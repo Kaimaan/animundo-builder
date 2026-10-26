@@ -37,7 +37,7 @@ uv run pytest
 uv run ruff check . && uv run ruff format --check .
 gitleaks git --no-banner
 uv run builder check --world ../animundo-world
-git config core.hooksPath .githooks   # once per clone: scan before commit
+./scripts/install-hooks   # once per clone: scan before every commit
 ```
 
 All checks must pass before a task counts as done. See `AGENTS.md` for the

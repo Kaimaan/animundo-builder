@@ -52,7 +52,11 @@ history. Treat every `git add` as publishing.
   anything about a player or a family. `.gitignore` covers these from the
   first commit.
 - **Recorded API responses** kept for tests and replay mode are scrubbed
-  before they are committed: no keys, no secret headers, no personal data.
+  before they are committed: strip every header and anything else that could
+  hold the key, plus any personal data. Gitleaks must pass on them.
+- **Session logs** kept for the README and the video are always exported
+  redacted (`muse export --redacted`), and `gitleaks dir --redact` runs on
+  the exported file before it is committed. Never commit a raw export.
 - **A secret scan** (gitleaks) runs before every commit and in CI. A finding
   stops the commit; never bypass it.
 - **If a secret is ever pushed:** stop, tell a person, and treat the secret
@@ -71,7 +75,7 @@ uv run builder check --world ../animundo-world
 ```
 
 All five must pass before a task is finished. Enable the pre-commit scan once
-per clone with `git config core.hooksPath .githooks`.
+per clone with `./scripts/install-hooks`.
 
 ## Rules
 

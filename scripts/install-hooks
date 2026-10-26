@@ -1,0 +1,22 @@
+#!/bin/sh
+# Install this repository's git hooks (once per clone).
+# The pre-commit hook scans staged changes for secrets with gitleaks.
+# This repository is public: a finding stops the commit.
+set -eu
+
+cd "$(dirname "$0")/.."
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "error: gitleaks is not installed." >&2
+  echo "Install it (https://github.com/gitleaks/gitleaks) and run this again." >&2
+  exit 1
+fi
+
+git config core.hooksPath .githooks
+
+if [ ! -x .githooks/pre-commit ]; then
+  echo "error: .githooks/pre-commit is missing or not executable." >&2
+  exit 1
+fi
+
+echo "hooks installed: core.hooksPath is now $(git config core.hooksPath)"

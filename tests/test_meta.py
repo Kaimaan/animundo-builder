@@ -8,7 +8,8 @@ from pathlib import Path
 import httpx2
 import pytest
 
-from builder.config import BASENTEN_OPEN_MODEL, Config, Prices
+from builder.config import Config
+from builder.ledger import CapExceeded, Caps, LedgerError, Receipt
 from builder.meta import (
     BASE_URL,
     CostLogger,
@@ -17,6 +18,7 @@ from builder.meta import (
     MetaError,
     Usage,
 )
+from builder.prices import UnknownModelError, prices_for
 
 FAKE_KEY = "sk-test-fake-key-999"
 MODEL = "muse-spark-1.3"
@@ -226,7 +228,7 @@ def test_usage_cost_with_search_and_cache() -> None:
         model=MODEL, input_tokens=1000, cached_input_tokens=100, searches=4, images=2
     )
     expected = 1000 * 1.25 / 1e6 + 100 * 0.15 / 1e6 + 4 * 2.50 / 1000 + 2 * 2.50 / 1000
-    assert usage.cost_usd(Prices()) == pytest.approx(expected)
+    assert usage.cost_usd(prices_for(MODEL)) == pytest.approx(expected)
 
 
 def test_open_weights_default_is_meta(tmp_path: Path) -> None:
@@ -248,9 +250,8 @@ def test_open_weights_baseten_needs_key_and_url() -> None:
         baseten_api_key="b-key",
         open_base_url="https://example.org/v1",
     )
-    client = MetaClient.for_open_weights(config)
-    assert client.model == BASENTEN_OPEN_MODEL
-    assert str(client._client.base_url).rstrip("/") == "https://example.org/v1"
+    with pytest.raises(UnknownModelError, match="no price"):
+        MetaClient.for_open_weights(config)
 
 
 def test_open_weights_unconfirmed_host_refused() -> None:
@@ -272,3 +273,113 @@ def test_responses_counts_searches(tmp_path: Path) -> None:
     request = script.requests[0]
     assert request.url == f"{BASE_URL}/responses"
     assert json.loads(request.content)["tools"] == [{"type": "web_search"}]
+
+
+class FakeLedger:
+    """A ledger that records reserve and settle calls."""
+
+    def __init__(self, caps: Caps) -> None:
+        self.caps = caps
+        self.reserved: list[float] = []
+        self.settled: list[float] = []
+        self.job_id: str | None = None
+
+    def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt:
+        self.job_id = job_id
+        self.reserved.append(amount_usd)
+        return Receipt(job_id=job_id, day="2026-10-26", reserved_usd=amount_usd)
+
+    def settle(self, receipt: Receipt, actual_usd: float) -> None:
+        self.settled.append(actual_usd)
+
+
+def test_unknown_model_has_no_price() -> None:
+    with pytest.raises(UnknownModelError, match="no price"):
+        prices_for("muse-spark-9.9")
+    assert prices_for(MODEL).input_per_million == 1.25
+
+
+def test_unpriced_model_cannot_be_called() -> None:
+    with pytest.raises(UnknownModelError, match="no price"):
+        MetaClient(api_key=FAKE_KEY, model="muse-spark-9.9")
+
+
+def test_ledger_needs_caps() -> None:
+    with pytest.raises(ValueError, match="needs caps"):
+        MetaClient(api_key=FAKE_KEY, model=MODEL, ledger=FakeLedger(Caps(1, 1, 1)))
+
+
+def test_chat_sends_max_tokens(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+    client, _ = make_client(script, tmp_path)
+    client.chat([{"role": "user", "content": "hi"}])
+    assert json.loads(script.requests[0].content)["max_tokens"] == 16384
+    script2 = Script([(200, chat_body())])
+    client2, _ = make_client(script2, tmp_path)
+    client2.chat([{"role": "user", "content": "hi"}], max_tokens=100)
+    assert json.loads(script2.requests[0].content)["max_tokens"] == 100
+
+
+def test_too_many_images_refused_before_send(tmp_path: Path) -> None:
+    script = Script([(200, responses_body())])
+    client, _ = make_client(script, tmp_path)
+    with pytest.raises(CapExceeded, match="at most 4 images"):
+        client.responses_create("see", images=5)
+    assert script.requests == []
+
+
+def test_reserve_then_settle(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(
+        script, tmp_path, ledger=ledger, job_id="job-1", caps=ledger.caps
+    )
+    client.chat([{"role": "user", "content": "What is 6 * 2?"}])
+    (reserved,) = ledger.reserved
+    (actual,) = ledger.settled
+    assert ledger.job_id == "job-1"
+    assert reserved > actual > 0
+    (line,) = read_log(logger)
+    assert line["cost_usd"] == pytest.approx(actual, abs=1e-6)
+
+
+def test_cap_refusal_sends_nothing(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+
+    class Broke(FakeLedger):
+        def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt:
+            raise CapExceeded("day cap $0.00 refuses everything")
+
+    client, _ = make_client(
+        script, tmp_path, ledger=Broke(Caps(8.0, 0.0, 120.0)), caps=Caps(8, 0, 120)
+    )
+    with pytest.raises(CapExceeded, match="day cap"):
+        client.chat([{"role": "user", "content": "hi"}])
+    assert script.requests == []
+
+
+def test_unreadable_ledger_sends_nothing(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+
+    class Down(FakeLedger):
+        def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt:
+            raise LedgerError("cannot read the ledger")
+
+    client, _ = make_client(
+        script, tmp_path, ledger=Down(Caps(8.0, 20.0, 120.0)), caps=Caps(8, 20, 120)
+    )
+    with pytest.raises(LedgerError, match="cannot read"):
+        client.chat([{"role": "user", "content": "hi"}])
+    assert script.requests == []
+
+
+def test_failed_call_releases_reserve(tmp_path: Path) -> None:
+    script = Script([(500, error_body("boom"))] * 5)
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, _ = make_client(
+        script, tmp_path, ledger=ledger, job_id="job-1", caps=ledger.caps
+    )
+    with pytest.raises(MetaError, match="failed after 5 tries"):
+        client.chat([{"role": "user", "content": "hi"}])
+    assert len(ledger.reserved) == 1
+    assert ledger.settled == [0.0]

@@ -22,6 +22,7 @@ secrets/
 jobs/
 recordings/raw/
 *.jsonl
+spend-ledger.json
 
 # Agent memory that must stay personal, never committed
 .agents/memory/

@@ -11,11 +11,21 @@ import json
 import sys
 import uuid
 from pathlib import Path
+from typing import Any
 
 from .config import load as load_config
+from .ledger import CapExceeded, Caps, FileLedger
 from .meta import CostLogger, MetaAuthError, MetaClient
-from .pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
+from .pipeline import (
+    IMPROVE_CHOICES,
+    BudgetTracker,
+    JobContext,
+    Pipeline,
+    StageFailedError,
+    stages_for_kind,
+)
 from .stages import (
+    AnimalsStage,
     CapabilityStage,
     IntakeStage,
     RegionStage,
@@ -24,7 +34,7 @@ from .stages import (
 )
 
 NOT_BUILT_YET = 3
-NEXT_STAGE = "animals"
+NEXT_STAGE = "models"
 
 
 def _pipeline_stages(intake: IntakeStage, author: str, max_new_species: int) -> list:
@@ -34,10 +44,31 @@ def _pipeline_stages(intake: IntakeStage, author: str, max_new_species: int) -> 
         CapabilityStage(),
         RegionStage(author=author),
         SpeciesPlanStage(max_new_species=max_new_species),
+        AnimalsStage(),
     ]
 
 
+def _check_choices(choices: list[str]) -> None:
+    for choice in choices:
+        if choice not in IMPROVE_CHOICES:
+            raise ValueError(
+                f"unknown improve choice {choice!r} "
+                f"(choose from {', '.join(IMPROVE_CHOICES)})"
+            )
+
+
+def _caps(config: Any) -> Caps:
+    return Caps(
+        job_usd=config.job_budget_usd,
+        day_usd=config.daily_budget_usd,
+        total_usd=config.total_budget_usd,
+    )
+
+
 def _explain_stop(job_id: str, error: Exception) -> int:
+    if isinstance(error, CapExceeded):
+        print(f"job {job_id}: stopping, {error}", file=sys.stderr)
+        return 1
     if isinstance(error, MetaAuthError):
         print(f"job {job_id}: stopping, MODEL_API_KEY is not set", file=sys.stderr)
         print("resume with a key to carry on from the last finished stage")
@@ -71,11 +102,28 @@ def build_parser() -> argparse.ArgumentParser:
         default="Animundo Builder",
         help="Name signed on the region file (default: Animundo Builder).",
     )
+    build.add_argument(
+        "--kind",
+        default="new_place",
+        choices=("new_place", "submit", "improve"),
+        help="The job kind (default: new_place).",
+    )
 
     resume = sub.add_parser("resume", help="Carry on an interrupted job.")
     resume.add_argument("job_id")
     resume.add_argument(
         "--jobs-dir", default="jobs", help="Where job folders live (default: jobs)."
+    )
+    resume.add_argument(
+        "--kind",
+        default=None,
+        choices=("new_place", "submit", "improve"),
+        help="Run a different kind on this job (default: the job's kind).",
+    )
+    resume.add_argument(
+        "--choices",
+        default=None,
+        help="Comma-separated improve choices (with --kind improve).",
     )
 
     check = sub.add_parser("check", help="Run every checker, nothing else.")
@@ -103,6 +151,15 @@ def _intake_from(args: argparse.Namespace) -> IntakeStage:
 def cmd_build(args: argparse.Namespace) -> int:
     if args.replay is not None:
         return cmd_not_built_yet("build --replay")
+    if args.kind == "submit":
+        return cmd_not_built_yet("build --kind submit")
+    if args.kind == "improve":
+        print(
+            "error: improve runs on an existing job: "
+            "`builder resume <job_id> --kind improve --choices ...`",
+            file=sys.stderr,
+        )
+        return 1
     world = _world_or_error(args.world)
     if world is None:
         return 1
@@ -129,6 +186,9 @@ def cmd_build(args: argparse.Namespace) -> int:
             api_key=config.model_api_key,
             model=config.model,
             logger=CostLogger(job_dir / "log.jsonl"),
+            ledger=FileLedger(config.ledger_path),
+            job_id=job_id,
+            caps=_caps(config),
         )
     ctx = JobContext(
         job_id=job_id,
@@ -146,6 +206,8 @@ def cmd_build(args: argparse.Namespace) -> int:
                     "country": args.country,
                     "world": str(world),
                     "author": args.author,
+                    "kind": args.kind,
+                    "choices": [],
                 },
                 "completed": [],
                 "results": {},
@@ -159,9 +221,11 @@ def cmd_build(args: argparse.Namespace) -> int:
             _pipeline_stages(stage, args.author, config.max_new_species),
             job_dir / "state.json",
         ).run(ctx)
-    except (StageFailedError, MetaAuthError) as error:
+    except (StageFailedError, CapExceeded, MetaAuthError) as error:
         return _explain_stop(job_id, error)
-    print(f"job {job_id}: intake, survey, capability, region and species plan done")
+    print(
+        f"job {job_id}: intake, survey, capability, region, species plan, animals done"
+    )
     print(f"next stage: {NEXT_STAGE} (not built yet)")
     return NOT_BUILT_YET
 
@@ -176,6 +240,20 @@ def cmd_resume(args: argparse.Namespace) -> int:
     world = _world_or_error(params.get("world", ""))
     if world is None:
         return 1
+    kind = args.kind or params.get("kind", "new_place")
+    if kind == "submit":
+        return cmd_not_built_yet("resume --kind submit")
+    choices: list[str] = []
+    if kind == "improve":
+        if not args.choices:
+            print("error: --kind improve needs --choices a,b,...", file=sys.stderr)
+            return 1
+        choices = [c.strip() for c in args.choices.split(",") if c.strip()]
+        try:
+            _check_choices(choices)
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
     config = load_config()
     client = None
     if config.model_api_key:
@@ -183,6 +261,9 @@ def cmd_resume(args: argparse.Namespace) -> int:
             api_key=config.model_api_key,
             model=config.model,
             logger=CostLogger(job_dir / "log.jsonl"),
+            ledger=FileLedger(config.ledger_path),
+            job_id=args.job_id,
+            caps=_caps(config),
         )
     ctx = JobContext(
         job_id=args.job_id,
@@ -196,16 +277,21 @@ def cmd_resume(args: argparse.Namespace) -> int:
         area_name=params.get("name"),
         country=params.get("country"),
     )
+    stages = _pipeline_stages(
+        stage,
+        params.get("author", "Animundo Builder"),
+        config.max_new_species,
+    )
+    run, missing = stages_for_kind(stages, kind, choices)
+    if missing:
+        print(
+            f"job {args.job_id}: needs {', '.join(missing)}, not built yet",
+            file=sys.stderr,
+        )
+        return NOT_BUILT_YET
     try:
-        Pipeline(
-            _pipeline_stages(
-                stage,
-                params.get("author", "Animundo Builder"),
-                config.max_new_species,
-            ),
-            state_file,
-        ).run(ctx)
-    except (StageFailedError, MetaAuthError) as error:
+        Pipeline(run, state_file).run(ctx)
+    except (StageFailedError, CapExceeded, MetaAuthError) as error:
         return _explain_stop(args.job_id, error)
     print(f"job {args.job_id}: carried on")
     print(f"next stage: {NEXT_STAGE} (not built yet)")

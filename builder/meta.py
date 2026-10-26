@@ -5,6 +5,11 @@ with tools and structured output on Chat Completions, search grounding and
 SAM 3.1 on the Responses API. Retries, timeouts, usage and cost logging all
 live here, so every stage gets them the same way.
 
+So do the hard spending caps. Every call carries `max_tokens`, reserves
+its worst-case cost against the job, day, and total caps before it is
+sent, and settles the real cost after. A refused reservation or an
+unreadable ledger means no call is made.
+
 No key, no secret and no personal data is ever written to a log.
 """
 
@@ -21,12 +26,16 @@ from typing import Any
 import httpx2
 import openai
 
-from .config import Prices
+from .ledger import CapExceeded, Caps, Ledger, Receipt
+from .prices import Prices, prices_for
 
 BASE_URL = "https://api.meta.ai/v1"
 MAX_TRIES = 5
 TIMEOUT_TEXT = 60
 TIMEOUT_LONG = 180
+DEFAULT_MAX_TOKENS = 16384
+MAX_IMAGES_PER_CALL = 4
+MAX_SEARCHES_PER_CALL = 5
 
 
 class MetaError(Exception):
@@ -114,12 +123,22 @@ class MetaClient:
         http_client: httpx2.Client | None = None,
         sleeper: Any = time.sleep,
         base_url: str = BASE_URL,
+        ledger: Ledger | None = None,
+        job_id: str = "local",
+        caps: Caps | None = None,
+        default_max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> None:
         if not api_key:
             raise MetaAuthError("MODEL_API_KEY is not set")
+        if ledger is not None and caps is None:
+            raise ValueError("a ledger needs caps")
         self.model = model
-        self.prices = prices or Prices()
+        self.prices = prices or prices_for(model)
         self.logger = logger
+        self.ledger = ledger
+        self.job_id = job_id
+        self.caps = caps
+        self.default_max_tokens = default_max_tokens
         self._sleeper = sleeper
         self._client = openai.OpenAI(
             base_url=base_url,
@@ -134,6 +153,9 @@ class MetaClient:
         config: Any,
         logger: CostLogger | None = None,
         http_client: httpx2.Client | None = None,
+        ledger: Ledger | None = None,
+        job_id: str = "local",
+        caps: Caps | None = None,
     ) -> MetaClient:
         """Build the client open-weights jobs (reviews, translations) use.
 
@@ -146,7 +168,14 @@ class MetaClient:
         if host == "meta":
             if not config.model_api_key:
                 raise MetaAuthError("MODEL_API_KEY is not set")
-            return cls(api_key=config.model_api_key, model=config.model, logger=logger)
+            return cls(
+                api_key=config.model_api_key,
+                model=config.model,
+                logger=logger,
+                ledger=ledger,
+                job_id=job_id,
+                caps=caps,
+            )
         if host == "modal-glimmer":
             raise ValueError("the modal-glimmer host is not confirmed yet (see T33)")
         env_var = {"baseten": "BASETEN_API_KEY", "fireworks": "FIREWORKS_API_KEY"}[host]
@@ -160,6 +189,9 @@ class MetaClient:
             logger=logger,
             http_client=http_client,
             base_url=config.open_base_url,
+            ledger=ledger,
+            job_id=job_id,
+            caps=caps,
         )
 
     def ensure_model(self) -> None:
@@ -175,8 +207,10 @@ class MetaClient:
         response_format: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
         timeout: float = TIMEOUT_TEXT,
+        max_tokens: int | None = None,
     ) -> Any:
-        """One Chat Completions call, with retries and cost logging."""
+        """One Chat Completions call, with caps, retries and cost logging."""
+        limit = max_tokens or self.default_max_tokens
 
         def call() -> Any:
             return self._client.chat.completions.create(
@@ -186,11 +220,19 @@ class MetaClient:
                 response_format=response_format,  # type: ignore[arg-type]
                 reasoning_effort=reasoning_effort,  # type: ignore[arg-type]
                 timeout=timeout,
+                max_tokens=limit,
             )
 
+        receipt = self._reserve(messages, limit, searches=0, images=0)
         start = time.monotonic()
-        response = self._with_retries("chat", call)
-        self._log("chat", response, time.monotonic() - start)
+        try:
+            response = self._with_retries("chat", call)
+        except Exception:
+            self._settle(receipt, 0.0)
+            raise
+        usage = usage_from_response(response, self.model)
+        self._settle(receipt, usage.cost_usd(self.prices))
+        self._log("chat", usage, time.monotonic() - start)
         return response
 
     def responses_create(
@@ -200,8 +242,15 @@ class MetaClient:
         include: list[str] | None = None,
         images: int = 0,
         timeout: float = TIMEOUT_LONG,
+        max_tokens: int | None = None,
     ) -> Any:
-        """One Responses API call (search grounding, SAM), with retries."""
+        """One Responses API call (search grounding, SAM), with caps."""
+        if images > MAX_IMAGES_PER_CALL:
+            raise CapExceeded(
+                f"at most {MAX_IMAGES_PER_CALL} images per call, got {images}"
+            )
+        limit = max_tokens or self.default_max_tokens
+        searches = MAX_SEARCHES_PER_CALL if _is_grounded(tools) else 0
 
         def call() -> Any:
             return self._client.responses.create(
@@ -210,12 +259,38 @@ class MetaClient:
                 tools=tools,  # type: ignore[arg-type]
                 include=include,  # type: ignore[arg-type]
                 timeout=timeout,
+                max_output_tokens=limit,
             )
 
+        receipt = self._reserve(model_input, limit, searches=searches, images=images)
         start = time.monotonic()
-        response = self._with_retries("responses", call)
-        self._log("responses", response, time.monotonic() - start, images=images)
+        try:
+            response = self._with_retries("responses", call)
+        except Exception:
+            self._settle(receipt, 0.0)
+            raise
+        usage = usage_from_response(response, self.model, images)
+        self._settle(receipt, usage.cost_usd(self.prices))
+        self._log("responses", usage, time.monotonic() - start)
         return response
+
+    def _reserve(
+        self, payload: Any, max_tokens: int, searches: int, images: int
+    ) -> Receipt | None:
+        if self.ledger is None or self.caps is None:
+            return None
+        worst = Usage(
+            model=self.model,
+            input_tokens=_estimate_input_tokens(payload),
+            output_tokens=max_tokens,
+            searches=searches,
+            images=images,
+        )
+        return self.ledger.reserve(self.job_id, worst.cost_usd(self.prices), self.caps)
+
+    def _settle(self, receipt: Receipt | None, actual_usd: float) -> None:
+        if receipt is not None and self.ledger is not None:
+            self.ledger.settle(receipt, actual_usd)
 
     def _with_retries(self, call: str, call_fn: Any) -> Any:
         last_error: Exception | None = None
@@ -231,22 +306,19 @@ class MetaClient:
                 self._sleeper(_backoff_seconds(attempt))
         raise MetaError(f"{call}: failed") from last_error
 
-    def _log(
-        self,
-        call: str,
-        response: Any,
-        duration_s: float,
-        images: int = 0,
-    ) -> None:
+    def _log(self, call: str, usage: Usage, duration_s: float) -> None:
         if self.logger is None:
             return
-        self.logger.log(
-            call,
-            usage_from_response(response, self.model, images),
-            self.prices,
-            duration_s,
-            "ok",
-        )
+        self.logger.log(call, usage, self.prices, duration_s, "ok")
+
+
+def _estimate_input_tokens(payload: Any) -> int:
+    """Rough input size for the reservation: four characters a token."""
+    return max(1, len(json.dumps(payload, default=str)) // 4)
+
+
+def _is_grounded(tools: list[dict[str, Any]] | None) -> bool:
+    return any(tool.get("type") == "web_search" for tool in tools or [])
 
 
 def count_search_calls(response: Any) -> int:

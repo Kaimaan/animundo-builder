@@ -84,13 +84,15 @@ print(response.choices[0].message.tool_calls)
   `response_format` to `{type: "json_schema", json_schema: {name, schema}}`
   and decoding is constrained to match it exactly.
   ([structured output](https://dev.meta.ai/docs/structured-output))
-- Limitation found live: the world's region schema cannot be used this
-  way. Its `animals` property (an object of optional `$ref` arrays, and
-  similar shapes like `fish`) is silently dropped from constrained
-  output, even when explicitly asked for; without the constraint the
-  same prompt writes it. The region stage therefore generates plain
-  JSON and validates against the world schema in code. The animal
-  schema works fine constrained.
+- Limitation found live: schemas with `$ref` properties cannot be used
+  this way. The region schema's `animals` (an object of optional `$ref`
+  arrays, and similar shapes like `fish`) is silently dropped from
+  constrained output, even when explicitly asked for; without the
+  constraint the same prompt writes it. The animal schema hits the same
+  wall: its `$ref` `diet` vanished from 18 straight drafts, each failing
+  the checker identically. Both stages therefore generate plain JSON
+  and validate against the world schemas in code. The small
+  builder-owned schemas (species plan) work fine constrained.
 
 ```python
 response = client.chat.completions.create(
@@ -159,6 +161,9 @@ for block in response.output:
   ([reasoning](https://dev.meta.ai/docs/reasoning))
 - Reasoning tokens are billed as output tokens and count toward the
   output budget (`max_tokens`). Budget for them in every estimate.
+- Verified live: Chat Completions accepts `max_tokens` and the
+  Responses API accepts `max_output_tokens`. The client sends one on
+  every call, so each call's worst-case cost is known before it goes.
 
 ```python
 response = client.chat.completions.create(

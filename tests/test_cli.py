@@ -121,3 +121,68 @@ def test_entry_point_runs() -> None:
     )
     assert proc.returncode == 0
     assert "build" in proc.stdout and "check" in proc.stdout
+
+
+def test_build_submit_says_not_built(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        [
+            "build",
+            "--area",
+            "gb_cairngorms",
+            "--world",
+            str(tmp_path),
+            "--kind",
+            "submit",
+        ]
+    )
+    assert code == NOT_BUILT_YET
+    assert "not built yet" in capsys.readouterr().err
+
+
+def test_build_improve_points_at_resume(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        [
+            "build",
+            "--area",
+            "gb_cairngorms",
+            "--world",
+            str(tmp_path),
+            "--kind",
+            "improve",
+        ]
+    )
+    assert code == 1
+    assert "resume <job_id>" in capsys.readouterr().err
+
+
+def test_resume_improve_needs_built_stages(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    assert main(["build", "--area", "gb_cairngorms", "--world", str(tmp_path)]) == (
+        NOT_BUILT_YET
+    )
+    (job_dir,) = (tmp_path / "jobs").iterdir()
+    capsys.readouterr()
+    code = main(
+        ["resume", job_dir.name, "--kind", "improve", "--choices", "colours_off"]
+    )
+    assert code == NOT_BUILT_YET
+    assert "models, safety, pack" in capsys.readouterr().err
+
+
+def test_resume_improve_validates_choices(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    assert main(["build", "--area", "gb_cairngorms", "--world", str(tmp_path)]) == (
+        NOT_BUILT_YET
+    )
+    (job_dir,) = (tmp_path / "jobs").iterdir()
+    capsys.readouterr()
+    assert main(["resume", job_dir.name, "--kind", "improve"]) == 1
+    assert "--choices" in capsys.readouterr().err
+    assert (
+        main(["resume", job_dir.name, "--kind", "improve", "--choices", "dragons"]) == 1
+    )
+    assert "unknown improve choice" in capsys.readouterr().err

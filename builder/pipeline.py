@@ -9,13 +9,15 @@ budget first and records the spend after.
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from .config import Prices
+from .ledger import CapExceeded
 from .meta import MetaAuthError, MetaClient, Usage, usage_from_response
+from .prices import Prices
 
 
 class BudgetExceeded(Exception):
@@ -24,6 +26,56 @@ class BudgetExceeded(Exception):
 
 class StageFailedError(Exception):
     """One stage failed. The state on disk says which, for `resume`."""
+
+
+JOB_KINDS = ("new_place", "improve", "submit")
+
+IMPROVE_CHOICES = (
+    "animal_looks_wrong",
+    "too_few_animals",
+    "colours_off",
+    "other",
+)
+
+# Improve choice -> stage names it touches, then always safety and pack.
+IMPROVE_STAGES = {
+    "animal_looks_wrong": ["models"],
+    "too_few_animals": ["species_plan", "animals", "models", "words"],
+    "colours_off": ["region", "models"],
+    "other": ["improve_plan"],
+}
+IMPROVE_ALWAYS = ["safety", "pack"]
+
+
+def stages_for_kind(
+    stages: list[Stage], kind: str, choices: Collection[str] = ()
+) -> tuple[list[Stage], list[str]]:
+    """Filter built stages to one job kind. Returns (run, missing).
+
+    `missing` names stages the kind needs that are not built yet, so
+    the caller can say so instead of running half a job.
+    """
+    if kind == "new_place":
+        return list(stages), []
+    if kind == "submit":
+        return [], ["pull_request"]
+    if kind != "improve":
+        raise ValueError(f"unknown job kind {kind!r}")
+    wanted: list[str] = []
+    for choice in choices:
+        if choice not in IMPROVE_CHOICES:
+            raise ValueError(f"unknown improve choice {choice!r}")
+        wanted.extend(IMPROVE_STAGES[choice])
+    wanted.extend(IMPROVE_ALWAYS)
+    by_name = {stage.name: stage for stage in stages}
+    run: list[Stage] = []
+    missing: list[str] = []
+    for name in dict.fromkeys(wanted):
+        if name in by_name:
+            run.append(by_name[name])
+        else:
+            missing.append(name)
+    return run, missing
 
 
 class Stage(Protocol):
@@ -101,7 +153,7 @@ class Pipeline:
             ctx.check_budget()
             try:
                 result = stage.run(ctx)
-            except (BudgetExceeded, MetaAuthError):
+            except (BudgetExceeded, CapExceeded, MetaAuthError):
                 raise
             except Exception as error:  # noqa: BLE001 - recorded, then raised
                 state["failed"] = {"stage": stage.name, "error": str(error)}

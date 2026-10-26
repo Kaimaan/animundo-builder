@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 
-from builder.config import Prices
 from builder.meta import Usage
 from builder.pipeline import (
     BudgetExceeded,
@@ -15,7 +14,9 @@ from builder.pipeline import (
     JobContext,
     Pipeline,
     StageFailedError,
+    stages_for_kind,
 )
+from builder.prices import Prices
 
 
 class FakeClient:
@@ -128,3 +129,41 @@ def test_tracker_math() -> None:
     tracker = BudgetTracker(budget_usd=8.0)
     tracker.add(Usage(model="m", input_tokens=1000))
     assert tracker.spent_usd == pytest.approx(1000 * 1.25 / 1e6)
+
+
+class NamedStage:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def run(self, ctx):  # type: ignore[no-untyped-def]
+        return {}
+
+
+def test_new_place_runs_everything() -> None:
+    stages = [NamedStage("intake"), NamedStage("survey")]
+    run, missing = stages_for_kind(stages, "new_place")
+    assert [s.name for s in run] == ["intake", "survey"]
+    assert missing == []
+
+
+def test_submit_needs_pull_request() -> None:
+    run, missing = stages_for_kind([NamedStage("intake")], "submit")
+    assert run == []
+    assert missing == ["pull_request"]
+
+
+def test_improve_runs_only_touched_stages() -> None:
+    stages = [NamedStage(n) for n in ("region", "species_plan", "animals")]
+    run, missing = stages_for_kind(stages, "improve", ["colours_off"])
+    assert [s.name for s in run] == ["region"]
+    assert missing == ["models", "safety", "pack"]
+    run, missing = stages_for_kind(stages, "improve", ["too_few_animals"])
+    assert [s.name for s in run] == ["species_plan", "animals"]
+    assert missing == ["models", "words", "safety", "pack"]
+
+
+def test_improve_unknown_choice_fails() -> None:
+    with pytest.raises(ValueError, match="unknown improve choice"):
+        stages_for_kind([NamedStage("region")], "improve", ["add_dragon"])
+    with pytest.raises(ValueError, match="unknown job kind"):
+        stages_for_kind([NamedStage("region")], "add_animal")

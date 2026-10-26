@@ -18,7 +18,6 @@
     "draft_id": {"type": "string", "minLength": 1},
     "draft_place_id": {"type": "string", "pattern": "^draft_"},
     "place_id": {"type": "string", "minLength": 1},
-    "base_place_id": {"type": ["string", "null"]},
     "version": {"type": "integer", "minimum": 1},
     "format": {"type": "integer", "minimum": 1},
     "files": {

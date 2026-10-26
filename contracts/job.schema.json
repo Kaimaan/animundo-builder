@@ -7,7 +7,7 @@
   "required": ["draft_id", "kind", "round", "attempt", "stages", "cost", "budget"],
   "properties": {
     "draft_id": {"type": "string", "minLength": 1},
-    "kind": {"enum": ["new_place", "add_animal", "improve", "submit"]},
+    "kind": {"enum": ["new_place", "improve", "submit"]},
     "round": {"type": "integer", "minimum": 1},
     "attempt": {"type": "integer", "minimum": 0},
     "stages": {

@@ -44,3 +44,43 @@ def test_every_schema_has_both_sides() -> None:
 def test_each_schema_is_valid_draft_2020_12() -> None:
     for name in _cases("valid"):
         jsonschema.Draft202012Validator.check_schema(load_schema(name))
+
+
+def _valid(name: str) -> dict:
+    return json.loads((EXAMPLES / "valid" / f"{name}.json").read_text())
+
+
+def test_add_animal_kind_is_gone() -> None:
+    draft = _valid("draft")
+    draft["kind"] = "add_animal"
+    with pytest.raises(jsonschema.ValidationError):
+        validate("draft", draft)
+    job = _valid("job")
+    job["kind"] = "add_animal"
+    with pytest.raises(jsonschema.ValidationError):
+        validate("job", job)
+
+
+def test_add_animal_fields_are_gone() -> None:
+    draft = _valid("draft")
+    draft["base_place_id"] = "fi_nuuksio"
+    with pytest.raises(jsonschema.ValidationError):
+        validate("draft", draft)
+    draft = _valid("draft")
+    draft["species"] = "lynx"
+    with pytest.raises(jsonschema.ValidationError):
+        validate("draft", draft)
+    pack = _valid("pack-manifest")
+    pack["base_place_id"] = "fi_nuuksio"
+    with pytest.raises(jsonschema.ValidationError):
+        validate("pack-manifest", pack)
+
+
+def test_something_missing_choice_is_gone() -> None:
+    draft = _valid("draft")
+    draft["improve"] = {
+        "choices": [{"choice": "something_missing", "species": "red_deer"}],
+        "at": "2026-11-02T10:00:00+02:00",
+    }
+    with pytest.raises(jsonschema.ValidationError):
+        validate("draft", draft)

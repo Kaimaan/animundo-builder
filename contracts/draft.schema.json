@@ -1,15 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://animundo-builder/contracts/draft.schema.json",
-  "title": "A family's draft of one place or animal",
+  "title": "A family's draft of one place",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "owner_uid", "family_uids", "status"],
   "properties": {
-    "kind": {"enum": ["new_place", "add_animal"]},
+    "kind": {"enum": ["new_place"]},
     "area_id": {"type": "string", "minLength": 1},
-    "base_place_id": {"type": "string", "minLength": 1},
-    "species": {"type": "string", "minLength": 1},
     "owner_uid": {"type": "string", "minLength": 1},
     "family_uids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
     "first_explorer_species": {"type": "string", "minLength": 1},
@@ -71,7 +69,6 @@
               "choice": {
                 "enum": [
                   "animal_looks_wrong",
-                  "something_missing",
                   "colours_off",
                   "too_few_animals",
                   "other"

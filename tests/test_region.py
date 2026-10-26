@@ -10,7 +10,11 @@ from typing import Any
 import pytest
 
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
-from builder.stages.region import RegionStage, seed_for_area
+from builder.stages.region import (
+    RegionStage,
+    seed_for_area,
+    sensitive_place_errors,
+)
 
 VALIDATOR_STUB = """\
 import json
@@ -225,3 +229,58 @@ def test_seed_is_stable_per_area() -> None:
     assert seed_for_area("gb_test") == seed_for_area("gb_test")
     assert seed_for_area("gb_test") != seed_for_area("fi_test")
     assert 0 <= seed_for_area("gb_test") < 2**32
+
+
+def test_named_nest_site_sent_back(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    survey = json.loads((tmp_path / "survey.json").read_text())
+    survey["species"].append(
+        {
+            "species": "golden_eagle",
+            "role": "predator",
+            "evidence": "Seen.",
+            "sources": ["https://example.org/d"],
+            "sensitive": True,
+        }
+    )
+    (tmp_path / "survey.json").write_text(json.dumps(survey))
+    nested = _draft(
+        animals={
+            "playable": ["fox", "zz_new"],
+            "predators": ["golden_eagle"],
+            "prey": [],
+        },
+        places=[{"name": "Eagle nest on Grey Crag"}],
+    )
+    clean = _draft(
+        animals={
+            "playable": ["fox", "zz_new"],
+            "predators": ["golden_eagle"],
+            "prey": [],
+        },
+        places=[],
+    )
+    client = ScriptClient([nested, clean])
+    RegionStage().run(_ctx(tmp_path, client, world))
+    assert len(client.calls) == 2
+    assert "golden_eagle" in client.prompts[1]
+
+
+def test_sensitive_place_errors() -> None:
+    surveyed = [
+        {"species": "golden_eagle", "sensitive": True},
+        {"species": "fox", "sensitive": False},
+    ]
+    assert sensitive_place_errors(surveyed, [{"name": "Grey Fell"}]) == []
+    assert sensitive_place_errors(surveyed, None) == []
+    errors = sensitive_place_errors(surveyed, [{"name": "Eagle Crag"}])
+    assert len(errors) == 1
+    assert "golden_eagle" in errors[0]
+    errors = sensitive_place_errors(surveyed, [{"name": "Fox den"}])
+    assert errors == []
+    errors = sensitive_place_errors(
+        surveyed, [{"name": "Wolverine den"}], ["wolverine"]
+    )
+    assert len(errors) == 1
+    assert "wolverine" in errors[0]

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://animundo-builder/schemas/species-plan.schema.json",
-  "title": "Reuse or build decision per species, with the food web check",
+  "title": "Reuse, build, food, or save decision per species, with the food web check",
   "type": "object",
   "additionalProperties": false,
   "required": ["species", "food_web_ok"],
@@ -12,15 +12,29 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["species", "decision", "reason"],
+        "required": ["species", "decision", "reason", "wild", "taxon"],
         "properties": {
           "species": {"type": "string", "minLength": 1},
-          "decision": {"enum": ["reuse", "new"]},
-          "reason": {"type": "string", "minLength": 1}
+          "decision": {"enum": ["reuse", "new", "food", "candidate"]},
+          "reason": {"type": "string", "minLength": 1},
+          "wild": {"type": "boolean"},
+          "taxon": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["gbif_key", "rank", "name"],
+            "properties": {
+              "gbif_key": {"type": "integer"},
+              "rank": {"type": "string", "minLength": 1},
+              "name": {"type": "string", "minLength": 1}
+            }
+          },
+          "food_kind": {"type": "string", "minLength": 1}
         }
       }
     },
     "food_web_ok": {"type": "boolean"},
-    "missing_food": {"type": "array", "items": {"type": "string"}}
+    "missing_food": {"type": "array", "items": {"type": "string"}},
+    "sensitive_species": {"type": "array", "items": {"type": "string"}},
+    "added_young": {"type": "array", "items": {"type": "string"}}
   }
 }

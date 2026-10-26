@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from builder.config import BASENTEN_OPEN_MODEL, DEFAULT_MODEL, Config, Prices, load
+from builder.config import BASENTEN_OPEN_MODEL, DEFAULT_MODEL, Config, load
+from builder.prices import Prices
 
 
 def test_defaults() -> None:
@@ -13,7 +14,9 @@ def test_defaults() -> None:
     assert config.open_model_host == "meta"
     assert config.daily_budget_usd == 20.0
     assert config.job_budget_usd == 8.0
-    assert config.max_new_species == 30
+    assert config.total_budget_usd == 120.0
+    assert config.ledger_path == "spend-ledger.json"
+    assert config.max_new_species == 3
     assert config.prices.input_per_million == 1.25
 
 
@@ -25,10 +28,14 @@ def test_max_new_species_from_env(monkeypatch) -> None:
 def test_load_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("BUILDER_MODEL", "muse-spark-1.2")
     monkeypatch.setenv("BUILDER_JOB_BUDGET_USD", "5")
+    monkeypatch.setenv("BUILDER_TOTAL_BUDGET_USD", "50")
+    monkeypatch.setenv("BUILDER_LEDGER_PATH", "/tmp/ledgers/test.json")
     monkeypatch.setenv("MODEL_API_KEY", "from-env")
     config = load()
     assert config.model == "muse-spark-1.2"
     assert config.job_budget_usd == 5
+    assert config.total_budget_usd == 50
+    assert config.ledger_path == "/tmp/ledgers/test.json"
     assert config.model_api_key == "from-env"
 
 

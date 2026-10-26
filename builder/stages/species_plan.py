@@ -1,15 +1,24 @@
-"""Stage 5, species plan: reuse or new for every species, food first.
+"""Stage 5, species plan: reuse, new, food, or candidate for every species.
 
-The code matches survey species to existing animal files by Latin name
-and rewrites the region to the reused file ids. The model writes the
-reasons, judges the food web, and flags anything a person must decide
-(herded or domestic species, sensitive species). New species over the
-cap stop the job before any model call.
+The code matches survey species to existing animal files by GBIF taxon
+id, using the world's own `tools/taxon.py` (never file ids or Latin
+spellings). Small invertebrates become food, never files, unless they
+are playable. The model ranks the rest best-first and writes reasons;
+the code builds at most `max_new_species` of them and saves the rest
+as candidates for `too_few_animals` and the submit pull request. The
+region is rewritten to the final cast (reuse + new) with food kinds
+for the invertebrates, then validated again.
+
+Nothing here touches the world's `wanted.json`: wanted additions go
+in the submit pull request only.
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import Any
 
@@ -17,18 +26,86 @@ import jsonschema
 
 from ..prompts import load_prompt
 from ..schemas import load_schema
+from .region import sensitive_place_errors, validate_region_file
 
-DEFAULT_MAX_NEW_SPECIES = 30
+DEFAULT_MAX_NEW_SPECIES = 3
 MAX_FIX_ROUNDS = 3
+
+# Tokens in a surveyed id that mark a small invertebrate. These are food
+# (`water_bugs` for the ones whose larvae live in water, `insects` for
+# the rest), never new animal files, unless the survey says playable.
+INVERTEBRATE_WORDS = frozenset(
+    {
+        "ant",
+        "bee",
+        "beetle",
+        "bumblebee",
+        "butterfly",
+        "cricket",
+        "damselfly",
+        "dragonfly",
+        "flea",
+        "fly",
+        "gnat",
+        "grasshopper",
+        "hornet",
+        "louse",
+        "midge",
+        "mite",
+        "mosquito",
+        "moth",
+        "snail",
+        "slug",
+        "spider",
+        "tick",
+        "wasp",
+        "worm",
+    }
+)
+WATER_BREEDERS = frozenset({"gnat", "midge", "mosquito"})
+
+MatchFn = Callable[[Path, str], dict[str, Any]]
+
+
+def taxon_same(world: Path, latin: str) -> dict[str, Any]:
+    """Resolve one Latin name with the world's `tools/taxon.py`."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, "tools/taxon.py", "--same", latin],
+            cwd=world,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise _Stopped(f"taxon.py did not run for {latin!r}: {error}")
+    if proc.returncode != 0:
+        raise _Stopped(
+            f"could not resolve {latin!r}; a person must match it: "
+            f"{(proc.stderr or proc.stdout).strip()}"
+        )
+    try:
+        found = json.loads(proc.stdout)
+    except json.JSONDecodeError as error:
+        raise _Stopped(f"taxon.py gave no JSON for {latin!r}: {error}")
+    if "taxon" not in found or "gbif_key" not in found["taxon"]:
+        raise _Stopped(f"taxon.py gave no GBIF key for {latin!r}")
+    return found
 
 
 class SpeciesPlanStage:
-    """Write `species-plan.json` and point the region at reused files."""
+    """Write `species-plan.json` and shrink the region to its final cast."""
 
     name = "species_plan"
 
-    def __init__(self, max_new_species: int = DEFAULT_MAX_NEW_SPECIES) -> None:
+    def __init__(
+        self,
+        max_new_species: int = DEFAULT_MAX_NEW_SPECIES,
+        match: MatchFn | None = None,
+    ) -> None:
         self.max_new_species = max_new_species
+        self._match = match or taxon_same
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -36,25 +113,23 @@ class SpeciesPlanStage:
         world = Path(ctx.world_path)
         survey = json.loads((ctx.job_dir / "survey.json").read_text(encoding="utf-8"))
         region_path = self._region_path(ctx)
-        decisions = self._match(world, survey)
-        new_count = sum(1 for d in decisions.values() if d[0] == "new")
-        if new_count > self.max_new_species:
-            raise _Stopped(
-                f"{new_count} new species over the cap of {self.max_new_species}; "
-                "a person must decide what goes"
-            )
-        self._point_region_at_reuse(region_path, survey, decisions)
-        plan = self._write_with_model(ctx, survey, decisions)
+        fixed, rank = self._match_all(world, survey)
+        plan = self._write_with_model(ctx, survey, region_path, fixed, rank)
+        self._rewrite_region(world, region_path, survey, fixed, plan)
         out = ctx.job_dir / "species-plan.json"
         out.write_text(json.dumps(plan, indent=2), encoding="utf-8")
         if not plan["food_web_ok"]:
             raise _Stopped(
                 "food first fails: " + "; ".join(plan.get("missing_food", ["unknown"]))
             )
+        decisions = [entry["decision"] for entry in plan["species"]]
         return {
             "species_plan_file": "species-plan.json",
-            "reuse": sum(1 for d in decisions.values() if d[0] == "reuse"),
-            "new": new_count,
+            "reuse": sum(1 for d in decisions if d == "reuse"),
+            "new": sum(1 for d in decisions if d == "new"),
+            "food": sum(1 for d in decisions if d == "food"),
+            "candidate": sum(1 for d in decisions if d == "candidate"),
+            "added_young": plan.get("added_young", []),
         }
 
     def _region_path(self, ctx: Any) -> Path:
@@ -63,72 +138,83 @@ class SpeciesPlanStage:
             raise ValueError(f"expected one region file, found {len(regions)}")
         return regions[0]
 
-    def _match(self, world: Path, survey: dict[str, Any]) -> dict[str, tuple[str, str]]:
-        """Map each surveyed id to (`reuse`|`new`, file id or reason)."""
-        latin_to_files: dict[str, list[str]] = {}
-        for path in (world / "animals").glob("*.json"):
-            if path.stem == "archetypes":
-                continue
-            latin = json.loads(path.read_text(encoding="utf-8")).get("latin", "")
-            latin_to_files.setdefault(latin.strip().lower(), []).append(path.stem)
-        all_files = {f for files in latin_to_files.values() for f in files}
-        decisions = {}
+    def _match_all(
+        self, world: Path, survey: dict[str, Any]
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        """Split surveyed species into fixed decisions and ones to rank.
+
+        Returns (`fixed`, `rank`): fixed maps an id to its reuse or food
+        record, rank maps an id to its GBIF taxon for the model to order.
+        """
+        taxa = _file_taxa(world)
+        fixed: dict[str, dict[str, Any]] = {}
+        rank: dict[str, dict[str, Any]] = {}
         for species in survey.get("species", []):
             survey_id = species["species"]
-            latin = (species.get("latin") or "").strip().lower()
-            same_latin = latin_to_files.get(latin, []) if latin else []
-            if survey_id in same_latin:
-                decisions[survey_id] = ("reuse", survey_id)
-            elif same_latin:
-                grown = [f for f in same_latin if not f.startswith("young_")]
-                chosen = sorted(grown or same_latin, key=len)[0]
-                decisions[survey_id] = ("reuse", chosen)
-            elif survey_id in all_files:
-                raise _Stopped(
-                    f"{survey_id} is a different species from the file with its "
-                    "name; a person must rename one"
-                )
+            latin = (species.get("latin") or "").strip()
+            if not latin:
+                raise _Stopped(f"{survey_id} has no Latin name to match")
+            found = self._match(world, latin)
+            taxon = found["taxon"]
+            files = found.get("files", [])
+            if files:
+                fixed[survey_id] = {
+                    "decision": "reuse",
+                    "file": _grown_form(world, files),
+                    "taxon": taxon,
+                }
+                continue
+            _refuse_collision(survey_id, taxon, taxa)
+            _refuse_other_subspecies(survey_id, taxon, taxa)
+            if _is_food_invertebrate(survey_id, species):
+                fixed[survey_id] = {
+                    "decision": "food",
+                    "kind": _food_kind(survey_id),
+                    "taxon": taxon,
+                }
             else:
-                decisions[survey_id] = ("new", species.get("latin", ""))
-        return decisions
-
-    def _point_region_at_reuse(
-        self,
-        region_path: Path,
-        survey: dict[str, Any],
-        decisions: dict[str, tuple[str, str]],
-    ) -> None:
-        region = json.loads(region_path.read_text(encoding="utf-8"))
-        rename = {
-            survey_id: file_id
-            for survey_id, (decision, file_id) in decisions.items()
-            if decision == "reuse" and survey_id != file_id
-        }
-        if not rename:
-            return
-        for group in region.get("animals", {}).values():
-            for index, animal_id in enumerate(group):
-                if animal_id in rename:
-                    group[index] = rename[animal_id]
-        for fish in region.get("fish", []):
-            if fish.get("kind") in rename:
-                fish["kind"] = rename[fish["kind"]]
-        region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
+                rank[survey_id] = taxon
+        return fixed, rank
 
     def _write_with_model(
         self,
         ctx: Any,
         survey: dict[str, Any],
-        decisions: dict[str, tuple[str, str]],
+        region_path: Path,
+        fixed: dict[str, dict[str, Any]],
+        rank: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
         schema = load_schema("species-plan")
-        table = "\n".join(
-            f"- {survey_id}: {decision} ({detail})"
-            for survey_id, (decision, detail) in sorted(decisions.items())
-        )
+        lines = []
+        for survey_id in sorted(set(fixed) | set(rank)):
+            if survey_id in fixed:
+                record = fixed[survey_id]
+                if record["decision"] == "reuse":
+                    taxon = record["taxon"]
+                    lines.append(
+                        f"- {survey_id}: reuse the file {record['file']} "
+                        f"(GBIF {taxon['gbif_key']} {taxon['rank']} "
+                        f"{taxon['name']})."
+                    )
+                else:
+                    lines.append(
+                        f"- {survey_id}: food ({record['kind']}), never a file. "
+                        f"(GBIF {record['taxon']['gbif_key']} "
+                        f"{record['taxon']['rank']} {record['taxon']['name']})."
+                    )
+            else:
+                taxon = rank[survey_id]
+                lines.append(
+                    f"- {survey_id}: rank me "
+                    f"(GBIF {taxon['gbif_key']} {taxon['rank']} {taxon['name']})."
+                )
         base = load_prompt(
             "species_plan",
-            {"SURVEY_JSON": json.dumps(survey, indent=2), "MATCH_TABLE": table},
+            {
+                "SURVEY_JSON": json.dumps(survey, indent=2),
+                "MATCH_TABLE": "\n".join(lines),
+                "MAX_NEW": str(self.max_new_species),
+            },
         )
         problems = ""
         for _ in range(MAX_FIX_ROUNDS + 1):
@@ -142,34 +228,327 @@ class SpeciesPlanStage:
                 },
             )
             text = (response.choices[0].message.content or "").strip()
-            problems, plan = self._check_write(text, decisions, schema)
+            problems, plan = self._settle(
+                text, survey, region_path, fixed, rank, schema
+            )
             if not problems:
                 return plan
         raise _Stopped("species plan did not settle: " + problems)
 
-    def _check_write(
+    def _settle(
         self,
         text: str,
-        decisions: dict[str, tuple[str, str]],
+        survey: dict[str, Any],
+        region_path: Path,
+        fixed: dict[str, dict[str, Any]],
+        rank: dict[str, dict[str, Any]],
         schema: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
         try:
             plan = json.loads(text)
         except json.JSONDecodeError as error:
             return f"PREVIOUS TRY was not JSON: {error}", {}
+        entries = plan.get("species", [])
+        if {entry.get("species") for entry in entries} != set(fixed) | set(rank):
+            return "PREVIOUS TRY must list every surveyed species once.", {}
+        for entry in entries:
+            survey_id = entry["species"]
+            if survey_id in fixed:
+                want = fixed[survey_id]["decision"]
+                if entry.get("decision") != want:
+                    return (
+                        f"PREVIOUS TRY moved {survey_id} from {want} to "
+                        f"{entry.get('decision')}. Keep the match; write reasons.",
+                        {},
+                    )
+            elif entry.get("decision") not in ("new", "candidate"):
+                return (
+                    f"PREVIOUS TRY gave {survey_id} "
+                    f"{entry.get('decision')}; rank-me species are new or "
+                    "candidate.",
+                    {},
+                )
+        kept = 0
+        for entry in entries:
+            if entry.get("decision") != "new":
+                continue
+            kept += 1
+            if kept > self.max_new_species:
+                entry["decision"] = "candidate"
+                entry["reason"] = (
+                    entry.get("reason", "")
+                    + f" Saved for later: over the cap of {self.max_new_species}."
+                ).strip()
+        self._enforce_wild_and_prey(entries, survey)
+        for entry in entries:
+            survey_id = entry["species"]
+            taxon = fixed[survey_id]["taxon"] if survey_id in fixed else rank[survey_id]
+            entry["taxon"] = taxon
+            if entry["decision"] == "food":
+                entry["food_kind"] = fixed[survey_id]["kind"]
         try:
             jsonschema.validate(plan, schema)
         except jsonschema.ValidationError as error:
             return f"PREVIOUS TRY broke the schema: {error.message}", {}
-        got = {entry["species"]: entry["decision"] for entry in plan["species"]}
-        want = {species: decision for species, (decision, _) in decisions.items()}
-        if got != want:
-            return (
-                "PREVIOUS TRY decided differently from the Latin match: "
-                f"expected {want}, got {got}. Keep the match; write reasons.",
-                {},
+        sensitive = list(plan.get("sensitive_species", []))
+        region = json.loads(region_path.read_text(encoding="utf-8"))
+        errors = sensitive_place_errors(
+            survey.get("species", []), region.get("places", []), sensitive
+        )
+        if errors:
+            raise _Stopped(
+                "the region names real sites for sensitive species: "
+                + "; ".join(errors)
             )
         return "", plan
+
+    def _enforce_wild_and_prey(
+        self, entries: list[dict[str, Any]], survey: dict[str, Any]
+    ) -> None:
+        """Demote unbuildable new species, refilling from candidates.
+
+        A new species the model itself calls not wild (herded, domestic,
+        farmed, stocked) is saved for a person, and a new predator with
+        no prey-role species in the cast waits until its prey is built.
+        Each demotion promotes the next suitable candidate, in order, so
+        the cast keeps the model's ranking up to the cap.
+        """
+        roles = {s["species"]: s.get("role") for s in survey.get("species", [])}
+        while True:
+            final = [e for e in entries if e["decision"] in ("reuse", "new")]
+            prey = {e["species"] for e in final if roles.get(e["species"]) == "prey"}
+            demoted = False
+            for entry in entries:
+                if entry["decision"] != "new":
+                    continue
+                if entry.get("wild", True) is False:
+                    entry["decision"] = "candidate"
+                    entry["reason"] = (
+                        entry.get("reason", "")
+                        + " Saved for a person: not built as a wild species."
+                    ).strip()
+                    demoted = True
+                elif roles.get(entry["species"]) == "predator" and not prey:
+                    entry["decision"] = "candidate"
+                    entry["reason"] = (
+                        entry.get("reason", "")
+                        + " Saved until its prey is built: no prey in the cast."
+                    ).strip()
+                    demoted = True
+            new_count = sum(1 for e in entries if e["decision"] == "new")
+            promoted = False
+            for entry in entries:
+                if new_count >= self.max_new_species:
+                    break
+                if entry["decision"] != "candidate":
+                    continue
+                if entry.get("wild", True) is False:
+                    continue
+                if roles.get(entry["species"]) == "predator" and not prey:
+                    continue
+                entry["decision"] = "new"
+                entry["reason"] = (
+                    entry.get("reason", "")
+                    + f" Built within the cap of {self.max_new_species}."
+                ).strip()
+                new_count += 1
+                promoted = True
+                if roles.get(entry["species"]) == "prey":
+                    prey.add(entry["species"])
+            if not (demoted or promoted):
+                return
+
+    def _heal_cast(self, world: Path, region: dict[str, Any]) -> set[str]:
+        """Feed the reuse cast: missing food kinds and young prey forms.
+
+        Every diet kind of a reused cast animal must be region food, and
+        every tag its hunters need must sit on a cast animal. Food is
+        added plainly; a missing tag is fixed by adding the young form
+        (`stage_of`) of a cast animal that carries it, young fish with
+        their parent's count. Returns the young forms added. Tags no
+        young form carries are left for the new species to provide (the
+        animal stage tells the model which).
+        """
+        added: set[str] = set()
+        for _ in range(3):
+            cast = _cast_files(region)
+            known = cast | added
+            files = {stem: _animal_file(world, stem) for stem in known}
+            kinds = {food.get("kind", "") for food in region.get("food", [])}
+            changed = False
+            for data in files.values():
+                for kind in data.get("diet") or []:
+                    if kind not in kinds:
+                        kinds.add(kind)
+                        region.setdefault("food", []).append(
+                            {"kind": kind, "amount": 10, "names": [kind]}
+                        )
+                        changed = True
+            tags = {tag for data in files.values() for tag in data.get("tags", [])}
+            hunts = {tag for data in files.values() for tag in data.get("hunts", [])}
+            for tag in sorted(hunts - tags):
+                young = _young_carrying(world, known, tag)
+                if young is None:
+                    continue
+                added.add(young)
+                parent = _animal_file(world, young).get("stage_of", "")
+                placed = False
+                for fish in region.get("fish", []):
+                    if fish.get("kind") == parent:
+                        region["fish"].append(
+                            {"kind": young, "count": fish.get("count", 5)}
+                        )
+                        placed = True
+                        break
+                if not placed:
+                    region["animals"].setdefault("prey", []).append(young)
+                changed = True
+            if not changed:
+                break
+        return added
+
+    def _rewrite_region(
+        self,
+        world: Path,
+        region_path: Path,
+        survey: dict[str, Any],
+        fixed: dict[str, dict[str, Any]],
+        plan: dict[str, Any],
+    ) -> None:
+        region = json.loads(region_path.read_text(encoding="utf-8"))
+        rename = {
+            survey_id: record["file"]
+            for survey_id, record in fixed.items()
+            if record["decision"] == "reuse" and survey_id != record["file"]
+        }
+        drop = {
+            entry["species"]
+            for entry in plan["species"]
+            if entry["decision"] in ("food", "candidate")
+        }
+        for group in region.get("animals", {}).values():
+            kept = []
+            for animal_id in group:
+                animal_id = rename.get(animal_id, animal_id)
+                if animal_id not in drop:
+                    kept.append(animal_id)
+            group[:] = kept
+        region["fish"] = [
+            fish
+            for fish in region.get("fish", [])
+            if rename.get(fish.get("kind"), fish.get("kind")) not in drop
+        ]
+        for fish in region.get("fish", []):
+            fish["kind"] = rename.get(fish["kind"], fish["kind"])
+        kinds = {food.get("kind", "") for food in region.get("food", [])}
+        for entry in plan["species"]:
+            if entry["decision"] != "food" or entry["food_kind"] in kinds:
+                continue
+            kinds.add(entry["food_kind"])
+            region.setdefault("food", []).append(
+                {
+                    "kind": entry["food_kind"],
+                    "amount": 10,
+                    "names": [entry["species"].replace("_", " ")],
+                }
+            )
+        added_young = self._heal_cast(world, region)
+        region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
+        new_ids = {
+            entry["species"] for entry in plan["species"] if entry["decision"] == "new"
+        }
+        errors = validate_region_file(world, region_path, new_ids)
+        if errors:
+            raise _Stopped("the rewritten region fails: " + "; ".join(errors))
+        plan["added_young"] = sorted(added_young)
+
+
+def _cast_files(region: dict[str, Any]) -> set[str]:
+    cast = set()
+    for group in region.get("animals", {}).values():
+        cast.update(group)
+    cast.update(fish.get("kind", "") for fish in region.get("fish", []))
+    return cast - {""}
+
+
+def _animal_file(world: Path, stem: str) -> dict[str, Any]:
+    path = world / "animals" / f"{stem}.json"
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _young_carrying(world: Path, cast: set[str], tag: str) -> str | None:
+    """A young form of a cast animal that carries `tag`, if one exists."""
+    for path in sorted((world / "animals").glob("*.json")):
+        if path.stem == "archetypes" or path.stem in cast:
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("stage_of") in cast and tag in data.get("tags", []):
+            return path.stem
+    return None
+
+
+def _file_taxa(world: Path) -> dict[str, dict[str, Any]]:
+    """GBIF taxon block per animal file stem (skipping the index)."""
+    taxa = {}
+    for path in (world / "animals").glob("*.json"):
+        if path.stem == "archetypes":
+            continue
+        taxon = json.loads(path.read_text(encoding="utf-8")).get("taxon")
+        if taxon:
+            taxa[path.stem] = taxon
+    return taxa
+
+
+def _grown_form(world: Path, files: Collection[str]) -> str:
+    """The file to reuse: a grown form over a `stage_of` young one."""
+    grown = []
+    for name in files:
+        data = json.loads((world / name).read_text(encoding="utf-8"))
+        if not data.get("stage_of"):
+            grown.append(Path(name).stem)
+    return sorted(grown or [Path(n).stem for n in files], key=len)[0]
+
+
+def _refuse_collision(
+    survey_id: str, taxon: dict[str, Any], taxa: dict[str, dict[str, Any]]
+) -> None:
+    same_name = taxa.get(survey_id)
+    if same_name is not None and same_name["gbif_key"] != taxon["gbif_key"]:
+        raise _Stopped(
+            f"{survey_id} is a different species from the file with its "
+            "name; a person must rename one"
+        )
+
+
+def _refuse_other_subspecies(
+    survey_id: str, taxon: dict[str, Any], taxa: dict[str, dict[str, Any]]
+) -> None:
+    words = str(taxon.get("name", "")).split()[:2]
+    if len(words) < 2:
+        return
+    for stem, other in taxa.items():
+        if (
+            str(other.get("name", "")).split()[:2] == words
+            and other["gbif_key"] != taxon["gbif_key"]
+        ):
+            raise _Stopped(
+                f"{survey_id} ({taxon['name']}) is a different subspecies "
+                f"from {stem} ({other['name']}); a person must decide"
+            )
+
+
+def _is_food_invertebrate(survey_id: str, species: dict[str, Any]) -> bool:
+    if species.get("role") == "playable":
+        return False
+    return bool(set(survey_id.split("_")) & INVERTEBRATE_WORDS)
+
+
+def _food_kind(survey_id: str) -> str:
+    if set(survey_id.split("_")) & WATER_BREEDERS:
+        return "water_bugs"
+    return "insects"
 
 
 class _Stopped(Exception):

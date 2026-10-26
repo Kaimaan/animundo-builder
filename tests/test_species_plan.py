@@ -1,4 +1,4 @@
-"""Species plan: Latin matching, region rewrite, food first. No network."""
+"""Species plan: GBIF matching, food, rank and save, region rewrite."""
 
 from __future__ import annotations
 
@@ -13,21 +13,62 @@ from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedErr
 from builder.schemas import validate
 from builder.stages.species_plan import SpeciesPlanStage
 
+FOX = {"gbif_key": 5219243, "rank": "SPECIES", "name": "Vulpes vulpes"}
+PERCH = {"gbif_key": 8140485, "rank": "SPECIES", "name": "Perca fluviatilis"}
+DEER = {"gbif_key": 2440958, "rank": "SPECIES", "name": "Cervus elaphus"}
+MOSQUITO = {"gbif_key": 1651255, "rank": "SPECIES", "name": "Aedes communis"}
+BEAR = {"gbif_key": 2433433, "rank": "SPECIES", "name": "Ursus arctos"}
+FENNEC = {"gbif_key": 5219244, "rank": "SPECIES", "name": "Vulpes zerda"}
+FENNICUS = {
+    "gbif_key": 5220116,
+    "rank": "SUBSPECIES",
+    "name": "Rangifer tarandus fennicus",
+}
+TARANDUS = {
+    "gbif_key": 5220117,
+    "rank": "SUBSPECIES",
+    "name": "Rangifer tarandus tarandus",
+}
+BEE = {"gbif_key": 1340298, "rank": "SPECIES", "name": "Apis mellifera"}
+
+MATCH = {
+    "Vulpes vulpes": (FOX, ["animals/fox.json"]),
+    "Perca fluviatilis": (PERCH, ["animals/perch.json", "animals/young_perch.json"]),
+    "Cervus elaphus": (DEER, []),
+    "Aedes communis": (MOSQUITO, []),
+    "Ursus arctos": (BEAR, []),
+    "Vulpes zerda": (FENNEC, []),
+    "Rangifer tarandus fennicus": (FENNICUS, []),
+    "Rangifer tarandus": (
+        {"gbif_key": 5220114, "rank": "SPECIES", "name": "Rangifer tarandus"},
+        [],
+    ),
+    "Apis mellifera": (BEE, []),
+    "Aquila chrysaetos": (
+        {"gbif_key": 2480506, "rank": "SPECIES", "name": "Aquila chrysaetos"},
+        [],
+    ),
+}
+
 
 def _world(tmp_path: Path) -> Path:
     world = tmp_path / "world"
     animals = world / "animals"
     animals.mkdir(parents=True)
-    (animals / "fox.json").write_text(json.dumps({"latin": "Vulpes vulpes"}))
-    (animals / "perch.json").write_text(json.dumps({"latin": "Perca fluviatilis"}))
+    (animals / "fox.json").write_text(json.dumps({"taxon": FOX}))
+    (animals / "perch.json").write_text(json.dumps({"taxon": PERCH}))
     (animals / "young_perch.json").write_text(
-        json.dumps({"latin": "Perca fluviatilis"})
+        json.dumps({"taxon": PERCH, "stage_of": "perch"})
     )
     (animals / "archetypes.json").write_text("{}")
     return world
 
 
-def _inputs(tmp_path: Path, survey_species: list[dict]) -> None:
+def _inputs(
+    tmp_path: Path,
+    survey_species: list[dict],
+    region: dict | None = None,
+) -> None:
     (tmp_path / "survey.json").write_text(
         json.dumps({"area_id": "xx_test", "facts": [], "species": survey_species})
     )
@@ -35,26 +76,33 @@ def _inputs(tmp_path: Path, survey_species: list[dict]) -> None:
     regions.mkdir(parents=True)
     (regions / "xx_test.json").write_text(
         json.dumps(
-            {
+            region
+            if region is not None
+            else {
                 "id": "xx_test",
                 "animals": {
                     "playable": ["red_deer"],
                     "predators": ["red_fox"],
-                    "prey": [],
+                    "prey": ["common_mosquito"],
                 },
                 "fish": [{"kind": "european_perch", "count": 5}],
+                "food": [],
+                "places": [],
             }
         )
     )
 
 
-def _species(species: str, latin: str, role: str = "playable") -> dict:
+def _species(
+    species: str, latin: str, role: str = "playable", sensitive: bool = False
+) -> dict:
     return {
         "species": species,
         "latin": latin,
         "role": role,
         "evidence": "Seen.",
         "sources": ["https://example.org/x"],
+        "sensitive": sensitive,
     }
 
 
@@ -66,6 +114,11 @@ def _ctx(tmp_path: Path, client: Any, world: Path) -> JobContext:
         tracker=BudgetTracker(budget_usd=8.0),
         world_path=world,
     )
+
+
+def _fake_match(world: Path, latin: str) -> dict[str, Any]:
+    taxon, files = MATCH[latin]
+    return {"taxon": taxon, "files": files}
 
 
 class ScriptClient:
@@ -89,14 +142,26 @@ class ScriptClient:
         )
 
 
-def _plan(entries: list[tuple[str, str]], food_web_ok: bool = True) -> dict:
+def _plan(
+    entries: list[tuple[str, str]],
+    food_web_ok: bool = True,
+    sensitive: list[str] | None = None,
+    wild: dict[str, bool] | None = None,
+) -> dict:
+    wild = wild or {}
     return {
         "species": [
-            {"species": species, "decision": decision, "reason": "Because."}
+            {
+                "species": species,
+                "decision": decision,
+                "reason": "Because.",
+                "wild": wild.get(species, True),
+            }
             for species, decision in entries
         ],
         "food_web_ok": food_web_ok,
         "missing_food": [],
+        "sensitive_species": sensitive or [],
     }
 
 
@@ -105,81 +170,160 @@ def _surveyed() -> list[dict]:
         _species("red_fox", "Vulpes vulpes", "predator"),
         _species("european_perch", "Perca fluviatilis", "prey"),
         _species("red_deer", "Cervus elaphus", "playable"),
+        _species("common_mosquito", "Aedes communis", "prey"),
     ]
 
 
-def test_match_rewrite_and_plan(tmp_path: Path) -> None:
+def _no_revalidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "builder.stages.species_plan.validate_region_file", lambda *args: []
+    )
+
+
+def _stage(**kwargs: Any) -> SpeciesPlanStage:
+    kwargs.setdefault("match", _fake_match)
+    return SpeciesPlanStage(**kwargs)
+
+
+def test_match_rewrite_and_plan(tmp_path: Path, monkeypatch: Any) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, _surveyed())
+    _no_revalidate(monkeypatch)
     client = ScriptClient(
         [
             _plan(
-                [("red_fox", "reuse"), ("european_perch", "reuse"), ("red_deer", "new")]
+                [
+                    ("red_fox", "reuse"),
+                    ("european_perch", "reuse"),
+                    ("red_deer", "new"),
+                    ("common_mosquito", "food"),
+                ]
             )
         ]
     )
-    result = SpeciesPlanStage().run(_ctx(tmp_path, client, world))
-    assert result == {"species_plan_file": "species-plan.json", "reuse": 2, "new": 1}
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result == {
+        "species_plan_file": "species-plan.json",
+        "reuse": 2,
+        "new": 1,
+        "food": 1,
+        "candidate": 0,
+        "added_young": [],
+    }
     written = json.loads((tmp_path / "species-plan.json").read_text())
     validate("species-plan", written)
     assert written["food_web_ok"] is True
+    by_id = {entry["species"]: entry for entry in written["species"]}
+    assert by_id["red_fox"]["taxon"]["gbif_key"] == 5219243
+    assert by_id["common_mosquito"]["food_kind"] == "water_bugs"
     region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
     assert region["animals"]["predators"] == ["fox"]
+    assert region["animals"]["playable"] == ["red_deer"]
+    assert region["animals"]["prey"] == []
     assert region["fish"] == [{"kind": "perch", "count": 5}]
+    assert region["food"] == [
+        {"kind": "water_bugs", "amount": 10, "names": ["common mosquito"]}
+    ]
+
+
+def test_over_cap_demotes_in_order(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(
+        tmp_path,
+        [
+            _species("red_deer", "Cervus elaphus", "playable"),
+            _species("brown_bear", "Ursus arctos", "predator"),
+        ],
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("red_deer", "new"), ("brown_bear", "new")])])
+    result = _stage(max_new_species=1).run(_ctx(tmp_path, client, world))
+    assert client.calls == 1
+    assert result["new"] == 1
+    assert result["candidate"] == 1
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    by_id = {entry["species"]: entry for entry in written["species"]}
+    assert by_id["red_deer"]["decision"] == "new"
+    assert by_id["brown_bear"]["decision"] == "candidate"
+    assert "over the cap of 1" in by_id["brown_bear"]["reason"]
+    region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
     assert region["animals"]["playable"] == ["red_deer"]
 
 
-def test_young_forms_lose_to_grown_ones(tmp_path: Path) -> None:
+def test_young_forms_lose_to_grown_ones(tmp_path: Path, monkeypatch: Any) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, _surveyed())
+    _no_revalidate(monkeypatch)
     client = ScriptClient(
         [
             _plan(
-                [("red_fox", "reuse"), ("european_perch", "reuse"), ("red_deer", "new")]
+                [
+                    ("red_fox", "reuse"),
+                    ("european_perch", "reuse"),
+                    ("red_deer", "new"),
+                    ("common_mosquito", "food"),
+                ]
             )
         ]
     )
-    SpeciesPlanStage().run(_ctx(tmp_path, client, world))
+    _stage().run(_ctx(tmp_path, client, world))
     region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
     assert region["fish"][0]["kind"] == "perch"
 
 
-def test_cap_checked_before_any_model_call(tmp_path: Path) -> None:
+def test_playable_invertebrate_is_ranked(tmp_path: Path, monkeypatch: Any) -> None:
     world = _world(tmp_path)
-    _inputs(tmp_path, _surveyed())
-    client = ScriptClient([_plan([])])
-    pipeline = Pipeline([SpeciesPlanStage(max_new_species=0)], tmp_path / "state.json")
-    with pytest.raises(StageFailedError, match="stage species_plan failed"):
-        pipeline.run(_ctx(tmp_path, client, world))
-    assert client.calls == 0
-    state = json.loads((tmp_path / "state.json").read_text())
-    assert "over the cap" in state["failed"]["error"]
+    _inputs(tmp_path, [_species("honey_bee", "Apis mellifera", "playable")])
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("honey_bee", "new")])])
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["new"] == 1
+    assert result["food"] == 0
 
 
-def test_model_must_keep_the_match(tmp_path: Path) -> None:
+def test_model_must_keep_the_match(tmp_path: Path, monkeypatch: Any) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, _surveyed())
+    _no_revalidate(monkeypatch)
     wrong = _plan(
-        [("red_fox", "new"), ("european_perch", "reuse"), ("red_deer", "new")]
+        [
+            ("red_fox", "new"),
+            ("european_perch", "reuse"),
+            ("red_deer", "new"),
+            ("common_mosquito", "food"),
+        ]
     )
     right = _plan(
-        [("red_fox", "reuse"), ("european_perch", "reuse"), ("red_deer", "new")]
+        [
+            ("red_fox", "reuse"),
+            ("european_perch", "reuse"),
+            ("red_deer", "new"),
+            ("common_mosquito", "food"),
+        ]
     )
     client = ScriptClient([wrong, right])
-    SpeciesPlanStage().run(_ctx(tmp_path, client, world))
+    _stage().run(_ctx(tmp_path, client, world))
     assert client.calls == 2
 
 
-def test_food_web_failure_stops_with_plan_written(tmp_path: Path) -> None:
+def test_food_web_failure_stops_with_plan_written(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, _surveyed())
+    _no_revalidate(monkeypatch)
     hungry = _plan(
-        [("red_fox", "reuse"), ("european_perch", "reuse"), ("red_deer", "new")],
+        [
+            ("red_fox", "reuse"),
+            ("european_perch", "reuse"),
+            ("red_deer", "new"),
+            ("common_mosquito", "food"),
+        ],
         food_web_ok=False,
     )
     hungry["missing_food"] = ["prey for red_fox"]
     client = ScriptClient([hungry])
-    pipeline = Pipeline([SpeciesPlanStage()], tmp_path / "state.json")
+    pipeline = Pipeline([_stage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage species_plan failed"):
         pipeline.run(_ctx(tmp_path, client, world))
     written = json.loads((tmp_path / "species-plan.json").read_text())
@@ -188,16 +332,237 @@ def test_food_web_failure_stops_with_plan_written(tmp_path: Path) -> None:
     assert "food first fails" in state["failed"]["error"]
 
 
-def test_id_collision_needs_a_person(tmp_path: Path) -> None:
+def test_id_collision_needs_a_person(tmp_path: Path, monkeypatch: Any) -> None:
     world = _world(tmp_path)
-    _inputs(
-        tmp_path,
-        [_species("fox", "Vulpes zerda", "playable")],
-    )
+    _inputs(tmp_path, [_species("fox", "Vulpes zerda", "playable")])
+    _no_revalidate(monkeypatch)
     client = ScriptClient([_plan([])])
-    pipeline = Pipeline([SpeciesPlanStage()], tmp_path / "state.json")
+    pipeline = Pipeline([_stage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage species_plan failed"):
         pipeline.run(_ctx(tmp_path, client, world))
     assert client.calls == 0
     state = json.loads((tmp_path / "state.json").read_text())
     assert "must rename one" in state["failed"]["error"]
+
+
+def test_other_subspecies_needs_a_person(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    (world / "animals" / "mountain_reindeer.json").write_text(
+        json.dumps({"taxon": TARANDUS})
+    )
+    _inputs(tmp_path, [_species("reindeer", "Rangifer tarandus fennicus", "playable")])
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([])])
+    pipeline = Pipeline([_stage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage species_plan failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    assert client.calls == 0
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "different subspecies" in state["failed"]["error"]
+
+
+def test_broken_rewrite_stops(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, _surveyed())
+    monkeypatch.setattr(
+        "builder.stages.species_plan.validate_region_file",
+        lambda *args: ["the cast is empty"],
+    )
+    client = ScriptClient(
+        [
+            _plan(
+                [
+                    ("red_fox", "reuse"),
+                    ("european_perch", "reuse"),
+                    ("red_deer", "new"),
+                    ("common_mosquito", "food"),
+                ]
+            )
+        ]
+    )
+    pipeline = Pipeline([_stage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage species_plan failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "rewritten region fails" in state["failed"]["error"]
+
+
+def test_tame_species_saved_for_person(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(
+        tmp_path,
+        [
+            _species("reindeer", "Rangifer tarandus", "prey"),
+            _species("red_deer", "Cervus elaphus", "playable"),
+            _species("brown_bear", "Ursus arctos", "predator"),
+            _species("european_perch", "Perca fluviatilis", "prey"),
+        ],
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient(
+        [
+            _plan(
+                [
+                    ("reindeer", "new"),
+                    ("red_deer", "new"),
+                    ("brown_bear", "candidate"),
+                    ("european_perch", "reuse"),
+                ],
+                wild={"reindeer": False},
+            )
+        ]
+    )
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["new"] == 2
+    assert result["candidate"] == 1
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    by_id = {entry["species"]: entry for entry in written["species"]}
+    assert by_id["reindeer"]["decision"] == "candidate"
+    assert "not built as a wild species" in by_id["reindeer"]["reason"]
+    assert by_id["brown_bear"]["decision"] == "new"
+    assert "within the cap" in by_id["brown_bear"]["reason"]
+
+
+def test_predator_without_prey_waits(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(
+        tmp_path,
+        [
+            _species("brown_bear", "Ursus arctos", "predator"),
+            _species("red_deer", "Cervus elaphus", "playable"),
+        ],
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("brown_bear", "new"), ("red_deer", "candidate")])])
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["new"] == 1
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    by_id = {entry["species"]: entry for entry in written["species"]}
+    assert by_id["brown_bear"]["decision"] == "candidate"
+    assert "no prey in the cast" in by_id["brown_bear"]["reason"]
+    assert by_id["red_deer"]["decision"] == "new"
+
+
+def _hungry_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    animals = world / "animals"
+    (animals / "fox.json").write_text(
+        json.dumps(
+            {
+                "taxon": FOX,
+                "diet": ["berries", "clover"],
+                "hunts": ["small_mammal"],
+                "tags": ["predator"],
+            }
+        )
+    )
+    (animals / "perch.json").write_text(
+        json.dumps(
+            {
+                "taxon": PERCH,
+                "diet": ["water_bugs"],
+                "hunts": ["fry"],
+                "tags": ["fish"],
+            }
+        )
+    )
+    (animals / "young_perch.json").write_text(
+        json.dumps(
+            {
+                "taxon": PERCH,
+                "stage_of": "perch",
+                "diet": ["water_bugs"],
+                "tags": ["fry"],
+            }
+        )
+    )
+    return world
+
+
+def test_heal_cast_adds_food_and_young(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _hungry_world(tmp_path)
+    _inputs(
+        tmp_path,
+        [
+            _species("red_fox", "Vulpes vulpes", "predator"),
+            _species("european_perch", "Perca fluviatilis", "prey"),
+        ],
+        {
+            "id": "xx_test",
+            "animals": {"playable": [], "predators": ["red_fox"], "prey": []},
+            "fish": [{"kind": "european_perch", "count": 5}],
+            "food": [{"kind": "berries", "amount": 10, "names": ["berries"]}],
+            "places": [],
+        },
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("red_fox", "reuse"), ("european_perch", "reuse")])])
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["added_young"] == ["young_perch"]
+    region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
+    kinds = sorted(food["kind"] for food in region["food"])
+    assert kinds == ["berries", "clover", "water_bugs"]
+    assert region["fish"] == [
+        {"kind": "perch", "count": 5},
+        {"kind": "young_perch", "count": 5},
+    ]
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    validate("species-plan", written)
+    assert written["added_young"] == ["young_perch"]
+
+
+def test_unresolvable_tag_waits_for_new_species(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    world = _world(tmp_path)
+    (world / "animals" / "fox.json").write_text(
+        json.dumps({"taxon": FOX, "hunts": ["small_bird"], "tags": ["predator"]})
+    )
+    _inputs(
+        tmp_path,
+        [
+            _species("red_fox", "Vulpes vulpes", "predator"),
+            _species("red_deer", "Cervus elaphus", "playable"),
+        ],
+        {
+            "id": "xx_test",
+            "animals": {
+                "playable": ["red_deer"],
+                "predators": ["red_fox"],
+                "prey": [],
+            },
+            "fish": [],
+            "food": [],
+            "places": [],
+        },
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("red_fox", "reuse"), ("red_deer", "new")])])
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["added_young"] == []
+    region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
+    assert region["animals"]["predators"] == ["fox"]
+
+
+def test_named_nest_site_stops(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(
+        tmp_path,
+        [_species("golden_eagle", "Aquila chrysaetos", "predator")],
+        {
+            "id": "xx_test",
+            "animals": {"playable": [], "predators": ["golden_eagle"], "prey": []},
+            "fish": [],
+            "food": [],
+            "places": [{"name": "Eagle Crag nest ledge"}],
+        },
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient(
+        [_plan([("golden_eagle", "new")], sensitive=["golden_eagle"])]
+    )
+    pipeline = Pipeline([_stage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage species_plan failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "real sites for sensitive species" in state["failed"]["error"]

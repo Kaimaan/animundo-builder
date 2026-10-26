@@ -11,23 +11,13 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .prices import Prices
+
 DEFAULT_MODEL = "muse-spark-1.3"
 BASENTEN_OPEN_MODEL = "meta-models/muse-spark-open-1026"
 OPEN_HOSTS = ("meta", "baseten", "fireworks", "modal-glimmer")
 
 ENV_PREFIX = "BUILDER_"
-
-
-@dataclass(frozen=True)
-class Prices:
-    """US dollars per million tokens, unless said otherwise."""
-
-    input_per_million: float = 1.25
-    output_per_million: float = 4.25
-    cached_input_per_million: float = 0.15
-    search_per_thousand_queries: float = 2.50
-    sam_image_per_thousand: float = 2.50
-    sam_frame_per_thousand: float = 0.20
 
 
 @dataclass(frozen=True)
@@ -41,9 +31,9 @@ class Config:
     world_path: str | None = None
     daily_budget_usd: float = 20.0
     job_budget_usd: float = 8.0
-    # Raised from the brief's 3: the test surveys find 16-26 species and the
-    # person approved big casts. Re-tune with measured model costs at T29.
-    max_new_species: int = 30
+    total_budget_usd: float = 120.0
+    ledger_path: str = "spend-ledger.json"
+    max_new_species: int = 3
     model_api_key: str | None = None
     baseten_api_key: str | None = None
     fireworks_api_key: str | None = None
@@ -79,6 +69,8 @@ def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
         "WORLD_PATH",
         "DAILY_BUDGET_USD",
         "JOB_BUDGET_USD",
+        "TOTAL_BUDGET_USD",
+        "LEDGER_PATH",
         "MAX_NEW_SPECIES",
     )
     found = {}
@@ -104,7 +96,7 @@ def load(path: str | Path | None = None) -> Config:
             with candidate.open("rb") as handle:
                 values.update(tomllib.load(handle))
     values.update(_from_env())
-    for money in ("daily_budget_usd", "job_budget_usd"):
+    for money in ("daily_budget_usd", "job_budget_usd", "total_budget_usd"):
         if money in values:
             values[money] = float(values[money])
     if "max_new_species" in values:

@@ -16,6 +16,7 @@ import hashlib
 import json
 import subprocess
 import sys
+from collections.abc import Collection
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -83,6 +84,11 @@ class RegionStage:
             region_path.parent.mkdir(parents=True, exist_ok=True)
             region_path.write_text(json.dumps(draft, indent=2), encoding="utf-8")
             errors = self._validate(world, region_path, planned)
+            errors.extend(
+                sensitive_place_errors(
+                    survey.get("species", []), draft.get("places", [])
+                )
+            )
             have_sources = len(draft.get("sources", []))
             if have_sources < MIN_SOURCES:
                 errors.append(f"need {MIN_SOURCES} sources, file has {have_sources}")
@@ -132,32 +138,68 @@ class RegionStage:
         return draft
 
     def _validate(self, world: Path, region_path: Path, planned: set[str]) -> list[str]:
-        checker = str(world / "tools" / "validate_region.py")
-        proc = subprocess.run(
-            [sys.executable, checker, str(region_path)],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=120,
-        )
-        errors = []
-        for line in proc.stdout.splitlines():
-            if line.startswith("  - "):
-                errors.append(line[4:])
-        if proc.returncode != 0 and not errors:
-            errors.append((proc.stderr or "validator failed silently").strip())
-        kept = []
-        saw_unknown = False
-        for error in errors:
-            if "has unknown animal" in error or "must be an animal" in error:
-                saw_unknown = True
-                continue
-            kept.append(error)
-        if saw_unknown:
-            bad = sorted(_unknown_animals(world, region_path) - planned)
-            if bad:
-                kept.append(f"unknown animals not in the survey: {', '.join(bad)}")
-        return kept
+        return validate_region_file(world, region_path, planned)
+
+
+def validate_region_file(
+    world: Path, region_path: Path, planned: set[str]
+) -> list[str]:
+    """Run the world's checker, excusing planned species without files."""
+    checker = str(world / "tools" / "validate_region.py")
+    proc = subprocess.run(
+        [sys.executable, checker, str(region_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    errors = []
+    for line in proc.stdout.splitlines():
+        if line.startswith("  - "):
+            errors.append(line[4:])
+    if proc.returncode != 0 and not errors:
+        errors.append((proc.stderr or "validator failed silently").strip())
+    kept = []
+    saw_unknown = False
+    for error in errors:
+        if "has unknown animal" in error or "must be an animal" in error:
+            saw_unknown = True
+            continue
+        kept.append(error)
+    if saw_unknown:
+        bad = sorted(_unknown_animals(world, region_path) - planned)
+        if bad:
+            kept.append(f"unknown animals not in the survey: {', '.join(bad)}")
+    return kept
+
+
+def sensitive_place_errors(
+    surveyed: list[dict[str, Any]],
+    places: list[dict[str, Any]] | None,
+    extra: Collection[str] = (),
+) -> list[str]:
+    """Name every `places` entry that points at a sensitive species' site.
+
+    Sensitive means flagged in the survey or named in `extra` (the plan's
+    `sensitive_species`). A place whose name holds a word of such a
+    species' id is a real site, and the rules forbid it.
+    """
+    ids = {s["species"] for s in surveyed if s.get("sensitive")} | set(extra)
+    words: dict[str, str] = {}
+    for survey_id in ids:
+        for word in survey_id.split("_"):
+            if len(word) > 3:
+                words.setdefault(word, survey_id)
+    errors = []
+    for place in places or []:
+        name = str(place.get("name", ""))
+        for word, survey_id in sorted(words.items()):
+            if word in name.lower():
+                errors.append(
+                    f"place {name!r} names a real site for sensitive "
+                    f"{survey_id}; keep places general"
+                )
+    return errors
 
 
 def seed_for_area(area_id: str) -> int:

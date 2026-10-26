@@ -1,0 +1,32 @@
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/
+
+# Secrets: never commit any of these. This repo is public from day one.
+.env
+.env.*
+*.pem
+*-key.json
+*key.json
+service-account*.json
+secrets/
+
+# Builder working state: prompts, downloads, costs, anything per-job
+jobs/
+recordings/raw/
+*.jsonl
+
+# Agent memory that must stay personal, never committed
+.agents/memory/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store

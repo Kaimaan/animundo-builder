@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pre-commit secret scan. Enabled per clone with:
+#   git config core.hooksPath .githooks
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "error: gitleaks is not installed; refusing to commit." >&2
+  echo "Install it (https://github.com/gitleaks/gitleaks) and try again." >&2
+  exit 1
+fi
+exec gitleaks protect --staged --no-banner --redact

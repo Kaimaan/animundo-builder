@@ -107,8 +107,8 @@ response = client.chat.completions.create(
 ## Search grounding
 
 - Add the built-in tool `{"type": "web_search"}` to a **Responses API**
-  request. Sources come back as `url_citation` annotations on the text
-  (span plus title and URL); raw hits are opt-in with
+  request. Sources come back as `url_citation` annotations on the
+  `output_text` content parts (span plus title and URL); raw hits are opt-in with
   `include: ["web_search_call.results"]`.
   ([search grounding](https://dev.meta.ai/docs/search-grounding))
 - The docs show `web_search` on Responses only. Until a live call proves
@@ -126,9 +126,10 @@ response = client.responses.create(
     tools=[{"type": "web_search"}],
 )
 for block in response.output:
-    for ann in getattr(block, "annotations", []) or []:
-        if ann.type == "url_citation":
-            print(block.text[ann.start_index : ann.end_index], "-", ann.url)
+    for part in getattr(block, "content", []) or []:
+        for ann in getattr(part, "annotations", []) or []:
+            if ann.type == "url_citation":
+                print(part.text[ann.start_index : ann.end_index], "-", ann.url)
 ```
 
 ## Image understanding
@@ -191,9 +192,12 @@ response = client.chat.completions.create(
   confirmed yet. **To confirm** when the open-weights task starts, with
   Modal credits in hand.
 
-## Still needing a live key
+## Verified with live calls
 
-One real call each, then this section is deleted: chat with tools,
-search grounding, image input, SAM 3.1, Muse Spark Open on Baseten.
-Re-test `web_search` on Chat Completions in the same pass: if it works,
-the survey can use one endpoint with everything else.
+`tests/test_meta_live.py` (opt-in, needs `MODEL_API_KEY`) proves one real
+call each: chat with tools, structured output, search grounding with
+citations, image input, and a SAM 3.1 segmentation stream. Still open:
+
+- Muse Spark Open on Baseten (needs key and endpoint URL; lands with T33).
+- `web_search` on Chat Completions: untested. If it works, the survey can
+  use one endpoint with everything else.

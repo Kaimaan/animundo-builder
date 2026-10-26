@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Kai Lemmetty" }]
-dependencies = []
+dependencies = ["openai>=1.50", "httpx2>=2", "jsonschema>=4.20"]
 
 [project.scripts]
 builder = "builder.cli:main"

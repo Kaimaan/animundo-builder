@@ -20,6 +20,13 @@ docs/       # design docs, written as each part lands
 Later tasks add `prompts/`, `schemas/`, `contracts/`, `firebase/`,
 `godot/addons/animundo_builder/`, `examples/` and `evals/`.
 
+## Models
+
+Every model call goes to a Meta model through `builder/meta.py`, the only
+file that touches the network for models. Transport is the OpenAI-compatible
+Python client pointed at `https://api.meta.ai/v1` (Meta's own documented
+pattern); no OpenAI services, keys, or data are used anywhere.
+
 ## Setup and checks
 
 Prerequisites: `uv`, Python 3.12, `gitleaks`.

@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx2
 import pytest
 
-from builder.config import Prices
+from builder.config import BASENTEN_OPEN_MODEL, Config, Prices
 from builder.meta import (
     BASE_URL,
     CostLogger,
@@ -227,6 +227,36 @@ def test_usage_cost_with_search_and_cache() -> None:
     )
     expected = 1000 * 1.25 / 1e6 + 100 * 0.15 / 1e6 + 4 * 2.50 / 1000 + 2 * 2.50 / 1000
     assert usage.cost_usd(Prices()) == pytest.approx(expected)
+
+
+def test_open_weights_default_is_meta(tmp_path: Path) -> None:
+    config = Config(model_api_key=FAKE_KEY)
+    client = MetaClient.for_open_weights(config)
+    assert client.model == MODEL
+    assert str(client._client.base_url).rstrip("/") == BASE_URL
+
+
+def test_open_weights_baseten_needs_key_and_url() -> None:
+    config = Config(open_model_host="baseten")
+    with pytest.raises(MetaAuthError, match="BASETEN_API_KEY"):
+        MetaClient.for_open_weights(config)
+    config = Config(open_model_host="baseten", baseten_api_key="b-key")
+    with pytest.raises(ValueError, match="BUILDER_OPEN_BASE_URL"):
+        MetaClient.for_open_weights(config)
+    config = Config(
+        open_model_host="baseten",
+        baseten_api_key="b-key",
+        open_base_url="https://example.org/v1",
+    )
+    client = MetaClient.for_open_weights(config)
+    assert client.model == BASENTEN_OPEN_MODEL
+    assert str(client._client.base_url).rstrip("/") == "https://example.org/v1"
+
+
+def test_open_weights_unconfirmed_host_refused() -> None:
+    config = Config(open_model_host="modal-glimmer")
+    with pytest.raises(ValueError, match="not confirmed yet"):
+        MetaClient.for_open_weights(config)
 
 
 def test_responses_counts_searches(tmp_path: Path) -> None:

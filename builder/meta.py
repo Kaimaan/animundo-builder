@@ -113,6 +113,7 @@ class MetaClient:
         logger: CostLogger | None = None,
         http_client: httpx2.Client | None = None,
         sleeper: Any = time.sleep,
+        base_url: str = BASE_URL,
     ) -> None:
         if not api_key:
             raise MetaAuthError("MODEL_API_KEY is not set")
@@ -121,10 +122,44 @@ class MetaClient:
         self.logger = logger
         self._sleeper = sleeper
         self._client = openai.OpenAI(
-            base_url=BASE_URL,
+            base_url=base_url,
             api_key=api_key,
             max_retries=0,  # retries are explicit below, and logged
             http_client=http_client,
+        )
+
+    @classmethod
+    def for_open_weights(
+        cls,
+        config: Any,
+        logger: CostLogger | None = None,
+        http_client: httpx2.Client | None = None,
+    ) -> MetaClient:
+        """Build the client open-weights jobs (reviews, translations) use.
+
+        Default host `meta` runs them on Muse Spark. Partner hosts need
+        their key and, until their URLs are confirmed, an explicit
+        `BUILDER_OPEN_BASE_URL`. Anything missing fails clearly here,
+        never mid-job.
+        """
+        host = config.open_model_host
+        if host == "meta":
+            if not config.model_api_key:
+                raise MetaAuthError("MODEL_API_KEY is not set")
+            return cls(api_key=config.model_api_key, model=config.model, logger=logger)
+        if host == "modal-glimmer":
+            raise ValueError("the modal-glimmer host is not confirmed yet (see T33)")
+        env_var = {"baseten": "BASETEN_API_KEY", "fireworks": "FIREWORKS_API_KEY"}[host]
+        if not config.open_api_key():
+            raise MetaAuthError(f"{env_var} is not set")
+        if not config.open_base_url:
+            raise ValueError(f"set BUILDER_OPEN_BASE_URL for host {host!r}")
+        return cls(
+            api_key=config.open_api_key(),
+            model=config.open_model_id(),
+            logger=logger,
+            http_client=http_client,
+            base_url=config.open_base_url,
         )
 
     def ensure_model(self) -> None:
@@ -214,12 +249,17 @@ class MetaClient:
         )
 
 
+def count_search_calls(response: Any) -> int:
+    """How many web searches one Responses API answer ran."""
+    return sum(
+        1 for item in getattr(response, "output", []) or [] if _is_search_call(item)
+    )
+
+
 def usage_from_response(response: Any, model: str, images: int = 0) -> Usage:
     """Read token and search usage off a Chat or Responses API answer."""
     usage = response.usage
-    searches = sum(
-        1 for item in getattr(response, "output", []) or [] if _is_search_call(item)
-    )
+    searches = count_search_calls(response)
     cached = 0
     details = getattr(usage, "prompt_tokens_details", None)
     if details is not None:

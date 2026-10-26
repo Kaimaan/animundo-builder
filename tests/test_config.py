@@ -13,7 +13,13 @@ def test_defaults() -> None:
     assert config.open_model_host == "meta"
     assert config.daily_budget_usd == 20.0
     assert config.job_budget_usd == 8.0
+    assert config.max_new_species == 30
     assert config.prices.input_per_million == 1.25
+
+
+def test_max_new_species_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("BUILDER_MAX_NEW_SPECIES", "5")
+    assert load().max_new_species == 5
 
 
 def test_load_reads_environment(monkeypatch) -> None:
@@ -51,10 +57,31 @@ def test_bad_open_host_rejected(monkeypatch) -> None:
 
 
 def test_open_model_hosts() -> None:
-    assert Config(open_model_host="baseten").open_model() == BASENTEN_OPEN_MODEL
-    assert Config(open_model_host="meta").open_model() == DEFAULT_MODEL
-    with pytest.raises(ValueError, match="Modal"):
-        Config(open_model_host="modal").open_model()
+    assert Config(open_model_host="baseten").open_model_id() == BASENTEN_OPEN_MODEL
+    assert Config(open_model_host="meta").open_model_id() == DEFAULT_MODEL
+    custom = Config(open_model_host="fireworks", open_model="my-glimmer-tune")
+    assert custom.open_model_id() == "my-glimmer-tune"
+    with pytest.raises(ValueError, match="BUILDER_OPEN_MODEL"):
+        Config(open_model_host="fireworks").open_model_id()
+
+
+def test_open_api_keys() -> None:
+    assert Config(open_model_host="meta", model_api_key="m").open_api_key() == "m"
+    assert Config(open_model_host="baseten", baseten_api_key="b").open_api_key() == "b"
+    assert (
+        Config(open_model_host="fireworks", fireworks_api_key="f").open_api_key() == "f"
+    )
+    assert Config(open_model_host="modal-glimmer").open_api_key() is None
+
+
+def test_open_settings_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("BUILDER_OPEN_MODEL_HOST", "baseten")
+    monkeypatch.setenv("BUILDER_OPEN_BASE_URL", "https://example.org/v1")
+    monkeypatch.setenv("FIREWORKS_API_KEY", "fw-key")
+    config = load()
+    assert config.open_model_host == "baseten"
+    assert config.open_base_url == "https://example.org/v1"
+    assert config.fireworks_api_key == "fw-key"
 
 
 def test_price_overrides() -> None:

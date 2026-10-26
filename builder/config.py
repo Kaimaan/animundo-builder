@@ -13,7 +13,7 @@ from pathlib import Path
 
 DEFAULT_MODEL = "muse-spark-1.3"
 BASENTEN_OPEN_MODEL = "meta-models/muse-spark-open-1026"
-OPEN_HOSTS = ("baseten", "modal", "meta")
+OPEN_HOSTS = ("meta", "baseten", "fireworks", "modal-glimmer")
 
 ENV_PREFIX = "BUILDER_"
 
@@ -36,29 +36,50 @@ class Config:
 
     model: str = DEFAULT_MODEL
     open_model_host: str = "meta"
+    open_model: str | None = None
+    open_base_url: str | None = None
     world_path: str | None = None
     daily_budget_usd: float = 20.0
     job_budget_usd: float = 8.0
+    # Raised from the brief's 3: the test surveys find 16-26 species and the
+    # person approved big casts. Re-tune with measured model costs at T29.
+    max_new_species: int = 30
     model_api_key: str | None = None
     baseten_api_key: str | None = None
+    fireworks_api_key: str | None = None
     prices: Prices = field(default_factory=Prices)
 
-    def open_model(self) -> str:
-        """The model id and host to use for open-weights jobs."""
+    def open_model_id(self) -> str:
+        """The model id to use for open-weights jobs on the chosen host."""
+        if self.open_model_host == "meta":
+            return self.model
+        if self.open_model is not None:
+            return self.open_model
         if self.open_model_host == "baseten":
             return BASENTEN_OPEN_MODEL
-        if self.open_model_host == "modal":
-            raise ValueError("the Modal model name is not confirmed yet")
-        return self.model
+        raise ValueError(f"set BUILDER_OPEN_MODEL for host {self.open_model_host!r}")
+
+    def open_api_key(self) -> str | None:
+        """The key for the chosen open-weights host, if it needs one."""
+        if self.open_model_host == "baseten":
+            return self.baseten_api_key
+        if self.open_model_host == "fireworks":
+            return self.fireworks_api_key
+        if self.open_model_host == "modal-glimmer":
+            return None
+        return self.model_api_key
 
 
 def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
     names = (
         "MODEL",
         "OPEN_MODEL_HOST",
+        "OPEN_MODEL",
+        "OPEN_BASE_URL",
         "WORLD_PATH",
         "DAILY_BUDGET_USD",
         "JOB_BUDGET_USD",
+        "MAX_NEW_SPECIES",
     )
     found = {}
     for name in names:
@@ -86,6 +107,8 @@ def load(path: str | Path | None = None) -> Config:
     for money in ("daily_budget_usd", "job_budget_usd"):
         if money in values:
             values[money] = float(values[money])
+    if "max_new_species" in values:
+        values["max_new_species"] = int(values["max_new_species"])
     if "open_model_host" in values and values["open_model_host"] not in OPEN_HOSTS:
         raise ValueError(f"open_model_host must be one of {', '.join(OPEN_HOSTS)}")
     if "prices" in values and isinstance(values["prices"], dict):
@@ -93,5 +116,6 @@ def load(path: str | Path | None = None) -> Config:
     return Config(
         model_api_key=os.environ.get("MODEL_API_KEY"),
         baseten_api_key=os.environ.get("BASETEN_API_KEY"),
+        fireworks_api_key=os.environ.get("FIREWORKS_API_KEY"),
         **values,  # type: ignore[arg-type]
     )

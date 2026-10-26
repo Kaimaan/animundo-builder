@@ -84,6 +84,13 @@ print(response.choices[0].message.tool_calls)
   `response_format` to `{type: "json_schema", json_schema: {name, schema}}`
   and decoding is constrained to match it exactly.
   ([structured output](https://dev.meta.ai/docs/structured-output))
+- Limitation found live: the world's region schema cannot be used this
+  way. Its `animals` property (an object of optional `$ref` arrays, and
+  similar shapes like `fish`) is silently dropped from constrained
+  output, even when explicitly asked for; without the constraint the
+  same prompt writes it. The region stage therefore generates plain
+  JSON and validates against the world schema in code. The animal
+  schema works fine constrained.
 
 ```python
 response = client.chat.completions.create(
@@ -184,13 +191,19 @@ response = client.chat.completions.create(
   builder's client does (429 and 5xx, at most 5 tries, then the step
   fails cleanly).
 
-## Muse Spark Open
+## Open-weight models: an add-on, off by default
 
-- The hackathon model id on Baseten is `meta-models/muse-spark-open-1026`
-  (from the event's own credit form, not the public docs).
-- On Modal it runs as a shared endpoint; the exact call name is not
-  confirmed yet. **To confirm** when the open-weights task starts, with
-  Modal credits in hand.
+Reviews and translations run on Muse Spark unless `BUILDER_OPEN_MODEL_HOST`
+says otherwise. The switch supports these hosts; partner hosts need their
+key plus an explicit `BUILDER_OPEN_BASE_URL` until their URLs are confirmed.
+
+- **Baseten:** Muse Spark Open, `meta-models/muse-spark-open-1026` (the
+  hackathon id, from the event's own credit form).
+- **Fireworks:** Muse Glimmer, model id from `BUILDER_OPEN_MODEL`.
+  **To confirm** at T33/T43: that a LoRA fine-tune of it is served
+  serverless.
+- **Modal:** refused until the model names are confirmed. **To confirm**
+  at T33, with Modal credits in hand.
 
 ## Verified with live calls
 
@@ -198,6 +211,7 @@ response = client.chat.completions.create(
 call each: chat with tools, structured output, search grounding with
 citations, image input, and a SAM 3.1 segmentation stream. Still open:
 
-- Muse Spark Open on Baseten (needs key and endpoint URL; lands with T33).
+- The open-weight add-on (needs partner keys and endpoint URLs; lands
+  with T33).
 - `web_search` on Chat Completions: untested. If it works, the survey can
   use one endpoint with everything else.

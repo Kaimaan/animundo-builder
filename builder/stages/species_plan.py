@@ -15,9 +15,12 @@ in the submit pull request only.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
+import time
+import urllib.request
 from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import Any
@@ -31,67 +34,74 @@ from .region import sensitive_place_errors, validate_region_file
 DEFAULT_MAX_NEW_SPECIES = 3
 MAX_FIX_ROUNDS = 3
 
-# Tokens in a surveyed id that mark a small invertebrate. These are food
-# (`water_bugs` for the ones whose larvae live in water, `insects` for
-# the rest), never new animal files, unless the survey says playable.
-INVERTEBRATE_WORDS = frozenset(
-    {
-        "ant",
-        "bee",
-        "beetle",
-        "bumblebee",
-        "butterfly",
-        "cricket",
-        "damselfly",
-        "dragonfly",
-        "flea",
-        "fly",
-        "gnat",
-        "grasshopper",
-        "hornet",
-        "louse",
-        "midge",
-        "mite",
-        "mosquito",
-        "moth",
-        "snail",
-        "slug",
-        "spider",
-        "tick",
-        "wasp",
-        "worm",
-    }
-)
+# Surveyed ids whose larvae live in water: food kind `water_bugs`
+# instead of `insects`.
 WATER_BREEDERS = frozenset({"gnat", "midge", "mosquito"})
 
 MatchFn = Callable[[Path, str], dict[str, Any]]
+ClassifyFn = Callable[[int], str]
+
+
+TAXON_TRIES = 3
 
 
 def taxon_same(world: Path, latin: str) -> dict[str, Any]:
-    """Resolve one Latin name with the world's `tools/taxon.py`."""
-    try:
-        proc = subprocess.run(
-            [sys.executable, "tools/taxon.py", "--same", latin],
-            cwd=world,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=120,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise _Stopped(f"taxon.py did not run for {latin!r}: {error}")
-    if proc.returncode != 0:
-        raise _Stopped(
-            f"could not resolve {latin!r}; a person must match it: "
-            f"{(proc.stderr or proc.stdout).strip()}"
-        )
-    try:
-        found = json.loads(proc.stdout)
-    except json.JSONDecodeError as error:
-        raise _Stopped(f"taxon.py gave no JSON for {latin!r}: {error}")
-    if "taxon" not in found or "gbif_key" not in found["taxon"]:
-        raise _Stopped(f"taxon.py gave no GBIF key for {latin!r}")
-    return found
+    """Resolve one Latin name with the world's `tools/taxon.py`.
+
+    GBIF is a network call away, so transient failures are retried;
+    only a stable failure stops the job for a person.
+    """
+    last_error = ""
+    for attempt in range(1, TAXON_TRIES + 1):
+        try:
+            proc = subprocess.run(
+                [sys.executable, "tools/taxon.py", "--same", latin],
+                cwd=world,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            last_error = str(error)
+            time.sleep(2.0**attempt)
+            continue
+        if proc.returncode != 0:
+            last_error = _last_line(proc.stderr or proc.stdout)
+            time.sleep(2.0**attempt)
+            continue
+        try:
+            found = json.loads(proc.stdout)
+        except json.JSONDecodeError as error:
+            raise _Stopped(f"taxon.py gave no JSON for {latin!r}: {error}")
+        if "taxon" not in found or "gbif_key" not in found["taxon"]:
+            raise _Stopped(f"taxon.py gave no GBIF key for {latin!r}")
+        return found
+    raise _Stopped(f"could not resolve {latin!r} ({last_error}); GBIF may be down")
+
+
+def _last_line(text: str) -> str:
+    """The cause, not the traceback: taxon.py failures end with it."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return lines[-1] if lines else "no output"
+
+
+def gbif_phylum(gbif_key: int) -> str:
+    """The GBIF phylum for a matched key: Chordata or an invertebrate.
+
+    This answers classification, not identity: the key always comes from
+    `taxon.py`, so no matching rule is duplicated here.
+    """
+    last_error = ""
+    for attempt in range(1, TAXON_TRIES + 1):
+        try:
+            url = f"https://api.gbif.org/v1/species/{gbif_key}"
+            with urllib.request.urlopen(url, timeout=20) as response:
+                return json.load(response).get("phylum", "")
+        except (OSError, ValueError) as error:
+            last_error = str(error)
+            time.sleep(2.0**attempt)
+    raise _Stopped(f"could not read the GBIF phylum for key {gbif_key} ({last_error})")
 
 
 class SpeciesPlanStage:
@@ -103,9 +113,11 @@ class SpeciesPlanStage:
         self,
         max_new_species: int = DEFAULT_MAX_NEW_SPECIES,
         match: MatchFn | None = None,
+        classify: ClassifyFn | None = None,
     ) -> None:
         self.max_new_species = max_new_species
         self._match = match or taxon_same
+        self._classify = classify or gbif_phylum
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -166,7 +178,7 @@ class SpeciesPlanStage:
                 continue
             _refuse_collision(survey_id, taxon, taxa)
             _refuse_other_subspecies(survey_id, taxon, taxa)
-            if _is_food_invertebrate(survey_id, species):
+            if species.get("role") != "playable" and self._is_food(taxon):
                 fixed[survey_id] = {
                     "decision": "food",
                     "kind": _food_kind(survey_id),
@@ -175,6 +187,14 @@ class SpeciesPlanStage:
             else:
                 rank[survey_id] = taxon
         return fixed, rank
+
+    def _is_food(self, taxon: dict[str, Any]) -> bool:
+        """A non-chordate is food: small invertebrates, never files.
+
+        Never a name match: slow_worm is a reptile, bee_eater a bird, and
+        only GBIF's phylum tells them from real invertebrates.
+        """
+        return self._classify(taxon["gbif_key"]) != "Chordata"
 
     def _write_with_model(
         self,
@@ -361,29 +381,40 @@ class SpeciesPlanStage:
     def _heal_cast(self, world: Path, region: dict[str, Any]) -> set[str]:
         """Feed the reuse cast: missing food kinds and young prey forms.
 
-        Every diet kind of a reused cast animal must be region food, and
-        every tag its hunters need must sit on a cast animal. Food is
-        added plainly; a missing tag is fixed by adding the young form
-        (`stage_of`) of a cast animal that carries it, young fish with
-        their parent's count. Returns the young forms added. Tags no
-        young form carries are left for the new species to provide (the
-        animal stage tells the model which).
+        Every diet kind of a reused cast animal must be food the region
+        has: its `food` list, its ground-cover plants, or nectar from
+        its flowers (the same count the animal checker makes). A missing
+        kind the region checker allows is added to `food`; one it does
+        not (mushrooms with no mushroom plant) stops for a person, since
+        growing it invents content. Every tag its hunters need must sit
+        on a cast animal: a missing tag is fixed by adding the young
+        form (`stage_of`) of a cast animal that carries it, young fish
+        with their parent's count. Returns the young forms added. Tags
+        no young form carries are left for the new species to provide
+        (the animal stage tells the model which).
         """
+        allowed = _region_food_kinds(world)
         added: set[str] = set()
         for _ in range(3):
             cast = _cast_files(region)
             known = cast | added
             files = {stem: _animal_file(world, stem) for stem in known}
-            kinds = {food.get("kind", "") for food in region.get("food", [])}
+            kinds = _available_food(region)
             changed = False
-            for data in files.values():
+            for stem, data in files.items():
                 for kind in data.get("diet") or []:
-                    if kind not in kinds:
-                        kinds.add(kind)
-                        region.setdefault("food", []).append(
-                            {"kind": kind, "amount": 10, "names": [kind]}
+                    if kind in kinds:
+                        continue
+                    if allowed is not None and kind not in allowed:
+                        raise _Stopped(
+                            f"{stem} eats {kind}, but no food or plant "
+                            "here provides it; a person must decide"
                         )
-                        changed = True
+                    kinds.add(kind)
+                    region.setdefault("food", []).append(
+                        {"kind": kind, "amount": 10, "names": [kind]}
+                    )
+                    changed = True
             tags = {tag for data in files.values() for tag in data.get("tags", [])}
             hunts = {tag for data in files.values() for tag in data.get("hunts", [])}
             for tag in sorted(hunts - tags):
@@ -478,6 +509,49 @@ def _animal_file(world: Path, stem: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _available_food(region: dict[str, Any]) -> set[str]:
+    """Food kinds the region has: `food`, plant food, flower nectar."""
+    kinds = {food.get("kind", "") for food in region.get("food", [])} - {""}
+    ground = region.get("ground_cover", {})
+    if not isinstance(ground, dict):
+        return kinds
+    for plant in ground.get("plants", []):
+        food = plant.get("food")
+        if isinstance(food, str):
+            kinds.add(food)
+        elif isinstance(food, dict) and food.get("kind"):
+            kinds.add(food["kind"])
+    flowers = ground.get("flowers", 0.0)
+    if (
+        isinstance(flowers, (int, float))
+        and flowers > 0
+        and ground.get("flower_colors")
+    ):
+        kinds.add("nectar")
+    return kinds
+
+
+def _region_food_kinds(world: Path) -> set[str] | None:
+    """The region checker's FOOD_KINDS, read from the checkout.
+
+    Never copied: the world's lists have one home. Test doubles have no
+    checker, so they get None and heal anything.
+    """
+    path = world / "tools" / "validate_region.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("animundo_validate_region", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        return None
+    kinds = getattr(module, "FOOD_KINDS", None)
+    return set(kinds) if kinds else None
+
+
 def _young_carrying(world: Path, cast: set[str], tag: str) -> str | None:
     """A young form of a cast animal that carries `tag`, if one exists."""
     for path in sorted((world / "animals").glob("*.json")):
@@ -537,12 +611,6 @@ def _refuse_other_subspecies(
                 f"{survey_id} ({taxon['name']}) is a different subspecies "
                 f"from {stem} ({other['name']}); a person must decide"
             )
-
-
-def _is_food_invertebrate(survey_id: str, species: dict[str, Any]) -> bool:
-    if species.get("role") == "playable":
-        return False
-    return bool(set(survey_id.split("_")) & INVERTEBRATE_WORDS)
 
 
 def _food_kind(survey_id: str) -> str:

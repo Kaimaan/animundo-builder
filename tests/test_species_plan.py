@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -11,7 +13,7 @@ import pytest
 
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
 from builder.schemas import validate
-from builder.stages.species_plan import SpeciesPlanStage
+from builder.stages.species_plan import SpeciesPlanStage, taxon_same
 
 FOX = {"gbif_key": 5219243, "rank": "SPECIES", "name": "Vulpes vulpes"}
 PERCH = {"gbif_key": 8140485, "rank": "SPECIES", "name": "Perca fluviatilis"}
@@ -46,6 +48,10 @@ MATCH = {
     "Apis mellifera": (BEE, []),
     "Aquila chrysaetos": (
         {"gbif_key": 2480506, "rank": "SPECIES", "name": "Aquila chrysaetos"},
+        [],
+    ),
+    "Anguis fragilis": (
+        {"gbif_key": 2468095, "rank": "SPECIES", "name": "Anguis fragilis"},
         [],
     ),
 }
@@ -121,6 +127,25 @@ def _fake_match(world: Path, latin: str) -> dict[str, Any]:
     return {"taxon": taxon, "files": files}
 
 
+PHYLA = {
+    5219243: "Chordata",
+    8140485: "Chordata",
+    2440958: "Chordata",
+    1651255: "Arthropoda",
+    2433433: "Chordata",
+    5219244: "Chordata",
+    5220116: "Chordata",
+    5220114: "Chordata",
+    1340298: "Arthropoda",
+    2480506: "Chordata",
+    2468095: "Chordata",
+}
+
+
+def _fake_classify(gbif_key: int) -> str:
+    return PHYLA[gbif_key]
+
+
 class ScriptClient:
     model = "fake-test-model"
 
@@ -182,6 +207,7 @@ def _no_revalidate(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _stage(**kwargs: Any) -> SpeciesPlanStage:
     kwargs.setdefault("match", _fake_match)
+    kwargs.setdefault("classify", _fake_classify)
     return SpeciesPlanStage(**kwargs)
 
 
@@ -276,6 +302,16 @@ def test_playable_invertebrate_is_ranked(tmp_path: Path, monkeypatch: Any) -> No
     _inputs(tmp_path, [_species("honey_bee", "Apis mellifera", "playable")])
     _no_revalidate(monkeypatch)
     client = ScriptClient([_plan([("honey_bee", "new")])])
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["new"] == 1
+    assert result["food"] == 0
+
+
+def test_wormy_vertebrate_is_ranked(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, [_species("slow_worm", "Anguis fragilis", "prey")])
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("slow_worm", "new")])])
     result = _stage().run(_ctx(tmp_path, client, world))
     assert result["new"] == 1
     assert result["food"] == 0
@@ -511,6 +547,59 @@ def test_heal_cast_adds_food_and_young(tmp_path: Path, monkeypatch: Any) -> None
     assert written["added_young"] == ["young_perch"]
 
 
+def _enum_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    (world / "animals" / "fox.json").write_text(
+        json.dumps({"taxon": FOX, "diet": ["berries", "mushrooms"]})
+    )
+    tools = world / "tools"
+    tools.mkdir(exist_ok=True)
+    (tools / "validate_region.py").write_text('FOOD_KINDS = {"berries"}\n')
+    return world
+
+
+def _fox_region(ground_cover: dict) -> dict:
+    return {
+        "id": "xx_test",
+        "animals": {"playable": [], "predators": ["red_fox"], "prey": []},
+        "fish": [],
+        "food": [{"kind": "berries", "amount": 10, "names": ["berries"]}],
+        "places": [],
+        "ground_cover": ground_cover,
+    }
+
+
+def test_plant_food_counts_for_diets(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _enum_world(tmp_path)
+    _inputs(
+        tmp_path,
+        [_species("red_fox", "Vulpes vulpes", "predator")],
+        _fox_region({"plants": [{"model": "porcini", "food": "mushrooms"}]}),
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("red_fox", "reuse")])])
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["reuse"] == 1
+    region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
+    assert [food["kind"] for food in region["food"]] == ["berries"]
+
+
+def test_unprovidable_food_stops_for_person(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _enum_world(tmp_path)
+    _inputs(
+        tmp_path,
+        [_species("red_fox", "Vulpes vulpes", "predator")],
+        _fox_region({"plants": []}),
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("red_fox", "reuse")])])
+    pipeline = Pipeline([_stage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage species_plan failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "no food or plant here provides it" in state["failed"]["error"]
+
+
 def test_unresolvable_tag_waits_for_new_species(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -566,3 +655,39 @@ def test_named_nest_site_stops(tmp_path: Path, monkeypatch: Any) -> None:
         pipeline.run(_ctx(tmp_path, client, world))
     state = json.loads((tmp_path / "state.json").read_text())
     assert "real sites for sensitive species" in state["failed"]["error"]
+
+
+def _proc(returncode: int, stdout: str = "", stderr: str = "") -> SimpleNamespace:
+    return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def test_taxon_retries_then_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = {"n": 0}
+    sleeps: list[float] = []
+
+    def flaky(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return _proc(1, "", "URLError: timed out")
+        return _proc(0, json.dumps({"taxon": FOX, "files": []}))
+
+    monkeypatch.setattr(subprocess, "run", flaky)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    found = taxon_same(tmp_path, "Vulpes vulpes")
+    assert found["taxon"]["gbif_key"] == 5219243
+    assert calls["n"] == 3
+    assert sleeps == [2.0, 4.0]
+
+
+def test_taxon_stable_failure_is_short(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stderr = "Traceback (most recent call last):\n  File x\nURLError: timed out"
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(1, "", stderr))
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    from builder.stages.species_plan import _Stopped
+
+    with pytest.raises(_Stopped, match="URLError: timed out"):
+        taxon_same(tmp_path, "Vulpes vulpes")

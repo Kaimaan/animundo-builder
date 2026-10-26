@@ -1,0 +1,41 @@
+[
+  {
+    "area_id": "fi_urho_kekkonen",
+    "name": "Urho Kekkonen",
+    "country": "FI",
+    "centroid": {"lat": 68.25, "lon": 28.3},
+    "ecoregion": "Scandinavian montane birch forest and grasslands",
+    "outline": [
+      [27.6, 67.9],
+      [29.0, 67.9],
+      [29.0, 68.6],
+      [27.6, 68.6]
+    ]
+  },
+  {
+    "area_id": "gb_cairngorms",
+    "name": "Cairngorms",
+    "country": "GB",
+    "centroid": {"lat": 57.07, "lon": -3.67},
+    "ecoregion": "Caledon conifer forests",
+    "outline": [
+      [-3.9, 57.0],
+      [-3.4, 57.0],
+      [-3.4, 57.2],
+      [-3.9, 57.2]
+    ]
+  },
+  {
+    "area_id": "no_hardangervidda",
+    "name": "Hardangervidda",
+    "country": "NO",
+    "centroid": {"lat": 60.2, "lon": 7.4},
+    "ecoregion": "Scandinavian montane birch forest and grasslands",
+    "outline": [
+      [7.0, 60.0],
+      [7.8, 60.0],
+      [7.8, 60.4],
+      [7.0, 60.4]
+    ]
+  }
+]

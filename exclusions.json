@@ -1,0 +1,5 @@
+{
+  "_notes": "Areas the builder never offers or builds. The core team maintains this file by hand; agents never add to or remove from it. See docs/07-safety.md in the full brief.",
+  "area_ids": [],
+  "country_codes": []
+}

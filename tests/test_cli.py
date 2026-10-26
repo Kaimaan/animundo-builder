@@ -1,7 +1,8 @@
-"""Tests for the builder command line skeleton."""
+"""Tests for the builder command line."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -27,12 +28,88 @@ def test_check_needs_world() -> None:
         main(["check"])
 
 
-def test_unbuilt_commands_say_so(tmp_path: Path, capsys) -> None:
-    assert main(["build", "--area", "x", "--world", str(tmp_path)]) == NOT_BUILT_YET
-    assert "not built yet" in capsys.readouterr().err
-    assert main(["resume", "job-1"]) == NOT_BUILT_YET
+def test_unbuilt_commands_say_so(capsys) -> None:
     assert main(["worker"]) == NOT_BUILT_YET
+    assert "not built yet" in capsys.readouterr().err
     assert main(["eval"]) == NOT_BUILT_YET
+
+
+def test_build_stops_cleanly_without_a_key(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    code = main(["build", "--area", "gb_cairngorms", "--world", str(tmp_path)])
+    assert code == NOT_BUILT_YET
+    err = capsys.readouterr().err
+    assert "MODEL_API_KEY is not set" in err
+    (job_dir,) = (tmp_path / "jobs").iterdir()
+    area = json.loads((job_dir / "area.json").read_text(encoding="utf-8"))
+    assert area["area_id"] == "gb_cairngorms"
+    state = json.loads((job_dir / "state.json").read_text(encoding="utf-8"))
+    assert state["completed"] == ["intake"]
+
+
+def test_build_by_name(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    code = main(
+        ["build", "--name", "Cairngorms", "--country", "GB", "--world", str(tmp_path)]
+    )
+    assert code == NOT_BUILT_YET
+    (job_dir,) = (tmp_path / "jobs").iterdir()
+    area = json.loads((job_dir / "area.json").read_text(encoding="utf-8"))
+    assert area["area_id"] == "gb_cairngorms"
+
+
+def test_build_dry_run_writes_nothing(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        ["build", "--area", "gb_cairngorms", "--world", str(tmp_path), "--dry-run"]
+    )
+    assert code == 0
+    assert "wrote nothing" in capsys.readouterr().out
+    assert not (tmp_path / "jobs").exists()
+
+
+def test_build_unknown_area_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["build", "--area", "xx_nowhere", "--world", str(tmp_path)]) == 1
+    assert "unknown area" in capsys.readouterr().err
+
+
+def test_build_needs_area_or_name(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["build", "--world", str(tmp_path)]) == 1
+    assert "--area or --name" in capsys.readouterr().err
+
+
+def test_build_needs_world(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    missing = tmp_path / "no-such-world"
+    assert main(["build", "--area", "gb_cairngorms", "--world", str(missing)]) == 1
+    assert "not a directory" in capsys.readouterr().err
+
+
+def test_resume_carries_on_without_redoing_intake(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    assert main(["build", "--area", "gb_cairngorms", "--world", str(tmp_path)]) == (
+        NOT_BUILT_YET
+    )
+    (job_dir,) = (tmp_path / "jobs").iterdir()
+    before = (job_dir / "area.json").read_bytes()
+    capsys.readouterr()
+    assert main(["resume", job_dir.name]) == NOT_BUILT_YET
+    assert (job_dir / "area.json").read_bytes() == before
+    state = json.loads((job_dir / "state.json").read_text(encoding="utf-8"))
+    assert state["completed"] == ["intake"]
+
+
+def test_resume_unknown_job_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["resume", "no-such-job"]) == 1
+    assert "no such job" in capsys.readouterr().err
 
 
 def test_entry_point_runs() -> None:

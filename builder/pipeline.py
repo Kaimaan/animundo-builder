@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .config import Prices
-from .meta import MetaClient, Usage, usage_from_response
+from .meta import MetaAuthError, MetaClient, Usage, usage_from_response
 
 
 class BudgetExceeded(Exception):
@@ -58,22 +58,30 @@ class JobContext:
 
     job_id: str
     job_dir: Path
-    client: MetaClient
+    client: MetaClient | None
     tracker: BudgetTracker
+    world_path: Path | None = None
 
     def check_budget(self) -> None:
         self.tracker.check()
 
+    def _client(self) -> MetaClient:
+        if self.client is None:
+            raise MetaAuthError("MODEL_API_KEY is not set")
+        return self.client
+
     def chat(self, *args: Any, **kwargs: Any) -> Any:
         self.tracker.check()
-        response = self.client.chat(*args, **kwargs)
-        self.tracker.add(usage_from_response(response, self.client.model))
+        client = self._client()
+        response = client.chat(*args, **kwargs)
+        self.tracker.add(usage_from_response(response, client.model))
         return response
 
     def respond(self, *args: Any, images: int = 0, **kwargs: Any) -> Any:
         self.tracker.check()
-        response = self.client.responses_create(*args, images=images, **kwargs)
-        self.tracker.add(usage_from_response(response, self.client.model, images))
+        client = self._client()
+        response = client.responses_create(*args, images=images, **kwargs)
+        self.tracker.add(usage_from_response(response, client.model, images))
         return response
 
 
@@ -93,7 +101,7 @@ class Pipeline:
             ctx.check_budget()
             try:
                 result = stage.run(ctx)
-            except BudgetExceeded:
+            except (BudgetExceeded, MetaAuthError):
                 raise
             except Exception as error:  # noqa: BLE001 - recorded, then raised
                 state["failed"] = {"stage": stage.name, "error": str(error)}

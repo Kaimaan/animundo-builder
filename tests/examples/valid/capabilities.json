@@ -1,0 +1,10 @@
+{
+  "area_id": "gb_cairngorms",
+  "possible": true,
+  "supported": {
+    "tree_shapes": ["pine", "birch", "round"],
+    "food_kinds": ["grass", "browse"],
+    "behaviours": ["grazer"]
+  },
+  "needs_code": []
+}

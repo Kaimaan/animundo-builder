@@ -1,0 +1,17 @@
+{
+  "species": "red_deer",
+  "photos": [
+    {"source": "https://example.org/deer-photo", "licence": "CC BY-SA 4.0"}
+  ],
+  "proportions": {
+    "body_length": 1.9,
+    "body_height": 1.2,
+    "leg_length": 0.8,
+    "head_size": 0.45,
+    "tail_length": 0.15
+  },
+  "colours": [
+    {"hex": "#7a5230", "fraction": 0.7},
+    {"hex": "#e8dcc8", "fraction": 0.1}
+  ]
+}

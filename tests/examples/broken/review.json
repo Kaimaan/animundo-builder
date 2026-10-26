@@ -1,0 +1,7 @@
+{
+  "species": "red_deer",
+  "round": 1,
+  "issues": [
+    {"part": "leg", "problem": "Bent.", "severity": "critical", "fix": "Straighten."}
+  ]
+}

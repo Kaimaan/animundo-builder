@@ -1,0 +1,10 @@
+{
+  "n": 12,
+  "at": "2026-11-01T10:05:00+02:00",
+  "round": 1,
+  "stage": "models",
+  "kind": "preview",
+  "text_key": "explore.feed.model_preview",
+  "args": {"species": "red_deer", "round": 2},
+  "image": "packs/k3x9q2/1/previews/red_deer.png"
+}

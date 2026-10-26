@@ -1,0 +1,8 @@
+{
+  "area_id": "gb_cairngorms",
+  "name": "Cairngorms",
+  "country": "GB",
+  "centroid": {"lat": 57.07, "lon": -3.67},
+  "ecoregion": "Caledon conifer forests",
+  "outline": [[-3.9, 57.0], [-3.4, 57.0], [-3.4, 57.2], [-3.9, 57.2]]
+}

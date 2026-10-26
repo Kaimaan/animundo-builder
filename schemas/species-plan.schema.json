@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/schemas/species-plan.schema.json",
+  "title": "Reuse or build decision per species, with the food web check",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["species", "food_web_ok"],
+  "properties": {
+    "species": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["species", "decision", "reason"],
+        "properties": {
+          "species": {"type": "string", "minLength": 1},
+          "decision": {"enum": ["reuse", "new"]},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "food_web_ok": {"type": "boolean"},
+    "missing_food": {"type": "array", "items": {"type": "string"}}
+  }
+}

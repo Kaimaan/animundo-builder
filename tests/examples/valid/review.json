@@ -1,0 +1,18 @@
+{
+  "species": "red_deer",
+  "round": 2,
+  "issues": [
+    {
+      "part": "antler_left",
+      "problem": "Floats above the head.",
+      "severity": "blocking",
+      "fix": "Move its base down to the skull."
+    },
+    {
+      "part": "tail",
+      "problem": "Slightly long.",
+      "severity": "minor",
+      "fix": "Shorten by a tenth."
+    }
+  ]
+}

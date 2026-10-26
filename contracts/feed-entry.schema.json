@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/feed-entry.schema.json",
+  "title": "One step of the live feed Builder mode shows",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["n", "at", "round", "stage", "kind", "text_key", "args"],
+  "properties": {
+    "n": {"type": "integer", "minimum": 0},
+    "at": {"type": "string"},
+    "round": {"type": "integer", "minimum": 1},
+    "stage": {"enum": ["land", "animals", "models", "checking", "packing"]},
+    "kind": {
+      "enum": [
+        "source_found",
+        "check_passed",
+        "check_failed",
+        "preview",
+        "review_note",
+        "round",
+        "done"
+      ]
+    },
+    "text_key": {"type": "string", "pattern": "^explore\\.feed\\."},
+    "args": {"type": "object"},
+    "image": {"type": "string"}
+  }
+}

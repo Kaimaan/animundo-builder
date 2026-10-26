@@ -1,0 +1,5 @@
+{
+  "area_id": "xx_mangrove",
+  "possible": false,
+  "needs_code": [{"item": "mangrove trees"}]
+}

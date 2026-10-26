@@ -1,0 +1,7 @@
+{
+  "kind": "new_place",
+  "area_id": "gb_cairngorms",
+  "owner_uid": "owner-uid-1",
+  "family_uids": ["owner-uid-1"],
+  "status": "almost_ready"
+}

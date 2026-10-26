@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/job.schema.json",
+  "title": "The worker's own record of one build round",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["draft_id", "kind", "round", "attempt", "stages", "cost", "budget"],
+  "properties": {
+    "draft_id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["new_place", "add_animal", "improve", "submit"]},
+    "round": {"type": "integer", "minimum": 1},
+    "attempt": {"type": "integer", "minimum": 0},
+    "stages": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["started_at", "result"],
+        "properties": {
+          "started_at": {"type": "string"},
+          "finished_at": {"type": "string"},
+          "result": {"type": "string"},
+          "rounds": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "input_tokens": {"type": "integer", "minimum": 0},
+          "output_tokens": {"type": "integer", "minimum": 0},
+          "searches": {"type": "integer", "minimum": 0},
+          "images": {"type": "integer", "minimum": 0},
+          "cost_usd": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "job_budget_usd": {"type": "number"},
+        "daily_budget_usd": {"type": "number"},
+        "max_new_species": {"type": "integer"},
+        "max_rounds_per_species": {"type": "integer"},
+        "max_searches": {"type": "integer"}
+      }
+    },
+    "log_uri": {"type": "string"}
+  }
+}

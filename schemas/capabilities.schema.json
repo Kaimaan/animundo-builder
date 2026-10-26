@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/schemas/capabilities.schema.json",
+  "title": "What the game can show of a place, and what needs code",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["area_id", "possible", "needs_code"],
+  "properties": {
+    "area_id": {"type": "string", "minLength": 1},
+    "possible": {"type": "boolean"},
+    "supported": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tree_shapes": {"type": "array", "items": {"type": "string"}},
+        "food_kinds": {"type": "array", "items": {"type": "string"}},
+        "behaviours": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "needs_code": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "reason"],
+        "properties": {
+          "item": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

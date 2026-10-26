@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "key": "animal.red_deer.about_food",
+      "verdict": "pass",
+      "reasons": [],
+      "rule": "claims match the sources"
+    },
+    {
+      "key": "animal.red_deer.intro_safe",
+      "verdict": "rewrite",
+      "reasons": ["two sentences are too long"],
+      "rule": "reading level"
+    }
+  ]
+}

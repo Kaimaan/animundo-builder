@@ -1,0 +1,10 @@
+{
+  "draft_id": "k3x9q2",
+  "draft_place_id": "draft_k3x9q2",
+  "place_id": "gb_cairngorms",
+  "version": 1,
+  "format": 1,
+  "files": [{"path": "region.json", "sha256": "not-a-hash", "bytes": 10}],
+  "new_species": [],
+  "reused_species": []
+}

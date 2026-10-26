@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/schemas/review.schema.json",
+  "title": "Issues the model reviewer found on one preview sheet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["species", "round", "issues"],
+  "properties": {
+    "species": {"type": "string", "minLength": 1},
+    "round": {"type": "integer", "minimum": 1},
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["part", "problem", "severity", "fix"],
+        "properties": {
+          "part": {"type": "string", "minLength": 1},
+          "problem": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["blocking", "minor"]},
+          "fix": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

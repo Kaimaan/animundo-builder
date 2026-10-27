@@ -184,3 +184,33 @@ Job folders live under `jobs/` (local only, never committed).
   Rainforest `needs_code` was already covered by the capability
   mangrove test. Report/pack integration for plants waits for
   T21.
+
+## 2026-10-27: inbox #20 (eagle approved, T16 done)
+
+- Kai approved the golden eagle from `jobs/eagle-r3` round 1.
+  T16 is done with two approved models: red deer (round 5,
+  approved over the reviewer's antler block) and golden eagle
+  (round 1, clean). No more model runs until after Kai's
+  production test.
+
+## 2026-10-27: T18 child-safety reviewer
+
+- New `SafetyStage` after words: a separate reader reviews every
+  new text (animal texts, place name/description/places, food
+  and flower and plant names, plant about texts, EN+FI) with
+  sources, sensitive-species context and the game's own tone.
+  Rewrites go back to a writer call once (EN+FI together, files
+  updated in place); fails and second flags stop the job for a
+  person. Verdicts in `checks/safety.json`.
+- `tests/safety_cases.json`: 30 good + 30 bad. Live eval passes
+  clean: 0 bad missed, 0 good flagged (spec allows 2).
+  `tests/test_meta_live.py::test_live_safety_sixty`.
+- Found live on the deer job (70 items): the reviewer failed the
+  shipped carrion names "roe deer remains" as bedtime-frightening.
+  Calibrated: plain food/plant/flower names pass, only graphic
+  detail fails them; the two names are regression cases now.
+  The rewrite path also proved live (2 items fixed, re-passed).
+- `exclusions.json` already exists and intake already enforces
+  it; it is empty and core-team-maintained. Kai: it needs its
+  first real entries (sanctioned/conflict/disputed areas) before
+  any public running.

@@ -238,6 +238,54 @@ def test_live_reviewer_passes_approved_deer(tmp_path) -> None:
     print(f"\nissues: {len(review.get('issues', []))}, blocking: 0")
 
 
+def test_live_safety_sixty(tmp_path) -> None:
+    """T18: the reviewer catches 30 bad texts, flags at most 2 good ones."""
+    from builder.stages.safety import REVIEW_SCHEMA, review_items
+
+    cases = json.loads(
+        (Path(__file__).resolve().parent / "safety_cases.json").read_text()
+    )
+    items = [
+        {
+            "key": case["key"],
+            "en": case["en"],
+            "fi": case.get("fi"),
+            "sources": case.get("sources", []),
+        }
+        for case in [*cases["good"], *cases["bad"]]
+    ]
+    client = make_live_client(tmp_path)
+
+    def ask(prompt: str, schema: dict | None) -> str:
+        response = client.chat(
+            [{"role": "user", "content": prompt}],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "Safety", "schema": schema or REVIEW_SCHEMA},
+            },
+        )
+        return (response.choices[0].message.content or "").strip()
+
+    verdicts = review_items(
+        ask, items, "(no sensitive species in this place)", "title: Moose"
+    )
+    missed = [
+        key
+        for case in cases["bad"]
+        for key in [case["key"]]
+        if verdicts[key]["verdict"] == "pass"
+    ]
+    flagged = [
+        key
+        for case in cases["good"]
+        for key in [case["key"]]
+        if verdicts[key]["verdict"] != "pass"
+    ]
+    print(f"\nmissed bad: {missed}\nflagged good: {flagged}")
+    assert not missed, f"reviewer passed {len(missed)} bad texts: {missed}"
+    assert len(flagged) <= 2, f"reviewer flagged {len(flagged)} good texts: {flagged}"
+
+
 def make_baseten_client(tmp_path) -> MetaClient:
     key = os.environ.get("BASETEN_API_KEY")
     assert key, "BASETEN_API_KEY is not set"

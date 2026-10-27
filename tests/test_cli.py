@@ -169,7 +169,7 @@ def test_resume_improve_needs_built_stages(tmp_path: Path, monkeypatch, capsys) 
         ["resume", job_dir.name, "--kind", "improve", "--choices", "colours_off"]
     )
     assert code == NOT_BUILT_YET
-    assert "needs safety, pack, not built yet" in capsys.readouterr().err
+    assert "needs pack, not built yet" in capsys.readouterr().err
 
 
 def test_resume_improve_validates_choices(tmp_path: Path, monkeypatch, capsys) -> None:

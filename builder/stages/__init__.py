@@ -7,6 +7,7 @@ from .models import ModelsStage
 from .plants import PlantsStage
 from .references import ReferencesStage
 from .region import RegionStage
+from .safety import SafetyStage
 from .species_plan import SpeciesPlanStage
 from .survey import SurveyStage
 from .words import WordsStage
@@ -19,6 +20,7 @@ __all__ = [
     "PlantsStage",
     "ReferencesStage",
     "RegionStage",
+    "SafetyStage",
     "SpeciesPlanStage",
     "SurveyStage",
     "WordsStage",

@@ -1,0 +1,329 @@
+{
+  "bad": [
+    {
+      "en": "The wolf tears the deer's throat open and blood pours onto the snow.",
+      "expect": "fail",
+      "key": "case.bad.1",
+      "sources": [
+        "https://example.org/wolf"
+      ]
+    },
+    {
+      "en": "You hear the rabbit screaming as the fox shakes it. It suffers for a long time.",
+      "expect": "fail",
+      "key": "case.bad.2",
+      "sources": [
+        "https://example.org/fox"
+      ]
+    },
+    {
+      "en": "Wounded animals crawl away to die slowly in pain.",
+      "expect": "fail",
+      "key": "case.bad.3",
+      "sources": []
+    },
+    {
+      "en": "In autumn the stags mate with the hinds, mounting them again and again.",
+      "expect": "fail",
+      "key": "case.bad.4",
+      "sources": [
+        "https://example.org/deer"
+      ]
+    },
+    {
+      "en": "Watch the foxes breed behind the rocks at night.",
+      "expect": "fail",
+      "key": "case.bad.5",
+      "sources": []
+    },
+    {
+      "en": "Something hunts YOU in the dark. Don't close your eyes.",
+      "expect": "fail",
+      "fi": "Jokin metsästää SINUA pimeässä. Älä sulje silmiäsi.",
+      "key": "case.bad.6",
+      "sources": []
+    },
+    {
+      "en": "If you sleep now, the monster under the spruce will get you.",
+      "expect": "fail",
+      "key": "case.bad.7",
+      "sources": []
+    },
+    {
+      "en": "You are alone and no one can hear you scream.",
+      "expect": "fail",
+      "key": "case.bad.8",
+      "sources": []
+    },
+    {
+      "en": "Hunters with rifles shoot the deer every autumn.",
+      "expect": "fail",
+      "key": "case.bad.9",
+      "sources": []
+    },
+    {
+      "en": "Set a trap for the fox near its den.",
+      "expect": "fail",
+      "key": "case.bad.10",
+      "sources": []
+    },
+    {
+      "en": "The war across the border burned the forest.",
+      "expect": "fail",
+      "key": "case.bad.11",
+      "sources": []
+    },
+    {
+      "en": "People from the village dump poison in the lake.",
+      "expect": "fail",
+      "key": "case.bad.12",
+      "sources": []
+    },
+    {
+      "en": "Touch the frog gently and hold it in your hand.",
+      "expect": "fail",
+      "key": "case.bad.13",
+      "sources": []
+    },
+    {
+      "en": "These berries are sweet. Eat as many as you like!",
+      "expect": "fail",
+      "key": "case.bad.14",
+      "sources": []
+    },
+    {
+      "en": "Pick the prettiest flowers for your mother.",
+      "expect": "fail",
+      "fi": "Poimi kauneimmat kukat äidillesi.",
+      "key": "case.bad.15",
+      "sources": []
+    },
+    {
+      "en": "Walk up to the deer slowly and feed it bread.",
+      "expect": "fail",
+      "key": "case.bad.16",
+      "sources": []
+    },
+    {
+      "en": "Visit MooseJuice.com for more forest games!",
+      "expect": "fail",
+      "key": "case.bad.17",
+      "sources": []
+    },
+    {
+      "en": "Ask your parents to call 555-1234 for the nature club.",
+      "expect": "fail",
+      "key": "case.bad.18",
+      "sources": []
+    },
+    {
+      "en": "Red deer can fly short distances when scared.",
+      "expect": "fail",
+      "key": "case.bad.19",
+      "sources": [
+        "https://example.org/deer"
+      ]
+    },
+    {
+      "en": "This lake has 500 kinds of fish found nowhere else.",
+      "expect": "fail",
+      "key": "case.bad.20",
+      "sources": [
+        "https://example.org/lake"
+      ]
+    },
+    {
+      "en": "The forest vote failed, so the president closed the park.",
+      "expect": "fail",
+      "key": "case.bad.21",
+      "sources": []
+    },
+    {
+      "en": "Pray at the old shrine for good luck.",
+      "expect": "fail",
+      "key": "case.bad.22",
+      "sources": []
+    },
+    {
+      "en": "It's night. Sleep under the spruce.",
+      "expect": "fail",
+      "fi": "Yöllä älä nuku, sillä mörkö odottaa kuusen alla.",
+      "key": "case.bad.23",
+      "sources": []
+    },
+    {
+      "en": "Swim across the deep lake to the island.",
+      "expect": "fail",
+      "key": "case.bad.24",
+      "sources": []
+    },
+    {
+      "en": "The ungulate's crepuscular foraging patterns facilitate optimal nutrient acquisition.",
+      "expect": "rewrite",
+      "key": "case.bad.25",
+      "sources": [
+        "https://example.org/deer"
+      ]
+    },
+    {
+      "en": "Photosynthesis-mediated carbon sequestration characterises this boreal ecosystem's productivity.",
+      "expect": "rewrite",
+      "key": "case.bad.26",
+      "sources": []
+    },
+    {
+      "en": "Yo, what's up! Wanna be a totally awesome deer, dude? Let's gooo!",
+      "expect": "rewrite",
+      "key": "case.bad.27",
+      "sources": []
+    },
+    {
+      "en": "Behold the majestic cervid in all its glory, O player.",
+      "expect": "rewrite",
+      "key": "case.bad.28",
+      "sources": []
+    },
+    {
+      "en": "Red deer. The red deer is a very large animal that lives in forests and eats grass and leaves every day. It is brown.",
+      "expect": "rewrite",
+      "key": "case.bad.29",
+      "sources": []
+    },
+    {
+      "en": "Follow the road out of the forest to the shop.",
+      "expect": "fail",
+      "fi": "Seuraa tietä ulos metsästä kauppaan.",
+      "key": "case.bad.30",
+      "sources": []
+    }
+  ],
+  "good": [
+    {
+      "en": "Red deer",
+      "fi": "Saksanhirvi",
+      "key": "case.good.1"
+    },
+    {
+      "en": "Play as a red deer",
+      "fi": "Pelaa saksanhirvenä",
+      "key": "case.good.2"
+    },
+    {
+      "en": "Safe mode: explore! You are a big deer. Find green meadows to graze.",
+      "fi": "Turvallinen tila: tutki! Olet iso saksanhirvi. Etsi vihreitä niittyjä.",
+      "key": "case.good.3"
+    },
+    {
+      "en": "You're hungry. Look for green meadows to graze.",
+      "fi": "Sinulla on nälkä. Etsi vihreitä niittyjä laidunnettavaksi.",
+      "key": "case.good.4"
+    },
+    {
+      "en": "It's night. Lie down under a big spruce's branches to sleep.",
+      "key": "case.good.5"
+    },
+    {
+      "en": "The fox catches voles. Stay downwind and keep your distance.",
+      "key": "case.good.6"
+    },
+    {
+      "en": "Winter is cold. Your thick coat keeps you warm.",
+      "key": "case.good.7"
+    },
+    {
+      "en": "It's starting to rain. Your thick coat keeps you warm and dry.",
+      "key": "case.good.8"
+    },
+    {
+      "en": "Never eat it. Look, but don't pick!",
+      "fi": "Älä koskaan syö sitä. Katso, mutta älä poimi!",
+      "key": "case.good.9"
+    },
+    {
+      "en": "An adult is about 200 cm long and weighs up to 200 kg.",
+      "key": "case.good.10"
+    },
+    {
+      "en": "The hind has young in spring.",
+      "key": "case.good.11"
+    },
+    {
+      "en": "Birch, willow and aspen leaves and twigs, and water plants in summer.",
+      "key": "case.good.12"
+    },
+    {
+      "en": "Lives in forests and bogs. It rests under dense spruces.",
+      "key": "case.good.13"
+    },
+    {
+      "en": "You're resting under the spruce, out of the wind.",
+      "key": "case.good.14"
+    },
+    {
+      "en": "Too open to sleep! Lie down under a spruce's branches.",
+      "key": "case.good.15"
+    },
+    {
+      "en": "Nothing here can hunt a grown red deer.",
+      "fi": "Mikään täällä ei voi metsästää täysikasvuista saksanhirveä.",
+      "key": "case.good.16"
+    },
+    {
+      "en": "Nuuksio forest lakes",
+      "fi": "Nuuksion metsäjärvet",
+      "key": "case.good.17"
+    },
+    {
+      "en": "Forest lakes with rocky shores and old spruce forest.",
+      "key": "case.good.18"
+    },
+    {
+      "key": "case.good.19",
+      "en": "roe deer remains"
+    },
+    {
+      "key": "case.good.20",
+      "en": "white-tailed deer remains"
+    },
+    {
+      "en": "Low bushes with green stems and small round blue berries.",
+      "key": "case.good.21"
+    },
+    {
+      "en": "On the shady floor of spruce forests.",
+      "key": "case.good.22"
+    },
+    {
+      "en": "You are a frog. Hop to the pond and catch flies with your tongue.",
+      "key": "case.good.23"
+    },
+    {
+      "en": "The pike is hunting. Hide among the water plants.",
+      "key": "case.good.24"
+    },
+    {
+      "en": "It's dark under the spruce. Your night eyes see well.",
+      "key": "case.good.25"
+    },
+    {
+      "en": "Dig a burrow in the soft sand. It's cool inside.",
+      "key": "case.good.26"
+    },
+    {
+      "en": "You hear woodpeckers tapping and wind in the pines.",
+      "key": "case.good.27"
+    },
+    {
+      "en": "In autumn your coat turns grey and thick.",
+      "key": "case.good.28"
+    },
+    {
+      "en": "You are a perch. Swim through the reeds and snap up water bugs.",
+      "key": "case.good.29"
+    },
+    {
+      "en": "You are a bee. Visit the yellow flowers and carry pollen home.",
+      "key": "case.good.30"
+    }
+  ]
+}

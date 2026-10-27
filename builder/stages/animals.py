@@ -214,8 +214,12 @@ class AnimalsStage:
 
         The models verdict is never read: it fails on the world's own
         unbuilt models. Missing-model complaints inside the animals
-        verdict are the same world state, and skipped the same way.
+        verdict are the same world state, and skipped the same way —
+        even when they name a new species, whose model is only built
+        later at the models stage.
         """
+        if _missing_model(line):
+            return
         owner = _file_owner(file, texts) if file else None
         owners = [owner] if owner else [i for i in texts if mentions(line, i)]
         if owners:
@@ -223,8 +227,6 @@ class AnimalsStage:
                 if species_id in checked:
                     text = line[2:].strip() if line.startswith("- ") else line.strip()
                     problems.setdefault(species_id, []).append(text)
-            return
-        if _missing_model(line):
             return
         fatal.append(line.strip() if not file else f"{file}: {line.strip()}")
 

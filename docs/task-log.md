@@ -81,3 +81,16 @@ Job folders live under `jobs/` (local only, never committed).
   runs), `jobs/deer-demo/` seeded but not run.
 - `builder report` now shows the final preview next to the
   game's closest animal (`tests/test_report.py`).
+
+## 2026-10-27: T14 animal stage vs the real world
+
+- Live run for one species (red deer, scratch job `jobs/t14-deer/`,
+  gitignored): locale/schema/taxa/region/models verdicts pass;
+  the only animals-verdict problem is the deer's own missing
+  model, which the models stage builds later.
+- Bug found live: a missing-model complaint naming a NEW species
+  was routed back as a fixable problem and burned all 6 rounds
+  ($0.17). The skip now runs before owner routing.
+  `tests/test_animals.py::test_new_species_missing_model_is_ignored`.
+- English text reads naturally; final `reads well` verdict is Kai's:
+  `jobs/t14-deer/animals/red_deer.json`.

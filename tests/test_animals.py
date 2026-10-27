@@ -249,6 +249,24 @@ def test_missing_world_models_are_ignored(tmp_path: Path) -> None:
     assert by_check["models"] == "fail"
 
 
+def test_new_species_missing_model_is_ignored(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    stub = world / "tools" / "check_draft.py"
+    stub.write_text(
+        stub.read_text().replace(
+            'animals_problems = ["ERROR: bee: model file not found:',
+            'animals_problems = ["ERROR: zz_deer: model file not found: '
+            'res://assets/animals/zz_deer.glb", "ERROR: bee: model file not found:',
+        )
+    )
+    client = ScriptClient(
+        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+    )
+    result = AnimalsStage().run(_ctx(tmp_path, client, world))
+    assert result["rounds"] == {"zz_deer": 1, "zz_owl": 1}
+
+
 def test_unowned_problem_stops(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

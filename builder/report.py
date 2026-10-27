@@ -33,6 +33,7 @@ def build_report(job_dir: Path) -> Path:
         _stages(state),
         _cost(calls),
         _sources(survey),
+        _checks(job_dir),
         *(_species(job_dir, species_id) for species_id in species_ids),
         _foot(),
     ]
@@ -177,6 +178,38 @@ def _survey_species(entry: dict[str, Any]) -> str:
             measured,
         )
     )
+
+
+def _checks(job_dir: Path) -> str:
+    files = sorted((job_dir / "checks").glob("*.json"))
+    if not files:
+        return '<h2>Checks</h2>\n<p class="muted">No draft checks recorded yet.</p>'
+    sections = []
+    for path in files:
+        data = _read_json(path)
+        rows = []
+        for entry in data.get("results", []):
+            found = "".join(
+                f"<li>{html.escape(str(item))}</li>"
+                for item in entry.get("problems", [])
+            )
+            rows.append(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td><ul>{}</ul></td></tr>".format(
+                    html.escape(str(entry.get("check", "?"))),
+                    html.escape(str(entry.get("status", "?"))),
+                    html.escape(str(entry.get("reason", ""))),
+                    found,
+                )
+            )
+        verdict = "passed" if data.get("ok") else "failing"
+        sections.append(
+            f"<h3>{html.escape(path.stem)} ({verdict})</h3>\n"
+            + "<table><tr><th>Check</th><th>Status</th><th>Skipped"
+            + " why</th><th>Problems</th></tr>\n"
+            + "\n".join(rows)
+            + "</table>"
+        )
+    return "<h2>Checks</h2>\n" + "\n".join(sections)
 
 
 def _species(job_dir: Path, species_id: str) -> str:

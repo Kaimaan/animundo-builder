@@ -186,6 +186,32 @@ def test_report_escapes_job_text_and_skips_the_family_note(tmp_path: Path) -> No
     assert "NOT-FOR-REPORT" not in text
 
 
+def test_report_shows_draft_checks(tmp_path: Path) -> None:
+    _job(tmp_path)
+    (tmp_path / "checks").mkdir()
+    (tmp_path / "checks" / "region.json").write_text(
+        json.dumps(
+            {
+                "ok": False,
+                "draft_files": ["regions/xx_test.json"],
+                "results": [
+                    {"check": "schema", "status": "pass", "problems": []},
+                    {
+                        "check": "region",
+                        "status": "fail",
+                        "problems": ["FAIL regions/xx_test.json", "- <x> broke"],
+                    },
+                ],
+            }
+        )
+    )
+    text = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "region (failing)" in text
+    assert "No draft checks recorded yet." not in text
+    assert "&lt;x&gt;" in text
+    assert "<x>" not in text
+
+
 def test_partial_job_still_reports(tmp_path: Path) -> None:
     (tmp_path / "state.json").write_text(
         json.dumps({"params": {}, "completed": ["intake"], "failed": None})

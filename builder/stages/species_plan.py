@@ -29,7 +29,8 @@ import jsonschema
 
 from ..prompts import load_prompt
 from ..schemas import load_schema
-from .region import sensitive_place_errors, validate_region_file
+from ..world import check_draft
+from .region import draft_region_errors, sensitive_place_errors
 
 DEFAULT_MAX_NEW_SPECIES = 3
 MAX_FIX_ROUNDS = 3
@@ -127,7 +128,7 @@ class SpeciesPlanStage:
         region_path = self._region_path(ctx)
         fixed, rank = self._match_all(world, survey)
         plan = self._write_with_model(ctx, survey, region_path, fixed, rank)
-        self._rewrite_region(world, region_path, survey, fixed, plan)
+        self._rewrite_region(world, ctx.job_dir, region_path, survey, fixed, plan)
         out = ctx.job_dir / "species-plan.json"
         out.write_text(json.dumps(plan, indent=2), encoding="utf-8")
         if not plan["food_web_ok"]:
@@ -441,6 +442,7 @@ class SpeciesPlanStage:
     def _rewrite_region(
         self,
         world: Path,
+        job_dir: Path,
         region_path: Path,
         survey: dict[str, Any],
         fixed: dict[str, dict[str, Any]],
@@ -488,7 +490,13 @@ class SpeciesPlanStage:
         new_ids = {
             entry["species"] for entry in plan["species"] if entry["decision"] == "new"
         }
-        errors = validate_region_file(world, region_path, new_ids)
+        result = check_draft(world, job_dir, "species-plan")
+        known = {
+            path.stem
+            for path in (world / "animals").glob("*.json")
+            if path.stem != "archetypes"
+        }
+        errors = draft_region_errors(result, new_ids, _cast_files(region), known)
         if errors:
             raise _Stopped("the rewritten region fails: " + "; ".join(errors))
         plan["added_young"] = sorted(added_young)

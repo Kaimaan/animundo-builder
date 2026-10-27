@@ -13,42 +13,65 @@ import pytest
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
 from builder.stages.animals import AnimalsStage
 
-CHECKER_STUB = """\
-import argparse
+DRAFT_STUB = """\
 import glob
 import json
 import os
+import sys
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--root", required=True)
-ap.add_argument("--no-built-models", action="store_true")
-args = ap.parse_args()
-errors = []
+draft = sys.argv[1]
 foods = set()
-for path in glob.glob(os.path.join(args.root, "regions", "*.json")):
+for path in glob.glob(os.path.join(draft, "regions", "*.json")):
     region = json.load(open(path))
     foods.update(f.get("kind") for f in region.get("food", []))
-for path in sorted(glob.glob(os.path.join(args.root, "animals", "*.json"))):
+schema_problems = []
+# The world's own unbuilt models fail these verdicts on main; the stage
+# must pass anyway. Every green test below proves the ignore rule.
+animals_problems = ["ERROR: bee: model file not found: res://assets/animals/bee.glb"]
+for path in sorted(glob.glob(os.path.join(draft, "animals", "*.json"))):
     animal_id = os.path.basename(path)[:-5]
-    if animal_id in ("archetypes", "fox", "mountain_hare"):
-        continue
     data = json.load(open(path))
     if "name" not in data:
-        errors.append(f"ERROR: {animal_id}: missing name")
+        schema_problems += [
+            f"FAIL animals/{animal_id}.json",
+            "- 'name' is a required property",
+        ]
     for kind in data.get("diet", []):
         if kind not in foods:
-            errors.append(f'ERROR: {animal_id}: diet kind "{kind}" not in region food')
-print("warning: some texts not translated yet (shown in English)")
-print("\\n".join(errors))
-sys_exit = 1 if errors else 0
-raise SystemExit(sys_exit)
+            animals_problems.append(
+                f'ERROR: {animal_id}: diet kind "{kind}" not in region food'
+            )
+report = {
+    "ok": False,
+    "draft_files": [],
+    "results": [
+        {"check": "locale", "status": "pass", "problems": []},
+        {
+            "check": "schema",
+            "status": "fail" if schema_problems else "pass",
+            "problems": schema_problems,
+        },
+        {"check": "taxa", "status": "pass", "problems": []},
+        {"check": "region", "status": "pass", "problems": []},
+        {"check": "animals", "status": "fail", "problems": animals_problems},
+        {
+            "check": "models",
+            "status": "fail",
+            "problems": [
+                "ERROR: bee: res://assets/animals/bee.glb is missing. "
+                "Run tools/build_model.sh models/bee.json"
+            ],
+        },
+    ],
+}
+print(json.dumps(report))
 """
 
 
 def _world(tmp_path: Path) -> Path:
     world = tmp_path / "world"
     (world / "tools").mkdir(parents=True)
-    (world / "tools" / "check_animals.py").write_text(CHECKER_STUB)
+    (world / "tools" / "check_draft.py").write_text(DRAFT_STUB)
     (world / "CONTRIBUTING.md").write_text(
         "# World\n\n## Adding animals\n\nName it well.\n\n## Next\n\nMore.\n"
     )
@@ -210,6 +233,38 @@ def test_checker_error_fixed_per_species(tmp_path: Path) -> None:
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == {"zz_deer": 1, "zz_owl": 2}
     assert "not in region food" in client.prompts[-1]
+
+
+def test_missing_world_models_are_ignored(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient(
+        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+    )
+    result = AnimalsStage().run(_ctx(tmp_path, client, world))
+    assert result["rounds"] == {"zz_deer": 1, "zz_owl": 1}
+    saved = json.loads((tmp_path / "checks" / "animals.json").read_text())
+    by_check = {entry["check"]: entry["status"] for entry in saved["results"]}
+    assert by_check["animals"] == "fail", "bee is missing, and ignored"
+    assert by_check["models"] == "fail"
+
+
+def test_unowned_problem_stops(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(
+        "import json;print(json.dumps({'ok': False, 'results': ["
+        "{'check': 'animals', 'status': 'fail', "
+        "'problems': ['ERROR: taxonomy database is on fire']}]}))"
+    )
+    client = ScriptClient(
+        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+    )
+    pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage animals failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "outside the new files" in state["failed"]["error"]
 
 
 def test_schema_break_fixed_per_species(tmp_path: Path) -> None:

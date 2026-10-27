@@ -1,14 +1,12 @@
 """Stage 6, animals: write every new species' file, English text inside.
 
 One model draft per species, then validate-all rounds against the
-world's own `check_animals.py` on an overlay of the checkout: the job's
-region plus every draft. Errors carry the species id, so each species
-is fixed on its own, 6 rounds at most. Every draft is written to the
-job's `animals/` folder at once, and each species that passes is
-recorded in `progress.json`: a stop or crash keeps what was paid for,
-and resume carries on with the rest. Translations come later (words
-stage); models are built next (models stage), so the model-file check
-is skipped with `--no-built-models`.
+world's own `check_draft.py`: the job's region plus every draft.
+Errors carry the species id, so each species is fixed on its own,
+6 rounds at most. Every draft is written to the job's `animals/`
+folder at once, and each species that passes is recorded in
+`progress.json`: a stop or crash keeps what was paid for, and resume
+carries on with the rest. Translations come later (words stage).
 """
 
 from __future__ import annotations
@@ -22,7 +20,7 @@ from typing import Any
 import jsonschema
 
 from ..prompts import PROMPTS_DIR
-from ..world import overlay, run_checker
+from ..world import check_draft, problems_by_file
 
 MAX_ROUNDS_PER_SPECIES = 6
 PROGRESS_FILE = "progress.json"
@@ -168,7 +166,6 @@ class AnimalsStage:
             (world / "schemas" / "animal.schema.json").read_text(encoding="utf-8")
         )
         problems: dict[str, list[str]] = {}
-        valid: dict[str, str] = {}
         for species_id in checked:
             try:
                 data = json.loads(texts[species_id])
@@ -180,39 +177,57 @@ class AnimalsStage:
             except jsonschema.ValidationError as error:
                 problems[species_id] = [f"broke the animal schema: {error.message}"]
                 continue
-            valid[species_id] = texts[species_id]
-        for species_id in texts:
-            if species_id not in valid and species_id not in problems:
-                valid[species_id] = texts[species_id]
-        files = {f"animals/{i}.json": text for i, text in valid.items()}
-        files[f"regions/{region['id']}.json"] = json.dumps(region)
-        with overlay(world, files) as root:
-            proc = run_checker(
-                world, "check_animals.py", "--root", str(root), "--no-built-models"
+        result = check_draft(world, ctx.job_dir, "animals")
+        by_check = {entry.get("check"): entry for entry in result.get("results", [])}
+        region_entry = by_check.get("region", {})
+        if region_entry.get("status") == "fail":
+            raise _Stopped(
+                "the region broke after stage 4: "
+                + "; ".join(region_entry.get("problems", [])[:5])
             )
-        if proc.returncode != 0:
-            fatal = []
-            for line in proc.stdout.splitlines() + proc.stderr.splitlines():
-                line = line.strip()
-                if not line.startswith("ERROR"):
-                    continue
-                owners = [i for i in texts if _mentions(line, i)]
-                if owners:
-                    for owner in owners:
-                        if owner in checked:
-                            problems.setdefault(owner, []).append(line)
-                else:
-                    fatal.append(line)
-            if fatal:
-                raise _Stopped(
-                    "the checker failed outside the new files: " + "; ".join(fatal[:5])
-                )
-            if not problems:
-                raise _Stopped(
-                    "the checker failed without naming a file: "
-                    + (proc.stderr or proc.stdout).strip()[-200:]
-                )
+        fatal = []
+        for name in ("locale", "schema", "taxa", "animals"):
+            entry = by_check.get(name, {})
+            if entry.get("status") != "fail":
+                continue
+            if not entry.get("problems"):
+                fatal.append(f"the {name} check failed without problems")
+                continue
+            for file, lines in problems_by_file(entry["problems"]).items():
+                for line in lines:
+                    self._route(texts, checked, problems, fatal, file, line)
+        if fatal:
+            raise _Stopped(
+                "the checker failed outside the new files: " + "; ".join(fatal[:5])
+            )
         return problems
+
+    @staticmethod
+    def _route(
+        texts: dict[str, str],
+        checked: set[str],
+        problems: dict[str, list[str]],
+        fatal: list[str],
+        file: str | None,
+        line: str,
+    ) -> None:
+        """Send one verdict problem to its species, or fail the stage.
+
+        The models verdict is never read: it fails on the world's own
+        unbuilt models. Missing-model complaints inside the animals
+        verdict are the same world state, and skipped the same way.
+        """
+        owner = _file_owner(file, texts) if file else None
+        owners = [owner] if owner else [i for i in texts if _mentions(line, i)]
+        if owners:
+            for species_id in owners:
+                if species_id in checked:
+                    text = line[2:].strip() if line.startswith("- ") else line.strip()
+                    problems.setdefault(species_id, []).append(text)
+            return
+        if _missing_model(line):
+            return
+        fatal.append(line.strip() if not file else f"{file}: {line.strip()}")
 
 
 class _Stopped(Exception):
@@ -340,6 +355,19 @@ def _with_examples(template: str, world: Path, role: str) -> str:
     for leftover in ("$EXAMPLE_1_NAME", "$EXAMPLE_1", "$EXAMPLE_2_NAME", "$EXAMPLE_2"):
         template = template.replace(leftover, "(no example)")
     return template
+
+
+def _file_owner(file: str, texts: dict[str, str]) -> str | None:
+    """The new species a FAIL file belongs to, if any."""
+    for species_id in texts:
+        if file == f"animals/{species_id}.json":
+            return species_id
+    return None
+
+
+def _missing_model(line: str) -> bool:
+    """The world's own unbuilt models: known red state, not the draft."""
+    return "model file not found" in line or ".glb is missing" in line
 
 
 def _mentions(line: str, species_id: str) -> bool:

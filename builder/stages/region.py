@@ -3,7 +3,7 @@
 The model writes `regions/<area_id>.json` following the region rules and
 examples read fresh from the world checkout. The pipeline then sets the
 mechanical fields itself (id, author, status, seed, center), runs the
-world's own `validate_region.py`, and sends failures back, up to 8 rounds.
+world's own `check_draft.py`, and sends failures back, up to 8 rounds.
 
 New species don't exist as files until a later stage, so "unknown animal"
 complaints about surveyed species are recorded as planned, not failures.
@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
-import sys
 from collections.abc import Collection
 from pathlib import Path
 from string import Template
@@ -24,6 +22,7 @@ from typing import Any
 import jsonschema
 
 from ..prompts import PROMPTS_DIR
+from ..world import DraftError, check_draft, problems_by_file
 
 HOSTED_AUTHOR = "Animundo Builder"
 MIN_SOURCES = 3
@@ -83,7 +82,7 @@ class RegionStage:
             draft = self._mechanical(draft, area, region_id)
             region_path.parent.mkdir(parents=True, exist_ok=True)
             region_path.write_text(json.dumps(draft, indent=2), encoding="utf-8")
-            errors = self._validate(world, region_path, planned)
+            errors = self._validate(world, ctx, region_path, planned)
             errors.extend(
                 sensitive_place_errors(
                     survey.get("species", []), draft.get("places", [])
@@ -137,40 +136,57 @@ class RegionStage:
         terrain["seed"] = seed_for_area(region_id)
         return draft
 
-    def _validate(self, world: Path, region_path: Path, planned: set[str]) -> list[str]:
-        return validate_region_file(world, region_path, planned)
+    def _validate(
+        self, world: Path, ctx: Any, region_path: Path, planned: set[str]
+    ) -> list[str]:
+        result = check_draft(world, ctx.job_dir, "region")
+        return draft_region_errors(
+            result, planned, _used_species(region_path), _known_animals(world)
+        )
 
 
-def validate_region_file(
-    world: Path, region_path: Path, planned: set[str]
+def draft_region_errors(
+    result: dict[str, Any], planned: set[str], used: set[str], known: set[str]
 ) -> list[str]:
-    """Run the world's checker, excusing planned species without files."""
-    checker = str(world / "tools" / "validate_region.py")
-    proc = subprocess.run(
-        [sys.executable, checker, str(region_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=120,
-    )
+    """Errors a regions-shaped draft must fix, from the draft verdicts.
+
+    Only locale, schema, taxa and region gate the stage: animals and
+    models still fail on the world's own unbuilt models, so their
+    verdicts are reported, never fed back. Unknown animals the survey
+    planned are excused (their files come later); strangers are errors.
+    """
+    by_check = {entry.get("check"): entry for entry in result.get("results", [])}
+    region = by_check.get("region", {})
+    if region.get("status") == "skip":
+        raise DraftError(
+            f"the region check was skipped: {region.get('reason', 'unknown reason')}"
+        )
     errors = []
-    for line in proc.stdout.splitlines():
-        if line.startswith("  - "):
-            errors.append(line[4:])
-    if proc.returncode != 0 and not errors:
-        errors.append((proc.stderr or "validator failed silently").strip())
-    kept = []
-    saw_unknown = False
-    for error in errors:
-        if "has unknown animal" in error or "must be an animal" in error:
-            saw_unknown = True
-            continue
-        kept.append(error)
-    if saw_unknown:
-        bad = sorted(_unknown_animals(world, region_path) - planned)
-        if bad:
-            kept.append(f"unknown animals not in the survey: {', '.join(bad)}")
-    return kept
+    for name in ("locale", "schema", "taxa"):
+        if by_check.get(name, {}).get("status") == "fail":
+            errors.extend(_with_files(by_check[name].get("problems", [])))
+    for file, lines in problems_by_file(region.get("problems", [])).items():
+        for line in lines:
+            if "has unknown animal" in line or "must be an animal" in line:
+                continue
+            errors.append(f"{file}: {_short(line)}" if file else _short(line))
+    bad = sorted(used - known - planned)
+    if bad:
+        errors.append(f"unknown animals not in the survey: {', '.join(bad)}")
+    return errors
+
+
+def _with_files(problems: list[str]) -> list[str]:
+    """Problem lines with their FAIL file attached, for feedback."""
+    out = []
+    for file, lines in problems_by_file(problems).items():
+        for line in lines:
+            out.append(f"{file}: {_short(line)}" if file else _short(line))
+    return out
+
+
+def _short(line: str) -> str:
+    return line[2:].strip() if line.startswith("- ") else line.strip()
 
 
 def sensitive_place_errors(

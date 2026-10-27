@@ -16,30 +16,44 @@ from builder.stages.region import (
     sensitive_place_errors,
 )
 
-VALIDATOR_STUB = """\
+DRAFT_STUB = """\
+import glob
 import json
+import os
 import sys
 
-d = json.load(open(sys.argv[1]))
-errors = []
-if d.get("name") == "Bad":
-    errors.append('"name" must be good')
-for a in d.get("animals", {}).get("playable", []):
+files = glob.glob(os.path.join(sys.argv[1], "regions", "*.json"))
+region = json.load(open(files[0])) if files else {}
+problems = []
+if region.get("name") == "Bad":
+    problems += ["FAIL regions/gb_test.json", '- "name" must be good']
+for a in region.get("animals", {}).get("playable", []):
     if a != "fox":
-        errors.append(f'"animals.playable" has unknown animal "{a}" (known: ["fox"])')
-if errors:
-    print("FAIL x")
-    for e in errors:
-        print(f"  - {e}")
-    sys.exit(1)
-print("ok   x")
+        problems += [
+            "FAIL regions/gb_test.json",
+            f'- "animals.playable" has unknown animal "{a}" (known: ["fox"])',
+        ]
+status = "fail" if problems else "pass"
+report = {
+    "ok": not problems,
+    "draft_files": ["regions/gb_test.json"],
+    "results": [
+        {"check": "locale", "status": "pass", "problems": []},
+        {"check": "schema", "status": "pass", "problems": []},
+        {"check": "taxa", "status": "pass", "problems": []},
+        {"check": "region", "status": status, "problems": problems},
+        {"check": "animals", "status": "skip", "problems": [], "reason": "stub"},
+        {"check": "models", "status": "skip", "problems": [], "reason": "stub"},
+    ],
+}
+print(json.dumps(report))
 """
 
 
 def _world(tmp_path: Path) -> Path:
     world = tmp_path / "world"
     (world / "tools").mkdir(parents=True)
-    (world / "tools" / "validate_region.py").write_text(VALIDATOR_STUB)
+    (world / "tools" / "check_draft.py").write_text(DRAFT_STUB)
     (world / "CONTRIBUTING.md").write_text(
         "# World\n\n## The region file\n\nName it well.\n\n## Next\n\nMore.\n"
     )
@@ -168,6 +182,15 @@ def test_writes_validated_region(tmp_path: Path) -> None:
     assert written["center"] == {"lat": 57.0, "lon": -3.0}
     assert written["terrain"]["seed"] == seed_for_area("gb_test")
     assert "response_format" not in client.calls[0]
+    saved = json.loads((tmp_path / "checks" / "region.json").read_text())
+    assert [entry["check"] for entry in saved["results"]] == [
+        "locale",
+        "schema",
+        "taxa",
+        "region",
+        "animals",
+        "models",
+    ]
 
 
 def test_validator_error_sent_back(tmp_path: Path) -> None:
@@ -223,6 +246,22 @@ def test_rounds_exhausted(tmp_path: Path) -> None:
     pipeline = Pipeline([RegionStage(max_rounds=2)], tmp_path / "state.json")
     with pytest.raises(StageFailedError):
         pipeline.run(_ctx(tmp_path, client, world))
+
+
+def test_skipped_region_check_stops(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(
+        "import json;print(json.dumps({'ok': True, 'results': ["
+        "{'check': 'region', 'status': 'skip', "
+        "'problems': [], 'reason': 'no models yet'}]}))"
+    )
+    client = ScriptClient([_draft()])
+    pipeline = Pipeline([RegionStage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage region failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "skipped" in state["failed"]["error"]
 
 
 def test_seed_is_stable_per_area() -> None:

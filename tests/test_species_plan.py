@@ -201,7 +201,10 @@ def _surveyed() -> list[dict]:
 
 def _no_revalidate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "builder.stages.species_plan.validate_region_file", lambda *args: []
+        "builder.stages.species_plan.check_draft", lambda *args: {"results": []}
+    )
+    monkeypatch.setattr(
+        "builder.stages.species_plan.draft_region_errors", lambda *args: []
     )
 
 
@@ -401,7 +404,10 @@ def test_broken_rewrite_stops(tmp_path: Path, monkeypatch: Any) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, _surveyed())
     monkeypatch.setattr(
-        "builder.stages.species_plan.validate_region_file",
+        "builder.stages.species_plan.check_draft", lambda *args: {"results": []}
+    )
+    monkeypatch.setattr(
+        "builder.stages.species_plan.draft_region_errors",
         lambda *args: ["the cast is empty"],
     )
     client = ScriptClient(

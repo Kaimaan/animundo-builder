@@ -2,7 +2,8 @@
 
 `build` runs the pipeline as far as implemented stages go; `resume`
 carries a job on; `check` runs every checker; `report` writes a round's
-`report.html`. Unbuilt commands say so.
+`report.html`; `submit` sends a finished draft on as a pull request.
+Unbuilt commands say so.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ from .stages import (
     SurveyStage,
     WordsStage,
 )
+from .submit import SubmitFailed, run_submit
 
 NOT_BUILT_YET = 3
 
@@ -196,6 +198,25 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("job_id")
     report.add_argument(
         "--jobs-dir", default="jobs", help="Where job folders live (default: jobs)."
+    )
+
+    submit = sub.add_parser(
+        "submit", help="Send a finished draft on as a pull request."
+    )
+    submit.add_argument("draft_id")
+    submit.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    submit.add_argument(
+        "--jobs-dir", default="jobs", help="Where job folders live (default: jobs)."
+    )
+    submit.add_argument(
+        "--place",
+        default=None,
+        help="The real place id (default: the pack's place id).",
+    )
+    submit.add_argument(
+        "--base", default="main", help="The branch to open against (default: main)."
     )
 
     sub.add_parser("worker", help="Run the hosted worker.")
@@ -392,6 +413,25 @@ def cmd_not_built_yet(command: str) -> int:
     return NOT_BUILT_YET
 
 
+def cmd_submit(args: argparse.Namespace) -> int:
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    try:
+        record = run_submit(
+            args.draft_id,
+            Path(args.jobs_dir),
+            world,
+            place_id=args.place,
+            base=args.base,
+        )
+    except SubmitFailed as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(f"draft {args.draft_id}: {record['pr_url']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "check":
@@ -402,6 +442,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_resume(args)
     if args.command == "report":
         return cmd_report(args.job_id, args.jobs_dir)
+    if args.command == "submit":
+        return cmd_submit(args)
     return cmd_not_built_yet(args.command)
 
 

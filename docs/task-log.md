@@ -234,3 +234,28 @@ Job folders live under `jobs/` (local only, never committed).
   copy only): t14-deer's real texts and safety verdicts plus
   deer-demo's approved model files pack clean through the real
   world checker — all six gates pass, 6 files, 1.29 MB.
+
+## 2026-10-27: T21 `builder submit` (inbox #14)
+
+- New command for an admin's own computer: it lays the draft's
+  newest round out like animundo-world on `builder/<draft_id>`
+  with the real place id (region, new animals and model specs,
+  committed preview sheets, locale keys merged, never a changed
+  shipped text), runs `check_draft.py` on exactly that content,
+  commits signed-off (DCO) and opens the PR with the admin's own
+  `gh`. The link goes back to the job's `submit.json`.
+- The `.glb` files are not committed: the world builds (and
+  ignores) its own; the gate still checks the round's builds
+  from the job. The body has the area, the sources, every
+  check, the new species with previews, the final review notes
+  (verified rounds win), the person-approval note and the
+  expert flags; it never names the family and never carries
+  their notes (a decoy-note test pins that).
+- Gate and layout failures roll the branch back fully; a
+  failed `gh` leaves the committed branch and the next run
+  carries on from it. A second submit is refused.
+- Proved end to end against a throwaway copy of the real world
+  with a stub `gh` (`/tmp/submit_probe.py`): all six real gates
+  pass, the branch holds 6 files, the commit is signed off.
+- Still open: the round comes from the local job; the Storage
+  download lands with T25. The first real PR is Kai's call.

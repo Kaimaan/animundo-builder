@@ -32,7 +32,10 @@ Five searches at most. Answer with JSON only, no prose.
   plain words plus `main_hex` and `belly_hex` like
   "#7a4a2b") and `marks` (the 2-3 field-guide marks that
   tell the species apart, like "ear tufts" or "short
-  black-tipped tail"). Each with its `source`.
+  black-tipped tail"). Each with its `source`. The main
+  colour is the one a child would name when looking at the
+  animal, as a field guide's plate shows it — not the most
+  striking variant.
 - `year`: how it lives through the seasons: `winter` (active,
   hibernates or migrates), `shelter` (one or two sentences),
   `young` (one or two sentences) and `food` (one sentence

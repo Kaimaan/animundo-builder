@@ -54,7 +54,10 @@ None. Write from the input only.
 
 - Factors near 1: change only what the looks move. A factor
   of 1 keeps the reference's shape, which already reads as an
-  animal.
+  animal. But lean towards the marks: the species' telling
+  differences from the reference read clear at game distance
+  (big paws and thick legs want 1.4–1.6, not 1.2). Small
+  factors keep the reference's look.
 - Marks the animal does not have stay out; marks no edit can
   make go in `unmakable`, never in `marks`.
 

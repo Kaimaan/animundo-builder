@@ -17,6 +17,11 @@ What grows and lies around there (the research's surroundings):
 $SURROUNDINGS
 ```
 
+What the new plants look like, grounded by their own searches;
+shape their specs from these colours and notes:
+
+$PLANT_LOOKS
+
 The closest existing home, $CLOSEST_NAME. Follow its shape and
 fill every section it has; change its land, trees, plants,
 water, food and fish to this habitat:

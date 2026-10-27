@@ -1546,6 +1546,62 @@ def test_run_adapt_runs_the_tool(tmp_path: Path) -> None:
     assert failed["ok"] is False
 
 
+def test_prey_looks_reach_the_edits_prompt(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    (tmp_path / "looks.json").write_text(
+        json.dumps(
+            {
+                "prey": {
+                    "latin": "Hydrochoerus hydrochaeris",
+                    "size_cm": 120.0,
+                    "colours": ["brown", "tan"],
+                    "marks": ["blunt snout", "webbed feet"],
+                    "sources": ["https://example.org/capybara"],
+                },
+                "plants": {},
+            }
+        )
+    )
+    client = ScriptClient(
+        [
+            _animal_answer("capybara"),
+            _edits_answer(),
+            _animal_answer("lynx"),
+            _edits_answer(),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    assert "Colours: brown, tan." in client.prompts[1]
+    assert "Marks: blunt snout, webbed feet." in client.prompts[1]
+
+
+def test_plant_looks_reach_the_home_prompt(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    (tmp_path / "looks.json").write_text(
+        json.dumps(
+            {
+                "prey": None,
+                "plants": {
+                    "water lettuce": {
+                        "latin": "Pistia stratiotes",
+                        "size_cm": 15.0,
+                        "colours": ["pale green"],
+                        "marks": ["rosette of ribbed leaves"],
+                        "year": "Leaves all year.",
+                        "sources": ["https://example.org/lettuce"],
+                    }
+                },
+            }
+        )
+    )
+    client = ScriptClient([_home_answer()])
+    _home_stage().run(_ctx(tmp_path, world, client))
+    assert "colours: pale green" in client.prompts[0]
+    assert "shape: rosette of ribbed leaves" in client.prompts[0]
+
+
 def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:
     """#59: user (first prompt), assistant (its answer), user (fixes)."""
     world = _world(tmp_path)

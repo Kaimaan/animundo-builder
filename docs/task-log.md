@@ -3,6 +3,33 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #58.5 (looks call) and #62 (D7 live fixes)
+
+- #58.5: a new `looks` stage after `minimum`: one short
+  strict call (3 searches at most, `text.format` with the
+  `ThingLooks` schema) for the prey and for every
+  plant-kind surrounding the game has no spec for. Each
+  returns latin, size, colours, marks or shape notes, the
+  year for plants, and sources; library items get no call.
+  The stage is idempotent (skips when `looks.json`
+  exists). The prey's looks feed the edits prompt
+  (colours, marks); the plants' feed `$PLANT_LOOKS` in the
+  home prompt. Makers tolerate a missing `looks.json`
+  (jobs already in flight).
+- #62.1: the research asks for the main colour a child
+  would name, as a field guide's plate shows it — not the
+  most striking variant (the lynx read fox-red).
+- #62.2: the edits prompt leans towards the marks: telling
+  differences read clear at game distance (1.4–1.6, not
+  1.2); small factors keep the reference's look.
+- Research recordings regenerated for the new prompt
+  (answers untouched).
+- Reviewer: `builder stage looks --job <job> --record`
+  between `minimum` and `newhome` on the live jobs; then
+  the capybara live. Recordings from the lynx and the
+  capybara become the replay tests next.
+- Suite: 561 passed, 12 skipped.
+
 ## 2026-10-27: inbox #60 (D7): the maker edits references instead of writing specs
 
 - Two calls per animal now: `animal_write` for the animal
@@ -357,7 +384,11 @@ noted; `<job>` holds the previous stages' outputs):
   `builder stage intake --job <job>`
 - `home` (free unless the template lacks a food kind): needs
   `home.json`. `builder stage home --job <job> [--record|--replay]`
-- `oneshot` (1 model call per thing, at most 2): needs
+- `looks` (1 short call per thing, 3 searches at most): needs
+  `home.json`, `research.json`, `minset.json`; run between
+  `minimum` and `newhome`, skipped when `looks.json` exists.
+  `builder stage looks --job <job> [--record|--replay]`
+- `oneshot` (2 model calls per thing, at most 4): needs
   `home.json`, `research.json`, `minset.json`, `regions/`.
   `builder stage oneshot --job <job> [--record|--replay]`
 - `newhome` (1 model call, at most 2): needs `home.json`,

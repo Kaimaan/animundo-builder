@@ -97,7 +97,15 @@ class AnimalMakerStage:
             next((ctx.job_dir / "regions").glob("*.json")).read_text(encoding="utf-8")
         )
         data = load_list(find_animal_list(world))
-        targets = _targets(brief, minset, data["animals"], ctx.job_dir)
+        looks_path = ctx.job_dir / "looks.json"
+        looks_file: dict[str, Any] = (
+            json.loads(looks_path.read_text(encoding="utf-8"))
+            if looks_path.is_file()
+            else {}
+        )
+        targets = _targets(
+            brief, minset, data["animals"], ctx.job_dir, looks_file.get("prey")
+        )
         before = ctx.tracker.spent_usd
         made = []
         unmakable: dict[str, list[str]] = {}
@@ -575,6 +583,7 @@ def _targets(
     minset: dict[str, Any],
     entries: list[dict[str, Any]],
     job_dir: Path,
+    prey_looks: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """What to make, in order: the prey, then the animal. Made ones skip."""
     targets = []
@@ -610,6 +619,7 @@ def _targets(
                     "start_from": match["start_from"],
                     "prey": True,
                     "size_cm": prey.get("size_cm"),
+                    "looks": prey_looks,
                 }
             )
     if minset.get("make_animal"):
@@ -693,10 +703,19 @@ def _description(
 ) -> str:
     """What the sculptor sees: looks first, shape from the start."""
     if target["prey"]:
-        return (
+        base = (
             f"{entry['name']} ({entry['latin']}), about "
             f"{target['size_cm']} cm long: the main animal's prey."
         )
+        looks = target.get("looks")
+        if not looks:
+            return base
+        bits = [base]
+        if looks.get("colours"):
+            bits.append(f"Colours: {', '.join(looks['colours'])}.")
+        if looks.get("marks"):
+            bits.append(f"Marks: {', '.join(looks['marks'])}.")
+        return " ".join(bits)
     looks = research.get("looks")
     if looks:
         return _looks_description(entry, looks)
@@ -1309,7 +1328,13 @@ class HomeMakerStage:
         habitat: str,
     ) -> list[str]:
         """One home, one try plus one fix round. Returns new plant ids."""
-        prompt = self._prompt(world, brief, research, habitat)
+        looks_path = ctx.job_dir / "looks.json"
+        looks: dict[str, Any] = (
+            json.loads(looks_path.read_text(encoding="utf-8"))
+            if looks_path.is_file()
+            else {}
+        )
+        prompt = self._prompt(world, brief, research, habitat, looks)
         errors: list[str] | None = None
         previous: str | None = None
         for attempt in range(1, MAX_TRIES + 1):
@@ -1711,6 +1736,7 @@ class HomeMakerStage:
         brief: dict[str, Any],
         research: dict[str, Any],
         habitat: str,
+        looks: dict[str, Any] | None = None,
     ) -> str:
         template = (PROMPTS_DIR / "home_write.md").read_text(encoding="utf-8")
         existing = sorted(
@@ -1722,6 +1748,7 @@ class HomeMakerStage:
             {
                 "HABITAT": habitat,
                 "SURROUNDINGS": json.dumps(research["surroundings"], indent=2),
+                "PLANT_LOOKS": _plant_looks_text((looks or {}).get("plants", {})),
                 "CLOSEST_NAME": CLOSEST_HOME,
                 "CLOSEST_HOME": (
                     (world / "homes" / f"{CLOSEST_HOME}.json").read_text()
@@ -1759,6 +1786,28 @@ def _tree_specs(world: Path) -> dict[str, Path]:
         for path in sorted(examples.glob("*.json")):
             specs.setdefault(path.stem, path)
     return specs
+
+
+def _plant_looks_text(plants: dict[str, Any]) -> str:
+    """Grounded plant looks for the home prompt (#58.5)."""
+    if not plants:
+        return "(no grounded plant looks; write from the surroundings' names)"
+    lines = []
+    for name in sorted(plants):
+        looks = plants[name]
+        bits = [f"- {name}"]
+        if looks.get("latin"):
+            bits.append(f"({looks['latin']})")
+        if looks.get("size_cm") is not None:
+            bits.append(f"{looks['size_cm']} cm tall")
+        if looks.get("colours"):
+            bits.append(f"colours: {', '.join(looks['colours'])}")
+        if looks.get("marks"):
+            bits.append(f"shape: {', '.join(looks['marks'])}")
+        if looks.get("year"):
+            bits.append(f"year: {looks['year']}")
+        lines.append(" ".join(bits))
+    return "\n".join(lines)
 
 
 def _tree_specs_text(world: Path) -> str:

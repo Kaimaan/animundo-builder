@@ -4,6 +4,7 @@ from .animals import AnimalsStage
 from .capability import CapabilityStage
 from .home import HomeStage
 from .intake import IntakeStage
+from .looks import LooksStage
 from .maker import AnimalMakerStage, HomeMakerStage
 from .minimum import MinimumStage
 from .models import ModelsStage
@@ -22,6 +23,7 @@ __all__ = [
     "CapabilityStage",
     "HomeStage",
     "IntakeStage",
+    "LooksStage",
     "AnimalMakerStage",
     "HomeMakerStage",
     "MinimumStage",

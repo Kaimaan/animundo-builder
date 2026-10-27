@@ -58,13 +58,14 @@ HOME_STAGES = [
     "intake",
     "research",
     "minimum",
+    "looks",
     "newhome",
     "home",
     "oneshot",
     "words",
     "pack",
 ]
-HOME_ONLY = {"research", "minimum", "newhome", "home", "oneshot"}
+HOME_ONLY = {"research", "minimum", "looks", "newhome", "home", "oneshot"}
 
 
 def stages_for_kind(

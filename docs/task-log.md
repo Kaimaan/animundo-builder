@@ -3,6 +3,40 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #64 (made rainforest home, five fixes)
+
+- #64.1: land stays out of the water. Prompt rule plus `_terrain_errors`
+  in code: `base_height` at least `water_level` + 3 (default water 8, so
+  at least 11). Checked against the game (`world.gd height()`: land runs
+  from base up by relief), so the floor keeps the lowest land dry; only
+  present numbers are checked, missing ones stay the world's check's
+  business. No relief bound: relief only raises land, and flat places
+  (relief 0-4) are legitimate per CONTRIBUTING.
+- #64.2: prompt rule — `terrain.edge` is `lake` only for lake and sea
+  shores and must be set (leaving it out rings the map too); a river
+  home is `edge: "none"` with water from `lakes`/`streams` (both in the
+  region schema and the game).
+- #64.3: the maker finishes only when the world's checks pass. The
+  `homes.py check` on the made home (copied into the sandbox's `homes/`)
+  already ran — try 1 of the live rainforest shows its errors — but a
+  failed try left its home behind and the next run took it as done.
+  Now the early return needs `checks/newhome.json` too, so a failure
+  retries instead of standing. Code carries the research's sources into
+  the template (the writer leaves `sources` out); prompt asks for
+  one-for-one `flower_names`, the world's check gates the rest.
+- #64.4: `place_name` is just the place ("Fox forest"); the game adds
+  the country itself. Intake writes it so, and home strips a trailing
+  ", Country" for old briefs (both the `homes.py make` and made-template
+  paths), so the fox's and anaconda's places fix on re-run.
+- #64.5: the `models/examples/trees/` fallback is out — no library tree
+  specs exist, so nothing is offered and every tree uses a built-in
+  shape. The shipped-spec machinery stays for when the library lands.
+- Fixture: the recorded anaconda home answer carried the template's
+  `base_height` 9 (flooded under the new rule); bumped to 11, the rest
+  untouched. Synced `web/build/animal-list.json` (new reef_shark
+  reference).
+- Suite: 575 passed, 12 skipped; ruff check + format clean.
+
 ## 2026-10-27: inbox #63 (lab-tried edits call)
 
 - #63.1: the edits call no longer names marks — `marks` left the schema

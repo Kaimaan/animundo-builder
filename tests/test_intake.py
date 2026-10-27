@@ -188,7 +188,7 @@ def test_home_writes_brief_with_worker_name(tmp_path: Path) -> None:
     result = _home_stage(tmp_path).run(_home_ctx(tmp_path))
     assert result["home"] == "boreal_forest"
     brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
-    assert brief["place_name"] == "Fox forest, Testland"
+    assert brief["place_name"] == "Fox forest"
     assert brief["country"] == "TT"
     assert brief["country_name"] == "Testland"
     assert brief["center"] == {"lat": 61.55, "lon": 26.05}
@@ -218,7 +218,7 @@ def test_home_without_home_is_flagged(tmp_path: Path) -> None:
     brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
     assert brief["needs_home"] is True
     assert brief["habitats"] == ["grassland"]
-    assert brief["place_name"] == "Fox grassland, Testland"
+    assert brief["place_name"] == "Fox grassland"
 
 
 def test_home_unrecorded_refused(tmp_path: Path) -> None:

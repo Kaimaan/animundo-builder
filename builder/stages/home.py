@@ -130,7 +130,7 @@ class HomeStage:
                     "--id",
                     place_id,
                     "--name",
-                    brief["place_name"],
+                    _region_name(brief),
                     "--country",
                     brief["country_name"] or brief["country"],
                     "--lat",
@@ -168,7 +168,7 @@ class HomeStage:
         except ValueError as error:
             raise _Stopped(f"the made template is no region: {error}")
         region["id"] = place_id
-        region["name"] = brief["place_name"]
+        region["name"] = _region_name(brief)
         region["country"] = brief["country_name"] or brief["country"]
         region["center"] = brief["center"]
         return region
@@ -467,6 +467,19 @@ def _read_minset(ctx: Any) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _region_name(brief: dict[str, Any]) -> str:
+    """The place name without the country (#64.4).
+
+    Old briefs carry "Place, Country"; the game adds the
+    country itself, so it would show twice.
+    """
+    name = brief.get("place_name", "")
+    for country in (brief.get("country_name") or "", brief.get("country") or ""):
+        if country and name.endswith(f", {country}"):
+            return name[: -len(country) - 2]
+    return name
 
 
 def _place_id(cell: str, stem: str, country: str) -> str:

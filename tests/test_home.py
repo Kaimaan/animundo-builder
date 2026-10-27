@@ -188,6 +188,17 @@ def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
     assert kept["stem"] == "fox"
 
 
+def test_home_strips_the_country_from_old_place_names(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _write_inputs(tmp_path, place_name="Fox copse, Finland")
+    client = ScriptClient([])
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(
+        _ctx(tmp_path, client, world)
+    )
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    assert region["name"] == "Fox copse"
+
+
 def test_home_new_animal_waits_for_one_shot(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _write_inputs(tmp_path, in_library=None, latin="Vulpes zerda")

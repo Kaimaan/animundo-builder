@@ -1538,7 +1538,7 @@
    "name": "Great white shark",
    "latin": "Carcharodon carcharias",
    "gbif_key": 2420694,
-   "start_from": "pike",
+   "start_from": "reef_shark",
    "habitats": [
     "sea"
    ],
@@ -1549,7 +1549,7 @@
    "name": "Scalloped hammerhead",
    "latin": "Sphyrna lewini",
    "gbif_key": 2418789,
-   "start_from": "pike",
+   "start_from": "reef_shark",
    "habitats": [
     "sea",
     "reef"
@@ -1794,7 +1794,7 @@
    "name": "Blacktip reef shark",
    "latin": "Carcharhinus melanopterus",
    "gbif_key": 2417981,
-   "start_from": "pike",
+   "start_from": "reef_shark",
    "habitats": [
     "reef"
    ],

@@ -31,6 +31,8 @@ from builder.stages.maker import (
     _size_misses,
     _sourced_sizes,
     _Stopped,
+    _template_sources,
+    _terrain_errors,
     _tool_marks,
 )
 from builder.strict import assert_strict_subset
@@ -969,6 +971,8 @@ def test_newhome_skips_a_made_home(tmp_path: Path) -> None:
     _home_inputs(tmp_path)
     (tmp_path / "homes").mkdir()
     (tmp_path / "homes" / "rainforest.json").write_text("{}")
+    (tmp_path / "checks").mkdir()
+    (tmp_path / "checks" / "newhome.json").write_text("{}")
     client = ScriptClient([])
     stage = _home_stage()
     result = stage.run(_ctx(tmp_path, world, client))
@@ -1236,6 +1240,20 @@ def test_description_names_the_looks_marks() -> None:
     assert "shoulder 60 cm" in text
 
 
+def _shipped_tree(world: Path) -> None:
+    trees = world / "models" / "trees"
+    trees.mkdir(parents=True)
+    (trees / "umbrella_thorn.json").write_text(
+        json.dumps(
+            {
+                "id": "umbrella_thorn",
+                "name": "Umbrella thorn acacia",
+                "latin": "Vachellia tortilis",
+            }
+        )
+    )
+
+
 def _example_tree(world: Path) -> None:
     trees = world / "models" / "examples" / "trees"
     trees.mkdir(parents=True)
@@ -1266,18 +1284,30 @@ def _thorn_inputs(tmp_path: Path) -> None:
 
 def test_newhome_offers_tree_specs_in_prompt(tmp_path: Path) -> None:
     world = _home_world(tmp_path)
-    _example_tree(world)
+    _shipped_tree(world)
     _home_inputs(tmp_path)
     client = ScriptClient([_home_answer()])
     _home_stage().run(_ctx(tmp_path, world, client))
     assert "umbrella_thorn" in client.prompts[0]
     assert "Vachellia tortilis" in client.prompts[0]
-    assert "no tree specs yet" not in client.prompts[0].lower()
+
+
+def test_newhome_ignores_example_tree_specs(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _example_tree(world)
+    _thorn_inputs(tmp_path)
+    answer = _home_answer(
+        trees={"mix": [{"shape": "umbrella_thorn", "plant": "umbrella_thorn"}]}
+    )
+    client = ScriptClient([answer, _home_answer()])
+    _home_stage().run(_ctx(tmp_path, world, client))
+    assert "umbrella_thorn" not in client.prompts[0]
+    assert "neither a shape nor" in client.prompts[1]
 
 
 def test_newhome_carries_a_matched_tree_spec(tmp_path: Path) -> None:
     world = _home_world(tmp_path)
-    _example_tree(world)
+    _shipped_tree(world)
     _thorn_inputs(tmp_path)
     answer = _home_answer(
         trees={"mix": [{"shape": "umbrella_thorn", "plant": "umbrella_thorn"}]}
@@ -1290,7 +1320,7 @@ def test_newhome_carries_a_matched_tree_spec(tmp_path: Path) -> None:
 
 def test_newhome_rejects_unknown_tree_shapes(tmp_path: Path) -> None:
     world = _home_world(tmp_path)
-    _example_tree(world)
+    _shipped_tree(world)
     _thorn_inputs(tmp_path)
     answer = _home_answer(trees={"mix": [{"shape": "palm"}]})
     client = ScriptClient([answer, _home_answer()])
@@ -1300,7 +1330,7 @@ def test_newhome_rejects_unknown_tree_shapes(tmp_path: Path) -> None:
 
 def test_newhome_rejects_spec_tree_with_other_plant(tmp_path: Path) -> None:
     world = _home_world(tmp_path)
-    _example_tree(world)
+    _shipped_tree(world)
     _thorn_inputs(tmp_path)
     answer = _home_answer(
         trees={"mix": [{"shape": "umbrella_thorn", "plant": "norway_spruce"}]}
@@ -1308,6 +1338,90 @@ def test_newhome_rejects_spec_tree_with_other_plant(tmp_path: Path) -> None:
     client = ScriptClient([answer, _home_answer()])
     _home_stage().run(_ctx(tmp_path, world, client))
     assert "is a spec, so its plant" in client.prompts[1]
+
+
+def test_terrain_errors_keeps_the_land_dry() -> None:
+    assert _terrain_errors({}) == []
+    assert _terrain_errors({"terrain": {"base_height": 11}}) == []
+    assert _terrain_errors({"terrain": {"base_height": 11, "water_level": 8}}) == []
+    assert _terrain_errors({"terrain": {"lakes": 0.2}}) == []
+    assert _terrain_errors({"terrain": {"base_height": "high"}}) == []
+    flooded = _terrain_errors({"terrain": {"base_height": 5}})
+    assert len(flooded) == 1
+    assert "base_height 5" in flooded[0]
+    assert "at least water_level + 3 (11)" in flooded[0]
+    deep = _terrain_errors({"terrain": {"base_height": 20, "water_level": 24}})
+    assert "water_level + 3 (27)" in deep[0]
+
+
+def test_newhome_fix_round_raises_flooded_land(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    flooded = _home_answer_with({"terrain": {"base_height": 5, "relief": 3}})
+    dry = _home_answer_with({"terrain": {"base_height": 11, "relief": 3}})
+    client = ScriptClient([flooded, dry])
+    result = _home_stage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert "under the water" in client.prompts[1]
+
+
+def test_template_sources_dedupes_and_skips_blanks() -> None:
+    research = {"sources": ["https://a.example", "", "https://a.example", 7]}
+    assert _template_sources(research) == ["https://a.example"]
+    assert _template_sources({}) == []
+
+
+def test_newhome_carries_the_research_sources(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    research = json.loads((tmp_path / "research.json").read_text())
+    research["sources"] = ["https://example.org/amazon"]
+    (tmp_path / "research.json").write_text(json.dumps(research))
+    written = _home_answer_with({"sources": ["https://ai.example/guess"]})
+    client = ScriptClient([written])
+    _home_stage().run(_ctx(tmp_path, world, client))
+    home = json.loads((tmp_path / "homes" / "rainforest.json").read_text())
+    assert home["sources"] == ["https://example.org/amazon"]
+
+
+def test_newhome_drops_sources_without_research(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    written = _home_answer_with({"sources": ["https://ai.example/guess"]})
+    client = ScriptClient([written])
+    _home_stage().run(_ctx(tmp_path, world, client))
+    home = json.loads((tmp_path / "homes" / "rainforest.json").read_text())
+    assert "sources" not in home
+
+
+def test_newhome_retries_after_a_failed_try(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    failing = _home_stage(check_homes=lambda s, h: ["boom"])
+    with pytest.raises(_Stopped, match="a person makes it"):
+        failing.run(_ctx(tmp_path, world, ScriptClient([_home_answer()] * 2)))
+    assert (tmp_path / "homes" / "rainforest.json").is_file()
+    assert not (tmp_path / "checks" / "newhome.json").is_file()
+    result = _home_stage().run(_ctx(tmp_path, world, ScriptClient([_home_answer()])))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert (tmp_path / "checks" / "newhome.json").is_file()
+
+
+def test_newhome_skips_a_passing_home(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    _home_stage().run(_ctx(tmp_path, world, ScriptClient([_home_answer()])))
+    result = _home_stage().run(_ctx(tmp_path, world, ScriptClient([])))
+    assert result == {"home_files": ["homes/rainforest.json"], "cost_usd": 0.0}
+
+
+def test_home_prompt_rules_land_water_flowers_and_sources() -> None:
+    prompt = (PROMPTS_DIR / "home_write.md").read_text(encoding="utf-8")
+    flat = " ".join(prompt.split())
+    assert "water_level` + 3" in flat
+    assert 'edge: "none"' in flat
+    assert "one for one" in flat
+    assert "Leave `sources` out" in flat
 
 
 def _write_looks_research(tmp_path: Path) -> None:

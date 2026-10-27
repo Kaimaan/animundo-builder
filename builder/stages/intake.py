@@ -125,10 +125,9 @@ class IntakeStage:
             "center": center,
             "country": country,
             "country_name": country_name,
-            "place_name": (
-                f"{short_name(entry.get('name', ''))} "
-                f"{habitat_word(home)}, {country_name}"
-            ),
+            # Just the place: the game adds the country itself
+            # ("{place}, {country}"), so a country here doubles it (#64.4).
+            "place_name": (f"{short_name(entry.get('name', ''))} {habitat_word(home)}"),
         }
         out = ctx.job_dir / "home.json"
         out.write_text(json.dumps(brief, indent=2), encoding="utf-8")

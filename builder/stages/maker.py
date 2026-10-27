@@ -1387,7 +1387,10 @@ class HomeMakerStage:
             return {"home_files": [], "cost_usd": 0.0}
         habitat = brief["home"]
         made = ctx.job_dir / "homes" / f"{habitat}.json"
-        if made.is_file():
+        passed = ctx.job_dir / "checks" / "newhome.json"
+        if made.is_file() and passed.is_file():
+            # A failed try leaves its home behind too; only a
+            # passing run counts as done, or the failure stands (#64.3).
             return {"home_files": [f"homes/{habitat}.json"], "cost_usd": 0.0}
         before = ctx.tracker.spent_usd
         plants = self._make(ctx, world, brief, research, habitat)
@@ -1507,11 +1510,18 @@ class HomeMakerStage:
                         "an existing plant nor a new spec"
                     )
         if not problems:
+            problems.extend(_terrain_errors(home))
+        if not problems:
             problems.extend(
                 self._carryover_errors(world, home, set(plants), research, brief)
             )
         if problems:
             return None, problems
+        sources = _template_sources(research)
+        if sources:
+            home["sources"] = sources
+        else:
+            home.pop("sources", None)
         return {"home": home, "plants": dict(plants)}, []
 
     def _carryover_errors(
@@ -1863,14 +1873,51 @@ def _region_rules(world: Path) -> str:
     return text[start:rest].strip() if start >= 0 else ""
 
 
+def _terrain_errors(home: dict[str, Any]) -> list[str]:
+    """The land stays out of the water (#64.1).
+
+    The game builds land from `base_height` up by `relief`
+    (`world.gd height()`), with the water at `water_level`
+    (default 8): a base below water_level + 3 floods the
+    place. Only present numbers are checked; missing ones
+    are the world's check's business.
+    """
+    terrain = home.get("terrain")
+    if not isinstance(terrain, dict):
+        return []
+    base = terrain.get("base_height")
+    if isinstance(base, bool) or not isinstance(base, (int, float)):
+        return []
+    water = terrain.get("water_level", 8)
+    if isinstance(water, bool) or not isinstance(water, (int, float)):
+        return []
+    floor = water + 3
+    if base >= floor:
+        return []
+    return [
+        f"the land sits under the water: terrain.base_height {base:g} "
+        f"with water_level {water:g} floods the place; base_height "
+        f"must be at least water_level + 3 ({floor:g}). A flat wet "
+        "place is low land near the water, not land under it"
+    ]
+
+
+def _template_sources(research: dict[str, Any]) -> list[str]:
+    """The research's sources, in order, for the made home (#64.3)."""
+    ordered = []
+    for url in research.get("sources", []) or []:
+        if isinstance(url, str) and url.strip() and url not in ordered:
+            ordered.append(url)
+    return ordered
+
+
 def _tree_specs(world: Path) -> dict[str, Path]:
-    """Offered tree spec ids: shipped ones, then the worked examples."""
-    specs = {path.stem: path for path in (world / "models" / "trees").glob("*.json")}
-    examples = world / "models" / "examples" / "trees"
-    if examples.is_dir():
-        for path in sorted(examples.glob("*.json")):
-            specs.setdefault(path.stem, path)
-    return specs
+    """Offered tree spec ids: the shipped library only (#64.5).
+
+    The worked examples in models/examples/trees/ are
+    reference work, not the library, so they stay unoffered.
+    """
+    return {path.stem: path for path in (world / "models" / "trees").glob("*.json")}
 
 
 def _plant_looks_text(plants: dict[str, Any]) -> str:

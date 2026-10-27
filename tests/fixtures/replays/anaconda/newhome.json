@@ -12,7 +12,7 @@
     "author": "Animundo team",
     "terrain": {
       "size": 2048,
-      "base_height": 9,
+      "base_height": 11,
       "relief": 12,
       "frequency": 0.04,
       "rock_ridges": 0.4,

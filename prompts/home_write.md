@@ -108,6 +108,20 @@ None. Write from the inputs only.
 - `food` covers berries, insects and carrion (the check
   plays a fox there) plus what this land offers.
 - Seasons only where the place has them.
+- Keep the land out of the water: `terrain.base_height` is
+  at least `terrain.water_level` + 3 (the default water is
+  8, so at least 11). The land runs from `base_height` up
+  by `relief`, so this keeps the lowest land dry; a flat
+  wet place is low land near the water, not land under it.
+- `terrain.edge` is `lake` only for lake and sea shores,
+  and must be set: leaving it out rings the map with
+  water too. A river home is land with the river running
+  through it: `edge: "none"`, with the water from
+  `lakes`/`streams`, not from the rim.
+- `flower_names` names every `flower_colors` colour, one
+  for one in the same order; no colours without names.
+- Leave `sources` out: the builder carries the research's
+  sources into the home.
 
 $FOR_CHILDREN
 

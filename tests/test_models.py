@@ -131,9 +131,14 @@ class ScriptChat:
         self.images: list[int] = []
 
     def __call__(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
-        content = messages[0]["content"]
-        self.prompts.append(content[0]["text"])
-        self.images.append(sum(1 for part in content if part["type"] == "image_url"))
+        first = messages[0]["content"]
+        last = messages[-1]["content"]
+        text = last if isinstance(last, str) else last[0]["text"]
+        self.prompts.append(text)
+        if isinstance(first, str):
+            self.images.append(0)
+        else:
+            self.images.append(sum(1 for part in first if part["type"] == "image_url"))
         return self.answers.pop(0)
 
 

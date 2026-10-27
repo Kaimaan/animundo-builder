@@ -17,6 +17,7 @@ into the job's own folder, never into the world checkout.
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 import sys
@@ -29,7 +30,7 @@ import jsonschema
 from .. import taxa
 from ..animal_list import find_entry, load_list, match_by_name
 from ..animal_list import find_list as find_animal_list
-from ..prompts import PROMPTS_DIR, for_children
+from ..prompts import PROMPTS_DIR, fix_messages, for_children
 from ..taxa import taxon_block
 from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
@@ -109,14 +110,17 @@ class AnimalMakerStage:
         animal_id = target["id"]
         prompt = self._prompt(world, brief, research, region, target)
         errors: list[str] | None = None
+        previous: str | None = None
         for attempt in range(1, MAX_TRIES + 1):
             ctx.check_budget()
-            answer = self._ask(ctx, prompt, errors)
+            answer = self._ask(ctx, prompt, errors, previous)
+            previous = answer
             files, file_errors = self._files(world, answer, animal_id)
             if files is not None:
                 self._place(ctx, world, animal_id, files, attempt)
                 build_errors = self._build_and_check(ctx, world, animal_id, attempt)
                 file_errors = build_errors
+                file_errors += _measure_errors(files["model"], research, target, world)
             self._save_try(ctx, animal_id, attempt, answer, files, file_errors)
             if not file_errors:
                 self._save_final(ctx, world, animal_id)
@@ -127,15 +131,21 @@ class AnimalMakerStage:
             f"({'; '.join(errors or [])}); a person makes it"
         )
 
-    def _ask(self, ctx: Any, prompt: str, errors: list[str] | None) -> str:
-        if errors:
-            notes = "\n".join(f"- {error}" for error in errors)
-            prompt = (
-                f"{prompt}\n\nPREVIOUS TRY had these problems,"
-                f" fix exactly them:\n{notes}"
-            )
+    def _ask(
+        self,
+        ctx: Any,
+        prompt: str,
+        errors: list[str] | None,
+        previous: str | None = None,
+    ) -> str:
+        first = {"role": "user", "content": prompt}
+        if errors and previous is not None:
+            notes = "\n".join(f"- {_guide(error)}" for error in errors)
+            messages = fix_messages(first, previous, notes)
+        else:
+            messages = [first]
         chat = self._chat or ctx.chat
-        response = chat([{"role": "user", "content": prompt}])
+        response = chat(messages)
         return (response.choices[0].message.content or "").strip()
 
     def _files(
@@ -260,10 +270,10 @@ class AnimalMakerStage:
             (folder / "spec.json").write_text(
                 json.dumps(files["model"], indent=2), encoding="utf-8"
             )
-        if not (folder / "errors.json").is_file():
-            (folder / "errors.json").write_text(
-                json.dumps(errors, indent=2), encoding="utf-8"
-            )
+        # Always: the measure check appends after the build wrote it.
+        (folder / "errors.json").write_text(
+            json.dumps(errors, indent=2), encoding="utf-8"
+        )
 
     def _update_plan(
         self, ctx: Any, brief: dict[str, Any], targets: list[dict[str, Any]]
@@ -364,11 +374,7 @@ class AnimalMakerStage:
                 "CLOSEST_SPEC": (world / "models" / f"{start_from}.json").read_text(
                     encoding="utf-8"
                 ),
-                "CHANGE": (
-                    "One shot, no reference sheet: adapt the closest spec's "
-                    "bones and layout to this species' body plan and the "
-                    "sourced sizes below; do not copy its sizes."
-                ),
+                "CHANGE": _change_text(world, start_from, entry),
                 "RULES": rules,
             }
         )
@@ -479,6 +485,8 @@ def _species_json(
     species["size"] = research["size"]
     species["year"] = research["year"]
     species["foods"] = [research["main_food"], *research["other_foods"]]
+    if research.get("looks"):
+        species["looks"] = research["looks"]
     return species
 
 
@@ -490,18 +498,24 @@ def _measurements(research: dict[str, Any], target: dict[str, Any]) -> dict[str,
     measurements = {"length_cm": size["length_cm"]}
     if size.get("weight_kg") is not None:
         measurements["weight_kg"] = size["weight_kg"]
+    for key in ("shoulder_cm", "height_cm", "tail_cm"):
+        if research.get("looks", {}).get(key) is not None:
+            measurements[key] = research["looks"][key]
     return measurements
 
 
 def _description(
     entry: dict[str, Any], research: dict[str, Any], target: dict[str, Any]
 ) -> str:
-    """What the sculptor knows of its life; shape comes from the start."""
+    """What the sculptor sees: looks first, shape from the start."""
     if target["prey"]:
         return (
             f"{entry['name']} ({entry['latin']}), about "
             f"{target['size_cm']} cm long: the main animal's prey."
         )
+    looks = research.get("looks")
+    if looks:
+        return _looks_description(entry, looks)
     year = research["year"]
     foods = [research["main_food"], *research["other_foods"]]
     dinner = ", ".join(food["name"] for food in foods)
@@ -509,6 +523,100 @@ def _description(
         f"{entry['name']} ({entry['latin']}): {year['shelter']} "
         f"{year['young']} Eats {dinner}."
     )
+
+
+def _looks_description(entry: dict[str, Any], looks: dict[str, Any]) -> str:
+    """The research's looks as sculpting direction (#57.1)."""
+    bits = [f"{entry['name']} ({entry['latin']})"]
+    sizes = []
+    if looks.get("shoulder_cm") is not None:
+        sizes.append(f"shoulder {looks['shoulder_cm']} cm")
+    if looks.get("height_cm") is not None:
+        sizes.append(f"height {looks['height_cm']} cm")
+    if looks.get("tail_cm") is not None:
+        sizes.append(f"tail {looks['tail_cm']} cm")
+    if sizes:
+        bits.append("Sizes: " + ", ".join(sizes) + ".")
+    coat = looks.get("coat", {})
+    if coat:
+        bits.append(
+            f"Coat {coat.get('main', '')} ({coat.get('main_hex', '')}) "
+            f"with {coat.get('belly', '')} ({coat.get('belly_hex', '')}) belly."
+        )
+    marks = [mark.get("mark", "") for mark in looks.get("marks", [])]
+    if marks:
+        bits.append("Field marks: " + "; ".join(marks) + ".")
+    return " ".join(bits)
+
+
+def _change_text(world: Path, start_from: str, entry: dict[str, Any]) -> str:
+    """What to change from the closest spec (#57.2, #57.3).
+
+    The reference table's own line when the species is on it,
+    then the proportions rule: start scaled, change only what
+    the measurements or the marks move.
+    """
+    keep = (
+        "Start from the closest spec scaled to the sourced body "
+        "length. Keep its proportions, except where the measurements "
+        "or the marks say otherwise: change only those."
+    )
+    row = _reference_row(world, start_from, entry.get("name", ""))
+    if row is None:
+        return f"One shot, no reference sheet: {keep}"
+    new, change = row
+    return f"Reference row ({new}): {change} One shot, no reference sheet: {keep}"
+
+
+# Table rows name a kind ("Snakes"), the animal a species ("anaconda").
+_KIND_ALIASES = {
+    "anaconda": "snake",
+    "python": "snake",
+    "boa": "snake",
+    "cobra": "snake",
+    "viper": "snake",
+    "adder": "snake",
+    "rattlesnake": "snake",
+    "mamba": "snake",
+}
+
+
+def _reference_row(world: Path, start_from: str, name: str) -> tuple[str, str] | None:
+    """The Reference-models line for this start and species (#57.2)."""
+    readme = world / "models" / "README.md"
+    if not readme.is_file():
+        return None
+    rows = _reference_table(readme.read_text(encoding="utf-8"))
+    words = {word.strip().lower() for word in name.replace("-", " ").split()}
+    words.update(_KIND_ALIASES[word] for word in list(words) if word in _KIND_ALIASES)
+    for new, start, change in rows:
+        starts = set(re.findall(r"[a-z][a-z0-9_]*", start.lower()))
+        if start_from.lower() not in starts:
+            continue
+        kinds = set(re.findall(r"[a-z][a-z0-9_]*", new.lower()))
+        kinds.update(token[:-1] for token in list(kinds) if token.endswith("s"))
+        if words & kinds:
+            return new, change
+    return None
+
+
+def _reference_table(text: str) -> list[tuple[str, str, str]]:
+    """(New animal, Start from, Change) rows of the table."""
+    rows = []
+    in_table = False
+    for line in text.splitlines():
+        if line.startswith("## Reference models"):
+            in_table = True
+            continue
+        if in_table and line.startswith("## "):
+            break
+        if not in_table or not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 3 or cells[0].startswith("---") or cells[0] == "New animal":
+            continue
+        rows.append((cells[0], cells[1], cells[2]))
+    return rows
 
 
 def _with_start_from(template: str, world: Path, start_from: str) -> str:
@@ -522,11 +630,165 @@ def _with_start_from(template: str, world: Path, start_from: str) -> str:
     return template
 
 
+def _measure_spec(spec: dict[str, Any]) -> dict[str, float]:
+    """What the spec measures, in metres (#57.4).
+
+    Shoulder: the body bone's head height. Length: the torso's
+    span (parts off the tail and leg bones). Tail: the tail
+    bones' chain. Legs: the top of the leg parts (they reach
+    y = 0). Depth: the body part's length axis. Anything the
+    spec doesn't name stays out.
+    """
+    bones = {
+        bone["name"]: bone
+        for bone in spec.get("bones", [])
+        if isinstance(bone, dict) and "name" in bone
+    }
+    parts = [
+        part
+        for part in spec.get("parts", [])
+        if isinstance(part, dict)
+        and isinstance(part.get("at"), list)
+        and isinstance(part.get("size"), list)
+    ]
+    found: dict[str, float] = {}
+    body_bone = bones.get("body")
+    if body_bone and isinstance(body_bone.get("head"), list):
+        found["shoulder_m"] = float(body_bone["head"][1])
+    torso = [
+        part
+        for part in parts
+        if not (part.get("bone") or "").startswith(("tail", "leg"))
+    ]
+    if torso:
+        found["length_m"] = max(
+            part["at"][2] + part["size"][2] / 2 for part in torso
+        ) - min(part["at"][2] - part["size"][2] / 2 for part in torso)
+    tails = [
+        bone
+        for name, bone in bones.items()
+        if name.startswith("tail")
+        and isinstance(bone.get("head"), list)
+        and isinstance(bone.get("tail"), list)
+    ]
+    if tails:
+        found["tail_m"] = sum(math.dist(bone["head"], bone["tail"]) for bone in tails)
+    legs = [part for part in parts if (part.get("bone") or "").startswith("leg")]
+    if legs:
+        found["leg_m"] = max(part["at"][1] + part["size"][1] / 2 for part in legs)
+    body = next((part for part in parts if part.get("name") == "body"), None)
+    if body is not None:
+        found["depth_m"] = float(body["size"][2])
+    if parts:
+        found["top_m"] = max(part["at"][1] + part["size"][1] / 2 for part in parts)
+    return found
+
+
+def _measure_errors(
+    spec: dict[str, Any],
+    research: dict[str, Any],
+    target: dict[str, Any],
+    world: Path,
+) -> list[str]:
+    """The spec's sizes against the sourced ones, free (#57.4).
+
+    Length, shoulder, tail and height within 20% of the research;
+    legs-against-depth within 30% of the reference's ratio (ratios
+    shift between species). Each miss names exact numbers for the
+    fix round. Missing numbers on either side skip quietly.
+    """
+    errors = []
+    found = _measure_spec(spec)
+    if target["prey"]:
+        sourced = {"length_m": (target.get("size_cm") or 0) / 100}
+    else:
+        looks = research.get("looks") or {}
+        sourced = {"length_m": research["size"]["length_cm"] / 100}
+        if looks.get("shoulder_cm") is not None:
+            sourced["shoulder_m"] = looks["shoulder_cm"] / 100
+        if looks.get("height_cm") is not None:
+            sourced["top_m"] = looks["height_cm"] / 100
+        if looks.get("tail_cm") is not None:
+            sourced["tail_m"] = looks["tail_cm"] / 100
+    names = {
+        "length_m": "body",
+        "shoulder_m": "shoulder",
+        "tail_m": "tail",
+        "top_m": "height",
+    }
+    for key, name in names.items():
+        if key not in found or key not in sourced or not sourced[key]:
+            continue
+        if abs(found[key] - sourced[key]) / sourced[key] <= 0.20:
+            continue
+        errors.append(
+            f"the spec's {name} is {found[key] * 100:.0f} cm, "
+            f"sourced {sourced[key] * 100:.0f} cm: size it to the source"
+        )
+    if "leg_m" in found and "depth_m" in found and found["depth_m"]:
+        ratio = found["leg_m"] / found["depth_m"]
+        reference = _reference_spec(world, target["start_from"])
+        if reference is not None:
+            theirs = _measure_spec(reference)
+            if "leg_m" in theirs and "depth_m" in theirs and theirs["depth_m"]:
+                want = theirs["leg_m"] / theirs["depth_m"]
+                if abs(ratio - want) / want > 0.30:
+                    errors.append(
+                        f"legs are {ratio:.1f}x the body's depth, "
+                        f"the {target['start_from']}'s are {want:.1f}x: "
+                        "shorten the legs or deepen the body"
+                    )
+    return errors
+
+
+def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:
+    """The reference spec, or nothing when it isn't a plain file."""
+    path = world / "models" / f"{start_from}.json"
+    if not path.is_file():
+        return None
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return spec if isinstance(spec, dict) else None
+
+
 def _verdicts(
     world: Path, ctx: Any, animal_id: str, attempt: int
 ) -> dict[str, dict[str, Any]]:
     result = check_draft(world, ctx.job_dir, f"oneshot-{animal_id}-{attempt}")
     return {entry.get("check", ""): entry for entry in result.get("results", [])}
+
+
+# Text the checks demand, and the flag that demands it (#56.1).
+_TEXT_FLAGS = {
+    "dig": "digs",
+    "safe_tag": "hunts",
+    "bite": "hunts",
+    "caught_you": "hunts",
+    "rival_bite": "territorial",
+    "rival_caught_you": "territorial",
+}
+
+
+def _guide(error: str) -> str:
+    """A missing-text error becomes fix guidance, not a stop (#56.1).
+
+    Either write the text or set the flag false when the research
+    says the animal doesn't do that; anything else passes through.
+    """
+    match = re.search(r"needs? texts? (.*)$", error)
+    if not match:
+        return error
+    texts = set(re.findall(r'"([a-z_]+)"', match.group(1)))
+    flags = sorted({_TEXT_FLAGS[text] for text in texts if text in _TEXT_FLAGS})
+    if not flags:
+        return error
+    picks = " or ".join(f"`{flag}`" for flag in flags)
+    return (
+        f"{error} Fix it one of two ways: write the text, or set {picks} "
+        "false when the surveyed animal doesn't do that."
+    )
 
 
 def _unfence(answer: str) -> str:
@@ -600,9 +862,11 @@ class HomeMakerStage:
         """One home, one try plus one fix round. Returns new plant ids."""
         prompt = self._prompt(world, brief, research, habitat)
         errors: list[str] | None = None
+        previous: str | None = None
         for attempt in range(1, MAX_TRIES + 1):
             ctx.check_budget()
-            answer = self._ask(ctx, prompt, errors)
+            answer = self._ask(ctx, prompt, errors, previous)
+            previous = answer
             files, file_errors = self._files(world, answer, habitat, research, brief)
             if files is not None:
                 file_errors = self._resolve_taxa(world, files)
@@ -619,15 +883,21 @@ class HomeMakerStage:
             f"({'; '.join(errors or [])}); a person makes it"
         )
 
-    def _ask(self, ctx: Any, prompt: str, errors: list[str] | None) -> str:
-        if errors:
+    def _ask(
+        self,
+        ctx: Any,
+        prompt: str,
+        errors: list[str] | None,
+        previous: str | None = None,
+    ) -> str:
+        first = {"role": "user", "content": prompt}
+        if errors and previous is not None:
             notes = "\n".join(f"- {error}" for error in errors)
-            prompt = (
-                f"{prompt}\n\nPREVIOUS TRY had these problems,"
-                f" fix exactly them:\n{notes}"
-            )
+            messages = fix_messages(first, previous, notes)
+        else:
+            messages = [first]
         chat = self._chat or ctx.chat
-        response = chat([{"role": "user", "content": prompt}])
+        response = chat(messages)
         return (response.choices[0].message.content or "").strip()
 
     def _files(

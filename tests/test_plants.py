@@ -155,7 +155,7 @@ class ScriptChat:
         self.prompts: list[str] = []
 
     def __call__(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
-        content = messages[0]["content"]
+        content = messages[-1]["content"]
         text = content if isinstance(content, str) else content[0]["text"]
         self.prompts.append(text)
         message = SimpleNamespace(content=self.answers.pop(0), tool_calls=None)

@@ -10,7 +10,19 @@ from typing import Any
 import pytest
 
 from builder.pipeline import BudgetTracker, JobContext
-from builder.stages.maker import AnimalMakerStage, HomeMakerStage, _Stopped
+from builder.prompts import PROMPTS_DIR
+from builder.stages.maker import (
+    AnimalMakerStage,
+    HomeMakerStage,
+    _change_text,
+    _description,
+    _guide,
+    _measure_errors,
+    _measure_spec,
+    _measurements,
+    _reference_row,
+    _Stopped,
+)
 
 DRAFT_STUB = """\
 import glob
@@ -212,9 +224,12 @@ class ScriptClient:
     def __init__(self, answers: list[str]) -> None:
         self.answers = list(answers)
         self.prompts: list[str] = []
+        self.calls: list[list[dict]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
-        self.prompts.append(messages[0]["content"])
+        self.calls.append(messages)
+        content = messages[-1]["content"]
+        self.prompts.append(content if isinstance(content, str) else content[0]["text"])
         message = SimpleNamespace(content=self.answers.pop(0), tool_calls=None)
         return SimpleNamespace(
             model="fake-test-model",
@@ -301,7 +316,7 @@ def test_fix_round_repairs_check_errors(tmp_path: Path) -> None:
     result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/lynx.json"]
     assert len(client.prompts) == 2
-    assert "PREVIOUS TRY" in client.prompts[1]
+    assert "Change only what these problems name" in client.prompts[1]
     assert "nectar" in client.prompts[1]
     assert (tmp_path / "tries" / "lynx" / "2" / "answer.json").is_file()
 
@@ -619,7 +634,7 @@ def test_newhome_fix_round_repairs_check_errors(tmp_path: Path) -> None:
     assert result["home_files"] == ["homes/rainforest.json"]
     assert calls == [["water_lettuce"], ["water_lettuce"]]
     assert len(client.prompts) == 2
-    assert "PREVIOUS TRY" in client.prompts[1]
+    assert "Change only what these problems name" in client.prompts[1]
     assert "the preview sheet is missing" in client.prompts[1]
 
 
@@ -781,3 +796,266 @@ def test_newhome_skips_a_made_home(tmp_path: Path) -> None:
     stage = _home_stage()
     result = stage.run(_ctx(tmp_path, world, client))
     assert result == {"home_files": ["homes/rainforest.json"], "cost_usd": 0.0}
+
+
+def _spec(**over: Any) -> dict[str, Any]:
+    """A lynx-shaped spec: 1 m body, 55 cm shoulder, 23 cm tail."""
+    spec: dict[str, Any] = {
+        "id": "lynx",
+        "bones": [
+            {"name": "body", "head": [0, 0.55, -0.45], "tail": [0, 0.58, 0.45]},
+            {"name": "leg_f_l", "head": [0, 0.5, 0.2], "tail": [0, 0, 0.2]},
+            {"name": "tail_1", "head": [0, 0.55, -0.45], "tail": [0, 0.5, -0.67]},
+        ],
+        "parts": [
+            {
+                "name": "body",
+                "shape": "ball",
+                "size": [0.26, 0.3, 1.0],
+                "at": [0, 0.55, 0],
+                "bone": "body",
+            },
+            {
+                "name": "arm_l",
+                "shape": "ball",
+                "size": [0.06, 0.5, 0.07],
+                "at": [0.06, 0.31, 0.2],
+                "bone": "leg_f_l",
+            },
+        ],
+    }
+    spec.update(over)
+    return spec
+
+
+def _looks_research() -> dict[str, Any]:
+    return {
+        "size": {"length_cm": 100, "weight_kg": 20},
+        "looks": {
+            "shoulder_cm": 60,
+            "tail_cm": 15,
+            "coat": {"main": "grey-brown", "belly": "white"},
+            "marks": [{"mark": "ear tufts"}, {"mark": "short black-tipped tail"}],
+        },
+    }
+
+
+def test_measure_spec_reads_shoulders_tail_and_legs() -> None:
+    found = _measure_spec(_spec())
+    assert found["shoulder_m"] == pytest.approx(0.55)
+    assert found["length_m"] == pytest.approx(1.0)
+    assert found["tail_m"] == pytest.approx(0.226, abs=0.001)
+    assert found["leg_m"] == pytest.approx(0.56)
+    assert found["depth_m"] == pytest.approx(1.0)
+
+
+def test_measure_errors_flags_a_long_tail(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    errors = _measure_errors(
+        _spec(),
+        _looks_research(),
+        {"prey": False, "start_from": "fox"},
+        world,
+    )
+    assert errors == ["the spec's tail is 23 cm, sourced 15 cm: size it to the source"]
+
+
+def test_measure_errors_passes_sizes_within_a_fifth(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    spec = _spec(
+        bones=[
+            {"name": "body", "head": [0, 0.55, -0.3], "tail": [0, 0.58, 0.25]},
+            {
+                "name": "tail_1",
+                "head": [0, 0.55, -0.3],
+                "tail": [0, 0.53, -0.44],
+            },
+        ]
+    )
+    errors = _measure_errors(
+        spec,
+        _looks_research(),
+        {"prey": False, "start_from": "fox"},
+        world,
+    )
+    assert errors == []
+
+
+def test_measure_errors_flags_drifted_leg_ratio(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    (world / "models" / "fox.json").write_text(
+        json.dumps(
+            {
+                "id": "fox",
+                "bones": [
+                    {
+                        "name": "leg_f_l",
+                        "head": [0, 0.3, 0.1],
+                        "tail": [0, 0, 0.1],
+                    }
+                ],
+                "parts": [
+                    {
+                        "name": "body",
+                        "size": [0.17, 0.19, 0.46],
+                        "at": [0, 0.32, 0],
+                    },
+                    {
+                        "name": "arm_l",
+                        "size": [0.06, 0.18, 0.07],
+                        "at": [0.06, 0.24, 0.1],
+                        "bone": "leg_f_l",
+                    },
+                ],
+            }
+        )
+    )
+    leggy = _spec(
+        parts=[
+            {
+                "name": "body",
+                "shape": "ball",
+                "size": [0.26, 0.3, 1.0],
+                "at": [0, 0.9, 0],
+                "bone": "body",
+            },
+            {
+                "name": "arm_l",
+                "shape": "ball",
+                "size": [0.06, 0.9, 0.07],
+                "at": [0.06, 0.85, 0.2],
+                "bone": "leg_f_l",
+            },
+        ]
+    )
+    errors = _measure_errors(
+        leggy,
+        {"size": {"length_cm": 100}},
+        {"prey": False, "start_from": "fox"},
+        world,
+    )
+    assert len(errors) == 1
+    assert errors[0].startswith("legs are 1.3x the body's depth")
+    assert "the fox's are 0.7x" in errors[0]
+
+
+def test_measure_errors_skips_what_the_spec_does_not_name(
+    tmp_path: Path,
+) -> None:
+    world = _world(tmp_path)
+    minimal = {"id": "lynx", "parts": [{"name": "body"}]}
+    assert (
+        _measure_errors(
+            minimal,
+            _looks_research(),
+            {"prey": False, "start_from": "fox"},
+            world,
+        )
+        == []
+    )
+
+
+def test_reference_row_finds_the_lynx_line(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    (world / "models" / "README.md").write_text(
+        "# Models\n\n## Reference models\n\n"
+        "| New animal | Start from | Change |\n"
+        "|---|---|---|\n"
+        "| Bear, lynx | `fox`, scaled up | lynx: short tail, ear tufts |\n"
+        "| Snakes, slow worm, eels | `examples/grass_snake` | Size, head |\n"
+    )
+    assert _reference_row(world, "fox", "Eurasian lynx") == (
+        "Bear, lynx",
+        "lynx: short tail, ear tufts",
+    )
+
+
+def test_reference_row_aliases_snake_kinds(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    (world / "models" / "README.md").write_text(
+        "# Models\n\n## Reference models\n\n"
+        "| New animal | Start from | Change |\n"
+        "|---|---|---|\n"
+        "| Snakes, slow worm, eels | `examples/grass_snake` | Size, head |\n"
+    )
+    assert _reference_row(world, "grass_snake", "Green anaconda") == (
+        "Snakes, slow worm, eels",
+        "Size, head",
+    )
+    assert _reference_row(world, "fox", "Green anaconda") is None
+
+
+def test_change_text_carries_the_row_and_the_proportions(
+    tmp_path: Path,
+) -> None:
+    world = _world(tmp_path)
+    (world / "models" / "README.md").write_text(
+        "# Models\n\n## Reference models\n\n"
+        "| New animal | Start from | Change |\n"
+        "|---|---|---|\n"
+        "| Bear, lynx | `fox`, scaled up | lynx: short tail, ear tufts |\n"
+    )
+    text = _change_text(world, "fox", {"name": "Eurasian lynx"})
+    assert "lynx: short tail, ear tufts" in text
+    assert "Keep its proportions" in text
+    assert "do not copy its sizes" not in text
+
+
+def test_guide_turns_a_missing_text_into_guidance() -> None:
+    guided = _guide('lynx: digs, so it needs text "dig"')
+    assert "write the text" in guided
+    assert "`digs`" in guided
+    assert "false" in guided
+
+
+def test_guide_passes_other_errors_through() -> None:
+    error = "the build failed: ERROR: bad bone"
+    assert _guide(error) == error
+
+
+def test_model_prompt_demands_visible_marks() -> None:
+    prompt = (PROMPTS_DIR / "model_spec.md").read_text(encoding="utf-8")
+    assert "15%" in prompt
+    assert "not tiny balls" in prompt
+
+
+def test_animal_prompt_takes_behaviour_from_the_survey() -> None:
+    prompt = (PROMPTS_DIR / "animal_write.md").read_text(encoding="utf-8")
+    flat = " ".join(prompt.split())
+    assert "never from the example animal" in flat
+
+
+def test_measurements_carries_the_looks_sizes() -> None:
+    measurements = _measurements(_looks_research(), {"prey": False, "size_cm": None})
+    assert measurements["length_cm"] == 100
+    assert measurements["shoulder_cm"] == 60
+    assert measurements["tail_cm"] == 15
+
+
+def test_description_names_the_looks_marks() -> None:
+    text = _description(
+        {"name": "Eurasian lynx", "latin": "Lynx lynx"},
+        _looks_research(),
+        {"prey": False, "size_cm": None},
+    )
+    assert "ear tufts" in text
+    assert "shoulder 60 cm" in text
+
+
+def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:
+    """#59: user (first prompt), assistant (its answer), user (fixes)."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    first = _answer("lynx", diet=["nectar"])
+    client = ScriptClient([first, _answer("lynx", diet=["grass"])])
+    AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    assert len(client.calls) == 2
+    assert client.calls[0] == [
+        {"role": "user", "content": client.calls[0][0]["content"]}
+    ]
+    fix = client.calls[1]
+    assert [message["role"] for message in fix] == ["user", "assistant", "user"]
+    assert fix[0] == client.calls[0][0]
+    assert fix[1]["content"] == first
+    assert "nectar" in fix[2]["content"]
+    assert "Change only what these problems name" in fix[2]["content"]

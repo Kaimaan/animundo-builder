@@ -19,7 +19,7 @@ from typing import Any
 
 import jsonschema
 
-from ..prompts import PROMPTS_DIR, for_children
+from ..prompts import PROMPTS_DIR, fix_messages, for_children
 from ..world import check_draft, mentions, problems_by_file
 from .region import MAX_NEW_PLANTS, new_plant_ids
 
@@ -100,6 +100,7 @@ class AnimalsStage:
                     roles,
                     region,
                     errors,
+                    texts[species_id],
                 )
                 (animals_dir / f"{species_id}.json").write_text(
                     texts[species_id], encoding="utf-8"
@@ -122,6 +123,7 @@ class AnimalsStage:
         roles: dict[str, str],
         region: dict[str, Any],
         errors: list[str] | None = None,
+        previous: str | None = None,
     ) -> str:
         ctx.check_budget()
         role = roles.get(species["species"], species.get("role", "playable"))
@@ -143,17 +145,17 @@ class AnimalsStage:
                 "FOR_CHILDREN": for_children(),
             }
         )
-        if errors:
+        first = {"role": "user", "content": prompt}
+        if errors and previous is not None:
             notes = "\n".join(f"- {error}" for error in errors)
-            prompt = (
-                f"{prompt}\n\nPREVIOUS TRY had these problems,"
-                f" fix exactly them:\n{notes}"
-            )
+            messages = fix_messages(first, previous, notes)
+        else:
+            messages = [first]
         # Plain JSON mode, not structured output: the API's schema compiler
         # silently drops this schema's `$ref` properties (`diet` vanishes and
         # every round fails the same way). The schema checks every draft, in
         # code, in `_validate` below.
-        response = ctx.chat([{"role": "user", "content": prompt}])
+        response = ctx.chat(messages)
         return (response.choices[0].message.content or "").strip()
 
     def _validate(

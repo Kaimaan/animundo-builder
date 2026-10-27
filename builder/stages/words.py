@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..prompts import for_children, load_prompt
+from ..prompts import fix_messages, for_children, load_prompt
 from ..world import check_draft
 
 TRIES = 2
@@ -122,13 +122,18 @@ class WordsStage:
             },
         )
         problems = ""
+        previous: str | None = None
+        first = {"role": "user", "content": base}
         for _ in range(TRIES):
             ctx.check_budget()
-            prompt = base if not problems else f"{base}\n\n{problems}"
-            response = ctx.chat(
-                [{"role": "user", "content": prompt}], reasoning_effort="low"
+            messages = (
+                fix_messages(first, previous, problems)
+                if problems and previous is not None
+                else [first]
             )
+            response = ctx.chat(messages, reasoning_effort="low")
             text = (response.choices[0].message.content or "").strip()
+            previous = text
             problems, about = _settle_keys(want, text)
             if not problems:
                 return about
@@ -178,13 +183,18 @@ class WordsStage:
             },
         )
         problems = ""
+        previous: str | None = None
+        first = {"role": "user", "content": base}
         for _ in range(TRIES):
             ctx.check_budget()
-            prompt = base if not problems else f"{base}\n\n{problems}"
-            response = ctx.chat(
-                [{"role": "user", "content": prompt}], reasoning_effort="low"
+            messages = (
+                fix_messages(first, previous, problems)
+                if problems and previous is not None
+                else [first]
             )
+            response = ctx.chat(messages, reasoning_effort="low")
             text = (response.choices[0].message.content or "").strip()
+            previous = text
             problems, translated = _settle(strings, text)
             if not problems:
                 return translated

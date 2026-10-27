@@ -53,6 +53,45 @@
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1 }
+    },
+    "looks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coat", "marks"],
+      "properties": {
+        "shoulder_cm": { "type": "number", "exclusiveMinimum": 0 },
+        "shoulder_source": { "type": "string", "minLength": 1 },
+        "height_cm": { "type": "number", "exclusiveMinimum": 0 },
+        "height_source": { "type": "string", "minLength": 1 },
+        "tail_cm": { "type": "number", "minimum": 0 },
+        "tail_source": { "type": "string", "minLength": 1 },
+        "coat": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["main", "main_hex", "belly", "belly_hex", "source"],
+          "properties": {
+            "main": { "type": "string", "minLength": 1 },
+            "main_hex": { "type": "string", "minLength": 1 },
+            "belly": { "type": "string", "minLength": 1 },
+            "belly_hex": { "type": "string", "minLength": 1 },
+            "source": { "type": "string", "minLength": 1 }
+          }
+        },
+        "marks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mark", "source"],
+            "properties": {
+              "mark": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

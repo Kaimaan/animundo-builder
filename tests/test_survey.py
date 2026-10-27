@@ -64,7 +64,8 @@ class ScriptClient:
         self.prompts: list[str] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
-        self.prompts.append(messages[0]["content"])
+        content = messages[-1]["content"]
+        self.prompts.append(content if isinstance(content, str) else content[0]["text"])
         return self.answers.pop(0)
 
     def responses_create(self, *args: Any, **kwargs: Any) -> SimpleNamespace:

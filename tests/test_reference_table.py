@@ -110,8 +110,8 @@ def test_pick_row_matches_by_body_plan(tmp_path: Path) -> None:
     rows = read_table(_world(tmp_path))
     seen: list[str] = []
 
-    def ask(text: str) -> str:
-        seen.append(text)
+    def ask(messages: list) -> str:
+        seen.append(messages[0]["content"])
         return json.dumps({"row": 2, "kind": "bird"})
 
     ref = pick_row(rows, {"species": "golden_eagle"}, ask)
@@ -130,14 +130,14 @@ def test_pick_row_retries_a_bad_row(tmp_path: Path) -> None:
         json.dumps({"row": 99, "kind": "bird"}),
         json.dumps({"row": 1, "kind": "mammal"}),
     ]
-    ref = pick_row(rows, {"species": "red_deer"}, lambda text: answers.pop(0))
+    ref = pick_row(rows, {"species": "red_deer"}, lambda messages: answers.pop(0))
     assert ref["start"] == "moose"
 
 
 def test_pick_row_gives_up_loudly(tmp_path: Path) -> None:
     rows = read_table(_world(tmp_path))
 
-    def ask(text: str) -> str:
+    def ask(messages: list) -> str:
         return "not json"
 
     with pytest.raises(ValueError, match="no row for this species"):

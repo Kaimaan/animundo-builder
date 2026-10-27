@@ -139,7 +139,8 @@ class ScriptClient:
         self.prompts: list[str] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
-        self.prompts.append(messages[0]["content"])
+        content = messages[-1]["content"]
+        self.prompts.append(content if isinstance(content, str) else content[0]["text"])
         self.calls.append(kwargs)
         content = json.dumps(self.drafts.pop(0))
         message = SimpleNamespace(content=content, tool_calls=None)

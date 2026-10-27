@@ -23,7 +23,7 @@ from typing import Any
 
 import jsonschema
 
-from ..prompts import PROMPTS_DIR, for_children
+from ..prompts import PROMPTS_DIR, fix_messages, for_children
 from ..world import DraftError, check_draft, problems_by_file
 
 HOSTED_AUTHOR = "Animundo Builder"
@@ -69,10 +69,12 @@ class RegionStage:
             }
         )
         problems = ""
+        previous: str | None = None
         region_path = ctx.job_dir / "regions" / f"{region_id}.json"
         while True:
             self._spend_round(ctx)
-            text = self._write_once(ctx, prompt, problems)
+            text = self._write_once(ctx, prompt, problems, previous)
+            previous = text
             try:
                 draft = json.loads(text)
             except json.JSONDecodeError as error:
@@ -122,12 +124,19 @@ class RegionStage:
             raise _Stopped(f"region spent its {self.max_rounds} rounds")
         self.rounds += 1
 
-    def _write_once(self, ctx: Any, prompt: str, problems: str) -> str:
+    def _write_once(
+        self, ctx: Any, prompt: str, problems: str, previous: str | None
+    ) -> str:
         # Plain JSON mode, not structured output: the API's schema compiler
         # silently drops this schema's `animals` (and similar) properties.
         # The world schema still checks every draft, in code, below.
-        full = prompt if not problems else f"{prompt}\n\n{problems}"
-        response = ctx.chat([{"role": "user", "content": full}])
+        first = {"role": "user", "content": prompt}
+        messages = (
+            fix_messages(first, previous, problems)
+            if problems and previous is not None
+            else [first]
+        )
+        response = ctx.chat(messages)
         return (response.choices[0].message.content or "").strip()
 
     def _mechanical(

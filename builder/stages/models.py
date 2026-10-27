@@ -28,7 +28,7 @@ from typing import Any
 
 import jsonschema
 
-from ..prompts import load_prompt
+from ..prompts import fix_messages, load_prompt
 from ..reference import PICK_SCHEMA, pick_row, read_table
 from ..schemas import load_schema, validate
 from ..world import check_draft, problems_by_file
@@ -192,9 +192,12 @@ class ModelsStage:
         schema = json.loads((world / "schemas" / "model.schema.json").read_text())
         images = ([sheet] if sheet else []) + list(prior or [])
         problems = ""
+        previous: str | None = None
         for _ in range(SPEC_RETRIES):
-            text = prompt if not problems else f"{prompt}\n\n{problems}"
-            answer = _content(self._ask(ctx, text, images or None, None))
+            answer = _content(
+                self._ask(ctx, prompt, images or None, None, problems, previous)
+            )
+            previous = answer
             try:
                 spec = json.loads(_unfence(answer))
             except json.JSONDecodeError as error:
@@ -230,21 +233,20 @@ class ModelsStage:
             return ref
         species = surveyed.get(species_id, {"species": species_id})
         table = read_table(world)
-        return pick_row(
-            table,
-            species,
-            lambda text: _content(
-                self._ask(
-                    ctx,
-                    text,
-                    None,
-                    {
+
+        def ask(messages: list[dict[str, Any]]) -> str:
+            chat = self._chat or ctx.chat
+            return _content(
+                chat(
+                    messages,
+                    response_format={
                         "type": "json_schema",
                         "json_schema": {"name": "ReferencePick", "schema": PICK_SCHEMA},
                     },
                 )
-            ),
-        )
+            )
+
+        return pick_row(table, species, ask)
 
     def _review(
         self,
@@ -302,19 +304,22 @@ class ModelsStage:
         """One review read, valid or a clean stop. Two tries, no saving."""
         schema = load_schema("review")
         problems = ""
+        previous: str | None = None
         for _ in range(2):
-            text = prompt if not problems else f"{prompt}\n\n{problems}"
             answer = _content(
                 self._ask(
                     ctx,
-                    text,
+                    prompt,
                     images or None,
                     {
                         "type": "json_schema",
                         "json_schema": {"name": "Review", "schema": schema},
                     },
+                    problems,
+                    previous,
                 )
             )
+            previous = answer
             try:
                 review = json.loads(_unfence(answer))
                 validate("review", review)
@@ -336,6 +341,8 @@ class ModelsStage:
         prompt: str,
         images: list[Path] | None,
         response_format: dict[str, Any] | None,
+        problems: str = "",
+        previous: str | None = None,
     ) -> Any:
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for path in images or []:
@@ -347,7 +354,12 @@ class ModelsStage:
                 }
             )
         chat = self._chat or ctx.chat
-        messages = [{"role": "user", "content": content}]
+        first = {"role": "user", "content": content}
+        messages = (
+            fix_messages(first, previous, problems)
+            if problems and previous is not None
+            else [first]
+        )
         return chat(messages, response_format=response_format)
 
     def _save_round(

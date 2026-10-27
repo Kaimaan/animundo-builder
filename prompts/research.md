@@ -26,6 +26,13 @@ Five searches at most. Answer with JSON only, no prose.
   plant that is a species also carries its `latin`.
 - `size`: its own body, `length_cm` (required) and
   `weight_kg` when known.
+- `looks`: what it looks like, so a sculptor gets it right.
+  `shoulder_cm` (or `height_cm` for birds and fish),
+  `tail_cm`, `coat` (`main` and `belly` or chest colour in
+  plain words plus `main_hex` and `belly_hex` like
+  "#7a4a2b") and `marks` (the 2-3 field-guide marks that
+  tell the species apart, like "ear tufts" or "short
+  black-tipped tail"). Each with its `source`.
 - `year`: how it lives through the seasons: `winter` (active,
   hibernates or migrates), `shelter` (one or two sentences),
   `young` (one or two sentences) and `food` (one sentence

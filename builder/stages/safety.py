@@ -17,7 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..prompts import load_prompt
+from ..prompts import fix_messages, load_prompt
 from ..schemas import validate
 
 TRIES = 2
@@ -58,7 +58,7 @@ class SafetyStage:
         sensitive = _sensitive(ctx.job_dir)
         examples = _examples(world)
 
-        def ask(prompt: str, schema: dict[str, Any] | None) -> str:
+        def ask(messages: list[dict[str, Any]], schema: dict[str, Any] | None) -> str:
             ctx.check_budget()
             kwargs: dict[str, Any] = {}
             if schema is not None:
@@ -66,7 +66,7 @@ class SafetyStage:
                     "type": "json_schema",
                     "json_schema": {"name": "Safety", "schema": schema},
                 }
-            response = ctx.chat([{"role": "user", "content": prompt}], **kwargs)
+            response = ctx.chat(messages, **kwargs)
             return (response.choices[0].message.content or "").strip()
 
         verdicts = review_items(ask, items, sensitive, examples)
@@ -128,7 +128,7 @@ class _Stopped(Exception):
 
 
 def review_items(
-    ask: Callable[[str, dict[str, Any] | None], str],
+    ask: Callable[[list[dict[str, Any]], dict[str, Any] | None], str],
     items: list[dict[str, Any]],
     sensitive: str,
     examples: str,
@@ -144,10 +144,18 @@ def review_items(
         },
     )
     problems = ""
+    previous: str | None = None
+    first = {"role": "user", "content": base}
     for _ in range(TRIES):
-        prompt = base if not problems else f"{base}\n\n{problems}"
+        messages = (
+            fix_messages(first, previous, problems)
+            if problems and previous is not None
+            else [first]
+        )
         try:
-            verdicts = json.loads(ask(prompt, REVIEW_SCHEMA))["verdicts"]
+            answer = ask(messages, REVIEW_SCHEMA)
+            previous = answer
+            verdicts = json.loads(answer)["verdicts"]
         except (json.JSONDecodeError, KeyError, TypeError) as error:
             problems = f"PREVIOUS TRY was not a verdicts object: {error}"
             continue
@@ -170,7 +178,7 @@ def review_items(
 
 
 def fix_items(
-    ask: Callable[[str, dict[str, Any] | None], str],
+    ask: Callable[[list[dict[str, Any]], dict[str, Any] | None], str],
     items: list[dict[str, Any]],
     todo: list[str],
     notes: dict[str, str],
@@ -198,10 +206,18 @@ def fix_items(
         },
     )
     problems = ""
+    previous: str | None = None
+    first = {"role": "user", "content": base}
     for _ in range(TRIES):
-        prompt = base if not problems else f"{base}\n\n{problems}"
+        messages = (
+            fix_messages(first, previous, problems)
+            if problems and previous is not None
+            else [first]
+        )
         try:
-            fixed = json.loads(ask(prompt, None))
+            answer = ask(messages, None)
+            previous = answer
+            fixed = json.loads(answer)
         except json.JSONDecodeError as error:
             problems = f"PREVIOUS TRY was not JSON: {error}"
             continue

@@ -96,6 +96,13 @@ None. Write from the inputs only.
 - `latin` is exactly the surveyed Latin name, and `taxon` is exactly
   the block above. `model.file` is exactly the path above, with the
   same `anims` names as the examples.
+- Behaviour comes from the surveyed species and the archetype, never
+  from the example animal: `digs`, `hunts`, `territorial`, `family`
+  and the rest follow what the survey says this animal does. When it
+  does not do it, set the flag false outright (the archetype may say
+  true). Every true flag needs its text: `digs` needs `dig`, `hunts`
+  needs `safe_tag` (plus `bite` and `caught_you` per prey),
+  `territorial` needs `rival_bite` and `rival_caught_you`.
 - Text sounds like the examples: plain words, short sentences, present
   tense, what a child sees. Never a real breeding, nesting, denning or
   resting site for a sensitive species.

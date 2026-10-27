@@ -26,7 +26,7 @@ from typing import Any
 import jsonschema
 from referencing import Registry, Resource
 
-from ..prompts import PROMPTS_DIR, for_children, load_prompt
+from ..prompts import PROMPTS_DIR, fix_messages, for_children, load_prompt
 from ..schemas import load_schema, validate
 from ..world import check_draft, mentions, problems_by_file
 from .models import build_in_sandbox
@@ -126,11 +126,21 @@ class PlantsStage:
     ) -> tuple[str, int]:
         names = ", ".join(entry.get("names", [])) or plant_id.replace("_", " ")
         spec: dict[str, Any] | None = None
+        previous: str | None = None
         issues: list[dict[str, Any]] = []
         errors: list[str] = []
         for round_no in range(1, MAX_ROUNDS_PER_PLANT + 1):
-            spec = self._draft(
-                ctx, world, region, facts, plant_id, names, spec, issues, errors
+            spec, previous = self._draft(
+                ctx,
+                world,
+                region,
+                facts,
+                plant_id,
+                names,
+                spec,
+                issues,
+                errors,
+                previous,
             )
             if spec.get("id") != plant_id:
                 renamed = spec.get("id")
@@ -187,7 +197,8 @@ class PlantsStage:
         spec: dict[str, Any] | None,
         issues: list[dict[str, Any]],
         errors: list[str],
-    ) -> dict[str, Any]:
+        previous: str | None,
+    ) -> tuple[dict[str, Any], str]:
         ctx.check_budget()
         template = (PROMPTS_DIR / "plant_write.md").read_text(encoding="utf-8")
         bush = (world / "models" / "plants" / "bilberry.json").read_text()
@@ -208,7 +219,8 @@ class PlantsStage:
                 "FOR_CHILDREN": for_children(),
             }
         )
-        if spec is not None:
+        first = {"role": "user", "content": prompt}
+        if spec is not None and previous is not None:
             notes = "\n".join(
                 [f"- {error}" for error in errors]
                 + [
@@ -216,14 +228,12 @@ class PlantsStage:
                     for issue in issues
                 ]
             )
-            prompt = (
-                f"{prompt}\n\nPREVIOUS TRY had these problems, "
-                f"fix exactly them (the current spec follows):\n{notes}\n\n"
-                f"```\n{json.dumps(spec, indent=2)}\n```"
-            )
-        response = self._ask_text(ctx, prompt)
+            messages = fix_messages(first, previous, notes)
+        else:
+            messages = [first]
+        response = self._ask_text(ctx, messages)
         try:
-            return json.loads(response)
+            return json.loads(response), response
         except json.JSONDecodeError as error:
             raise _Stopped(f"{plant_id}: the draft was not JSON: {error}")
 
@@ -326,9 +336,10 @@ class PlantsStage:
     ) -> dict[str, Any]:
         """One review read, valid or a clean stop. Two tries, no saving."""
         problems = ""
+        previous: str | None = None
         for _ in range(2):
-            text = prompt if not problems else f"{prompt}\n\n{problems}"
-            answer = self._ask(ctx, text, images)
+            answer = self._ask(ctx, prompt, images, problems, previous)
+            previous = answer
             try:
                 review = json.loads(_unfence(answer))
                 validate("review", review)
@@ -344,7 +355,14 @@ class PlantsStage:
             return review
         raise _Stopped(f"the reviewer never wrote a valid review: {problems}")
 
-    def _ask(self, ctx: Any, prompt: str, images: list[Path]) -> str:
+    def _ask(
+        self,
+        ctx: Any,
+        prompt: str,
+        images: list[Path],
+        problems: str = "",
+        previous: str | None = None,
+    ) -> str:
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for path in images:
             encoded = base64.b64encode(path.read_bytes()).decode()
@@ -354,9 +372,15 @@ class PlantsStage:
                     "image_url": {"url": f"data:image/png;base64,{encoded}"},
                 }
             )
+        first = {"role": "user", "content": content}
+        messages = (
+            fix_messages(first, previous, problems)
+            if problems and previous is not None
+            else [first]
+        )
         chat = self._chat or ctx.chat
         response = chat(
-            [{"role": "user", "content": content}],
+            messages,
             response_format={
                 "type": "json_schema",
                 "json_schema": {"name": "Review", "schema": load_schema("review")},
@@ -364,9 +388,9 @@ class PlantsStage:
         )
         return (response.choices[0].message.content or "").strip()
 
-    def _ask_text(self, ctx: Any, prompt: str) -> str:
+    def _ask_text(self, ctx: Any, messages: list[dict[str, Any]]) -> str:
         chat = self._chat or ctx.chat
-        response = chat([{"role": "user", "content": prompt}])
+        response = chat(messages)
         return (response.choices[0].message.content or "").strip()
 
     def _save_round(

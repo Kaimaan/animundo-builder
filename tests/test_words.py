@@ -102,7 +102,7 @@ class ScriptChat:
         self.options: list[dict[str, Any]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
-        content = messages[0]["content"]
+        content = messages[-1]["content"]
         self.prompts.append(content if isinstance(content, str) else content[0]["text"])
         self.options.append(kwargs)
         message = SimpleNamespace(

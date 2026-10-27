@@ -3,6 +3,49 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #57, #56.1, #59: the maker models with looks, measures and a memory
+
+- #57.1: the research returns a `looks` block (shoulder or
+  height, tail, coat colours, 2–3 field marks, each with a
+  source). It feeds `$DESCRIPTION` (marks and sizes in
+  words) and `$MEASUREMENTS` (shoulder, height, tail).
+- #57.2: `$CHANGE` carries the Reference-models row for the
+  species' kind, found in code by `start_from` and the
+  species name (snake kinds alias to the Snakes row, so the
+  anaconda lands it too). #57.3: the proportions sentence
+  replaces "do not copy its sizes".
+- #57.4: a free measurement check in code reads each spec
+  (shoulder, torso span, tail-bone chain, leg top, body
+  depth) and compares with the sourced sizes (20%) and the
+  reference's leg ratio (30%). Misses name exact numbers
+  for the fix round ("tail 23 cm, sourced 15 cm" — the live
+  lynx spec's only miss; the fox passes clean).
+- #57.5: marks span ~15% of the body's length or height, or
+  colour a whole part (a spotted coat is a second colour on
+  body parts, not tiny balls); game distance is the bar.
+- #56.1: behaviour comes from the survey and the archetype,
+  never the example animal (`digs`, `hunts`, `territorial`,
+  `family`); a missing-text error now guides the fix round
+  (write the text or set the flag false) instead of
+  stopping. This unblocks the live lynx (`digs` inherited
+  from `land_mammal` with no `dig` text).
+- #59: every fix round is a real conversation — the first
+  message as is, the previous answer as the assistant's,
+  then "Change only what these problems name…" — in both
+  makers, words, and every other writer with a fix round
+  (region, survey, species plan, safety, animals, plants,
+  models incl. vision, reference picks). One helper,
+  `builder/prompts.py:fix_messages`; the test asserts the
+  assistant message.
+- Fixtures: research recordings regenerated for the new
+  research prompt (answers untouched); replay stand-in
+  specs scaled to the recorded research sizes. Reviewer:
+  re-run `oneshot` live on the lynx (~$0.17).
+- Note: the anaconda's `start_from` is `grass_snake`, whose
+  spec lives at `models/examples/` with no animal file; the
+  maker reads neither yet, so its `oneshot` re-run needs
+  that first. Suite: 530 passed, 12 skipped.
+
 ## 2026-10-27: inbox #54.2, #55, replay tests: home seats the unmade, no template carry-over
 
 - #54.2: `home` seats an animal `minset.json` says will be

@@ -14,7 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .prompts import load_prompt
+from .prompts import fix_messages, load_prompt
 from .world import mentions
 
 TABLE_HEADING = "## Reference models: where to start"
@@ -132,11 +132,11 @@ def _singular(word: str) -> str:
 def pick_row(
     rows: list[dict[str, str]],
     species: dict[str, Any],
-    ask: Callable[[str], str],
+    ask: Callable[[list[dict[str, Any]]], str],
 ) -> dict[str, str]:
     """Match one species to its table row: `row`, `start`, `change`, `kind`.
 
-    `ask` sends one prompt and returns the model's text; two tries, then
+    `ask` sends messages and returns the model's text; two tries, then
     a loud stop. The row comes back verbatim from the table, never from
     memory.
     """
@@ -149,9 +149,18 @@ def pick_row(
         {"TABLE": table, "SPECIES_JSON": json.dumps(species, indent=2)},
     )
     problems = ""
+    previous: str | None = None
+    first = {"role": "user", "content": base}
     for _ in range(2):
+        messages = (
+            fix_messages(first, previous, problems)
+            if problems and previous is not None
+            else [first]
+        )
         try:
-            answer = json.loads(ask(base if not problems else f"{base}\n\n{problems}"))
+            raw = ask(messages)
+            previous = raw
+            answer = json.loads(raw)
         except json.JSONDecodeError as error:
             problems = f"PREVIOUS TRY was not JSON: {error}"
             continue

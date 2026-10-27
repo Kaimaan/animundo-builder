@@ -183,7 +183,8 @@ class ScriptClient:
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         content = messages[0]["content"]
-        self.prompts.append(content)
+        last = messages[-1]["content"]
+        self.prompts.append(last if isinstance(last, str) else last[0]["text"])
         species_id = re.search(r'"species": "([^"]+)"', content).group(1)  # type: ignore[union-attr]
         draft = self.drafts[species_id].pop(0)
         message = SimpleNamespace(content=json.dumps(draft), tool_calls=None)

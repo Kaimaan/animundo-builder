@@ -22,7 +22,7 @@ from ..meta import (
     is_cut_off,
     usage_from_response,
 )
-from ..prompts import load_prompt
+from ..prompts import fix_messages, load_prompt
 from ..schemas import load_schema, validate
 
 SEARCH_TOOL = [{"type": "web_search"}]
@@ -155,17 +155,24 @@ class SurveyStage:
         )
         draft: dict[str, Any] = {}
         problems = ""
+        previous: str | None = None
+        first = {"role": "user", "content": base}
         while True:
             self._spend_round(ctx, searches=False)
-            prompt = base if not problems else f"{base}\n\n{problems}"
+            messages = (
+                fix_messages(first, previous, problems)
+                if problems and previous is not None
+                else [first]
+            )
             response = ctx.chat(
-                [{"role": "user", "content": prompt}],
+                messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {"name": "Survey", "schema": schema},
                 },
             )
             text = (response.choices[0].message.content or "").strip()
+            previous = text
             problems, draft = self._check_write(text, cited)
             if not problems:
                 return draft

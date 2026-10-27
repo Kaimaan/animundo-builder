@@ -28,7 +28,7 @@ from typing import Any
 
 import jsonschema
 
-from ..prompts import load_prompt
+from ..prompts import fix_messages, load_prompt
 from ..reference import PICK_SCHEMA, impossible_match, pick_row, read_table
 from ..schemas import load_schema
 from ..world import check_draft
@@ -384,17 +384,24 @@ class SpeciesPlanStage:
             },
         )
         problems = ""
+        previous: str | None = None
+        first = {"role": "user", "content": base}
         for _ in range(MAX_FIX_ROUNDS + 1):
             ctx.check_budget()
-            prompt = base if not problems else f"{base}\n\n{problems}"
+            messages = (
+                fix_messages(first, previous, problems)
+                if problems and previous is not None
+                else [first]
+            )
             response = ctx.chat(
-                [{"role": "user", "content": prompt}],
+                messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {"name": "SpeciesPlan", "schema": schema},
                 },
             )
             text = (response.choices[0].message.content or "").strip()
+            previous = text
             problems, plan = self._settle(
                 text, survey, region_path, fixed, rank, schema
             )
@@ -417,10 +424,10 @@ class SpeciesPlanStage:
         """
         by_id = {entry["species"]: entry for entry in survey.get("species", [])}
 
-        def ask(text: str) -> str:
+        def ask(messages: list[dict[str, Any]]) -> str:
             ctx.check_budget()
             response = ctx.chat(
-                [{"role": "user", "content": text}],
+                messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {"name": "ReferencePick", "schema": PICK_SCHEMA},

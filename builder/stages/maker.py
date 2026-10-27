@@ -26,15 +26,17 @@ from typing import Any
 
 import jsonschema
 
+from .. import taxa
 from ..animal_list import find_entry, load_list, match_by_name
 from ..animal_list import find_list as find_animal_list
 from ..prompts import PROMPTS_DIR, for_children
+from ..taxa import taxon_block
 from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
 from . import plants as plant_builders
 from .capability import NotPossibleError
 from .models import _ensure_sandbox, build_in_sandbox
-from .species_plan import taxon_same
+from .species_plan import recorded_near, taxon_same
 
 #: The four verdicts that decide a made animal (spec 04).
 VERDICTS = ("animals", "models", "taxa", "region")
@@ -82,6 +84,7 @@ class AnimalMakerStage:
         made = []
         for target in targets:
             made.append(self._make(ctx, world, brief, research, region, target))
+        self._update_plan(ctx, brief, targets)
         cost = round(ctx.tracker.spent_usd - before, 6)
         checks = ctx.job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
@@ -261,6 +264,39 @@ class AnimalMakerStage:
             (folder / "errors.json").write_text(
                 json.dumps(errors, indent=2), encoding="utf-8"
             )
+
+    def _update_plan(
+        self, ctx: Any, brief: dict[str, Any], targets: list[dict[str, Any]]
+    ) -> None:
+        """The made prey joins the species plan, as new (#54).
+
+        The home wrote the plan before anything was made; the
+        pack reads it to decide what ships. Without this the
+        prey's files would never leave the job.
+        """
+        plan_path = ctx.job_dir / "species-plan.json"
+        if not plan_path.is_file():
+            return
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        have = {entry.get("species") for entry in plan.get("species", [])}
+        for target in targets:
+            if target["id"] in have:
+                continue
+            entry = target["entry"]
+            plan.setdefault("species", []).append(
+                {
+                    "species": target["id"],
+                    "decision": "new",
+                    "reason": (
+                        f"made one-shot as {brief['latin']}'s prey"
+                        if target["prey"]
+                        else "made one-shot for this home"
+                    ),
+                    "wild": True,
+                    "taxon": taxon_block(entry["gbif_key"], entry["latin"]),
+                }
+            )
+        plan_path.write_text(json.dumps(plan, indent=2), encoding="utf-8")
 
     def _save_final(self, ctx: Any, world: Path, animal_id: str) -> None:
         """The passing files, where the pack and the report find them."""
@@ -513,6 +549,7 @@ class HomeMakerStage:
         check_homes: Any | None = None,
         check_models: Any | None = None,
         match: Any | None = None,
+        recorded: Any | None = None,
     ) -> None:
         self.author = author
         self._chat = chat
@@ -520,6 +557,7 @@ class HomeMakerStage:
         self._check_homes = check_homes or check_homes_in_sandbox
         self._check_models = check_models or check_models_in_sandbox
         self._match = match or _match_plant
+        self._recorded = recorded or recorded_near
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -565,7 +603,7 @@ class HomeMakerStage:
         for attempt in range(1, MAX_TRIES + 1):
             ctx.check_budget()
             answer = self._ask(ctx, prompt, errors)
-            files, file_errors = self._files(world, answer, habitat)
+            files, file_errors = self._files(world, answer, habitat, research, brief)
             if files is not None:
                 file_errors = self._resolve_taxa(world, files)
             if files is not None and not file_errors:
@@ -593,7 +631,12 @@ class HomeMakerStage:
         return (response.choices[0].message.content or "").strip()
 
     def _files(
-        self, world: Path, answer: str, habitat: str
+        self,
+        world: Path,
+        answer: str,
+        habitat: str,
+        research: dict[str, Any],
+        brief: dict[str, Any],
     ) -> tuple[dict[str, Any] | None, list[str]]:
         """The try's home and plant specs, or why the answer holds none."""
         try:
@@ -634,9 +677,112 @@ class HomeMakerStage:
                         f"ground cover uses {model!r}, which is neither "
                         "an existing plant nor a new spec"
                     )
+        if not problems:
+            problems.extend(
+                self._carryover_errors(world, home, set(plants), research, brief)
+            )
         if problems:
             return None, problems
         return {"home": home, "plants": dict(plants)}, []
+
+    def _carryover_errors(
+        self,
+        world: Path,
+        home: dict[str, Any],
+        new_ids: set[str],
+        research: dict[str, Any],
+        brief: dict[str, Any],
+    ) -> list[str]:
+        """Nothing living carries over from the example home (#55).
+
+        Every fish, ground plant and tree plant id must be a
+        species the research named or GBIF recorded near the
+        spot; only land, sky and colour structure carry over.
+        """
+        surroundings = research.get("surroundings", [])
+        names = {
+            thing.get("name", "").strip().lower()
+            for thing in surroundings
+            if thing.get("name")
+        }
+        keys = set()
+        for thing in surroundings:
+            if thing.get("latin"):
+                taxon = taxa.resolve(world, thing["latin"], plant=True)
+                if taxon is not None:
+                    keys.add(taxon["gbif_key"])
+        center = brief.get("center", {})
+        lat, lon = float(center.get("lat", 0.0)), float(center.get("lon", 0.0))
+        errors = []
+        for fish in home.get("fish", []):
+            kind = fish.get("kind", "")
+            path = world / "animals" / f"{kind}.json"
+            if not path.is_file():
+                errors.append(f"fish {kind!r} is no animal the library has")
+                continue
+            key = (json.loads(path.read_text()).get("taxon") or {}).get("gbif_key")
+            if not isinstance(key, int) or not self._recorded_here(lat, lon, key):
+                errors.append(
+                    f"fish {kind!r} swims in the template's waters, not here; drop it"
+                )
+        for plant in home.get("ground_cover", {}).get("plants", []):
+            model = plant.get("model", "")
+            if model in new_ids:
+                continue
+            spec_path = world / "models" / "plants" / f"{model}.json"
+            if not spec_path.is_file():
+                continue  # reported above as neither existing nor new
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+            labels = {
+                model.replace("_", " "),
+                str(spec.get("latin", "")).lower(),
+                str(spec.get("name", "")).lower(),
+            } - {""}
+            named = spec.get("latin") and self._latin_key(world, spec["latin"]) in keys
+            named = named or any(
+                name == label or name in label or label in name
+                for name in names
+                for label in labels
+            )
+            key = (spec.get("taxon") or {}).get("gbif_key")
+            recorded = isinstance(key, int) and self._recorded_here(lat, lon, key)
+            if not named and not recorded:
+                errors.append(
+                    f"{model} grows in the template's land, not here; "
+                    "drop it or write a spec for what the research names"
+                )
+        pages = _tree_pages(world)
+        for entry in home.get("trees", {}).get("mix", []):
+            plant = entry.get("plant") or ""
+            if not plant:
+                continue
+            if plant not in pages:
+                errors.append(
+                    f"tree plant {plant!r} has no spec or page; leave plant out"
+                )
+                continue
+            label = plant.replace("_", " ")
+            if not any(name in label or label in name for name in names):
+                errors.append(
+                    f"tree plant {plant!r} is named nowhere in the surroundings; "
+                    "leave plant out"
+                )
+        return errors
+
+    def _latin_key(self, world: Path, latin: str) -> int | None:
+        taxon = taxa.resolve(world, latin, plant=True)
+        return taxon["gbif_key"] if taxon is not None else None
+
+    def _recorded_here(self, lat: float, lon: float, key: int) -> bool:
+        """GBIF occurrences near the spot; unknown on an outage.
+
+        A failed query must not fail the try: the named path
+        still guards, and the reviewer re-runs.
+        """
+        try:
+            return bool(self._recorded(lat, lon, key))
+        except Exception:  # noqa: BLE001 - GBIF is down, not the home
+            return True
 
     def _resolve_taxa(self, world: Path, files: dict[str, Any]) -> list[str]:
         """Give every new plant its GBIF taxon, or reuse what exists.
@@ -811,6 +957,7 @@ class HomeMakerStage:
                 "MAX_PLANTS": str(MAX_NEW_PLANTS),
                 "EXISTING_PLANTS": ", ".join(existing) or "(none yet)",
                 "TREE_SHAPES": "spruce, pine, birch, round, rowan",
+                "TREE_PLANTS": ", ".join(sorted(_tree_pages(world))) or "(none yet)",
                 "PLANT_EXAMPLES": (
                     f"A bush (bilberry):\n{bush}\n\n"
                     f"A ground plant (wood anemone):\n{ground}"
@@ -829,6 +976,21 @@ def _region_rules(world: Path) -> str:
     start = text.find("## The region file")
     rest = text.find("\n## ", start + 1)
     return text[start:rest].strip() if start >= 0 else ""
+
+
+def _tree_pages(world: Path) -> set[str]:
+    """Tree ids a `plant` may name: specs or locale plant pages."""
+    ids = {path.stem for path in (world / "models" / "trees").glob("*.json")}
+    pages = world / "locale" / "en" / "plants.json"
+    if pages.is_file():
+        try:
+            keys = json.loads(pages.read_text(encoding="utf-8"))
+        except ValueError:
+            return ids
+        for key in keys:
+            if key.startswith("plant.") and key.count(".") >= 2:
+                ids.add(key.split(".")[1])
+    return ids
 
 
 def _build_plant(sandbox: Path, plant_id: str) -> dict[str, Any]:

@@ -1,0 +1,617 @@
+{
+  "animal": {
+    "archetype": "land_mammal",
+    "latin": "Hydrochoerus hydrochaeris",
+    "taxon": {
+      "gbif_key": 5786666,
+      "rank": "SPECIES",
+      "name": "Hydrochoerus hydrochaeris"
+    },
+    "playable": false,
+    "color": "#9a4a2a",
+    "tags": [
+      "small_mammal",
+      "vole"
+    ],
+    "diet": [
+      "berries",
+      "clover",
+      "grass"
+    ],
+    "dark_vision": 0.7,
+    "box": [
+      0.14,
+      0.08,
+      0.14
+    ],
+    "flee_speed": 3.4,
+    "food_value": 18,
+    "model": {
+      "file": "res://assets/animals/capybara.glb",
+      "length": 0.108,
+      "yaw": 0.0,
+      "anims": {
+        "idle": "idle",
+        "walk": "walk",
+        "run": "run",
+        "eat": "eat",
+        "sleep": "sleep"
+      }
+    },
+    "year": {
+      "winter": "active",
+      "shelter": "Nests of grass and moss in burrows under tree roots, stones and logs, and runs along hidden paths in the moss. In winter it lives in tunnels under the snow, where it's warmer.",
+      "young": "Up to four litters a year from April to October, 3\u20136 young each; the first young can have their own young the same summer.",
+      "food": {
+        "spring": "Fresh green shoots, buds and leaves.",
+        "summer": "Seeds, berries, mushrooms and green plants.",
+        "autumn": "Seeds, berries and mushrooms; it stores seeds for winter.",
+        "winter": "Seeds, roots and bark under the snow."
+      },
+      "notes": "The main food of foxes, kestrels, owls, weasels and many more. Vole numbers rise and crash every few years, and their hunters' young rise and fall with them."
+    },
+    "text": {
+      "title": "Bank vole",
+      "caught": "A tasty vole! +{food} food",
+      "stalk_hint": "A vole! Get close quietly, then tap Pounce before it darts away.",
+      "about_looks": "A small round rodent with a chestnut-red back, grey sides and a blunt nose. Its tail is about half as long as its body.",
+      "about_food": "Seeds, berries, mushrooms and green plants. In winter, roots and bark under the snow.",
+      "about_home": "Lives in the forest, nesting in burrows under tree roots and logs. It runs along hidden paths in the moss.",
+      "about_winter": "Stays awake all winter in tunnels under the snow, where it's warmer than on top.",
+      "about_young": "Up to four families a year, each of 3\u20136 young. Young born in spring can have their own young by summer.",
+      "about_fact": "Foxes, kestrels and owls all live mostly on voles. When voles are many, those hunters raise more young.",
+      "dig": "Digging... (a burrow keeps you safe and warm)"
+    }
+  },
+  "model": {
+    "id": "capybara",
+    "name": "Bank vole (Myodes glareolus)",
+    "author": "Animundo team",
+    "gait": "walk",
+    "sleep_pose": "curl",
+    "skin": {
+      "triangles": 500
+    },
+    "colors": {
+      "fur": "#94482a",
+      "flank": "#7f746c",
+      "belly": "#cfc8b8",
+      "tail_top": "#4a3428",
+      "dark": "#2a1f1a"
+    },
+    "bones": [
+      {
+        "name": "body",
+        "head": [
+          0,
+          0.02,
+          -0.04
+        ],
+        "tail": [
+          0,
+          0.022,
+          0.022
+        ],
+        "role": "body"
+      },
+      {
+        "name": "head",
+        "head": [
+          0,
+          0.022,
+          0.022
+        ],
+        "tail": [
+          0,
+          0.02,
+          0.055
+        ],
+        "parent": "body",
+        "role": "head"
+      },
+      {
+        "name": "ear_l",
+        "head": [
+          0.011,
+          0.029,
+          0.03
+        ],
+        "tail": [
+          0.013,
+          0.036,
+          0.029
+        ],
+        "parent": "head",
+        "role": "ear",
+        "mirror": true
+      },
+      {
+        "name": "leg_f_l",
+        "head": [
+          0.011,
+          0.014,
+          0.025
+        ],
+        "tail": [
+          0.011,
+          0.0,
+          0.027
+        ],
+        "parent": "body",
+        "role": "leg",
+        "phase": 0.0,
+        "mirror": true
+      },
+      {
+        "name": "leg_b_l",
+        "head": [
+          0.013,
+          0.015,
+          -0.027
+        ],
+        "tail": [
+          0.013,
+          0.0,
+          -0.023
+        ],
+        "parent": "body",
+        "role": "leg",
+        "phase": 0.5,
+        "mirror": true
+      },
+      {
+        "name": "tail_1",
+        "head": [
+          0,
+          0.013,
+          -0.044
+        ],
+        "tail": [
+          0,
+          0.0105,
+          -0.061
+        ],
+        "parent": "body",
+        "role": "tail",
+        "phase": 0.0
+      },
+      {
+        "name": "tail_2",
+        "head": [
+          0,
+          0.0105,
+          -0.061
+        ],
+        "tail": [
+          0,
+          0.008,
+          -0.078
+        ],
+        "parent": "tail_1",
+        "role": "tail",
+        "phase": 0.12
+      },
+      {
+        "name": "tail_3",
+        "head": [
+          0,
+          0.008,
+          -0.078
+        ],
+        "tail": [
+          0,
+          0.006,
+          -0.096
+        ],
+        "parent": "tail_2",
+        "role": "tail",
+        "phase": 0.24
+      }
+    ],
+    "parts": [
+      {
+        "name": "body",
+        "shape": "ball",
+        "size": [
+          0.043,
+          0.031,
+          0.064
+        ],
+        "at": [
+          0,
+          0.018,
+          -0.002
+        ],
+        "color": "fur",
+        "bone": "body"
+      },
+      {
+        "name": "rump",
+        "shape": "ball",
+        "size": [
+          0.046,
+          0.035,
+          0.052
+        ],
+        "at": [
+          0,
+          0.0195,
+          -0.019
+        ],
+        "color": "fur",
+        "bone": "body"
+      },
+      {
+        "name": "shoulders",
+        "shape": "ball",
+        "size": [
+          0.037,
+          0.029,
+          0.034
+        ],
+        "at": [
+          0,
+          0.019,
+          0.017
+        ],
+        "color": "fur",
+        "bone": "body"
+      },
+      {
+        "name": "flank_l",
+        "shape": "ball",
+        "size": [
+          0.021,
+          0.021,
+          0.056
+        ],
+        "at": [
+          0.0145,
+          0.0135,
+          -0.004
+        ],
+        "color": "flank",
+        "bone": "body",
+        "mirror": true
+      },
+      {
+        "name": "belly",
+        "shape": "ball",
+        "size": [
+          0.032,
+          0.014,
+          0.056
+        ],
+        "at": [
+          0,
+          0.008,
+          -0.004
+        ],
+        "color": "belly",
+        "bone": "body"
+      },
+      {
+        "name": "head",
+        "shape": "ball",
+        "size": [
+          0.034,
+          0.028,
+          0.033
+        ],
+        "at": [
+          0,
+          0.0205,
+          0.031
+        ],
+        "color": "fur",
+        "bone": "head"
+      },
+      {
+        "name": "snout",
+        "shape": "ball",
+        "size": [
+          0.024,
+          0.019,
+          0.018
+        ],
+        "at": [
+          0,
+          0.017,
+          0.045
+        ],
+        "color": "fur",
+        "bone": "head"
+      },
+      {
+        "name": "chin",
+        "shape": "ball",
+        "size": [
+          0.018,
+          0.01,
+          0.016
+        ],
+        "at": [
+          0,
+          0.011,
+          0.042
+        ],
+        "color": "belly",
+        "bone": "head"
+      },
+      {
+        "name": "nose",
+        "shape": "ball",
+        "size": [
+          0.006,
+          0.005,
+          0.005
+        ],
+        "at": [
+          0,
+          0.018,
+          0.0535
+        ],
+        "color": "dark",
+        "bone": "head",
+        "separate": true,
+        "detail": 0.4
+      },
+      {
+        "name": "eye_l",
+        "shape": "ball",
+        "size": [
+          0.005,
+          0.005,
+          0.005
+        ],
+        "at": [
+          0.012,
+          0.0245,
+          0.04
+        ],
+        "color": "dark",
+        "bone": "head",
+        "mirror": true,
+        "separate": true,
+        "detail": 0.4
+      },
+      {
+        "name": "ear_l",
+        "shape": "taper",
+        "top": 0.6,
+        "size": [
+          0.01,
+          0.008,
+          0.005
+        ],
+        "at": [
+          0.0125,
+          0.031,
+          0.029
+        ],
+        "rot": [
+          -10,
+          0,
+          -20
+        ],
+        "color": "fur",
+        "bone": "ear_l",
+        "mirror": true,
+        "separate": true,
+        "detail": 0.5
+      },
+      {
+        "name": "arm_l",
+        "shape": "ball",
+        "size": [
+          0.008,
+          0.014,
+          0.01
+        ],
+        "at": [
+          0.011,
+          0.007,
+          0.026
+        ],
+        "color": "flank",
+        "bone": "leg_f_l",
+        "mirror": true
+      },
+      {
+        "name": "hand_l",
+        "shape": "ball",
+        "size": [
+          0.008,
+          0.005,
+          0.009
+        ],
+        "at": [
+          0.011,
+          0.0025,
+          0.029
+        ],
+        "color": "belly",
+        "bone": "leg_f_l",
+        "mirror": true
+      },
+      {
+        "name": "thigh_l",
+        "shape": "ball",
+        "size": [
+          0.012,
+          0.016,
+          0.016
+        ],
+        "at": [
+          0.014,
+          0.009,
+          -0.025
+        ],
+        "color": "flank",
+        "bone": "leg_b_l",
+        "mirror": true
+      },
+      {
+        "name": "foot_l",
+        "shape": "ball",
+        "size": [
+          0.009,
+          0.005,
+          0.014
+        ],
+        "at": [
+          0.014,
+          0.0025,
+          -0.019
+        ],
+        "color": "belly",
+        "bone": "leg_b_l",
+        "mirror": true
+      },
+      {
+        "name": "tail_1",
+        "shape": "taper",
+        "top": 0.85,
+        "size": [
+          0.0046,
+          0.019,
+          0.0046
+        ],
+        "at": [
+          0,
+          0.01235,
+          -0.0525
+        ],
+        "rot": [
+          -98,
+          0,
+          0
+        ],
+        "color": "tail_top",
+        "bone": "tail_1",
+        "separate": true,
+        "detail": 0.5
+      },
+      {
+        "name": "tail_under_1",
+        "shape": "taper",
+        "top": 0.85,
+        "size": [
+          0.0041400000000000005,
+          0.019,
+          0.0041400000000000005
+        ],
+        "at": [
+          0,
+          0.01095,
+          -0.0525
+        ],
+        "rot": [
+          -98,
+          0,
+          0
+        ],
+        "color": "belly",
+        "bone": "tail_1",
+        "separate": true,
+        "detail": 0.4
+      },
+      {
+        "name": "tail_2",
+        "shape": "taper",
+        "top": 0.85,
+        "size": [
+          0.0042,
+          0.019,
+          0.0042
+        ],
+        "at": [
+          0,
+          0.009850000000000001,
+          -0.0695
+        ],
+        "rot": [
+          -98,
+          0,
+          0
+        ],
+        "color": "tail_top",
+        "bone": "tail_2",
+        "separate": true,
+        "detail": 0.5
+      },
+      {
+        "name": "tail_under_2",
+        "shape": "taper",
+        "top": 0.85,
+        "size": [
+          0.00378,
+          0.019,
+          0.00378
+        ],
+        "at": [
+          0,
+          0.008450000000000001,
+          -0.0695
+        ],
+        "rot": [
+          -98,
+          0,
+          0
+        ],
+        "color": "belly",
+        "bone": "tail_2",
+        "separate": true,
+        "detail": 0.4
+      },
+      {
+        "name": "tail_3",
+        "shape": "taper",
+        "top": 0.5,
+        "size": [
+          0.0036,
+          0.019,
+          0.0036
+        ],
+        "at": [
+          0,
+          0.0076,
+          -0.087
+        ],
+        "rot": [
+          -98,
+          0,
+          0
+        ],
+        "color": "tail_top",
+        "bone": "tail_3",
+        "separate": true,
+        "detail": 0.5
+      },
+      {
+        "name": "tail_under_3",
+        "shape": "taper",
+        "top": 0.5,
+        "size": [
+          0.00324,
+          0.019,
+          0.00324
+        ],
+        "at": [
+          0,
+          0.0062,
+          -0.087
+        ],
+        "rot": [
+          -98,
+          0,
+          0
+        ],
+        "color": "belly",
+        "bone": "tail_3",
+        "separate": true,
+        "detail": 0.4
+      }
+    ]
+  }
+}

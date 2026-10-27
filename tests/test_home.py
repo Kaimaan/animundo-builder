@@ -352,6 +352,35 @@ def test_home_seats_prey_by_species_key(tmp_path: Path) -> None:
     assert region["welcome"].endswith("Go and find a blue hare to eat!")
 
 
+def test_home_seats_an_animal_the_minset_will_make(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _write_inputs(tmp_path)
+    (tmp_path / "home.json").write_text(
+        json.dumps(
+            _brief(
+                id="lynx",
+                latin="Lynx lynx",
+                name="Eurasian lynx",
+                species_key=2435240,
+                in_library=None,
+                start_from="fox",
+            )
+        )
+    )
+    (tmp_path / "minset.json").write_text(
+        json.dumps({"make_animal": True, "make_home": False, "prey": None})
+    )
+    (world / "animals" / "lynx.json").unlink()
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(
+        _ctx(tmp_path, ScriptClient([]), world)
+    )
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    assert "lynx" in region["animals"]["playable"]
+    plan = json.loads((tmp_path / "species-plan.json").read_text(encoding="utf-8"))
+    assert plan["species"][0]["decision"] == "new"
+    assert plan["species"][0]["taxon"]["gbif_key"] == 2435240
+
+
 def test_home_seats_made_animals_unasked(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _write_inputs(tmp_path)

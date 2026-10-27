@@ -17,6 +17,12 @@ from typing import Any
 from .animal_list import match_by_name
 
 
+def taxon_block(gbif_key: int, latin: str) -> dict[str, Any]:
+    """A plan-shaped GBIF block from a key the list already gave."""
+    rank = "SUBSPECIES" if len(latin.split()) > 2 else "SPECIES"
+    return {"gbif_key": gbif_key, "rank": rank, "name": latin}
+
+
 def match_entry(
     entries: list[dict[str, Any]],
     world: Path,

@@ -1,0 +1,22 @@
+{
+  "species_key": 2435240,
+  "id": "lynx",
+  "latin": "Lynx lynx",
+  "name": "Eurasian lynx",
+  "in_library": null,
+  "start_from": "fox",
+  "habitats": [
+    "boreal_forest",
+    "mountain"
+  ],
+  "home": "boreal_forest",
+  "needs_home": false,
+  "cell": "61.5_26.0",
+  "center": {
+    "lat": 61.55,
+    "lon": 26.05
+  },
+  "country": "FI",
+  "country_name": "Finland",
+  "place_name": "Lynx forest, Finland"
+}

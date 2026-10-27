@@ -3,6 +3,44 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #54.2, #55, replay tests: home seats the unmade, no template carry-over
+
+- #54.2: `home` seats an animal `minset.json` says will be
+  made (its file comes from `oneshot`): the cast, the
+  plan (decision `new`, taxon from the brief's key) and
+  the welcome all tolerate the missing file; seating
+  roles use the `start_from` file's hunts as the proxy.
+  `oneshot` appends its made prey to the species plan, so
+  the prey ships in the pack (it never did before).
+- #55.1: a made home keeps no living thing from its
+  template. Code check on every try: each fish must be a
+  library animal GBIF recorded near the spot; each kept
+  ground plant must be research-named (latin key or name)
+  or recorded; empty stays empty.
+- #55.2: floating and water plants map to `lake_life`
+  (`reeds`/`lilies`/`pondweed` densities), never specs;
+  in the prompt, since only the writer knows what floats.
+- #55.3: a tree `plant` id must be a tree spec or a
+  locale plant page, and named in the surroundings;
+  otherwise the writer leaves `plant` out.
+- #55 verified on the live failing answer
+  (`jobs/review-anaconda/records/newhome.jsonl`): try 1's
+  invented fish, try 2's roach/perch/bream/pike,
+  bracken/fern/moss and `kapok_tree`/`rubber_tree` all
+  fail with drop-it errors. Reviewer: re-run `newhome`
+  live on the anaconda.
+- Replay tests (`tests/test_replays.py`): the review
+  jobs' real briefs and research recordings, committed
+  under `tests/fixtures/replays/`, run keyless as far as
+  each build goes — fox to pack (nothing made), lynx
+  through `oneshot` to pack, anaconda through `newhome`
+  and two `oneshot` runs to pack. Maker answers are
+  committed stand-ins adapted from real files (see the
+  fixtures README); builds and the homes check are stubs
+  that verify placement.
+- Reviewer: run `oneshot` live on the lynx (a few cents
+  plus a Blender build) and look at the preview sheet.
+
 ## 2026-10-27: inbox #50: the new-home maker (rainforest)
 
 - The `newhome` stage makes the minimum set's home: one

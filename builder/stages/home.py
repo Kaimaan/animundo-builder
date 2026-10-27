@@ -19,7 +19,7 @@ from typing import Any
 
 from ..animal_list import find_list, load_list, short_name
 from ..schemas import validate
-from ..taxa import match_entry
+from ..taxa import match_entry, taxon_block
 from .capability import NotPossibleError
 from .species_plan import (
     RecordedFn,
@@ -55,14 +55,17 @@ class HomeStage:
             (ctx.job_dir / "research.json").read_text(encoding="utf-8")
         )
         taxa = file_taxa(world, overlay)
+        minset = _read_minset(ctx)
         stem = brief.get("in_library") or self._made_stem(ctx, brief)
+        if stem is None and minset.get("make_animal"):
+            stem = brief.get("id") or None
         if stem is None:
             raise NotPossibleError(
-                f"{brief['latin']} is made one-shot next; "
-                "the maker lands after this review"
+                f"{brief['latin']} is made one-shot next; run minimum first"
             )
         data = animal_file(world, stem, overlay)
-        if not data:
+        will_make = minset.get("make_animal") and stem == brief.get("id")
+        if not data and not will_make:
             raise ValueError(f"the library lost its file for {stem}")
         if data.get("stage_of"):
             stem = data["stage_of"]
@@ -187,6 +190,11 @@ class HomeStage:
         main = animal_file(world, stem, overlay)
         made = set(file_taxa(overlay))
         hunts = set(main.get("hunts", []) or [])
+        if not main and brief.get("start_from"):
+            # No file yet: seat roles against what the one-shot
+            # writer starts from, not an empty set.
+            proxy = animal_file(world, brief["start_from"], overlay)
+            hunts = set(proxy.get("hunts", []) or [])
         center = brief["center"]
         placed: dict[str, dict[str, Any]] = {}
         unchecked: set[str] = set()
@@ -229,6 +237,12 @@ class HomeStage:
         main_role = backfill_role(main, hunts) or "playable"
         placed[stem] = {"backfilled": True, "file": stem, "role": main_role}
         SpeciesPlanStage.place_backfilled(world, region, placed, overlay)
+        if not main:
+            # No file yet: the maker writes it next, but the cast
+            # seats the animal now, as the one to play.
+            playable = region.setdefault("animals", {}).setdefault("playable", [])
+            if stem not in playable:
+                playable.append(stem)
         neighbours = set(placed) - {stem}
         return neighbours, unchecked
 
@@ -291,17 +305,20 @@ class HomeStage:
         overlay = ctx.job_dir
         taxa = file_taxa(world, overlay)
         made = set(file_taxa(overlay))
+        minset = _read_minset(ctx)
+        new = stem in made or (minset.get("make_animal") and stem == brief.get("id"))
+        taxon = taxa.get(stem) or taxon_block(brief["species_key"], brief["latin"])
         species = [
             {
                 "species": stem,
-                "decision": "new" if stem in made else "reuse",
+                "decision": "new" if new else "reuse",
                 "reason": (
                     "made one-shot for this home"
-                    if stem in made
+                    if new
                     else "the home's animal, reused from the library"
                 ),
                 "wild": True,
-                "taxon": taxa[stem],
+                "taxon": taxon,
             }
         ]
         for other in sorted(neighbours):
@@ -438,6 +455,18 @@ def _prey_seated(
     if match is None:
         return False
     return (match.get("in_library") or match.get("id", "")) in cast
+
+
+def _read_minset(ctx: Any) -> dict[str, Any]:
+    """The minimum set, or {} when home runs before minimum."""
+    path = ctx.job_dir / "minset.json"
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _place_id(cell: str, stem: str, country: str) -> str:

@@ -1,0 +1,23 @@
+{
+  "species_key": 5225712,
+  "id": "anaconda",
+  "latin": "Eunectes murinus",
+  "name": "Green anaconda",
+  "in_library": null,
+  "start_from": "grass_snake",
+  "habitats": [
+    "rainforest",
+    "wetland",
+    "river"
+  ],
+  "home": "rainforest",
+  "needs_home": true,
+  "cell": "-3.5_-62.0",
+  "center": {
+    "lat": -3.45,
+    "lon": -61.95
+  },
+  "country": "BR",
+  "country_name": "Brazil",
+  "place_name": "Anaconda rainforest, Brazil"
+}

@@ -338,6 +338,38 @@ def test_prey_comes_before_the_animal(tmp_path: Path) -> None:
     assert (tmp_path / "animals" / "capybara.json").is_file()
 
 
+def test_oneshot_adds_made_prey_to_the_plan(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    (tmp_path / "species-plan.json").write_text(
+        json.dumps(
+            {
+                "species": [
+                    {
+                        "species": "lynx",
+                        "decision": "new",
+                        "reason": "made one-shot for this home",
+                        "wild": True,
+                        "taxon": {
+                            "gbif_key": 2435240,
+                            "rank": "SPECIES",
+                            "name": "Lynx lynx",
+                        },
+                    }
+                ]
+            }
+        )
+    )
+    client = ScriptClient([_answer("capybara"), _answer("lynx")])
+    AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    plan = json.loads((tmp_path / "species-plan.json").read_text())
+    assert [(e["species"], e["decision"]) for e in plan["species"]] == [
+        ("lynx", "new"),
+        ("capybara", "new"),
+    ]
+    assert plan["species"][1]["taxon"]["gbif_key"] == 2437585
+
+
 def test_prey_matches_by_species_key(tmp_path: Path) -> None:
     world = _world(tmp_path)
     minset = _minset_with_prey()
@@ -412,12 +444,35 @@ def _home_world(tmp_path: Path) -> Path:
     plants = world / "models" / "plants"
     plants.mkdir(parents=True)
     (plants / "bilberry.json").write_text(
-        json.dumps({"id": "bilberry", "parts": [{"name": "bush"}]})
+        json.dumps(
+            {
+                "id": "bilberry",
+                "latin": "Vaccinium myrtillus",
+                "taxon": {
+                    "gbif_key": 2882833,
+                    "rank": "SPECIES",
+                    "name": "Vaccinium myrtillus",
+                },
+                "parts": [{"name": "bush"}],
+            }
+        )
     )
     (plants / "wood_anemone.json").write_text(
         json.dumps({"id": "wood_anemone", "parts": [{"name": "leaves"}]})
     )
     (world / "models" / "README.md").write_text("# Models\n\n## Plants\n\nGrow.\n")
+    pages = world / "locale" / "en"
+    pages.mkdir(parents=True)
+    (pages / "plants.json").write_text(
+        json.dumps({"plant.norway_spruce.title": "Norway spruce"})
+    )
+    animals = world / "animals"
+    animals.mkdir(parents=True)
+    (animals / "roach.json").write_text(
+        json.dumps(
+            {"taxon": {"gbif_key": 1, "rank": "SPECIES", "name": "Rutilus rutilus"}}
+        )
+    )
     (world / "schemas").mkdir(parents=True)
     (world / "schemas" / "model.schema.json").write_text(
         json.dumps(
@@ -484,12 +539,7 @@ def _home_answer(plants: dict[str, Any] | None = None, **home_over: Any) -> str:
     home: dict[str, Any] = {
         "id": "rainforest",
         "name": "Rainforest home",
-        "ground_cover": {
-            "plants": [
-                {"model": "bilberry", "density": 0.2},
-                {"model": "water_lettuce", "density": 0.3},
-            ]
-        },
+        "ground_cover": {"plants": [{"model": "water_lettuce", "density": 0.3}]},
     }
     home.update(home_over)
     if plants is None:
@@ -509,6 +559,7 @@ def _home_stage(**over: Any) -> HomeMakerStage:
         "check_homes": lambda s, h: [],
         "check_models": lambda s, p: [],
         "match": _match_new,
+        "recorded": lambda lat, lon, key: False,
     }
     args.update(over)
     return HomeMakerStage(**args)
@@ -546,6 +597,9 @@ def test_newhome_prompt_carries_the_inputs(tmp_path: Path) -> None:
     assert "bilberry" in prompt
     assert "The region file" in prompt
     assert "Young animals" in prompt
+    assert "lake_life" in prompt
+    assert "norway_spruce" in prompt
+    assert "Nothing living carries over" in prompt
 
 
 def test_newhome_fix_round_repairs_check_errors(tmp_path: Path) -> None:
@@ -612,7 +666,7 @@ def test_newhome_reuses_a_spec_the_world_grows(tmp_path: Path) -> None:
     assert result["plant_files"] == []
     home = json.loads((tmp_path / "homes" / "rainforest.json").read_text())
     models = [p["model"] for p in home["ground_cover"]["plants"]]
-    assert models == ["bilberry", "bilberry"]
+    assert models == ["bilberry"]
     assert not (tmp_path / "models" / "plants" / "water_lettuce.json").is_file()
 
 
@@ -637,6 +691,85 @@ def test_newhome_nothing_to_make_calls_nothing(tmp_path: Path) -> None:
     stage = _home_stage()
     result = stage.run(_ctx(tmp_path, world, client))
     assert result == {"home_files": [], "cost_usd": 0.0}
+
+
+def _home_answer_with(home_patch: dict[str, Any]) -> str:
+    wrapped = json.loads(_home_answer())
+    wrapped["home"].update(home_patch)
+    return json.dumps(wrapped)
+
+
+def test_newhome_rejects_template_carryover_plants(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    carried = _home_answer_with(
+        {"ground_cover": {"plants": [{"model": "bilberry", "density": 0.2}]}}
+    )
+    client = ScriptClient([carried, _home_answer()])
+    result = _home_stage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert "grows in the template's land" in client.prompts[1]
+
+
+def test_newhome_keeps_research_named_plants(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    research = json.loads((tmp_path / "research.json").read_text())
+    research["surroundings"].append({"name": "bilberry", "kind": "plant"})
+    (tmp_path / "research.json").write_text(json.dumps(research))
+    named = _home_answer_with(
+        {"ground_cover": {"plants": [{"model": "bilberry", "density": 0.2}]}}
+    )
+    client = ScriptClient([named])
+    result = _home_stage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert result["plant_files"] == ["models/plants/water_lettuce.json"]
+
+
+def test_newhome_keeps_recorded_plants(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    named = _home_answer_with(
+        {"ground_cover": {"plants": [{"model": "bilberry", "density": 0.2}]}}
+    )
+    client = ScriptClient([named])
+    stage = _home_stage(recorded=lambda lat, lon, key: True)
+    result = stage.run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+
+
+def test_newhome_rejects_unrecorded_fish(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    fished = _home_answer_with({"fish": [{"kind": "roach", "count": 12}]})
+    client = ScriptClient([fished, _home_answer()])
+    result = _home_stage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert "swims in the template's waters" in client.prompts[1]
+
+
+def test_newhome_rejects_unknown_tree_plants(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    treed = _home_answer_with(
+        {"trees": {"mix": [{"shape": "round", "plant": "kapok_tree"}]}}
+    )
+    client = ScriptClient([treed, _home_answer()])
+    result = _home_stage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert "has no spec or page" in client.prompts[1]
+
+
+def test_newhome_rejects_unnamed_tree_plants(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    treed = _home_answer_with(
+        {"trees": {"mix": [{"shape": "spruce", "plant": "norway_spruce"}]}}
+    )
+    client = ScriptClient([treed, _home_answer()])
+    result = _home_stage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert "named nowhere in the surroundings" in client.prompts[1]
 
 
 def test_newhome_skips_a_made_home(tmp_path: Path) -> None:

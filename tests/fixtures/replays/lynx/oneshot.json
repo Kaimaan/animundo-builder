@@ -1,0 +1,796 @@
+{
+  "animal": {
+    "archetype": "land_mammal",
+    "latin": "Lynx lynx",
+    "taxon": {
+      "gbif_key": 2435240,
+      "rank": "SPECIES",
+      "name": "Lynx lynx"
+    },
+    "playable": true,
+    "color": "#c8642a",
+    "tags": [
+      "predator"
+    ],
+    "diet": [
+      "berries",
+      "insects",
+      "carrion"
+    ],
+    "dark_vision": 0.85,
+    "hunts": [
+      "small_mammal",
+      "small_bird",
+      "frog"
+    ],
+    "territorial": true,
+    "walk": 4.2,
+    "sprint": 8.4,
+    "jump": 6.8,
+    "box": [
+      0.55,
+      0.85,
+      0.55
+    ],
+    "cam_height": 0.6,
+    "cam_dist": 2.8,
+    "family": {
+      "raised_by": [
+        "mother",
+        "father"
+      ],
+      "siblings": [
+        2,
+        3
+      ],
+      "baby_scale": 0.5,
+      "lessons": [
+        "eat",
+        "pounce",
+        "shelter",
+        "sleep"
+      ],
+      "sources": [
+        "https://en.wikipedia.org/wiki/Red_fox#Reproduction_and_development"
+      ]
+    },
+    "model": {
+      "file": "res://assets/animals/lynx.glb",
+      "length": 0.755,
+      "yaw": 0.0,
+      "anims": {
+        "idle": "idle",
+        "walk": "walk",
+        "run": "run",
+        "eat": "eat",
+        "sleep": "sleep"
+      }
+    },
+    "text": {
+      "title": "Fox",
+      "menu_sub": "Stalk hares, pounce, rest in your den.",
+      "menu_wild": "Rival foxes guard their land.",
+      "intro_safe": "Safe mode: explore! Play tag with the hares.",
+      "intro_survival": "Hunt to stay fed. Rest in a den at night.",
+      "intro_wild": "Other foxes guard their land. Keep your distance!",
+      "night_hint": "It's night. Dig a den into a hillside and sleep in it.",
+      "too_exposed": "Too exposed to sleep! Dig a den into a hillside and sleep in it.",
+      "sheltered": "You're safe in your den.",
+      "hungry": "You're hungry. Look for voles and hares, beetles, or berry bushes.",
+      "no_food": "Nothing to eat here. Look for voles and hares, beetles, or berry bushes.",
+      "dig": "Digging... (a den keeps you safe and warm)",
+      "rain_start": "It's starting to rain. Shelter in a den to stay warm.",
+      "chased": "A rival fox is chasing you off its land!",
+      "safe_tag": "Tag, you got it! In Safe mode foxes fill up on berries.",
+      "bite": "A fox bit you! Run!",
+      "caught_you": "A fox ate you.",
+      "play_as": "Play as a fox",
+      "rival_bite": "A rival fox bit you! Run!",
+      "rival_caught_you": "You were caught by a rival fox",
+      "about_looks": "Orange-red fur, a white chest and a big bushy tail with a white tip. About as big as a medium-sized dog.",
+      "about_food": "Mostly voles and mice. Also hares, birds, eggs, insects and lots of berries in autumn.",
+      "about_home": "Sleeps curled up in the open with its tail over its nose. It uses a den only to raise its cubs.",
+      "about_winter": "Stays awake all winter. It hears voles moving under the snow and pounces on them nose first.",
+      "about_young": "Cubs are born in a den in April or May. Both parents bring them food.",
+      "about_fact": "A fox wraps its bushy tail around itself like a warm blanket when it sleeps.",
+      "family_mother": "Here's your mom! She knows every path in the forest.",
+      "family_father": "And here's your dad. He brings home the food, so stay close!",
+      "family_siblings": "These are your brothers and sisters. Expect lots of play-fighting!",
+      "family_you": "And this little fluffball is you! Follow Mom and Dad to learn how to survive in Animundo.",
+      "lesson_eat": "Mom found berries. Go and eat some too!",
+      "lesson_pounce": "Mom is sneaking up on a hare. Creep closer and tap Pounce!",
+      "lesson_shelter": "Back to the den! Follow Mom inside.",
+      "lesson_sleep": "Time for a nap. Curl up in the den and tap Sleep.",
+      "fed_mother": "Mom brought you a vole! +{food} food",
+      "fed_father": "Dad brought you a vole! +{food} food",
+      "calling_mother": "Mom is calling you. Stay close!",
+      "calling_father": "Dad is calling you. Stay close!",
+      "bedtime": "It's getting dark. The family is going back to the den. Come home and sleep!",
+      "grown_up": "You're grown up! Time to find your own place in the forest."
+    },
+    "year": {
+      "winter": "active",
+      "shelter": "Sleeps curled up in the open, tail over the nose. Digs or takes over a den (often an old badger sett) only to raise cubs.",
+      "young": "Cubs born in the den in April\u2013May.",
+      "food": {
+        "spring": "Voles, hares, birds and their eggs.",
+        "summer": "Voles, insects and young birds.",
+        "autumn": "Voles and lots of berries.",
+        "winter": "Voles caught by hearing them under the snow and pouncing, and carrion."
+      },
+      "notes": "The winter 'mousing pounce' through the snow is a great thing to show."
+    }
+  },
+  "model": {
+    "id": "lynx",
+    "name": "Red fox (Vulpes vulpes)",
+    "author": "Animundo team",
+    "gait": "walk",
+    "sleep_pose": "curl",
+    "colors": {
+      "fur": "#c4622b",
+      "belly": "#efe3cf",
+      "dark": "#2a1f1a"
+    },
+    "bones": [
+      {
+        "name": "body",
+        "head": [
+          0,
+          0.32,
+          -0.18
+        ],
+        "tail": [
+          0,
+          0.34,
+          0.15
+        ],
+        "role": "body"
+      },
+      {
+        "name": "neck",
+        "head": [
+          0,
+          0.35,
+          0.15
+        ],
+        "tail": [
+          0,
+          0.42,
+          0.24
+        ],
+        "parent": "body",
+        "role": "neck"
+      },
+      {
+        "name": "head",
+        "head": [
+          0,
+          0.42,
+          0.24
+        ],
+        "tail": [
+          0,
+          0.42,
+          0.4
+        ],
+        "parent": "neck",
+        "role": "head"
+      },
+      {
+        "name": "ear_l",
+        "head": [
+          0.044,
+          0.46,
+          0.255
+        ],
+        "tail": [
+          0.05,
+          0.56,
+          0.25
+        ],
+        "parent": "head",
+        "role": "ear",
+        "mirror": true
+      },
+      {
+        "name": "leg_f_l",
+        "head": [
+          0.066,
+          0.32,
+          0.14
+        ],
+        "tail": [
+          0.066,
+          0.0,
+          0.15
+        ],
+        "parent": "body",
+        "role": "leg",
+        "phase": 0.0,
+        "mirror": true
+      },
+      {
+        "name": "leg_b_l",
+        "head": [
+          0.068,
+          0.32,
+          -0.15
+        ],
+        "tail": [
+          0.068,
+          0.0,
+          -0.16
+        ],
+        "parent": "body",
+        "role": "leg",
+        "phase": 0.5,
+        "mirror": true
+      },
+      {
+        "name": "tail_1",
+        "head": [
+          0,
+          0.32,
+          -0.22
+        ],
+        "tail": [
+          0,
+          0.26,
+          -0.36
+        ],
+        "parent": "body",
+        "role": "tail",
+        "phase": 0.0
+      },
+      {
+        "name": "tail_2",
+        "head": [
+          0,
+          0.26,
+          -0.36
+        ],
+        "tail": [
+          0,
+          0.21,
+          -0.5
+        ],
+        "parent": "tail_1",
+        "role": "tail",
+        "phase": 0.12
+      },
+      {
+        "name": "tail_3",
+        "head": [
+          0,
+          0.21,
+          -0.5
+        ],
+        "tail": [
+          0,
+          0.185,
+          -0.63
+        ],
+        "parent": "tail_2",
+        "role": "tail",
+        "phase": 0.24
+      }
+    ],
+    "parts": [
+      {
+        "name": "body",
+        "shape": "ball",
+        "size": [
+          0.17,
+          0.19,
+          0.46
+        ],
+        "at": [
+          0,
+          0.32,
+          -0.01
+        ],
+        "color": "fur",
+        "bone": "body"
+      },
+      {
+        "name": "chest",
+        "shape": "ball",
+        "size": [
+          0.11,
+          0.15,
+          0.12
+        ],
+        "at": [
+          0,
+          0.31,
+          0.18
+        ],
+        "color": "belly",
+        "bone": "body"
+      },
+      {
+        "name": "neck",
+        "shape": "ball",
+        "size": [
+          0.12,
+          0.15,
+          0.16
+        ],
+        "at": [
+          0,
+          0.37,
+          0.19
+        ],
+        "rot": [
+          -30,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "neck"
+      },
+      {
+        "name": "throat",
+        "shape": "ball",
+        "size": [
+          0.08,
+          0.1,
+          0.1
+        ],
+        "at": [
+          0,
+          0.35,
+          0.225
+        ],
+        "rot": [
+          -30,
+          0,
+          0
+        ],
+        "color": "belly",
+        "bone": "neck"
+      },
+      {
+        "name": "head",
+        "shape": "ball",
+        "size": [
+          0.14,
+          0.12,
+          0.14
+        ],
+        "at": [
+          0,
+          0.43,
+          0.27
+        ],
+        "color": "fur",
+        "bone": "head"
+      },
+      {
+        "name": "cheeks",
+        "shape": "ball",
+        "size": [
+          0.12,
+          0.06,
+          0.08
+        ],
+        "at": [
+          0,
+          0.4,
+          0.3
+        ],
+        "color": "belly",
+        "bone": "head"
+      },
+      {
+        "name": "muzzle",
+        "shape": "ball",
+        "size": [
+          0.065,
+          0.055,
+          0.13
+        ],
+        "at": [
+          0,
+          0.415,
+          0.35
+        ],
+        "color": "fur",
+        "bone": "head"
+      },
+      {
+        "name": "chin",
+        "shape": "ball",
+        "size": [
+          0.055,
+          0.035,
+          0.1
+        ],
+        "at": [
+          0,
+          0.395,
+          0.34
+        ],
+        "color": "belly",
+        "bone": "head"
+      },
+      {
+        "name": "nose",
+        "shape": "ball",
+        "size": [
+          0.026,
+          0.022,
+          0.02
+        ],
+        "at": [
+          0,
+          0.42,
+          0.413
+        ],
+        "color": "dark",
+        "bone": "head",
+        "separate": true
+      },
+      {
+        "name": "eye_l",
+        "shape": "ball",
+        "size": [
+          0.016,
+          0.016,
+          0.016
+        ],
+        "at": [
+          0.043,
+          0.443,
+          0.318
+        ],
+        "color": "dark",
+        "bone": "head",
+        "mirror": true,
+        "separate": true
+      },
+      {
+        "name": "ear_l",
+        "shape": "taper",
+        "top": 0.35,
+        "size": [
+          0.08,
+          0.115,
+          0.032
+        ],
+        "at": [
+          0.046,
+          0.505,
+          0.255
+        ],
+        "rot": [
+          0,
+          0,
+          -15
+        ],
+        "color": "dark",
+        "bone": "ear_l",
+        "mirror": true,
+        "separate": true
+      },
+      {
+        "name": "ear_in_l",
+        "shape": "taper",
+        "top": 0.35,
+        "size": [
+          0.056,
+          0.085,
+          0.014
+        ],
+        "at": [
+          0.046,
+          0.5,
+          0.27
+        ],
+        "rot": [
+          0,
+          0,
+          -15
+        ],
+        "color": "fur",
+        "bone": "ear_l",
+        "mirror": true,
+        "separate": true
+      },
+      {
+        "name": "arm_l",
+        "shape": "ball",
+        "size": [
+          0.06,
+          0.18,
+          0.072
+        ],
+        "at": [
+          0.066,
+          0.24,
+          0.14
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "leg_f_l",
+        "mirror": true
+      },
+      {
+        "name": "fore_l",
+        "shape": "ball",
+        "size": [
+          0.046,
+          0.2,
+          0.05
+        ],
+        "at": [
+          0.066,
+          0.1,
+          0.148
+        ],
+        "color": "dark",
+        "bone": "leg_f_l",
+        "mirror": true
+      },
+      {
+        "name": "wrist_l",
+        "shape": "ball",
+        "size": [
+          0.054,
+          0.06,
+          0.056
+        ],
+        "at": [
+          0.066,
+          0.055,
+          0.15
+        ],
+        "color": "dark",
+        "bone": "leg_f_l",
+        "mirror": true
+      },
+      {
+        "name": "hand_l",
+        "shape": "ball",
+        "size": [
+          0.052,
+          0.034,
+          0.075
+        ],
+        "at": [
+          0.066,
+          0.017,
+          0.162
+        ],
+        "color": "dark",
+        "bone": "leg_f_l",
+        "mirror": true
+      },
+      {
+        "name": "thigh_l",
+        "shape": "ball",
+        "size": [
+          0.065,
+          0.17,
+          0.13
+        ],
+        "at": [
+          0.068,
+          0.27,
+          -0.15
+        ],
+        "rot": [
+          -20,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "leg_b_l",
+        "mirror": true
+      },
+      {
+        "name": "shin_l",
+        "shape": "ball",
+        "size": [
+          0.046,
+          0.2,
+          0.052
+        ],
+        "at": [
+          0.068,
+          0.11,
+          -0.168
+        ],
+        "color": "dark",
+        "bone": "leg_b_l",
+        "mirror": true
+      },
+      {
+        "name": "hock_l",
+        "shape": "ball",
+        "size": [
+          0.054,
+          0.07,
+          0.06
+        ],
+        "at": [
+          0.068,
+          0.1,
+          -0.17
+        ],
+        "color": "dark",
+        "bone": "leg_b_l",
+        "mirror": true
+      },
+      {
+        "name": "foot_l",
+        "shape": "ball",
+        "size": [
+          0.052,
+          0.034,
+          0.085
+        ],
+        "at": [
+          0.068,
+          0.017,
+          -0.15
+        ],
+        "color": "dark",
+        "bone": "leg_b_l",
+        "mirror": true
+      },
+      {
+        "name": "tail_1",
+        "shape": "ball",
+        "size": [
+          0.09,
+          0.09,
+          0.1
+        ],
+        "at": [
+          0,
+          0.312,
+          -0.24
+        ],
+        "rot": [
+          20,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "tail_1"
+      },
+      {
+        "name": "tail_2",
+        "shape": "ball",
+        "size": [
+          0.115,
+          0.115,
+          0.12
+        ],
+        "at": [
+          0,
+          0.293,
+          -0.29
+        ],
+        "rot": [
+          20,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "tail_1"
+      },
+      {
+        "name": "tail_3",
+        "shape": "ball",
+        "size": [
+          0.14,
+          0.14,
+          0.13
+        ],
+        "at": [
+          0,
+          0.27,
+          -0.345
+        ],
+        "rot": [
+          18,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "tail_1"
+      },
+      {
+        "name": "tail_4",
+        "shape": "ball",
+        "size": [
+          0.155,
+          0.155,
+          0.14
+        ],
+        "at": [
+          0,
+          0.245,
+          -0.405
+        ],
+        "rot": [
+          15,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "tail_2"
+      },
+      {
+        "name": "tail_5",
+        "shape": "ball",
+        "size": [
+          0.16,
+          0.155,
+          0.14
+        ],
+        "at": [
+          0,
+          0.222,
+          -0.465
+        ],
+        "rot": [
+          12,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "tail_2"
+      },
+      {
+        "name": "tail_6",
+        "shape": "ball",
+        "size": [
+          0.145,
+          0.14,
+          0.13
+        ],
+        "at": [
+          0,
+          0.203,
+          -0.525
+        ],
+        "rot": [
+          10,
+          0,
+          0
+        ],
+        "color": "fur",
+        "bone": "tail_3"
+      },
+      {
+        "name": "tail_7",
+        "shape": "ball",
+        "size": [
+          0.125,
+          0.12,
+          0.13
+        ],
+        "at": [
+          0,
+          0.19,
+          -0.595
+        ],
+        "rot": [
+          8,
+          0,
+          0
+        ],
+        "color": "belly",
+        "bone": "tail_3"
+      }
+    ]
+  }
+}

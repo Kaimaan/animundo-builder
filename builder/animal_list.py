@@ -44,6 +44,14 @@ def find_entry(entries: list[dict[str, Any]], species_key: int) -> dict[str, Any
     raise ValueError(f"species key {species_key} is not on the animal list")
 
 
+def find_by_id(entries: list[dict[str, Any]], animal_id: str) -> dict[str, Any]:
+    """The list entry with this id, or a ValueError."""
+    for entry in entries:
+        if entry.get("id") == animal_id:
+            return entry
+    raise ValueError(f"{animal_id!r} is not on the animal list")
+
+
 def home_for(entry: dict[str, Any], homes: list[str]) -> str:
     """The animal's first habitat with a built home, or a ValueError."""
     for habitat in entry.get("habitats", []):

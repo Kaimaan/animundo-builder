@@ -159,22 +159,40 @@ class JobContext:
 
     def _chat_via(self, client: MetaClient, *args: Any, **kwargs: Any) -> Any:
         response = client.chat(*args, **kwargs)
-        self.tracker.add(usage_from_response(response, client.model))
+        self.tracker.add(_usage(client, response))
         return response
 
     def respond(self, *args: Any, images: int = 0, **kwargs: Any) -> Any:
         self.tracker.check()
         client = self._client()
         response = client.responses_create(*args, images=images, **kwargs)
-        self.tracker.add(usage_from_response(response, client.model, images))
+        self.tracker.add(_usage(client, response, images))
         return response
 
     def draw(self, prompt: str) -> bytes:
         self.tracker.check()
         client = self._client().for_image()
         data = client.images_generate(prompt)
-        self.tracker.add(Usage(model=client.model, generated=1))
+        if getattr(client, "replays", False):
+            self.tracker.add(Usage(model=client.model))
+        else:
+            self.tracker.add(Usage(model=client.model, generated=1))
         return data
+
+
+def _set_stage(ctx: JobContext, name: str) -> None:
+    """Tell recording and replay clients which stage is running."""
+    for client in (ctx.client, ctx.open_client):
+        setter = getattr(client, "set_stage", None)
+        if setter is not None:
+            setter(name)
+
+
+def _usage(client: Any, response: Any, images: int = 0) -> Usage:
+    """What the call spent: nothing when it came from a recording."""
+    if getattr(client, "replays", False):
+        return Usage(model=getattr(client, "model", "replay"))
+    return usage_from_response(response, client.model, images)
 
 
 @dataclass
@@ -191,6 +209,7 @@ class Pipeline:
             if stage.name in state["completed"]:
                 continue
             ctx.check_budget()
+            _set_stage(ctx, stage.name)
             try:
                 result = stage.run(ctx)
             except (BudgetExceeded, CapExceeded, MetaAuthError):

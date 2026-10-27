@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -10,6 +11,8 @@ from typing import Any
 import pytest
 
 from builder.pipeline import BudgetTracker, JobContext
+from builder.records import ReplayClient
+from builder.schemas import validate
 from builder.stages.capability import NotPossibleError
 from builder.stages.home import HomeStage
 
@@ -244,3 +247,114 @@ def test_home_research_past_its_round_stops(tmp_path: Path) -> None:
         HomeStage(recorded=lambda lat, lon, key: True).run(
             _ctx(tmp_path, ScriptClient([answer]), world)
         )
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+REPLAY_CASES = [
+    ("fox", "Vulpes vulpes", 5219243, "61.5_26.0", ["rodent"], "mountain hare"),
+    ("lynx", "Lynx lynx", 2435239, "61.5_26.0", ["mammal"], "mountain hare"),
+    (
+        "anaconda",
+        "Eunectes murinus",
+        5225712,
+        "-3.1_-60.1",
+        ["mammal"],
+        "capybara",
+    ),
+]
+
+
+def _replay_world(tmp_path: Path, stem: str, key: int, tags: list[str]) -> Path:
+    world = tmp_path / "world"
+    animals = world / "animals"
+    animals.mkdir(parents=True)
+    (animals / f"{stem}.json").write_text(
+        json.dumps(
+            {
+                "taxon": {"gbif_key": key, "rank": "SPECIES", "name": "X"},
+                "diet": ["meat"],
+                "playable": True,
+                "tags": ["mammal"],
+                "hunts": tags,
+            }
+        )
+    )
+    (animals / "comp.json").write_text(
+        json.dumps(
+            {
+                "taxon": {
+                    "gbif_key": 2436756,
+                    "rank": "SPECIES",
+                    "name": "Y",
+                },
+                "diet": ["grass"],
+                "tags": tags,
+            }
+        )
+    )
+    (animals / "archetypes.json").write_text("{}")
+    tools = world / "tools"
+    tools.mkdir(parents=True)
+    (tools / "homes.py").write_text(
+        STUB_TOOL.replace('["berries", "meat", "grass"]', '["berries"]')
+    )
+    return world
+
+
+@pytest.mark.parametrize("stem,latin,key,cell,tags,first_meat", REPLAY_CASES)
+def test_home_replays_saved_research(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+    stem: str,
+    latin: str,
+    key: int,
+    cell: str,
+    tags: list[str],
+    first_meat: str,
+) -> None:
+    """The free home run: no model client at all, only the fixture."""
+    world = _replay_world(tmp_path, stem, key, tags)
+    south, west = (round(float(part) + 0.05, 3) for part in cell.split("_"))
+    (tmp_path / "home.json").write_text(
+        json.dumps(
+            {
+                "latin": latin,
+                "species_key": key,
+                "home": "boreal_forest",
+                "place_name": f"{stem} home",
+                "country_name": "Testland",
+                "country": "TT",
+                "center": {"lat": south, "lon": west},
+                "cell": cell,
+                "in_library": stem,
+            }
+        )
+    )
+    records = tmp_path / "records"
+    records.mkdir()
+    shutil.copy(FIXTURES / f"research-{stem}.jsonl", records / "home.jsonl")
+    ctx = JobContext(
+        job_id="job-1",
+        job_dir=tmp_path,
+        client=ReplayClient(records, "home"),
+        tracker=BudgetTracker(budget_usd=8.0),
+        world_path=world,
+    )
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(ctx)
+    assert result["foods_added"] == ["grass", "meat"]
+    assert ctx.tracker.spent_usd == 0
+    assert capsys.readouterr().err == ""
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    by_kind = {food["kind"]: food for food in region["food"]}
+    assert by_kind["meat"]["names"][0] == first_meat
+    assert (tmp_path / "species-plan.json").is_file()
+
+
+@pytest.mark.parametrize("stem", ["fox", "lynx", "anaconda"])
+def test_research_fixtures_validate(stem: str) -> None:
+    line = (FIXTURES / f"research-{stem}.jsonl").read_text(encoding="utf-8")
+    entry = json.loads(line)
+    assert entry["method"] == "responses_create"
+    text = entry["response"]["output"][0]["content"][0]["text"]
+    validate("home-research", json.loads(text))

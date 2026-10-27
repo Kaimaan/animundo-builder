@@ -23,6 +23,7 @@ secrets/
 jobs/
 recordings/raw/
 *.jsonl
+!tests/fixtures/*.jsonl
 spend-ledger.json
 
 # Agent memory that must stay personal, never committed

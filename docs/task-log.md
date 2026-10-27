@@ -3,6 +3,55 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #43.1, #44, T39: stages run alone, recorded, replayed
+
+`builder stage <name> --job <dir>` runs one stage on a saved job
+folder and saves its output (`state.json`) and its cost
+(`log.jsonl`), nothing else. `--record` saves the stage's model
+answers under `records/<name>.jsonl`; `--replay` runs on them
+with no key and no cost. `builder build --replay <dir>` replays
+a whole job the same way. A recording holds no keys and no
+private model reasoning, so it can be committed. Anything else a
+stage reaches (GBIF, the world's tools) still runs live and free.
+
+Start a home job folder without the web app:
+
+```
+builder build --kind animal_home --animal fox --cell 61.5_26.0 \
+    --world ../animundo-world --dry-run   # checks only
+```
+
+Stages that run alone (all verified this turn except where
+noted; `<job>` holds the previous stages' outputs):
+
+- `intake` (free): needs only the job's params.
+  `builder stage intake --job <job>`
+- `home` (free unless the template lacks a food kind): needs
+  `home.json`. `builder stage home --job <job> [--record|--replay]`
+- `words` (model calls): needs `regions/` and
+  `species-plan.json`.
+  `builder stage words --job <job> [--record|--replay]`
+- `safety` (model calls): needs `regions/`, `locale/` (and
+  `animals/` for a park).
+  `builder stage safety --job <job> [--record|--replay]`
+- `pack` (free): needs the whole job before it.
+  `builder stage pack --job <job>`
+- Park stages `survey`, `capability`, `region`, `species_plan`,
+  `animals`, `references`, `models`, `plants` run under the same
+  command once their inputs exist; not yet tried alone this
+  turn.
+
+Fixtures: `tests/fixtures/research-{fox,lynx,anaconda}.jsonl`
+(saved food-research answers; the home stage replays them with
+no model client in `test_home_replays_saved_research`).
+
+Evidence: a scripted fox home recorded to `/tmp/replay-src`
+($0.00, no live calls); `build --replay` on it with all keys
+unset ran all five stages, wrote the pack, and logged $0.00
+with host `replay`; each stage also replayed alone via
+`builder stage`. No live model runs were made from here; the
+reviewer runs the real step tests.
+
 ## 2026-10-27: inbox #3, arm's-length reviewer (T16 fix)
 
 - Reviewer compares the render against the sheet part by part and

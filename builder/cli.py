@@ -1,8 +1,9 @@
 """Command line for Animundo Builder.
 
 `build` runs the pipeline as far as implemented stages go; `resume`
-carries a job on; `check` runs every checker; `report` writes a round's
-`report.html`; `submit` sends a finished draft on as a pull request.
+carries a job on; `stage` runs one stage of a job on its own;
+`check` runs every checker; `report` writes a round's `report.html`;
+`submit` sends a finished draft on as a pull request.
 Unbuilt commands say so.
 """
 
@@ -15,18 +16,23 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .animal_list import find_by_id, find_list, load_list
 from .config import load as load_config
 from .jobs import fresh_state, make_context, pipeline_stages
 from .ledger import CapExceeded
-from .meta import MetaAuthError
+from .meta import CostLogger, MetaAuthError
 from .pipeline import (
     IMPROVE_CHOICES,
+    BudgetTracker,
+    JobContext,
     Pipeline,
     StageFailedError,
     stages_for_kind,
 )
+from .records import RecordingClient, ReplayClient, ReplayError
 from .report import build_report
 from .stages import IntakeStage
+from .stages.intake import CELL_PATTERN
 from .submit import SubmitFailed, run_submit
 
 NOT_BUILT_YET = 3
@@ -43,6 +49,9 @@ def _check_choices(choices: list[str]) -> None:
 
 def _explain_stop(job_id: str, error: Exception) -> int:
     if isinstance(error, CapExceeded):
+        print(f"job {job_id}: stopping, {error}", file=sys.stderr)
+        return 1
+    if isinstance(error, ReplayError):
         print(f"job {job_id}: stopping, {error}", file=sys.stderr)
         return 1
     if isinstance(error, MetaAuthError):
@@ -81,12 +90,28 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--name", help="Area name (looked up in the index).")
     build.add_argument("--country", help="ISO 3166-1 alpha-2, with --name.")
     build.add_argument(
+        "--animal", help="Animal id from the animal list (with --kind animal_home)."
+    )
+    build.add_argument(
+        "--cell",
+        help="Snapped 0.1-degree cell, like 61.5_26.0 (with --kind animal_home).",
+    )
+    build.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
     )
     build.add_argument(
         "--dry-run", action="store_true", help="Stop before pushing or uploading."
     )
-    build.add_argument("--replay", metavar="RECORDING", help="Run on a recording.")
+    build.add_argument(
+        "--record",
+        action="store_true",
+        help="Save every model answer under the job's records/.",
+    )
+    build.add_argument(
+        "--replay",
+        metavar="RECORDING",
+        help="Run on a recording (a job folder with records/), no key, no cost.",
+    )
     build.add_argument(
         "--jobs-dir", default="jobs", help="Where job folders live (default: jobs)."
     )
@@ -98,8 +123,25 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--kind",
         default="new_place",
-        choices=("new_place", "submit", "improve"),
+        choices=("new_place", "animal_home", "submit", "improve"),
         help="The job kind (default: new_place).",
+    )
+
+    stage = sub.add_parser("stage", help="Run one stage of a job on its own.")
+    stage.add_argument("name", help="The stage to run.")
+    stage.add_argument("--job", required=True, help="The job folder to run in.")
+    stage.add_argument(
+        "--world", default=None, help="Path to an animundo-world checkout."
+    )
+    stage.add_argument(
+        "--record",
+        action="store_true",
+        help="Save the stage's model answers under the job's records/.",
+    )
+    stage.add_argument(
+        "--replay",
+        action="store_true",
+        help="Run on the job's records/ instead of the model API.",
     )
 
     resume = sub.add_parser("resume", help="Carry on an interrupted job.")
@@ -110,7 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
     resume.add_argument(
         "--kind",
         default=None,
-        choices=("new_place", "submit", "improve"),
+        choices=("new_place", "animal_home", "submit", "improve"),
         help="Run a different kind on this job (default: the job's kind).",
     )
     resume.add_argument(
@@ -192,9 +234,55 @@ def _intake_from(args: argparse.Namespace) -> IntakeStage:
     return IntakeStage(area_id=args.area, area_name=args.name, country=args.country)
 
 
+def _intake_from_params(params: dict[str, Any]) -> IntakeStage:
+    """The job's intake, rebuilt from its saved params."""
+    if params.get("kind") == "animal_home":
+        return IntakeStage(
+            species_key=params.get("species_key"), cell=params.get("cell")
+        )
+    return IntakeStage(
+        area_id=params.get("area"),
+        area_name=params.get("name"),
+        country=params.get("country"),
+    )
+
+
+def _animal_key(world: Path, animal_id: str) -> int:
+    """The list id's GBIF key, or a ValueError."""
+    data = load_list(find_list(world))
+    entry = find_by_id(data["animals"], animal_id)
+    key = entry.get("gbif_key")
+    if not isinstance(key, int):
+        raise ValueError(f"{animal_id!r} has no GBIF key on the animal list")
+    return key
+
+
+def _recording(ctx: JobContext, job_dir: Path) -> JobContext:
+    """The context with every model answer saved under records/."""
+    records = job_dir / "records"
+    if ctx.client is not None:
+        ctx.client = RecordingClient(ctx.client, records)
+    if ctx.open_client is not None:
+        ctx.open_client = RecordingClient(ctx.open_client, records)
+    return ctx
+
+
+def _replay_context(
+    job_id: str, job_dir: Path, world: Path, records: Path, budget_usd: float
+) -> JobContext:
+    """A keyless context that plays a recording back at $0."""
+    return JobContext(
+        job_id=job_id,
+        job_dir=job_dir,
+        client=ReplayClient(records, logger=CostLogger(job_dir / "log.jsonl")),
+        tracker=BudgetTracker(budget_usd=budget_usd),
+        world_path=world,
+    )
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     if args.replay is not None:
-        return cmd_not_built_yet("build --replay")
+        return cmd_replay(args)
     if args.kind == "submit":
         return cmd_not_built_yet("build --kind submit")
     if args.kind == "improve":
@@ -207,6 +295,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     world = _world_or_error(args.world)
     if world is None:
         return 1
+    if args.kind == "animal_home":
+        return cmd_build_home(args, world)
     try:
         stage = _intake_from(args)
     except ValueError as error:
@@ -225,6 +315,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     job_dir = Path(args.jobs_dir) / job_id
     job_dir.mkdir(parents=True)
     ctx = make_context(config, job_id, job_dir, world)
+    if args.record:
+        ctx = _recording(ctx, job_dir)
     (job_dir / "state.json").write_text(
         json.dumps(
             fresh_state(
@@ -262,6 +354,182 @@ def cmd_build(args: argparse.Namespace) -> int:
     return _finish(job_id, run, job_dir / "state.json")
 
 
+def cmd_build_home(args: argparse.Namespace, world: Path) -> int:
+    """Start one animal's home from the command line, no web app."""
+    if not args.animal or not args.cell:
+        print(
+            "error: --kind animal_home needs --animal <id> --cell <lat_lon>",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        species_key = _animal_key(world, args.animal)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    if not CELL_PATTERN.match(args.cell):
+        print(f"error: bad cell, want like 61.5_26.0: {args.cell}", file=sys.stderr)
+        return 1
+    if args.dry_run:
+        print(f"would build {args.animal} at {args.cell}; wrote nothing")
+        return 0
+    config = load_config()
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = Path(args.jobs_dir) / job_id
+    job_dir.mkdir(parents=True)
+    ctx = make_context(config, job_id, job_dir, world)
+    if args.record:
+        ctx = _recording(ctx, job_dir)
+    stage = IntakeStage(species_key=species_key, cell=args.cell)
+    (job_dir / "state.json").write_text(
+        json.dumps(
+            fresh_state(
+                {
+                    "species_key": species_key,
+                    "cell": args.cell,
+                    "world": str(world),
+                    "author": args.author,
+                    "kind": "animal_home",
+                    "choices": [],
+                }
+            )
+        ),
+        encoding="utf-8",
+    )
+    stages = pipeline_stages(
+        stage,
+        args.author,
+        config.max_new_species,
+        config.reference,
+        config.max_new_plants,
+    )
+    run, missing = stages_for_kind(stages, "animal_home", [])
+    if missing:
+        print(
+            f"error: animal_home needs {', '.join(missing)}, not built yet",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        Pipeline(run, job_dir / "state.json").run(ctx)
+    except (StageFailedError, CapExceeded, MetaAuthError) as error:
+        return _explain_stop(job_id, error)
+    return _finish(job_id, run, job_dir / "state.json")
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Run a whole job on a recording: no key, no cost."""
+    recording = Path(args.replay)
+    state_file = recording / "state.json"
+    records = recording / "records"
+    if not state_file.is_file() or not records.is_dir():
+        print(
+            f"error: {args.replay} is not a recording (want state.json and records/)",
+            file=sys.stderr,
+        )
+        return 1
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    params = json.loads(state_file.read_text(encoding="utf-8")).get("params", {})
+    kind = params.get("kind", "new_place")
+    if kind not in ("new_place", "animal_home"):
+        print(f"error: cannot replay a {kind} job", file=sys.stderr)
+        return 1
+    config = load_config()
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = Path(args.jobs_dir) / job_id
+    job_dir.mkdir(parents=True)
+    params = {**params, "world": str(world), "author": args.author}
+    (job_dir / "state.json").write_text(
+        json.dumps(fresh_state(params)), encoding="utf-8"
+    )
+    try:
+        stage = _intake_from_params(params)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    stages = pipeline_stages(
+        stage,
+        args.author,
+        config.max_new_species,
+        config.reference,
+        config.max_new_plants,
+    )
+    run, missing = stages_for_kind(stages, kind, [])
+    if missing:
+        print(
+            f"error: {kind} needs {', '.join(missing)}, not built yet",
+            file=sys.stderr,
+        )
+        return 1
+    ctx = _replay_context(job_id, job_dir, world, records, config.job_budget_usd)
+    try:
+        Pipeline(run, job_dir / "state.json").run(ctx)
+        ctx.client.verify_consumed()
+    except (StageFailedError, CapExceeded, MetaAuthError, ReplayError) as error:
+        return _explain_stop(job_id, error)
+    print(f"job {job_id}: replayed {args.replay} for $0.00")
+    return _finish(job_id, run, job_dir / "state.json")
+
+
+def cmd_stage(args: argparse.Namespace) -> int:
+    """Run one stage of a job on its own, live, recorded or replayed."""
+    if args.record and args.replay:
+        print("error: --record and --replay do not mix", file=sys.stderr)
+        return 1
+    job_dir = Path(args.job)
+    state_file = job_dir / "state.json"
+    if not state_file.is_file():
+        print(f"error: no such job: {args.job}", file=sys.stderr)
+        return 1
+    params = json.loads(state_file.read_text(encoding="utf-8")).get("params", {})
+    if args.world is not None:
+        world = _world_or_error(args.world)
+    else:
+        world = _world_or_error(params.get("world", ""))
+    if world is None:
+        return 1
+    config = load_config()
+    try:
+        intake = _intake_from_params(params)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    stages = pipeline_stages(
+        intake,
+        params.get("author", "Animundo Builder"),
+        config.max_new_species,
+        config.reference,
+        config.max_new_plants,
+    )
+    wanted = [stage for stage in stages if stage.name == args.name]
+    if not wanted:
+        names = ", ".join(stage.name for stage in stages)
+        print(f"error: no stage {args.name!r} (stages: {names})", file=sys.stderr)
+        return 1
+    if args.replay:
+        records = job_dir / "records"
+        if not records.is_dir():
+            print(f"error: no records/ in {args.job}", file=sys.stderr)
+            return 1
+        ctx = _replay_context(
+            job_dir.name, job_dir, world, records, config.job_budget_usd
+        )
+    else:
+        ctx = make_context(config, job_dir.name, job_dir, world)
+        if args.record:
+            ctx = _recording(ctx, job_dir)
+    try:
+        results = Pipeline(wanted, state_file).run(ctx)
+        if args.replay:
+            ctx.client.verify_consumed()
+    except (StageFailedError, CapExceeded, MetaAuthError, ReplayError) as error:
+        return _explain_stop(job_dir.name, error)
+    print(json.dumps(results.get(args.name, {}), indent=2))
+    return 0
+
+
 def cmd_resume(args: argparse.Namespace) -> int:
     job_dir = Path(args.jobs_dir) / args.job_id
     state_file = job_dir / "state.json"
@@ -288,11 +556,11 @@ def cmd_resume(args: argparse.Namespace) -> int:
             return 1
     config = load_config()
     ctx = make_context(config, args.job_id, job_dir, world)
-    stage = IntakeStage(
-        area_id=params.get("area"),
-        area_name=params.get("name"),
-        country=params.get("country"),
-    )
+    try:
+        stage = _intake_from_params(params)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     stages = pipeline_stages(
         stage,
         params.get("author", "Animundo Builder"),
@@ -384,6 +652,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_build(args)
     if args.command == "resume":
         return cmd_resume(args)
+    if args.command == "stage":
+        return cmd_stage(args)
     if args.command == "report":
         return cmd_report(args.job_id, args.jobs_dir)
     if args.command == "submit":

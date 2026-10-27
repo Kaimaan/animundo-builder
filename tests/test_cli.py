@@ -217,3 +217,205 @@ def test_report_writes_html(tmp_path: Path, monkeypatch, capsys) -> None:
     assert main(["report", "job-1"]) == 0
     assert "report.html" in capsys.readouterr().out
     assert (job_dir / "report.html").is_file()
+
+
+def _world_with_list(tmp_path: Path) -> Path:
+    world = tmp_path / "world"
+    world.mkdir()
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [
+                    {
+                        "id": "fox",
+                        "name": "Red fox",
+                        "latin": "Vulpes vulpes",
+                        "gbif_key": 5219243,
+                        "habitats": ["boreal_forest"],
+                        "can_make": True,
+                    }
+                ],
+            }
+        )
+    )
+    return world
+
+
+def test_build_home_dry_run(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    world = _world_with_list(tmp_path)
+    code = main(
+        [
+            "build",
+            "--kind",
+            "animal_home",
+            "--animal",
+            "fox",
+            "--cell",
+            "61.5_26.0",
+            "--world",
+            str(world),
+            "--dry-run",
+        ]
+    )
+    assert code == 0
+    assert "would build fox at 61.5_26.0" in capsys.readouterr().out
+    assert not (tmp_path / "jobs").exists()
+
+
+def test_build_home_needs_animal_and_cell(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    world = _world_with_list(tmp_path)
+    code = main(["build", "--kind", "animal_home", "--world", str(world), "--dry-run"])
+    assert code == 1
+    assert "--animal <id> --cell" in capsys.readouterr().err
+
+
+def test_build_home_unknown_animal(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    world = _world_with_list(tmp_path)
+    code = main(
+        [
+            "build",
+            "--kind",
+            "animal_home",
+            "--animal",
+            "dragon",
+            "--cell",
+            "61.5_26.0",
+            "--world",
+            str(world),
+            "--dry-run",
+        ]
+    )
+    assert code == 1
+    assert "not on the animal list" in capsys.readouterr().err
+
+
+def test_build_home_bad_cell(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    world = _world_with_list(tmp_path)
+    code = main(
+        [
+            "build",
+            "--kind",
+            "animal_home",
+            "--animal",
+            "fox",
+            "--cell",
+            "here",
+            "--world",
+            str(world),
+            "--dry-run",
+        ]
+    )
+    assert code == 1
+    assert "bad cell" in capsys.readouterr().err
+
+
+def _area_job(tmp_path: Path) -> Path:
+    job_dir = tmp_path / "jobs" / "job-1"
+    job_dir.mkdir(parents=True)
+    (job_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "params": {
+                    "area": "gb_cairngorms",
+                    "name": None,
+                    "country": None,
+                    "world": str(tmp_path),
+                    "author": "Animundo Builder",
+                    "kind": "new_place",
+                    "choices": [],
+                },
+                "completed": [],
+                "results": {},
+                "failed": None,
+            }
+        )
+    )
+    return job_dir
+
+
+def test_stage_unknown_name(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    job_dir = _area_job(tmp_path)
+    assert main(["stage", "dragon", "--job", str(job_dir)]) == 1
+    assert "no stage 'dragon'" in capsys.readouterr().err
+
+
+def test_stage_record_and_replay_conflict(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    job_dir = _area_job(tmp_path)
+    code = main(["stage", "intake", "--job", str(job_dir), "--record", "--replay"])
+    assert code == 1
+    assert "do not mix" in capsys.readouterr().err
+
+
+def test_stage_runs_one_stage_alone(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    job_dir = _area_job(tmp_path)
+    assert main(["stage", "intake", "--job", str(job_dir)]) == 0
+    out = capsys.readouterr().out
+    assert "gb_cairngorms" in out
+    state = json.loads((job_dir / "state.json").read_text(encoding="utf-8"))
+    assert state["completed"] == ["intake"]
+
+
+def test_stage_replay_needs_records(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    job_dir = _area_job(tmp_path)
+    code = main(["stage", "intake", "--job", str(job_dir), "--replay"])
+    assert code == 1
+    assert "no records/" in capsys.readouterr().err
+
+
+def test_stage_replay_runs_free_stage(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    job_dir = _area_job(tmp_path)
+    (job_dir / "records").mkdir()
+    assert main(["stage", "intake", "--job", str(job_dir), "--replay"]) == 0
+    assert "gb_cairngorms" in capsys.readouterr().out
+    assert not (job_dir / "log.jsonl").is_file()
+
+
+def test_build_replay_rejects_non_recording(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(["build", "--replay", str(tmp_path), "--world", str(tmp_path)])
+    assert code == 1
+    assert "not a recording" in capsys.readouterr().err
+
+
+def test_build_replay_stops_where_answers_end(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    recording = tmp_path / "recording"
+    recording.mkdir()
+    (recording / "state.json").write_text(
+        json.dumps(
+            {
+                "params": {
+                    "area": "gb_cairngorms",
+                    "kind": "new_place",
+                    "choices": [],
+                },
+                "completed": [],
+                "results": {},
+                "failed": None,
+            }
+        )
+    )
+    (recording / "records").mkdir()
+    code = main(["build", "--replay", str(recording), "--world", str(tmp_path)])
+    assert code == 1
+    assert "recording" in capsys.readouterr().err
+    (job_dir,) = (tmp_path / "jobs").iterdir()
+    state = json.loads((job_dir / "state.json").read_text(encoding="utf-8"))
+    assert state["completed"] == ["intake"]

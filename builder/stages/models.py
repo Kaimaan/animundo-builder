@@ -3,9 +3,11 @@
 For every new species: Muse Spark writes `models/<id>.json` from the
 measurements, the reference sheet and the closest existing spec;
 `tools/build_model.sh` builds it in a scratch copy of animundo-world;
-the reviewer judges the preview against the reference sheet; fixes go
-back into the spec. At most six rounds. The loop ends when the review
-finds no blocking issue and the world's own checks pass.
+the reviewer judges the preview against the reference sheet part by
+part and frame by frame; a clean review after blocking issues is
+verified by a second look before it counts; fixes go back into the
+spec. At most six rounds. The loop ends when the review finds no
+blocking issue and the world's own checks pass.
 
 Every round keeps its spec, preview, build log and review in the job
 folder: they are the build report's key shots. The scratch world is
@@ -27,14 +29,15 @@ import jsonschema
 
 from ..prompts import load_prompt
 from ..schemas import load_schema, validate
+from ..world import check_draft, mentions, problems_by_file
 
 MAX_ROUNDS = 6
 SPEC_RETRIES = 3
-CLOSEST = {"golden_eagle": "kestrel"}
+CLOSEST = {"golden_eagle": "great_tit"}
 
 ChatFn = Callable[..., Any]
 BuildFn = Callable[[Path, str], dict[str, Any]]
-CheckFn = Callable[[Path, str], list[str]]
+CheckFn = Callable[[Any, Path, str, int], list[str]]
 
 
 class ModelsStage:
@@ -137,7 +140,7 @@ class ModelsStage:
             preview = sandbox / "models" / "previews" / f"{species_id}.png"
             preview.unlink(missing_ok=True)
             built = self._build(sandbox, species_id)
-            problems = list(self._check(sandbox, species_id))
+            problems = list(self._check(ctx, sandbox, species_id, round_no))
             if not built["ok"]:
                 problems = [built["log"]] + problems
             self._save_round(ctx, species_id, round_no, spec, sandbox, built)
@@ -195,8 +198,45 @@ class ModelsStage:
                 "BUILT": built["summary"],
             },
         )
+        previous = _previous_blocking(ctx.job_dir, species_id, round_no)
+        if previous:
+            listed = "\n".join(
+                f"- {issue['part']}: {issue['problem']}" for issue in previous
+            )
+            prompt += (
+                "\n\nLast round's blocking issues. Verify each is fixed "
+                f"in this render, or re-raise it:\n{listed}"
+            )
         preview = sandbox / "models" / "previews" / f"{species_id}.png"
         images = [path for path in (sheet, preview) if path is not None]
+        review = self._read_review(ctx, species_id, round_no, prompt, images)
+        if not _blocking(review["issues"]) and previous:
+            kept = ctx.job_dir / "reviews" / f"{species_id}-{round_no}-unverified.json"
+            kept.parent.mkdir(exist_ok=True)
+            kept.write_text(json.dumps(review, indent=2), encoding="utf-8")
+            verify = load_prompt(
+                "model_reverify",
+                {
+                    "ISSUES": json.dumps(previous, indent=2),
+                    "SPECIES": species_id,
+                    "ROUND": str(round_no),
+                },
+            )
+            review = self._read_review(ctx, species_id, round_no, verify, images)
+        out = ctx.job_dir / "reviews" / f"{species_id}-{round_no}.json"
+        out.parent.mkdir(exist_ok=True)
+        out.write_text(json.dumps(review, indent=2), encoding="utf-8")
+        return review
+
+    def _read_review(
+        self,
+        ctx: Any,
+        species_id: str,
+        round_no: int,
+        prompt: str,
+        images: list[Path],
+    ) -> dict[str, Any]:
+        """One review read, valid or a clean stop. Two tries, no saving."""
         schema = load_schema("review")
         problems = ""
         for _ in range(2):
@@ -224,9 +264,6 @@ class ModelsStage:
                     f"{review['species']} round {review['round']}"
                 )
                 continue
-            out = ctx.job_dir / "reviews" / f"{species_id}-{round_no}.json"
-            out.parent.mkdir(exist_ok=True)
-            out.write_text(json.dumps(review, indent=2), encoding="utf-8")
             return review
         raise _Stopped(f"the reviewer never wrote a valid review: {problems}")
 
@@ -313,35 +350,44 @@ def build_in_sandbox(sandbox: Path, species_id: str) -> dict[str, Any]:
     return {"ok": False, "summary": "the build failed", "log": log}
 
 
-def check_in_sandbox(sandbox: Path, species_id: str) -> list[str]:
-    """The world's own checks, filtered to this species' errors."""
-    problems = []
-    spec = [
-        "python3",
-        "tools/check_schemas.py",
-        "--root",
-        ".",
-        f"models/{species_id}.json",
-    ]
-    done = subprocess.run(
-        spec, cwd=sandbox, capture_output=True, text=True, timeout=600
+def check_in_sandbox(
+    ctx: Any, sandbox: Path, species_id: str, round_no: int
+) -> list[str]:
+    """This species' own models-verdict problems, via the draft checker.
+
+    The models verdict is the one the world CI runs, but it covers the
+    whole world and the world's own models are unbuilt: only problems
+    naming this species' spec count. Everything else is reported in
+    the saved JSON, never fed back.
+    """
+    extra = {f"models/{species_id}.json": sandbox / "models" / f"{species_id}.json"}
+    built = sandbox / "assets" / "animals" / f"{species_id}.glb"
+    if built.is_file():
+        extra[f"assets/animals/{species_id}.glb"] = built
+    result = check_draft(
+        Path(ctx.world_path),
+        ctx.job_dir,
+        f"models-{species_id}-{round_no}",
+        extra=extra,
     )
-    mine = False
-    for line in (done.stdout + done.stderr).splitlines():
-        if line.startswith("FAIL "):
-            mine = line.removeprefix("FAIL ").strip() == f"models/{species_id}.json"
-        elif mine and line.startswith("  - "):
-            problems.append(line.removeprefix("  - ").strip())
-        elif line and not line.startswith(" "):
-            mine = False
-    built = ["python3", "tools/check_models.py", "--root", "."]
-    done = subprocess.run(
-        built, cwd=sandbox, capture_output=True, text=True, timeout=600
+    models = next(
+        (
+            entry
+            for entry in result.get("results", [])
+            if entry.get("check") == "models"
+        ),
+        {},
     )
-    for line in (done.stdout + done.stderr).splitlines():
-        if re.match(rf"^(ERROR: )?{re.escape(species_id)}:", line):
-            problems.append(line.removeprefix("ERROR: ").strip())
-    return problems
+    if models.get("status") != "fail":
+        return []
+    errors = []
+    for file, lines in problems_by_file(models.get("problems", [])).items():
+        for line in lines:
+            if file == f"models/{species_id}.json" or mentions(line, species_id):
+                errors.append(
+                    line[2:].strip() if line.startswith("- ") else line.strip()
+                )
+    return errors
 
 
 def _animal_title(job_dir: Path, species_id: str) -> str:
@@ -365,6 +411,26 @@ def _latest_sheet(job_dir: Path, species_id: str, reference: str) -> Path | None
 
 def _blocking(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [issue for issue in issues if issue["severity"] == "blocking"]
+
+
+def _previous_blocking(
+    job_dir: Path, species_id: str, round_no: int
+) -> list[dict[str, Any]]:
+    """Last round's blocking issues, if that round was reviewed."""
+    if round_no < 2:
+        return []
+    path = job_dir / "reviews" / f"{species_id}-{round_no - 1}.json"
+    if not path.is_file():
+        return []
+    try:
+        review = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return [
+        issue
+        for issue in review.get("issues", [])
+        if issue.get("severity") == "blocking"
+    ]
 
 
 def _content(response: Any) -> str:

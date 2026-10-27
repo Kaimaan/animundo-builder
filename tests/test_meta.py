@@ -15,7 +15,7 @@ from builder.config import Config
 from builder.ledger import CapExceeded, Caps, LedgerError, Receipt
 from builder.meta import (
     BASE_URL,
-    BASENTEN_BASE_URL,
+    BASETEN_BASE_URL,
     OPEN_DEFAULT_MAX_TOKENS,
     CostLogger,
     MetaAuthError,
@@ -252,7 +252,7 @@ def test_open_weights_baseten_confirmed() -> None:
     config = Config(open_model_host="baseten", baseten_api_key="b-key")
     client = MetaClient.for_open_weights(config)
     assert client.model == "meta-models/muse-spark-open-1026"
-    assert str(client._client.base_url).rstrip("/") == BASENTEN_BASE_URL
+    assert str(client._client.base_url).rstrip("/") == BASETEN_BASE_URL
     assert client.host == "baseten"
     assert client.default_max_tokens == OPEN_DEFAULT_MAX_TOKENS
 

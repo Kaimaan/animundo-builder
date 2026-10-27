@@ -22,7 +22,7 @@ from builder.meta import CostLogger, MetaClient
 LIVE = os.environ.get("BUILDER_LIVE_TEST") == "1" and bool(
     os.environ.get("MODEL_API_KEY")
 )
-BASENTEN = os.environ.get("BUILDER_LIVE_TEST") == "1" and bool(
+BASETEN = os.environ.get("BUILDER_LIVE_TEST") == "1" and bool(
     os.environ.get("BASETEN_API_KEY")
 )
 
@@ -199,7 +199,7 @@ def make_baseten_client(tmp_path) -> MetaClient:
 
 
 @pytest.mark.skipif(
-    not BASENTEN, reason="live test: needs BUILDER_LIVE_TEST=1 and BASETEN_API_KEY"
+    not BASETEN, reason="live test: needs BUILDER_LIVE_TEST=1 and BASETEN_API_KEY"
 )
 def test_live_baseten_translate(tmp_path) -> None:
     client = make_baseten_client(tmp_path)
@@ -221,7 +221,7 @@ def test_live_baseten_translate(tmp_path) -> None:
 
 
 @pytest.mark.skipif(
-    not BASENTEN, reason="live test: needs BUILDER_LIVE_TEST=1 and BASETEN_API_KEY"
+    not BASETEN, reason="live test: needs BUILDER_LIVE_TEST=1 and BASETEN_API_KEY"
 )
 def test_live_baseten_review_shaped(tmp_path) -> None:
     client = make_baseten_client(tmp_path)

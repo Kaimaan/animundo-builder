@@ -12,7 +12,6 @@ carries on with the rest. Translations come later (words stage).
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -20,7 +19,7 @@ from typing import Any
 import jsonschema
 
 from ..prompts import PROMPTS_DIR
-from ..world import check_draft, problems_by_file
+from ..world import check_draft, mentions, problems_by_file
 
 MAX_ROUNDS_PER_SPECIES = 6
 PROGRESS_FILE = "progress.json"
@@ -218,7 +217,7 @@ class AnimalsStage:
         verdict are the same world state, and skipped the same way.
         """
         owner = _file_owner(file, texts) if file else None
-        owners = [owner] if owner else [i for i in texts if _mentions(line, i)]
+        owners = [owner] if owner else [i for i in texts if mentions(line, i)]
         if owners:
             for species_id in owners:
                 if species_id in checked:
@@ -368,12 +367,3 @@ def _file_owner(file: str, texts: dict[str, str]) -> str | None:
 def _missing_model(line: str) -> bool:
     """The world's own unbuilt models: known red state, not the draft."""
     return "model file not found" in line or ".glb is missing" in line
-
-
-def _mentions(line: str, species_id: str) -> bool:
-    return (
-        line.startswith(f"{species_id}:")
-        or f"ERROR: {species_id}" in line
-        or f'"{species_id}"' in line
-        or re.search(rf"\b{re.escape(species_id)}\b", line) is not None
-    )

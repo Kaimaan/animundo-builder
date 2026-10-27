@@ -48,6 +48,20 @@ def test_assembles_the_draft_layout(tmp_path: Path) -> None:
     ]
 
 
+def test_extra_files_win_over_job(tmp_path: Path) -> None:
+    world = _world(
+        tmp_path,
+        "import json, sys\n"
+        "text = open(sys.argv[1] + '/models/zz_new.json').read()\n"
+        "print(json.dumps({'ok': True, 'results': [], 'seen': text}))\n",
+    )
+    job = _job(tmp_path)
+    overlay = tmp_path / "round-spec.json"
+    overlay.write_text('{"id": "zz_new"}')
+    result = check_draft(world, job, "models", extra={"models/zz_new.json": overlay})
+    assert result["seen"] == '{"id": "zz_new"}'
+
+
 def test_runs_tool_saves_json_returns_it(tmp_path: Path) -> None:
     result = {"ok": True, "draft_files": ["regions/xx_test.json"], "results": []}
     world = _world(tmp_path, f"import json;print(json.dumps({result!r}))")

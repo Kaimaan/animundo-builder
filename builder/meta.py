@@ -34,8 +34,8 @@ from .ledger import CapExceeded, Caps, Ledger, LedgerError, Receipt
 from .prices import Prices, prices_for
 
 BASE_URL = "https://api.meta.ai/v1"
-BASENTEN_BASE_URL = "https://inference.baseten.co/v1"
-BASENTEN_LOW_USD = 20.0
+BASETEN_BASE_URL = "https://inference.baseten.co/v1"
+BASETEN_LOW_USD = 20.0
 MAX_TRIES = 5
 TIMEOUT_TEXT = 60
 TIMEOUT_LONG = 180
@@ -207,7 +207,7 @@ class MetaClient:
                 model=config.open_model_id(),
                 logger=logger,
                 http_client=http_client,
-                base_url=config.open_base_url or BASENTEN_BASE_URL,
+                base_url=config.open_base_url or BASETEN_BASE_URL,
                 ledger=ledger,
                 job_id=job_id,
                 caps=caps,
@@ -465,7 +465,7 @@ class MetaClient:
             left = self.caps.total_usd - self.ledger.total_spent()
         except LedgerError:
             return
-        if left < BASENTEN_LOW_USD:
+        if left < BASETEN_LOW_USD:
             _baseten_low_warned = True
             print(
                 f"warning: only ${left:.2f} of Baseten credit left",

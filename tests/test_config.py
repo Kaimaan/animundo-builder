@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from builder.config import BASENTEN_OPEN_MODEL, DEFAULT_MODEL, Config, load
+from builder.config import BASETEN_OPEN_MODEL, DEFAULT_MODEL, Config, load
 from builder.prices import Prices
 
 
@@ -64,7 +64,7 @@ def test_bad_open_host_rejected(monkeypatch) -> None:
 
 
 def test_open_model_hosts() -> None:
-    assert Config(open_model_host="baseten").open_model_id() == BASENTEN_OPEN_MODEL
+    assert Config(open_model_host="baseten").open_model_id() == BASETEN_OPEN_MODEL
     assert Config(open_model_host="meta").open_model_id() == DEFAULT_MODEL
     custom = Config(open_model_host="fireworks", open_model="my-glimmer-tune")
     assert custom.open_model_id() == "my-glimmer-tune"

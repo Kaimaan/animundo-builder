@@ -9,6 +9,7 @@ tool, saves its JSON for the build report, and returns it parsed.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -22,18 +23,25 @@ class DraftError(Exception):
     """The draft couldn't be checked. The job stops with the reason."""
 
 
-def check_draft(world: Path, job_dir: Path, name: str) -> dict[str, Any]:
+def check_draft(
+    world: Path,
+    job_dir: Path,
+    name: str,
+    extra: dict[str, Path] | None = None,
+) -> dict[str, Any]:
     """Check the job's new files; save the JSON verdict; return it parsed.
 
     Assembles `draft/` from the job (regions, animals, models, built
     models, locale), runs the world's checker against it, and writes
-    the verdict to `checks/<name>.json`. A failed check is data, not
-    an error; an unreadable draft or broken tool output raises.
+    the verdict to `checks/<name>.json`. `extra` lays files from
+    elsewhere (a build sandbox) over the draft, winning on clash. A
+    failed check is data, not an error; an unreadable draft or broken
+    tool output raises.
     """
     draft = job_dir / "draft"
     if draft.exists():
         shutil.rmtree(draft)
-    _assemble(job_dir, draft)
+    _assemble(job_dir, draft, extra or {})
     tool = world / "tools" / "check_draft.py"
     if not tool.is_file():
         raise DraftError(f"no draft checker in this checkout: {tool}")
@@ -61,7 +69,7 @@ def check_draft(world: Path, job_dir: Path, name: str) -> dict[str, Any]:
     return result
 
 
-def _assemble(job_dir: Path, draft: Path) -> None:
+def _assemble(job_dir: Path, draft: Path, extra: dict[str, Path]) -> None:
     """Lay the job's new files out like the world repository."""
     pairs: list[tuple[Path, Path]] = []
     pairs += [
@@ -99,6 +107,10 @@ def _assemble(job_dir: Path, draft: Path) -> None:
         dest = draft / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
+    for rel, src in extra.items():
+        dest = draft / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
 
 
 def _short(proc: subprocess.CompletedProcess[str]) -> str:
@@ -111,6 +123,16 @@ def _short(proc: subprocess.CompletedProcess[str]) -> str:
         return str(data["error"])
     tail = (proc.stderr or proc.stdout).strip().splitlines()[-3:]
     return "; ".join(tail) if tail else f"exit {proc.returncode}"
+
+
+def mentions(text: str, species_id: str) -> bool:
+    """The text names this species: prefix, error tag, quote or word."""
+    return (
+        text.startswith(f"{species_id}:")
+        or f"ERROR: {species_id}" in text
+        or f'"{species_id}"' in text
+        or re.search(rf"\b{re.escape(species_id)}\b", text) is not None
+    )
 
 
 def problems_by_file(problems: list[str]) -> dict[str | None, list[str]]:

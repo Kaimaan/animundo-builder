@@ -14,7 +14,7 @@ from pathlib import Path
 from .prices import Prices
 
 DEFAULT_MODEL = "muse-spark-1.3"
-BASENTEN_OPEN_MODEL = "meta-models/muse-spark-open-1026"
+BASETEN_OPEN_MODEL = "meta-models/muse-spark-open-1026"
 OPEN_HOSTS = ("meta", "baseten", "fireworks", "modal-glimmer")
 
 ENV_PREFIX = "BUILDER_"
@@ -48,7 +48,7 @@ class Config:
         if self.open_model is not None:
             return self.open_model
         if self.open_model_host == "baseten":
-            return BASENTEN_OPEN_MODEL
+            return BASETEN_OPEN_MODEL
         raise ValueError(f"set BUILDER_OPEN_MODEL for host {self.open_model_host!r}")
 
     def open_api_key(self) -> str | None:

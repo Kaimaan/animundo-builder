@@ -12,7 +12,8 @@ import pytest
 from PIL import Image
 
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
-from builder.stages.models import ModelsStage, _unfence
+from builder.prompts import PROMPTS_DIR
+from builder.stages.models import ModelsStage, _unfence, check_in_sandbox
 
 SPEC = {"id": "golden_eagle", "parts": [{"name": "body"}]}
 REVIEW_CLEAN = {"species": "golden_eagle", "round": 1, "issues": []}
@@ -31,7 +32,7 @@ def _world(tmp_path: Path) -> Path:
     (world / "ART.md").write_text("# Art\n\nReal first.\n")
     (world / "models").mkdir(parents=True)
     (world / "models" / "README.md").write_text("# Models\n\nOverlap.\n")
-    (world / "models" / "kestrel.json").write_text(json.dumps(SPEC))
+    (world / "models" / "great_tit.json").write_text(json.dumps(SPEC))
     (world / "schemas").mkdir()
     (world / "schemas" / "model.schema.json").write_text(
         json.dumps({"type": "object", "required": ["id", "parts"]})
@@ -138,26 +139,143 @@ def test_fix_round_then_pass(tmp_path: Path) -> None:
             json.dumps(review_blocking),
             json.dumps(SPEC),
             json.dumps({**REVIEW_CLEAN, "round": 2}),
+            json.dumps({**REVIEW_CLEAN, "round": 2}),
         ]
     )
-    result = ModelsStage(chat=chat, build=_build_ok, check=lambda s, i: []).run(
+    result = ModelsStage(chat=chat, build=_build_ok, check=lambda c, s, i, n: []).run(
         _ctx(tmp_path, world)
     )
     assert result == {"model_files": ["models/golden_eagle.json"]}
-    assert len(chat.prompts) == 4, "spec, review, fix, review"
+    assert len(chat.prompts) == 5, "spec, review, fix, review, verify"
     assert "A very large eagle" in chat.prompts[0]
-    assert "kestrel" in chat.prompts[0]
+    assert "great_tit" in chat.prompts[0]
     assert "900 triangles" in chat.prompts[1], "review sees the build stats"
     assert "Floats." in chat.prompts[2], "fix sees the issue"
-    assert chat.images == [1, 2, 1, 2], "sheet+preview where each needs them"
+    assert "Floats." in chat.prompts[3], "review re-checks last round"
+    assert "Floats." in chat.prompts[4], "verify names the old issue"
+    assert chat.images == [1, 2, 1, 2, 2], "sheet+preview where each needs them"
     assert (tmp_path / "rounds" / "golden_eagle" / "1" / "preview.png").is_file()
     assert (tmp_path / "rounds" / "golden_eagle" / "2" / "build.log").is_file()
     assert (tmp_path / "reviews" / "golden_eagle-1.json").is_file()
     assert (tmp_path / "reviews" / "golden_eagle-2.json").is_file()
+    assert (tmp_path / "reviews" / "golden_eagle-2-unverified.json").is_file()
     assert (tmp_path / "models" / "golden_eagle.json").is_file()
     assert (tmp_path / "models" / "golden_eagle.glb").read_bytes() == b"glb-bytes"
     assert (tmp_path / "models" / "golden_eagle.png").is_file()
     assert (tmp_path / "sandbox" / "tools" / "build_model.sh").is_file()
+
+
+def test_reverify_reraises_unfixed_issue(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    blocking = {
+        "species": "golden_eagle",
+        "round": 1,
+        "issues": [
+            {
+                "part": "wing",
+                "problem": "Bent.",
+                "severity": "blocking",
+                "fix": "Straighten.",
+            }
+        ],
+    }
+    chat = ScriptChat(
+        [
+            json.dumps(SPEC),
+            json.dumps(blocking),
+            json.dumps(SPEC),
+            json.dumps({**REVIEW_CLEAN, "round": 2}),
+            json.dumps({**blocking, "round": 2}),
+            json.dumps(SPEC),
+            json.dumps({**REVIEW_CLEAN, "round": 3}),
+            json.dumps({**REVIEW_CLEAN, "round": 3}),
+        ]
+    )
+    result = ModelsStage(chat=chat, build=_build_ok, check=lambda c, s, i, n: []).run(
+        _ctx(tmp_path, world)
+    )
+    assert result == {"model_files": ["models/golden_eagle.json"]}
+    assert (tmp_path / "rounds" / "golden_eagle" / "3" / "preview.png").is_file()
+    final = json.loads((tmp_path / "reviews" / "golden_eagle-2.json").read_text())
+    assert final["issues"][0]["part"] == "wing", "the re-check stands"
+
+
+def test_review_prompts_check_parts_and_frames() -> None:
+    for name in ("model_review", "model_review_none"):
+        text = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+        for anchor in (
+            "Silhouette",
+            "Wings",
+            "Tail",
+            "Legs",
+            "Colours",
+            "Fly",
+            "off the ground",
+            "Walk frames",
+        ):
+            assert anchor in text, name
+
+
+def _draft_world(tmp_path: Path, verdict: dict) -> Path:
+    world = tmp_path / "world"
+    (world / "tools").mkdir(parents=True)
+    (world / "tools" / "check_draft.py").write_text(
+        f"import json, os, sys\n"
+        f"files = sorted(os.path.relpath(os.path.join(r, f), sys.argv[1])\n"
+        f"                 for r, _, fs in os.walk(sys.argv[1]) for f in fs)\n"
+        f"report = {verdict!r}\n"
+        f"report['draft_files'] = files\n"
+        f"print(json.dumps(report))\n"
+    )
+    return world
+
+
+def test_check_uses_species_models_problems(tmp_path: Path) -> None:
+    verdict = {
+        "ok": False,
+        "results": [
+            {
+                "check": "models",
+                "status": "fail",
+                "problems": [
+                    "FAIL models/golden_eagle.json",
+                    "- triangles over budget",
+                    "ERROR: bee: res://assets/animals/bee.glb is missing",
+                ],
+            }
+        ],
+    }
+    world = _draft_world(tmp_path, verdict)
+    job = tmp_path / "job"
+    job.mkdir()
+    sandbox = tmp_path / "sandbox"
+    (sandbox / "models").mkdir(parents=True)
+    (sandbox / "models" / "golden_eagle.json").write_text("{}")
+    (sandbox / "assets" / "animals").mkdir(parents=True)
+    (sandbox / "assets" / "animals" / "golden_eagle.glb").write_bytes(b"glb")
+    ctx = SimpleNamespace(job_dir=job, world_path=world)
+    assert check_in_sandbox(ctx, sandbox, "golden_eagle", 1) == [
+        "triangles over budget"
+    ]
+    saved = json.loads((job / "checks" / "models-golden_eagle-1.json").read_text())
+    assert "models/golden_eagle.json" in saved["draft_files"]
+    assert "assets/animals/golden_eagle.glb" in saved["draft_files"]
+
+
+def test_check_ignores_passing_models(tmp_path: Path) -> None:
+    verdict = {
+        "ok": True,
+        "results": [{"check": "models", "status": "pass", "problems": []}],
+    }
+    world = _draft_world(tmp_path, verdict)
+    job = tmp_path / "job"
+    job.mkdir()
+    sandbox = tmp_path / "sandbox"
+    (sandbox / "models").mkdir(parents=True)
+    (sandbox / "models" / "golden_eagle.json").write_text("{}")
+    ctx = SimpleNamespace(job_dir=job, world_path=world)
+    assert check_in_sandbox(ctx, sandbox, "golden_eagle", 2) == []
 
 
 def test_build_failure_skips_review_and_fixes_from_log(tmp_path: Path) -> None:
@@ -178,7 +296,7 @@ def test_build_failure_skips_review_and_fixes_from_log(tmp_path: Path) -> None:
             json.dumps({**REVIEW_CLEAN, "round": 2}),
         ]
     )
-    ModelsStage(chat=chat, build=build, check=lambda s, i: []).run(
+    ModelsStage(chat=chat, build=build, check=lambda c, s, i, n: []).run(
         _ctx(tmp_path, world)
     )
     assert len(chat.prompts) == 3, "spec, fix, review: no review of thin air"
@@ -204,7 +322,7 @@ def test_broken_spec_retried_inside_the_round(tmp_path: Path) -> None:
     ModelsStage(
         chat=chat,
         build=lambda s, i: builds.append(i) or _build_ok(s, i),
-        check=lambda s, i: [],
+        check=lambda c, s, i, n: [],
     ).run(_ctx(tmp_path, world))
     assert len(builds) == 1, "only valid specs reach Blender"
     assert "not JSON" in chat.prompts[1]
@@ -216,7 +334,7 @@ def test_none_mode_attaches_no_sheet(tmp_path: Path) -> None:
     _inputs(tmp_path)
     chat = ScriptChat([json.dumps(SPEC), json.dumps(REVIEW_CLEAN)])
     ModelsStage(
-        reference="none", chat=chat, build=_build_ok, check=lambda s, i: []
+        reference="none", chat=chat, build=_build_ok, check=lambda c, s, i, n: []
     ).run(_ctx(tmp_path, world))
     assert chat.images == [0, 1], "spec from text, review of the preview alone"
 
@@ -234,7 +352,7 @@ def test_check_errors_reach_the_fix(tmp_path: Path) -> None:
     )
     checks = []
 
-    def check(sandbox: Path, species_id: str) -> list[str]:
+    def check(ctx: Any, sandbox: Path, species_id: str, round_no: int) -> list[str]:
         checks.append(species_id)
         return ["no skeleton"] if len(checks) == 1 else []
 
@@ -303,7 +421,10 @@ def test_rounds_run_out(tmp_path: Path) -> None:
         Pipeline(
             [
                 ModelsStage(
-                    max_rounds=2, chat=chat, build=_build_ok, check=lambda s, i: []
+                    max_rounds=2,
+                    chat=chat,
+                    build=_build_ok,
+                    check=lambda c, s, i, n: [],
                 )
             ],
             tmp_path / "state.json",
@@ -318,7 +439,7 @@ def test_empty_review_content_fails_the_stage(tmp_path: Path) -> None:
     chat = ScriptChat([json.dumps(SPEC), "", ""])
     with pytest.raises(StageFailedError, match="stage models failed"):
         Pipeline(
-            [ModelsStage(chat=chat, build=_build_ok, check=lambda s, i: [])],
+            [ModelsStage(chat=chat, build=_build_ok, check=lambda c, s, i, n: [])],
             tmp_path / "state.json",
         ).run(_ctx(tmp_path, world))
     state = json.loads((tmp_path / "state.json").read_text())

@@ -118,3 +118,19 @@ Job folders live under `jobs/` (local only, never committed).
 - #10 comes free: snakes, porpoises/dolphins, butterflies have
   table rows with starts, so they are never `needs_code`.
 - World rebuilt after the pull (40 models, 0 problems).
+
+## 2026-10-27: eagle converged, round 1 (inbox #8, #13)
+
+- Fresh attempt `jobs/eagle-r3` (gitignored) with the loosened
+  reviewer and the kestrel bar: the picker matched the eagle to
+  "Birds of prey, owls" -> kestrel live, and round 1 passed with
+  zero issues. 7 calls, $0.11 (the strict reviewer never got the
+  eagle below blocking in 4 attempts).
+- Real size (0.774 m vs 77 cm sourced), golden colours present,
+  sits next to the kestrel; the models verdict passes. Other
+  verdicts fail only on the hand seed's thin region/animal
+  files, which their own stages own.
+- This was the first of the 2 allowed attempts (#8); no second
+  needed. Kai's approval of the final render still stands as
+  the T16 gate: `jobs/eagle-r3/models/golden_eagle.png`, with
+  the bar beside it in `jobs/eagle-r3/report.html`.

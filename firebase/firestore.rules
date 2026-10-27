@@ -1,0 +1,321 @@
+rules_version = '2';
+
+// Builder drafts, the live feed, public places, jobs, the admin inbox,
+// wishes and the off switch. The game's deploy copies the marked block
+// into its own firestore.rules; only that block is merged.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // BEGIN animundo-builder
+    // One draft per family build. The client creates it, plays it,
+    // improves it, submits it and reports on it; the worker moves it.
+    match /drafts/{draftId} {
+      // A grown-up signed in by email link starts a draft for their own uid.
+      allow create: if request.auth != null
+        && request.auth.token.email_verified == true
+        && request.resource.data.owner_uid == request.auth.uid
+        && request.resource.data.family_uids == [request.auth.uid]
+        && request.resource.data.status == 'requested'
+        && request.resource.data.kind == 'new_place'
+        && request.resource.data.keys().hasOnly(
+          ['kind', 'area_id', 'owner_uid', 'family_uids', 'status',
+           'first_explorer_species', 'created_at'])
+        && request.resource.data.keys().hasAll(
+          ['kind', 'area_id', 'owner_uid', 'family_uids', 'status'])
+        && request.resource.data.area_id is string
+        && (!('first_explorer_species' in request.resource.data)
+          || request.resource.data.first_explorer_species is string)
+        && (!('created_at' in request.resource.data)
+          || request.resource.data.created_at is timestamp);
+
+      // Only the family reads its draft, and admins read every draft.
+      allow read: if request.auth != null
+        && (
+          request.auth.uid in resource.data.family_uids
+          || exists(
+            /databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+
+      // The owner improves, submits and reports; anyone in the family
+      // records playing. Everything else is the worker's.
+      allow update: if request.auth != null && (
+        (
+          resource.data.owner_uid == request.auth.uid
+          && (
+            // Improve, only while ready.
+            (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['improve', 'updated_at'])
+              && 'improve' in request.resource.data.diff(resource.data)
+                .affectedKeys()
+              && resource.data.status == 'ready'
+              && request.resource.data.improve.keys()
+                .hasOnly(['choices', 'note', 'at'])
+              && request.resource.data.improve.keys().hasAll(['choices', 'at'])
+              && request.resource.data.improve.choices is list
+              && request.resource.data.improve.choices.size() >= 1
+              && request.resource.data.improve.choices.size() <= 4
+              && (request.resource.data.improve.choices.size() < 1
+                || (
+                  request.resource.data.improve.choices[0].keys()
+                    .hasOnly(['choice', 'species'])
+                  && 'choice' in request.resource.data.improve.choices[0]
+                  && request.resource.data.improve.choices[0].choice in
+                    ['animal_looks_wrong', 'too_few_animals', 'colours_off',
+                     'other']
+                  && (
+                    request.resource.data.improve.choices[0].choice
+                      == 'animal_looks_wrong'
+                    ? 'species' in request.resource.data.improve.choices[0]
+                      && request.resource.data.improve.choices[0].species
+                        is string
+                    : !('species' in request.resource.data.improve.choices[0])
+                  )
+                ))
+              && (request.resource.data.improve.choices.size() < 2
+                || (
+                  request.resource.data.improve.choices[1].keys()
+                    .hasOnly(['choice', 'species'])
+                  && 'choice' in request.resource.data.improve.choices[1]
+                  && request.resource.data.improve.choices[1].choice in
+                    ['animal_looks_wrong', 'too_few_animals', 'colours_off',
+                     'other']
+                  && (
+                    request.resource.data.improve.choices[1].choice
+                      == 'animal_looks_wrong'
+                    ? 'species' in request.resource.data.improve.choices[1]
+                      && request.resource.data.improve.choices[1].species
+                        is string
+                    : !('species' in request.resource.data.improve.choices[1])
+                  )
+                ))
+              && (request.resource.data.improve.choices.size() < 3
+                || (
+                  request.resource.data.improve.choices[2].keys()
+                    .hasOnly(['choice', 'species'])
+                  && 'choice' in request.resource.data.improve.choices[2]
+                  && request.resource.data.improve.choices[2].choice in
+                    ['animal_looks_wrong', 'too_few_animals', 'colours_off',
+                     'other']
+                  && (
+                    request.resource.data.improve.choices[2].choice
+                      == 'animal_looks_wrong'
+                    ? 'species' in request.resource.data.improve.choices[2]
+                      && request.resource.data.improve.choices[2].species
+                        is string
+                    : !('species' in request.resource.data.improve.choices[2])
+                  )
+                ))
+              && (request.resource.data.improve.choices.size() < 4
+                || (
+                  request.resource.data.improve.choices[3].keys()
+                    .hasOnly(['choice', 'species'])
+                  && 'choice' in request.resource.data.improve.choices[3]
+                  && request.resource.data.improve.choices[3].choice in
+                    ['animal_looks_wrong', 'too_few_animals', 'colours_off',
+                     'other']
+                  && (
+                    request.resource.data.improve.choices[3].choice
+                      == 'animal_looks_wrong'
+                    ? 'species' in request.resource.data.improve.choices[3]
+                      && request.resource.data.improve.choices[3].species
+                        is string
+                    : !('species' in request.resource.data.improve.choices[3])
+                  )
+                ))
+              && (!('note' in request.resource.data.improve)
+                || (
+                  request.resource.data.improve.note is string
+                  && request.resource.data.improve.note.size() <= 200
+                ))
+              && request.resource.data.improve.at is timestamp
+            )
+            // Submit, only after playing.
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['submit', 'updated_at'])
+              && 'submit' in request.resource.data.diff(resource.data)
+                .affectedKeys()
+              && resource.data.status in ['ready', 'not_accepted']
+              && 'last_played_at' in resource.data
+              && resource.data.last_played_at is timestamp
+              && request.resource.data.submit.keys().hasOnly(['at'])
+              && request.resource.data.submit.keys().hasAll(['at'])
+              && request.resource.data.submit.at is timestamp
+            )
+            // Feedback, once.
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['feedback', 'updated_at'])
+              && 'feedback' in request.resource.data.diff(resource.data)
+                .affectedKeys()
+              && resource.data.status in ['ready', 'in_review', 'not_accepted']
+              && !('feedback' in resource.data)
+              && request.resource.data.feedback.keys()
+                .hasOnly(['kind', 'reason', 'note', 'at'])
+              && request.resource.data.feedback.keys().hasAll(['kind', 'reason',
+               'at'])
+              && (
+                (
+                  request.resource.data.feedback.kind == 'not_right'
+                  && request.resource.data.feedback.reason in
+                    ['wrong_animals', 'looks_wrong', 'not_like_the_real_place',
+                     'other']
+                )
+                || (
+                  request.resource.data.feedback.kind == 'problem'
+                  && request.resource.data.feedback.reason in
+                    ['unsuitable_text', 'scary_or_upsetting',
+                     'wrong_safety_advice', 'other']
+                )
+                || (
+                  request.resource.data.feedback.kind == 'ask_person'
+                  && request.resource.data.feedback.reason == 'still_wrong'
+                )
+              )
+              && (!('note' in request.resource.data.feedback)
+                || (
+                  request.resource.data.feedback.note is string
+                  && request.resource.data.feedback.note.size() <= 300
+                ))
+              && request.resource.data.feedback.at is timestamp
+            )
+          )
+        )
+        // Playing: anyone in the family, only forward, never the future.
+        || (
+          request.auth.uid in resource.data.family_uids
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['last_played_at', 'updated_at'])
+          && 'last_played_at' in request.resource.data.diff(resource.data)
+            .affectedKeys()
+          && request.resource.data.last_played_at is timestamp
+          && request.resource.data.last_played_at <= request.time
+          && (
+            !('last_played_at' in resource.data)
+            || request.resource.data.last_played_at
+              > resource.data.last_played_at
+          )
+        )
+      );
+
+      // The owner may delete, except while we review it.
+      allow delete: if request.auth != null
+        && resource.data.owner_uid == request.auth.uid
+        && resource.data.status != 'in_review';
+    }
+
+    // The live feed: the family reads, admins read, the worker writes.
+    match /drafts/{draftId}/feed/{n} {
+      allow read: if request.auth != null
+        && (
+          request.auth.uid in get(
+            /databases/$(database)/documents/drafts/$(draftId))
+            .data.family_uids
+          || exists(
+            /databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+      allow write: if false;
+    }
+
+    // What every signed-in player may know about an area.
+    match /places_public/{areaId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // The worker's own record: no client access.
+    match /jobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    // The off switch: the game reads, the core team changes it
+    // in the console, never from a client.
+    match /config/builder {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Admins, added by hand in the console. An account reads only
+    // its own entry, to learn whether it is one.
+    match /admins/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    // The admin panel's inbox: admins read, the worker writes,
+    // admins mark items handled and nothing else.
+    match /admin_inbox/{id} {
+      allow read: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow create, delete: if false;
+      allow update: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['handled', 'handled_at', 'updated_at'])
+        && 'handled' in request.resource.data.diff(resource.data)
+          .affectedKeys()
+        && request.resource.data.handled is bool;
+    }
+
+    // What the admin panel asks the worker to do about a draft:
+    // send it on, publish it, turn it down, show it again, remove it.
+    // Admins write the request, the worker carries it out.
+    match /admin_actions/{id} {
+      allow read: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow create: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && request.resource.data.admin_uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+          ['admin_uid', 'draft_id', 'action', 'reason', 'answer', 'at'])
+        && request.resource.data.keys().hasAll(
+          ['admin_uid', 'draft_id', 'action', 'at'])
+        && request.resource.data.admin_uid is string
+        && request.resource.data.draft_id is string
+        && request.resource.data.action in
+          ['send_on', 'published', 'not_accepted', 'show_again', 'remove']
+        && (!('reason' in request.resource.data)
+          || (
+            request.resource.data.reason is string
+            && request.resource.data.reason.size() <= 300
+          ))
+        && (!('answer' in request.resource.data)
+          || (
+            request.resource.data.answer is string
+            && request.resource.data.answer.size() <= 300
+          ))
+        && (
+          request.resource.data.action != 'not_accepted'
+          || (
+            'reason' in request.resource.data
+            && request.resource.data.reason.size() > 0
+          )
+        )
+        && (
+          request.resource.data.action != 'remove'
+          || (
+            'answer' in request.resource.data
+            && request.resource.data.answer.size() > 0
+          )
+        )
+        && request.resource.data.at is timestamp
+        && request.resource.data.at <= request.time;
+      allow update, delete: if false;
+    }
+
+    // "I want this place!": one vote per account and area.
+    // The panel adds them up; nobody changes a vote.
+    match /wishes/{areaId}/votes/{uid} {
+      allow read: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['at'])
+        && request.resource.data.keys().hasAll(['at'])
+        && request.resource.data.at is timestamp
+        && request.resource.data.at <= request.time;
+      allow update, delete: if false;
+    }
+    // END animundo-builder
+  }
+}

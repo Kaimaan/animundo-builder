@@ -259,3 +259,28 @@ Job folders live under `jobs/` (local only, never committed).
   pass, the branch holds 6 files, the commit is signed off.
 - Still open: the round comes from the local job; the Storage
   download lands with T25. The first real PR is Kai's call.
+
+## 2026-10-27: T23 rules (inbox #30, #31)
+
+- `firebase/firestore.rules` and `firebase/storage.rules`: drafts
+  (verified grown-up creates, family reads, owner improves /
+  submits after playing / reports once, owner deletes outside
+  review), feed, public places, jobs (no clients), the off
+  switch (read-only), admins, the admin inbox (admins read and
+  mark handled), wishes (one vote per account and area) and the
+  new `admin_actions` (admins ask the worker: send on, publish,
+  turn down with a reason, show again, remove with an answer).
+  Admins read drafts, feeds and packs, never write them. Each
+  file carries one mergeable `// BEGIN/END animundo-builder`
+  block with match sections only.
+- 39 emulator tests (`cd firebase && npm test`) prove every
+  "only", including submit-only-after-play and feedback-once.
+  The sandbox here forbids listening sockets, so the reviewer
+  runs them on Kai's Mac. Found that way: Storage `allow read`
+  includes `list`, so packs use `allow get`; missing drafts
+  need an `exists()` guard for a clean deny; the suite names
+  its files, runs serially, and shares one `--project` with
+  the emulators.
+- Also noted inbox #29 (T26 is now the web app at
+  animundo.app/build, T25 the small game addon, web app first);
+  it lands after T22 and the short T20.

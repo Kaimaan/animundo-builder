@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Content packs: the family reads its drafts' packs, the worker
+// writes them. The game's deploy copies the marked block into its
+// own storage.rules; only that block is merged. No listing anywhere.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // BEGIN animundo-builder
+    match /packs/{draftId}/{version}/{file=**} {
+      // `get`, never `read`: in Storage rules `read` includes `list`,
+      // and nobody lists a pack folder.
+      allow get: if request.auth != null
+        && (
+          firestore.exists(
+            /databases/(default)/documents/admins/$(request.auth.uid))
+          || (
+            firestore.exists(
+              /databases/(default)/documents/drafts/$(draftId))
+            && request.auth.uid in firestore.get(
+              /databases/(default)/documents/drafts/$(draftId)).data.family_uids
+          )
+        );
+      allow write: if false;
+    }
+    // END animundo-builder
+  }
+}

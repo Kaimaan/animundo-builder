@@ -31,3 +31,8 @@ spend-ledger.json
 .idea/
 .vscode/
 .DS_Store
+
+# Rules tests
+firebase/node_modules/
+firebase/*-debug.log
+firebase/.firebase/

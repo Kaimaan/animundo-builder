@@ -27,9 +27,11 @@ part that does not match is an issue naming that part:
 
 Then check every animation frame on its own:
 
-- Fly: the body is level and off the ground, both wings spread wide
-  and symmetric, tail fanned, feet tucked. A body lying, tipped or
-  touching the ground with folded wings is blocking.
+- Fly: the body tips forward about 45 degrees as it flies, wings
+  unfolded mid-beat (one frame of the cycle), tail trailing, feet
+  tucked. Low over the ground is correct: the game's birds fly low,
+  they do not soar. Blocking only if the body lies past level,
+  rolls onto its side, or a wing stays folded.
 - Run, eat, sleep: the pose reads clearly; nothing floats, detaches
   or clips through another part.
 - Walk frames: the four frames cohere; legs reach the ground.

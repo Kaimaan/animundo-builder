@@ -50,6 +50,11 @@ None. Write from the input only.
 - Bones where the joints are; at most 16 bones. Parts overlap
   generously; legs reach `y = 0`; eyes and beak sink a third in.
 - Triangle budget 1000 (up to 1500 for a large, complex animal).
+- Pose keys from the guide, not guesses: keep `fly_pitch` near the
+  closest bird's (45 tips level; higher tips past level, so never
+  raise it to fix a tipped frame — shorten the legs instead). Set
+  `fold`/`fold_length` so folded wings lie flat, and `sleep_*` so
+  the bird reads asleep.
 - A seasonal coat only if the real animal changes colour.
 - `id` is `$SPECIES`, `author` is `$AUTHOR`.
 

@@ -209,8 +209,9 @@ class ModelsStage:
                 f"- {issue['part']}: {issue['problem']}" for issue in previous
             )
             prompt += (
-                "\n\nLast round's blocking issues. Verify each is fixed "
-                f"in this render, or re-raise it:\n{listed}"
+                "\n\nCompare this render against the reference afresh, "
+                "part by part. Last round flagged these; re-raise only "
+                f"what still visibly mismatches:\n{listed}"
             )
         preview = sandbox / "models" / "previews" / f"{species_id}.png"
         images = [path for path in (sheet, preview) if path is not None]

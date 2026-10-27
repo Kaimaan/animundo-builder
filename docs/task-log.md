@@ -14,7 +14,13 @@ Job folders live under `jobs/` (local only, never committed).
   rounds.
 - Attempt 1 (`jobs/eagle-r2/`, $0.22) died in the sandbox: Blender
   5.2.3 crashes in Metal detection under it, so all 6 rounds failed
-  before review. Re-running outside the sandbox.
+  before review.
+- Attempt 2 ($0.53) built and reviewed all 6 rounds but never
+  converged: the fly bar ("level and off the ground") is higher
+  than the builder can reach (the game's own great tit flies low
+  and tipped), and the writer drifted `fly_pitch` 45 to 68 chasing
+  it. Fixed the bar to the achievable look, pinned the pose keys
+  in the spec prompt, softened the re-raise.
 - Evidence: `jobs/eagle-r2/` (re-run with the fixed reviewer).
 
 ## 2026-10-27: inbox #1, #2, draft checker

@@ -3,11 +3,11 @@
 ## Job
 
 Last round's review flagged blocking issues in this model. The
-builder says it fixed them. Look at the new preview (the last
-image; if there are two, the first is the reference sheet) and
-check each issue below: fixed, or still broken. Then give the
-whole review again, part by part and frame by frame as the review
-prompt says.
+builder says it fixed them. Judge the new preview on its own
+first (the last image; if there are two, the first is the reference
+sheet), part by part and frame by frame as the review prompt says;
+then confirm each earlier issue is gone, and re-raise only what
+still visibly stands.
 
 ## Input
 

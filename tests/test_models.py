@@ -211,7 +211,7 @@ def test_review_prompts_check_parts_and_frames() -> None:
             "Legs",
             "Colours",
             "Fly",
-            "off the ground",
+            "Low over the ground",
             "Walk frames",
         ):
             assert anchor in text, name

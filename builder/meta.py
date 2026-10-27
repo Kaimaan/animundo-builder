@@ -291,8 +291,13 @@ class MetaClient:
         timeout: float = TIMEOUT_LONG,
         max_tokens: int | None = None,
         max_tool_calls: int | None = None,
+        text_format: dict[str, Any] | None = None,
     ) -> Any:
-        """One Responses API call (search grounding, SAM), with caps."""
+        """One Responses API call (search grounding, SAM), with caps.
+
+        `text_format` is this endpoint's structured output (#58):
+        `{"type": "json_schema", "name", "schema", "strict": True}`.
+        """
         if images > MAX_IMAGES_PER_CALL:
             raise CapExceeded(
                 f"at most {MAX_IMAGES_PER_CALL} images per call, got {images}"
@@ -306,6 +311,9 @@ class MetaClient:
                 input=model_input,
                 tools=tools,  # type: ignore[arg-type]
                 include=include,  # type: ignore[arg-type]
+                text={"format": text_format}  # type: ignore[arg-type]
+                if text_format
+                else openai.NOT_GIVEN,
                 timeout=timeout,
                 max_output_tokens=limit,
                 max_tool_calls=max_tool_calls,

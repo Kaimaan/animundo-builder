@@ -14,9 +14,19 @@ from typing import Any
 from ..meta import count_search_calls, is_cut_off
 from ..prompts import for_children, load_prompt
 from ..schemas import validate
+from ..strict import Research, strict_schema, strip_nulls
 from .survey import SEARCH_TOOL, final_text
 
 SEARCHES = 5
+
+#: Structured research, the Responses way (#58): decoding itself
+#: follows the strict schema, so the answer parses as it arrives.
+RESEARCH_FORMAT = {
+    "type": "json_schema",
+    "name": "Research",
+    "schema": strict_schema(Research),
+    "strict": True,
+}
 
 #: Headroom past the round: the model doesn't keep to the count, so
 #: the API caps the runaway and a parsing answer is kept (#51.2).
@@ -92,13 +102,14 @@ class ResearchStage:
             tools=SEARCH_TOOL,
             timeout=180,
             max_tool_calls=SEARCHES + SEARCH_SLACK,
+            text_format=RESEARCH_FORMAT,
         )
         searches = count_search_calls(response)
         text = final_text(response)
         if is_cut_off(response, 0) and not text.strip():
             raise _Stopped("the research came back empty")
         try:
-            data = json.loads(text)
+            data = strip_nulls(json.loads(text))
             if isinstance(data, dict):
                 data["sources"] = _source_urls(data.get("sources"))
             validate("research", data)

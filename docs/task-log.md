@@ -3,6 +3,38 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #58 part 1: strict research, tree specs (looks call waits on #58.4)
+
+- #58.1–3: one Pydantic model per builder schema
+  (`builder/strict.py`: `Research`, `ThingLooks`), flattened
+  to the strict subset (plain object root,
+  `additionalProperties: false` everywhere, `required`
+  naming every key, no `allOf`/`oneOf`, `$ref`s inlined,
+  flat food-kind enum with `prey`); chat keeps
+  `response_format`, Responses gains `text_format`
+  (`MetaClient.responses_create`). Tests assert the subset
+  on both schemas.
+- Research now sends `text.format` strict with `web_search`
+  and strips nulls back to the file shape (loose schema
+  still judges). Recordings regenerated (answers untouched).
+- #58.4 live test, reviewer runs (~$0.06, ask Kai first):
+  `builder stage research --job jobs/review-anaconda
+  --record --world ../animundo-world`. Report: does the
+  call hold (no 400), and does `research.json` carry looks
+  plus every field? If not, the research becomes two steps
+  (search notes, then a strict chat call) and #58.5 follows
+  that shape.
+- #58.6: the home maker offers the world's tree specs
+  (`models/trees/`, falling back to `models/examples/trees/`
+  — baobab, coconut palm, cypress, mangrove, umbrella
+  thorn). A surroundings tree that matches by latin (same
+  GBIF species) or closest kind uses the spec id as `shape`
+  with `plant` the spec itself; `round` stays for unmatched
+  broadleaf. Used specs copy into the job's `models/trees/`
+  (and the sandbox) so submit carries them; the "no tree
+  specs yet" line is gone.
+- Suite: 539 passed, 12 skipped.
+
 ## 2026-10-27: inbox #57, #56.1, #59: the maker models with looks, measures and a memory
 
 - #57.1: the research returns a `looks` block (shoulder or

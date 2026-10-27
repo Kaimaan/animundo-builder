@@ -1042,6 +1042,80 @@ def test_description_names_the_looks_marks() -> None:
     assert "shoulder 60 cm" in text
 
 
+def _example_tree(world: Path) -> None:
+    trees = world / "models" / "examples" / "trees"
+    trees.mkdir(parents=True)
+    (trees / "umbrella_thorn.json").write_text(
+        json.dumps(
+            {
+                "id": "umbrella_thorn",
+                "name": "Umbrella thorn acacia",
+                "latin": "Vachellia tortilis",
+            }
+        )
+    )
+
+
+def _thorn_inputs(tmp_path: Path) -> None:
+    _home_inputs(tmp_path)
+    (tmp_path / "research.json").write_text(
+        json.dumps(
+            {
+                "surroundings": [
+                    {"name": "umbrella thorn", "kind": "tree"},
+                    {"name": "muddy bank", "kind": "ground"},
+                ],
+            }
+        )
+    )
+
+
+def test_newhome_offers_tree_specs_in_prompt(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _example_tree(world)
+    _home_inputs(tmp_path)
+    client = ScriptClient([_home_answer()])
+    _home_stage().run(_ctx(tmp_path, world, client))
+    assert "umbrella_thorn" in client.prompts[0]
+    assert "Vachellia tortilis" in client.prompts[0]
+    assert "no tree specs yet" not in client.prompts[0].lower()
+
+
+def test_newhome_carries_a_matched_tree_spec(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _example_tree(world)
+    _thorn_inputs(tmp_path)
+    answer = _home_answer(
+        trees={"mix": [{"shape": "umbrella_thorn", "plant": "umbrella_thorn"}]}
+    )
+    client = ScriptClient([answer])
+    result = _home_stage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert (tmp_path / "models" / "trees" / "umbrella_thorn.json").is_file()
+
+
+def test_newhome_rejects_unknown_tree_shapes(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _example_tree(world)
+    _thorn_inputs(tmp_path)
+    answer = _home_answer(trees={"mix": [{"shape": "palm"}]})
+    client = ScriptClient([answer, _home_answer()])
+    _home_stage().run(_ctx(tmp_path, world, client))
+    assert "neither a shape nor" in client.prompts[1]
+
+
+def test_newhome_rejects_spec_tree_with_other_plant(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    _example_tree(world)
+    _thorn_inputs(tmp_path)
+    answer = _home_answer(
+        trees={"mix": [{"shape": "umbrella_thorn", "plant": "norway_spruce"}]}
+    )
+    client = ScriptClient([answer, _home_answer()])
+    _home_stage().run(_ctx(tmp_path, world, client))
+    assert "is a spec, so its plant" in client.prompts[1]
+
+
 def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:
     """#59: user (first prompt), assistant (its answer), user (fixes)."""
     world = _world(tmp_path)

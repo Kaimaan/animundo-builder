@@ -51,6 +51,9 @@ MAX_NEW_PLANTS = 2
 #: The worked example every home is written from.
 CLOSEST_HOME = "boreal_forest"
 
+#: Tree shapes the game draws without a spec.
+TREE_SHAPES = ("spruce", "pine", "birch", "round", "rowan")
+
 
 class AnimalMakerStage:
     """Make the minimum set's animals: prey first, then the animal."""
@@ -1022,8 +1025,28 @@ class HomeMakerStage:
                     "drop it or write a spec for what the research names"
                 )
         pages = _tree_pages(world)
+        specs = _tree_specs(world)
         for entry in home.get("trees", {}).get("mix", []):
+            shape = entry.get("shape", "")
             plant = entry.get("plant") or ""
+            if shape in specs:
+                if plant != shape:
+                    errors.append(
+                        f"tree shape {shape!r} is a spec, so its plant "
+                        f"is {shape!r} itself, not {plant!r}"
+                    )
+                    continue
+                if not self._tree_named(world, specs[shape], shape, names, keys):
+                    errors.append(
+                        f"tree spec {shape!r} is named nowhere in the "
+                        "surroundings; leave plant out"
+                    )
+                continue
+            if shape not in TREE_SHAPES:
+                errors.append(
+                    f"tree shape {shape!r} is neither a shape nor an offered tree spec"
+                )
+                continue
             if not plant:
                 continue
             if plant not in pages:
@@ -1038,6 +1061,25 @@ class HomeMakerStage:
                     "leave plant out"
                 )
         return errors
+
+    def _tree_named(
+        self,
+        world: Path,
+        path: Path,
+        stem: str,
+        names: set[str],
+        keys: set[int],
+    ) -> bool:
+        """A spec tree the research names: latin key or plain words."""
+        try:
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            return False
+        latin = spec.get("latin") or ""
+        if latin and self._latin_key(world, latin) in keys:
+            return True
+        labels = {stem.replace("_", " "), str(spec.get("name", "")).lower()}
+        return any(name in label or label in name for name in names for label in labels)
 
     def _latin_key(self, world: Path, latin: str) -> int | None:
         taxon = taxa.resolve(world, latin, plant=True)
@@ -1114,6 +1156,20 @@ class HomeMakerStage:
             (sandbox / "models" / "plants" / f"{plant_id}.json").write_text(
                 text, encoding="utf-8"
             )
+        specs = _tree_specs(world)
+        wanted = {
+            entry.get("shape", "")
+            for entry in files["home"].get("trees", {}).get("mix", [])
+        } & set(specs)
+        if wanted:
+            trees_dir = ctx.job_dir / "models" / "trees"
+            trees_dir.mkdir(parents=True, exist_ok=True)
+            sandbox_trees = sandbox / "models" / "trees"
+            sandbox_trees.mkdir(parents=True, exist_ok=True)
+            for stem in sorted(wanted):
+                text = specs[stem].read_text(encoding="utf-8")
+                (trees_dir / f"{stem}.json").write_text(text, encoding="utf-8")
+                (sandbox_trees / f"{stem}.json").write_text(text, encoding="utf-8")
 
     def _build_and_check(
         self,
@@ -1226,7 +1282,8 @@ class HomeMakerStage:
                 ).replace("$", "$$"),
                 "MAX_PLANTS": str(MAX_NEW_PLANTS),
                 "EXISTING_PLANTS": ", ".join(existing) or "(none yet)",
-                "TREE_SHAPES": "spruce, pine, birch, round, rowan",
+                "TREE_SHAPES": ", ".join(TREE_SHAPES),
+                "TREE_SPECS": _tree_specs_text(world),
                 "TREE_PLANTS": ", ".join(sorted(_tree_pages(world))) or "(none yet)",
                 "PLANT_EXAMPLES": (
                     f"A bush (bilberry):\n{bush}\n\n"
@@ -1248,9 +1305,33 @@ def _region_rules(world: Path) -> str:
     return text[start:rest].strip() if start >= 0 else ""
 
 
+def _tree_specs(world: Path) -> dict[str, Path]:
+    """Offered tree spec ids: shipped ones, then the worked examples."""
+    specs = {path.stem: path for path in (world / "models" / "trees").glob("*.json")}
+    examples = world / "models" / "examples" / "trees"
+    if examples.is_dir():
+        for path in sorted(examples.glob("*.json")):
+            specs.setdefault(path.stem, path)
+    return specs
+
+
+def _tree_specs_text(world: Path) -> str:
+    """Offered tree specs for the prompt: id, name, latin (#58.6)."""
+    lines = []
+    for stem, path in sorted(_tree_specs(world).items()):
+        try:
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        name = spec.get("name", stem) or stem
+        latin = spec.get("latin", "") or "no latin"
+        lines.append(f"- {stem}: {name} ({latin})")
+    return "\n".join(lines) if lines else "(none yet)"
+
+
 def _tree_pages(world: Path) -> set[str]:
     """Tree ids a `plant` may name: specs or locale plant pages."""
-    ids = {path.stem for path in (world / "models" / "trees").glob("*.json")}
+    ids = set(_tree_specs(world))
     pages = world / "locale" / "en" / "plants.json"
     if pages.is_file():
         try:

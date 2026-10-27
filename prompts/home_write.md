@@ -30,10 +30,19 @@ these fits; at most $MAX_PLANTS new ones):
 
 $EXISTING_PLANTS
 
-Tree shapes the game draws: $TREE_SHAPES. There are no tree
-specs yet, so every tree uses a shape, never a spec id. A tree
-`plant` id must be one of these pages, and named in the
-surroundings above; otherwise leave `plant` out:
+Tree shapes the game draws: $TREE_SHAPES. Tree specs the game
+draws from a spec id instead of a shape (its colours come from
+the spec, and `plant` is the spec itself):
+
+$TREE_SPECS
+
+A surroundings tree that matches a spec uses the spec id as
+its `shape`: same latin (the same GBIF species) where the
+research names it, or the closest kind (an acacia for the
+umbrella thorn, a palm for the coconut palm). Broadleaf trees
+with no spec stay `round`. A tree `plant` id must be one of
+these pages or a spec above, and named in the surroundings
+above; otherwise leave `plant` out:
 
 $TREE_PLANTS
 
@@ -79,10 +88,11 @@ None. Write from the inputs only.
   anywhere: `country` is empty, `center` is 0, 0, and
   `based_on` stays out unless a shipped region truly
   resembles this land (then only its id).
-- Every tree is one of the shapes above. Every
-  `ground_cover.plants[].model` is an existing plant above
-  or one of the new specs, whose `id` matches its key. At
-  most $MAX_PLANTS new specs.
+- Every tree `shape` is one of the shapes above or an
+  offered tree spec id; a spec tree sets `plant` to the spec
+  id. Every `ground_cover.plants[].model` is an existing
+  plant above or one of the new specs, whose `id` matches
+  its key. At most $MAX_PLANTS new specs.
 - Nothing living carries over from the example home: only
   its land, sky and colour structure do. Every fish, ground
   plant and tree plant id must be a species the surroundings

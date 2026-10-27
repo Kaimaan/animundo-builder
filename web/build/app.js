@@ -45,6 +45,8 @@ const state = {
   publicPlaces: {},
   drafts: {},
   feedUnsubs: {},
+  feedRetry: {},
+  feedTries: {},
   map: null,
   layers: {},
   selectedArea: null,
@@ -202,6 +204,11 @@ function onUser(user) {
       unsub();
     }
     state.feedUnsubs = {};
+    for (const timer of Object.values(state.feedRetry)) {
+      clearTimeout(timer);
+    }
+    state.feedRetry = {};
+    state.feedTries = {};
     if (state.draftsUnsub) {
       state.draftsUnsub();
       state.draftsUnsub = null;
@@ -267,7 +274,11 @@ async function boot() {
         const seen = new Set();
         snap.forEach((doc) => {
           seen.add(doc.id);
-          state.drafts[doc.id] = { id: doc.id, ...doc.data() };
+          state.drafts[doc.id] = {
+            id: doc.id,
+            ...doc.data(),
+            _synced: !doc.metadata.hasPendingWrites,
+          };
         });
         for (const id of Object.keys(state.drafts)) {
           if (!seen.has(id)) {
@@ -276,6 +287,11 @@ async function boot() {
               state.feedUnsubs[id]();
               delete state.feedUnsubs[id];
             }
+            if (state.feedRetry[id]) {
+              clearTimeout(state.feedRetry[id]);
+              delete state.feedRetry[id];
+            }
+            delete state.feedTries[id];
           }
         }
         renderCounts();
@@ -297,6 +313,9 @@ function draftForArea(areaId) {
 function lookForArea(area) {
   const draft = draftForArea(area.area_id);
   if (draft) {
+    if (draft.status === "failed") {
+      return "building";
+    }
     return BUILDING.includes(draft.status) ? "building" : "yours";
   }
   const pub = state.publicPlaces[area.area_id];
@@ -538,7 +557,11 @@ function renderDrafts() {
   list.innerHTML = "";
   for (const draft of drafts) {
     list.appendChild(renderDraft(draft));
-    watchFeed(draft);
+    // The feed rule reads the draft, so a locally-written draft starts
+    // no listener until the server has it.
+    if (draft._synced) {
+      watchFeed(draft);
+    }
     renderFeed(draft.id);
   }
 }
@@ -583,6 +606,11 @@ function renderDraft(draft) {
 function draftActions(draft) {
   const status = draft.status;
   let html = `<div class="actions" data-actions="${escapeHtml(draft.id)}">`;
+  if (status === "failed") {
+    html += `<p>${escapeHtml(t("draft.failed_words"))}</p>` +
+      `<button type="button" data-act="try_again">${escapeHtml(t("draft.try_again"))}</button>` +
+      `<button type="button" data-act="remove">${escapeHtml(t("draft.remove"))}</button>`;
+  }
   const canImprove = status === "ready" && (draft.round || 1) < 4;
   const needsPerson = status === "ready" && (draft.round || 1) >= 4;
   if (canImprove) {
@@ -723,6 +751,14 @@ async function actOnDraft(draft, button) {
         feedback: { kind: "ask_person", reason: "still_wrong", at: stamp },
       });
       draftMessage(draft.id, t("draft.sent"));
+    } else if (action === "try_again") {
+      await db().collection("drafts").doc(draft.id).update({ status: "requested" });
+      draftMessage(draft.id, t("draft.try_again_sent"));
+    } else if (action === "remove") {
+      if (!window.confirm(t("draft.remove_confirm"))) {
+        return;
+      }
+      await db().collection("drafts").doc(draft.id).delete();
     }
   } catch (error) {
     console.error(error);
@@ -731,20 +767,43 @@ async function actOnDraft(draft, button) {
 }
 
 function watchFeed(draft) {
-  if (state.feedUnsubs[draft.id]) {
+  if (state.feedUnsubs[draft.id] || state.feedRetry[draft.id]) {
     return;
   }
-  state.feedUnsubs[draft.id] = db().collection("drafts").doc(draft.id)
-    .collection("feed").orderBy("n").onSnapshot(
-      (snap) => {
-        const entries = [];
-        snap.forEach((doc) => entries.push(doc.data()));
-        state.feeds = state.feeds || {};
-        state.feeds[draft.id] = entries;
-        renderFeed(draft.id);
-      },
-      (error) => console.error(error),
-    );
+  const start = () => {
+    delete state.feedRetry[draft.id];
+    state.feedUnsubs[draft.id] = db().collection("drafts").doc(draft.id)
+      .collection("feed").orderBy("n").onSnapshot(
+        (snap) => {
+          const entries = [];
+          snap.forEach((doc) => entries.push(doc.data()));
+          state.feeds = state.feeds || {};
+          state.feeds[draft.id] = entries;
+          delete state.feedTries[draft.id];
+          renderFeed(draft.id);
+        },
+        (error) => {
+          console.error(error);
+          state.feedUnsubs[draft.id]();
+          delete state.feedUnsubs[draft.id];
+          const tries = (state.feedTries[draft.id] || 0) + 1;
+          if (tries > 3) {
+            delete state.feedTries[draft.id];
+            return;
+          }
+          state.feedTries[draft.id] = tries;
+          state.feedRetry[draft.id] = setTimeout(() => {
+            const current = state.drafts[draft.id];
+            if (current && current._synced) {
+              start();
+            } else {
+              delete state.feedRetry[draft.id];
+            }
+          }, [3000, 10000, 30000][tries - 1]);
+        },
+      );
+  };
+  start();
 }
 
 function renderFeed(draftId) {

@@ -435,3 +435,22 @@ Job folders live under `jobs/` (local only, never committed).
   land in `backfill_unchecked`, never silently.
 - #29 compliance: the addon's `not_possible_yet` globe look
   is gone (the look stays unused); the screen explains.
+
+## 2026-10-27: loop fixes #36.3 to #36.7
+
+- #36.3: survey searches capped per call in the prompts (10
+  land, 12 species, 8 gaps, down from 25/40/15), 40 total,
+  and input tokens capped (0.5M a call, 1.2M the survey);
+  over any of them stops the job instead of spending on.
+- #36.4: the feed listener starts only once the server has
+  the draft, and a failed listen drops out and retries three
+  times instead of staying dead.
+- #36.5: a failed draft says plainly what happened and
+  offers Try again (owner-only rule, failed to requested;
+  the worker resumes the local job and clears the error)
+  and Remove (already owner-allowed). Failed areas show as
+  building until then.
+- #36.6: the seed's admin URL goes through identitytoolkit.
+- #36.7: `load()` reads `.env` from the working directory
+  upward (never overriding real env, never printing: keys
+  left the Config repr too). python-dotenv added.

@@ -370,6 +370,40 @@ describe("drafts feedback", () => {
   });
 });
 
+describe("drafts try again", () => {
+  let env;
+  before(async () => (env = await makeEnv()));
+  after(async () => env.cleanup());
+  beforeEach(async () => {
+    await env.clearFirestore();
+    await seed(env, [
+      ["drafts/d1", draftDoc("grown", { status: "failed", error: "build_failed" })],
+      ["drafts/d2", draftDoc("grown", { status: "ready" })],
+      ["drafts/d3", draftDoc("grown", { status: "failed", error: "build_failed" })],
+    ]);
+  });
+
+  it("the owner retries a failed draft, nothing else", async () => {
+    const db = grownUp(env, "grown").firestore();
+    await assertSucceeds(updateDoc(doc(db, "drafts/d1"), { status: "requested" }));
+    await assertFails(updateDoc(doc(db, "drafts/d2"), { status: "requested" }));
+    await assertFails(updateDoc(doc(db, "drafts/d3"), { status: "ready" }));
+  });
+
+  it("strangers and family do not retry", async () => {
+    await assertFails(
+      updateDoc(doc(player(env, "other").firestore(), "drafts/d1"), {
+        status: "requested",
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(player(env, "kid").firestore(), "drafts/d1"), {
+        status: "requested",
+      }),
+    );
+  });
+});
+
 describe("drafts delete", () => {
   let env;
   before(async () => (env = await makeEnv()));
@@ -379,12 +413,14 @@ describe("drafts delete", () => {
     await seed(env, [
       ["drafts/ready", draftDoc("grown", { status: "ready" })],
       ["drafts/review", draftDoc("grown", { status: "in_review" })],
+      ["drafts/gone", draftDoc("grown", { status: "failed" })],
     ]);
   });
 
   it("the owner deletes, except in review", async () => {
     const db = grownUp(env, "grown").firestore();
     await assertSucceeds(deleteDoc(doc(db, "drafts/ready")));
+    await assertSucceeds(deleteDoc(doc(db, "drafts/gone")));
     await assertFails(deleteDoc(doc(db, "drafts/review")));
     await assertFails(deleteDoc(doc(grownUp(env, "other").firestore(), "drafts/ready")));
   });

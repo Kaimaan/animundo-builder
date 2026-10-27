@@ -204,6 +204,14 @@ def test_note_draft_finds_creates(tmp_path: Path) -> None:
     assert worker.note_draft("d2", None, _draft(status="ready")) == []
 
 
+def test_note_draft_retries_a_failed_draft(tmp_path: Path) -> None:
+    worker = _worker(tmp_path, FakeStore())
+    failed = _draft(status="failed", error="build_failed")
+    assert worker.note_draft("d1", failed, _draft()) == [("create", "d1")]
+    # Still requested is still running: no second event.
+    assert worker.note_draft("d1", _draft(), _draft()) == []
+
+
 def test_note_draft_finds_updates_and_restarts(tmp_path: Path) -> None:
     worker = _worker(tmp_path, FakeStore())
     ready = _draft(status="ready")
@@ -365,6 +373,22 @@ def test_create_fails_cleanly_on_stage_errors(tmp_path: Path) -> None:
     }
     kinds = [entry["kind"] for entry in store.feed["d1"]]
     assert "check_failed" in kinds
+
+
+def test_create_retry_clears_the_error_and_resumes(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _draft()
+    worker = _worker(tmp_path, store)
+    worker.runner = ScriptRunner({"region": StageFailedError("stage region failed")})
+    worker.handle_create("d1")
+    assert store.drafts["d1"]["status"] == "failed"
+    store.drafts["d1"]["status"] = "requested"
+    worker.runner = ScriptRunner({})
+    job_dir = tmp_path / "jobs" / "d1"
+    _seed_pack(job_dir)
+    worker.handle_create("d1")
+    assert store.drafts["d1"]["status"] == "ready"
+    assert "error" not in store.drafts["d1"]
 
 
 def test_create_maps_not_possible_and_budget(tmp_path: Path) -> None:

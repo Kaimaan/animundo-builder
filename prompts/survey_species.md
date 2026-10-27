@@ -61,4 +61,6 @@ and so on) until each has support.
 ## Stop
 
 Stop searching when every group has at least three sourced species, or
-after 40 searches, whichever comes first. Then write the species blocks.
+after 12 searches, whichever comes first. Prefer the most authoritative
+page per group; don't re-search what's answered. Then write the species
+blocks.

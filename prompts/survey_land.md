@@ -36,5 +36,6 @@ Search grounding (`web_search`). Search until each heading has support.
 
 ## Stop
 
-Stop searching when every heading has at least one source, or after 25
-searches, whichever comes first. Then write the findings.
+Stop searching when every heading has at least one source, or after 10
+searches, whichever comes first. Prefer the most authoritative page per
+question; don't re-search what's answered. Then write the findings.

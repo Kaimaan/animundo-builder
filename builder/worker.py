@@ -132,7 +132,13 @@ class Worker:
             return events
         if before is None and draft_id in self.seen:
             before = self.seen[draft_id]
-        if before is None and after.get("status") == "requested":
+        # A new request, or Try again on a failed draft: any arrival
+        # at requested needs work (the worker itself only ever leaves
+        # it, for queued).
+        if (
+            after.get("status") == "requested"
+            and (before or {}).get("status") != "requested"
+        ):
             events.append(("create", draft_id))
         # Processed improves are cleared, so a present improve on a
         # ready draft always needs work, even after a restart.
@@ -160,6 +166,8 @@ class Worker:
         doc = self.store.get_draft(draft_id)
         if doc is None or doc.get("status") != "requested":
             return
+        if "error" in doc:
+            self._update(draft_id, {"error": DELETE})
         try:
             area = self._area(doc.get("area_id", ""))
         except RoundFailed as failed:

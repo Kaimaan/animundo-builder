@@ -17,7 +17,11 @@ SPECIES_URLS = ["https://nature.example.com/deer", "https://gbif.example.net/dee
 
 
 def _research_response(
-    text: str, urls: list[str], searches: int = 1, output_tokens: int = 50
+    text: str,
+    urls: list[str],
+    searches: int = 1,
+    output_tokens: int = 50,
+    input_tokens: int = 100,
 ) -> SimpleNamespace:
     parts = [
         SimpleNamespace(
@@ -32,7 +36,7 @@ def _research_response(
         model="fake-test-model",
         output=output,
         usage=SimpleNamespace(
-            prompt_tokens=100,
+            prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             prompt_tokens_details=None,
         ),
@@ -274,3 +278,26 @@ def test_cut_off_twice_stops_loud(tmp_path: Path) -> None:
         pipeline.run(_ctx(tmp_path, client))
     state = json.loads((tmp_path / "state.json").read_text())
     assert "still cut off after 2 continuations" in state["failed"]["error"]
+
+
+def test_per_call_input_cap_stops_the_job(tmp_path: Path) -> None:
+    big = _research_response("LAND ...", LAND_URLS, input_tokens=500_001)
+    client = ScriptClient([big, _research_response("SPECIES ...", SPECIES_URLS)])
+    pipeline = Pipeline([SurveyStage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage survey failed"):
+        pipeline.run(_ctx(tmp_path, client))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "over the 500000 per-call cap" in state["failed"]["error"]
+
+
+def test_total_input_cap_stops_the_job(tmp_path: Path) -> None:
+    one_site = ["https://park.example.org/land"]
+    land = _research_response("LAND ...", one_site, input_tokens=400_000)
+    species = _research_response("SPECIES ...", one_site, input_tokens=400_000)
+    gaps = _research_response("GAPS ...", one_site, input_tokens=400_001)
+    client = ScriptClient([land, species, gaps])
+    pipeline = Pipeline([SurveyStage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage survey failed"):
+        pipeline.run(_ctx(tmp_path, client))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "spent its 1200000 input tokens" in state["failed"]["error"]

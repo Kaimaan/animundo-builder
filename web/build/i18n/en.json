@@ -84,5 +84,10 @@
   "explore.feed.stage_failed": "This step failed: {stage}. We're looking at it.",
   "explore.feed.not_possible": "Not possible yet: {reason}.",
   "explore.feed.retry": "A wobble; trying again (attempt {attempt}).",
-  "error.generic": "Something went wrong. Please try again."
+  "error.generic": "Something went wrong. Please try again.",
+  "draft.failed_words": "We couldn't finish this place. Try again, or we'll look at it.",
+  "draft.try_again": "Try again",
+  "draft.try_again_sent": "Trying again. Watch the feed below.",
+  "draft.remove": "Remove",
+  "draft.remove_confirm": "Remove this draft? The builders will stop working on it."
 }

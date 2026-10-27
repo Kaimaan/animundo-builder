@@ -100,3 +100,22 @@ def test_open_settings_from_env(monkeypatch) -> None:
 def test_price_overrides() -> None:
     prices = Prices(input_per_million=9.0)
     assert Config(prices=prices).prices.input_per_million == 9.0
+
+
+def test_load_reads_dotenv(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    (tmp_path / ".env").write_text('MODEL_API_KEY="from-dotenv"\n', encoding="utf-8")
+    assert load().model_api_key == "from-dotenv"
+
+
+def test_environment_wins_over_dotenv(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("MODEL_API_KEY=from-dotenv\n", encoding="utf-8")
+    monkeypatch.setenv("MODEL_API_KEY", "from-env")
+    assert load().model_api_key == "from-env"
+
+
+def test_keys_stay_out_of_repr() -> None:
+    shown = repr(Config(model_api_key="MODEL-KEY-1", baseten_api_key="BASETEN-KEY-2"))
+    assert "MODEL-KEY-1" not in shown and "BASETEN-KEY-2" not in shown

@@ -84,5 +84,10 @@
   "explore.feed.stage_failed": "Tämä vaihe epäonnistui: {stage}. Selvitämme sitä.",
   "explore.feed.not_possible": "Ei vielä mahdollista: {reason}.",
   "explore.feed.retry": "Häiriö; yritetään uudelleen (yritys {attempt}).",
-  "error.generic": "Jokin meni pieleen. Yritä uudelleen."
+  "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
+  "draft.failed_words": "Emme saaneet paikkaa valmiiksi. Yritä uudelleen, tai katsomme sitä.",
+  "draft.try_again": "Yritä uudelleen",
+  "draft.try_again_sent": "Yritetään uudelleen. Seuraa alta.",
+  "draft.remove": "Poista",
+  "draft.remove_confirm": "Poistetaanko luonnos? Rakentajat lopettavat sen tekemisen."
 }

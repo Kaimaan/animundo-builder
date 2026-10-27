@@ -86,3 +86,11 @@ def test_nothing_shows_until_sign_in() -> None:
     assert re.search(r'<main id="app" hidden>', html)
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert '$("app").hidden = !user' in app
+
+
+def test_js_strings_exist() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    keys = set(re.findall(r'\bt\("([a-z0-9_.]+)"', app))
+    assert keys
+    en = _json(WEB / "i18n" / "en.json")
+    assert keys <= set(en), keys - set(en)

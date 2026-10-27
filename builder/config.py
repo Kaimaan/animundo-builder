@@ -11,6 +11,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import find_dotenv, load_dotenv
+
 from .prices import Prices
 
 DEFAULT_MODEL = "muse-spark-1.3"
@@ -37,9 +39,9 @@ class Config:
     baseten_total_usd: float = 100.0
     max_new_species: int = 3
     max_new_plants: int = 3
-    model_api_key: str | None = None
-    baseten_api_key: str | None = None
-    fireworks_api_key: str | None = None
+    model_api_key: str | None = field(default=None, repr=False)
+    baseten_api_key: str | None = field(default=None, repr=False)
+    fireworks_api_key: str | None = field(default=None, repr=False)
     prices: Prices = field(default_factory=Prices)
 
     def open_model_id(self) -> str:
@@ -96,7 +98,14 @@ def load(path: str | Path | None = None) -> Config:
 
     `path` may point at the file itself or at the directory holding it.
     Missing files are fine; the environment alone is a complete config.
+    A `.env` file fills what the environment lacks (never overriding
+    it); its values are never printed.
     """
+    # From the working directory upward (a tool reads the project's
+    # file, not its own install folder); missing files are fine.
+    env_file = find_dotenv(usecwd=True)
+    if env_file:
+        load_dotenv(env_file)
     values: dict[str, object] = {}
     if path is not None:
         candidate = Path(path)

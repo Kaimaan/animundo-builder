@@ -10,7 +10,8 @@
 // token cannot set it). Idempotent: run it as often as you like.
 
 const AUTH = "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1";
-const ADMIN = "http://127.0.0.1:9099/v1/projects/demo-animundo/accounts:update";
+const ADMIN =
+  "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/projects/demo-animundo/accounts:update";
 const EMAIL = "test@example.org";
 const PASSWORD = "grown-up-1";
 

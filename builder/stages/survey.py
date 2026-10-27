@@ -3,8 +3,9 @@
 Fixed shape, no model-decided flow: one land call, one species call, an
 extra gaps call only when fewer than three independent source sites turned
 up, then one structured write call with fix retries. A research answer cut
-off at max_tokens is continued, never taken as ok. Eight model calls and
-80 searches at most; going over stops the job.
+off at max_tokens is continued, never taken as ok. Eight model calls, 40
+searches and 1.2M input tokens at most, no call over 0.5M input; going
+over stops the job.
 """
 
 from __future__ import annotations
@@ -15,13 +16,19 @@ from urllib.parse import urlparse
 
 import jsonschema
 
-from ..meta import DEFAULT_MAX_TOKENS, count_search_calls, is_cut_off
+from ..meta import (
+    DEFAULT_MAX_TOKENS,
+    count_search_calls,
+    is_cut_off,
+    usage_from_response,
+)
 from ..prompts import load_prompt
 from ..schemas import load_schema, validate
 
 SEARCH_TOOL = [{"type": "web_search"}]
 MIN_DOMAINS = 3
 MAX_CONTINUATIONS = 2
+MAX_INPUT_PER_CALL = 500_000
 
 
 def domain_of(url: str) -> str:
@@ -42,11 +49,18 @@ class SurveyStage:
 
     name = "survey"
 
-    def __init__(self, max_rounds: int = 8, max_searches: int = 80) -> None:
+    def __init__(
+        self,
+        max_rounds: int = 8,
+        max_searches: int = 40,
+        max_input_tokens: int = 1_200_000,
+    ) -> None:
         self.max_rounds = max_rounds
         self.max_searches = max_searches
+        self.max_input_tokens = max_input_tokens
         self.rounds = 0
         self.searches = 0
+        self.input_tokens = 0
 
     def run(self, ctx: Any) -> dict[str, Any]:
         area = json.loads((ctx.job_dir / "area.json").read_text(encoding="utf-8"))
@@ -98,7 +112,7 @@ class SurveyStage:
         )
         text = _response_text(response)
         found = _citation_urls(response)
-        self.searches += count_search_calls(response)
+        self._spend_call(prompt_name, response)
         for _ in range(MAX_CONTINUATIONS):
             if not is_cut_off(response, DEFAULT_MAX_TOKENS):
                 return text, found
@@ -111,7 +125,7 @@ class SurveyStage:
             )
             text += "\n" + _response_text(response)
             found |= _citation_urls(response)
-            self.searches += count_search_calls(response)
+            self._spend_call(prompt_name, response)
         if is_cut_off(response, DEFAULT_MAX_TOKENS):
             raise _Stopped(
                 f"{prompt_name} was still cut off "
@@ -163,6 +177,19 @@ class SurveyStage:
         if searches and self.searches >= self.max_searches:
             raise _Stopped(f"survey spent its {self.max_searches} searches")
         self.rounds += 1
+
+    def _spend_call(self, prompt_name: str, response: Any) -> None:
+        """Count one research answer's searches and input against the caps."""
+        self.searches += count_search_calls(response)
+        call_input = usage_from_response(response, "").input_tokens
+        if call_input > MAX_INPUT_PER_CALL:
+            raise _Stopped(
+                f"{prompt_name} read {call_input} input tokens, "
+                f"over the {MAX_INPUT_PER_CALL} per-call cap"
+            )
+        self.input_tokens += call_input
+        if self.input_tokens > self.max_input_tokens:
+            raise _Stopped(f"survey spent its {self.max_input_tokens} input tokens")
 
     def _check_write(self, text: str, cited: set[str]) -> tuple[str, dict[str, Any]]:
         try:

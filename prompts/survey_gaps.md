@@ -38,5 +38,5 @@ Search grounding (`web_search`).
 
 ## Stop
 
-Stop after 15 searches, or when three new independent sites are found,
+Stop after 8 searches, or when three new independent sites are found,
 whichever comes first. Then write the paragraphs.

@@ -481,7 +481,9 @@ class MetaClient:
                 raise MetaAuthError(f"{call}: not authorised: {error}") from error
             except Exception as error:  # noqa: BLE001 - sorted below
                 if not _is_retriable(error) or attempt == MAX_TRIES:
-                    raise MetaError(f"{call}: failed after {attempt} tries") from error
+                    raise MetaError(
+                        f"{call}: failed after {attempt} tries ({error})"
+                    ) from error
                 last_error = error
                 self._sleeper(_backoff_seconds(attempt))
         raise MetaError(f"{call}: failed") from last_error

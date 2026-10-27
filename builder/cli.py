@@ -16,58 +16,20 @@ from pathlib import Path
 from typing import Any
 
 from .config import load as load_config
-from .ledger import CapExceeded, Caps, FileLedger
-from .meta import CostLogger, MetaAuthError, MetaClient
+from .jobs import fresh_state, make_context, pipeline_stages
+from .ledger import CapExceeded
+from .meta import MetaAuthError
 from .pipeline import (
     IMPROVE_CHOICES,
-    BudgetTracker,
-    JobContext,
     Pipeline,
     StageFailedError,
     stages_for_kind,
 )
-from .prices import UnknownModelError
 from .report import build_report
-from .stages import (
-    AnimalsStage,
-    CapabilityStage,
-    IntakeStage,
-    ModelsStage,
-    PackStage,
-    PlantsStage,
-    ReferencesStage,
-    RegionStage,
-    SafetyStage,
-    SpeciesPlanStage,
-    SurveyStage,
-    WordsStage,
-)
+from .stages import IntakeStage
 from .submit import SubmitFailed, run_submit
 
 NOT_BUILT_YET = 3
-
-
-def _pipeline_stages(
-    intake: IntakeStage,
-    author: str,
-    max_new_species: int,
-    reference: str,
-    max_new_plants: int = 3,
-) -> list:
-    return [
-        intake,
-        SurveyStage(),
-        CapabilityStage(),
-        RegionStage(author=author),
-        SpeciesPlanStage(max_new_species=max_new_species),
-        AnimalsStage(),
-        ReferencesStage(reference=reference),
-        ModelsStage(reference=reference, author=author),
-        PlantsStage(max_new_plants=max_new_plants, author=author),
-        WordsStage(),
-        SafetyStage(),
-        PackStage(),
-    ]
 
 
 def _check_choices(choices: list[str]) -> None:
@@ -77,38 +39,6 @@ def _check_choices(choices: list[str]) -> None:
                 f"unknown improve choice {choice!r} "
                 f"(choose from {', '.join(IMPROVE_CHOICES)})"
             )
-
-
-def _caps(config: Any) -> Caps:
-    return Caps(
-        job_usd=config.job_budget_usd,
-        day_usd=config.daily_budget_usd,
-        total_usd=config.total_budget_usd,
-    )
-
-
-def _open_client(config: Any, job_dir: Path, job_id: str) -> MetaClient | None:
-    """The open-weights client, or None when reviews stay on Muse Spark."""
-    if config.open_model_host == "meta":
-        return None
-    try:
-        return MetaClient.for_open_weights(
-            config,
-            logger=CostLogger(job_dir / "log.jsonl"),
-            ledger=FileLedger(config.baseten_ledger_path()),
-            job_id=job_id,
-            caps=Caps(
-                job_usd=config.job_budget_usd,
-                day_usd=config.daily_budget_usd,
-                total_usd=config.baseten_total_usd,
-            ),
-        )
-    except (MetaAuthError, ValueError, UnknownModelError) as error:
-        print(
-            f"open weights off ({config.open_model_host}): {error}; "
-            "reviews run on Muse Spark"
-        )
-        return None
 
 
 def _explain_stop(job_id: str, error: Exception) -> int:
@@ -219,7 +149,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--base", default="main", help="The branch to open against (default: main)."
     )
 
-    sub.add_parser("worker", help="Run the hosted worker.")
+    worker = sub.add_parser("worker", help="Run the hosted worker.")
+    worker.add_argument(
+        "--listen",
+        action="store_true",
+        help="Listen on Firestore (the Mac mode for milestone 1).",
+    )
+    worker.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    worker.add_argument(
+        "--jobs-dir", default="jobs", help="Where job folders live (default: jobs)."
+    )
+    worker.add_argument(
+        "--areas",
+        default="web/build/areas.json",
+        help="The area index (default: web/build/areas.json).",
+    )
+    worker.add_argument(
+        "--project",
+        default=None,
+        help="The Firebase project (default: Application Default Credentials).",
+    )
+    worker.add_argument(
+        "--storage-bucket",
+        default=None,
+        help="The Storage bucket (default: the project's default bucket).",
+    )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
 
@@ -268,28 +224,11 @@ def cmd_build(args: argparse.Namespace) -> int:
     job_id = uuid.uuid4().hex[:12]
     job_dir = Path(args.jobs_dir) / job_id
     job_dir.mkdir(parents=True)
-    client = None
-    if config.model_api_key:
-        client = MetaClient(
-            api_key=config.model_api_key,
-            model=config.model,
-            logger=CostLogger(job_dir / "log.jsonl"),
-            ledger=FileLedger(config.ledger_path),
-            job_id=job_id,
-            caps=_caps(config),
-        )
-    ctx = JobContext(
-        job_id=job_id,
-        job_dir=job_dir,
-        client=client,
-        tracker=BudgetTracker(budget_usd=config.job_budget_usd),
-        world_path=world,
-        open_client=_open_client(config, job_dir, job_id),
-    )
+    ctx = make_context(config, job_id, job_dir, world)
     (job_dir / "state.json").write_text(
         json.dumps(
-            {
-                "params": {
+            fresh_state(
+                {
                     "area": args.area,
                     "name": args.name,
                     "country": args.country,
@@ -297,15 +236,12 @@ def cmd_build(args: argparse.Namespace) -> int:
                     "author": args.author,
                     "kind": args.kind,
                     "choices": [],
-                },
-                "completed": [],
-                "results": {},
-                "failed": None,
-            }
+                }
+            )
         ),
         encoding="utf-8",
     )
-    stages = _pipeline_stages(
+    stages = pipeline_stages(
         stage,
         args.author,
         config.max_new_species,
@@ -344,30 +280,13 @@ def cmd_resume(args: argparse.Namespace) -> int:
             print(f"error: {error}", file=sys.stderr)
             return 1
     config = load_config()
-    client = None
-    if config.model_api_key:
-        client = MetaClient(
-            api_key=config.model_api_key,
-            model=config.model,
-            logger=CostLogger(job_dir / "log.jsonl"),
-            ledger=FileLedger(config.ledger_path),
-            job_id=args.job_id,
-            caps=_caps(config),
-        )
-    ctx = JobContext(
-        job_id=args.job_id,
-        job_dir=job_dir,
-        client=client,
-        tracker=BudgetTracker(budget_usd=config.job_budget_usd),
-        world_path=world,
-        open_client=_open_client(config, job_dir, args.job_id),
-    )
+    ctx = make_context(config, args.job_id, job_dir, world)
     stage = IntakeStage(
         area_id=params.get("area"),
         area_name=params.get("name"),
         country=params.get("country"),
     )
-    stages = _pipeline_stages(
+    stages = pipeline_stages(
         stage,
         params.get("author", "Animundo Builder"),
         config.max_new_species,
@@ -413,6 +332,24 @@ def cmd_not_built_yet(command: str) -> int:
     return NOT_BUILT_YET
 
 
+def cmd_worker(args: argparse.Namespace) -> int:
+    if not args.listen:
+        return cmd_not_built_yet("worker without --listen")
+    from .worker import listen
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    return listen(
+        load_config(),
+        Path(args.jobs_dir),
+        world,
+        Path(args.areas),
+        args.project,
+        args.storage_bucket,
+    )
+
+
 def cmd_submit(args: argparse.Namespace) -> int:
     world = _world_or_error(args.world)
     if world is None:
@@ -444,6 +381,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_report(args.job_id, args.jobs_dir)
     if args.command == "submit":
         return cmd_submit(args)
+    if args.command == "worker":
+        return cmd_worker(args)
     return cmd_not_built_yet(args.command)
 
 

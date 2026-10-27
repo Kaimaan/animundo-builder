@@ -67,7 +67,7 @@ class CapabilityStage:
         out = ctx.job_dir / "capabilities.json"
         out.write_text(json.dumps(capabilities, indent=2), encoding="utf-8")
         if not possible:
-            raise _NotPossible(
+            raise NotPossibleError(
                 "the game's trees cannot show this place honestly: "
                 + ", ".join(item["item"] for item in needs_code)
             )
@@ -129,5 +129,5 @@ def _archetypes(world: Path) -> list[str]:
     return sorted(a["id"] if isinstance(a, dict) else a for a in archetypes)
 
 
-class _NotPossible(Exception):
+class NotPossibleError(Exception):
     """The place needs game code first. The job stops with `not_possible_yet`."""

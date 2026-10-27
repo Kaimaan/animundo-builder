@@ -284,3 +284,39 @@ Job folders live under `jobs/` (local only, never committed).
 - Also noted inbox #29 (T26 is now the web app at
   animundo.app/build, T25 the small game addon, web app first);
   it lands after T22 and the short T20.
+
+## 2026-10-27: T22 worker --listen
+
+- `builder worker --listen` runs the milestone-1 funnel on Kai's
+  Mac (Application Default Credentials, no key file): it
+  listens on `drafts` and `admin_actions`, limits-checks new
+  drafts (2 active, 3 a week, the daily ledger, unreadable
+  ledger refuses), builds round by round with a live feed,
+  uploads the pack and the report to Storage, moves submits to
+  `in_review`, hides/removes on feedback, and carries out Send
+  on (runs `builder submit` with Kai's `gh`), Published (writes
+  `places_public`), Not accepted, Show again and Remove.
+- Statuses are the guards: restarts only replay events still
+  waiting; processed improves and ask-person notes are cleared.
+  Content errors fail at once (two retries for transient ones
+  only); a failed improve keeps the last good pack playable.
+  Stuck `queued`/`building`/`improving` drafts are named at
+  startup and left alone. Docs: `docs/worker.md`.
+- Feed keys for the T26 web app: `explore.feed.round_started`,
+  `sources_found`, `stage_done`, `models_built`, `preview`,
+  `round_done`, `stage_failed`, `not_possible`, `retry`.
+  Reports live at `reports/<draft>/<round>/report.html`
+  (Storage rule added, family and admins read). Drafts gained
+  `admin_answer`; new contracts `admin-action` and
+  `admin-inbox-item`.
+- Also in this commit: CLI and worker share `builder/jobs.py`
+  for contexts and stage assembly; `PackStage(version=round)`;
+  capability's stop is public (`NotPossibleError`); areas take
+  `biome` and `buildable` (the T20-short/T26 file must satisfy
+  the area schema as a bare list or `{"areas": [...]}`);
+  `FileLedger.day_spent()`; Blender runs without secret
+  variables in its environment.
+- Verified with 22 FakeStore tests (no Firebase from here);
+  the Firebase connect and the first live draft wait for Kai's
+  terminal (ADC + the areas file from T26). The Storage
+  `reports/` addition needs one more reviewer emulator run.

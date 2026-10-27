@@ -53,3 +53,36 @@ describe("packs", () => {
     await assertFails(listAll(ref(storage, "packs/d1/1")));
   });
 });
+
+describe("reports", () => {
+  const REPORT = "reports/d1/1/report.html";
+  let env;
+  before(async () => (env = await makeEnv()));
+  after(async () => env.cleanup());
+  beforeEach(async () => {
+    await env.clearFirestore();
+    await env.clearStorage();
+    await seed(env, [
+      ["drafts/d1", draftDoc("grown", { family_uids: ["grown", "kid"] })],
+      ["admins/chief", {}],
+    ]);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await uploadBytes(
+        ref(ctx.storage(), REPORT),
+        new TextEncoder().encode("<html></html>"),
+      );
+    });
+  });
+
+  it("the family and admins read them, nobody else does", async () => {
+    await assertSucceeds(getBytes(ref(player(env, "kid").storage(), REPORT)));
+    await assertSucceeds(getBytes(ref(grownUp(env, "chief").storage(), REPORT)));
+    await assertFails(getBytes(ref(player(env, "other").storage(), REPORT)));
+    await assertFails(
+      uploadBytes(
+        ref(grownUp(env, "grown").storage(), REPORT),
+        new TextEncoder().encode("<html></html>"),
+      ),
+    );
+  });
+});

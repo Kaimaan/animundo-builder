@@ -101,6 +101,7 @@
       }
     },
     "pack_superseded_at": {"type": "string"},
+    "admin_answer": {"type": "string", "maxLength": 300},
     "created_at": {"type": "string"},
     "updated_at": {"type": "string"},
     "error": {"type": "string"}

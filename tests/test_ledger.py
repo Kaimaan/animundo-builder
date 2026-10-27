@@ -81,6 +81,15 @@ def test_total_spent_refuses_a_broken_ledger(tmp_path: Path) -> None:
         FileLedger(path).total_spent()
 
 
+def test_day_spent_reads_one_day(tmp_path: Path) -> None:
+    ledger = FileLedger(tmp_path / "spend.json")
+    assert ledger.day_spent("2026-10-27") == 0.0
+    receipt = ledger.reserve("job-1", 1.00, CAPS)
+    ledger.settle(receipt, 0.25)
+    assert ledger.day_spent() == pytest.approx(0.25)
+    assert ledger.day_spent("2026-01-01") == 0.0
+
+
 def test_racing_jobs_cannot_both_spend(tmp_path: Path) -> None:
     ledger = FileLedger(tmp_path / "spend.json")
     caps = Caps(job_usd=10.0, day_usd=1.0, total_usd=10.0)

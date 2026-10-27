@@ -16,6 +16,8 @@
       "properties": {"lat": {"type": "number"}, "lon": {"type": "number"}}
     },
     "ecoregion": {"type": "string"},
+    "biome": {"type": "string"},
+    "buildable": {"type": "boolean"},
     "outline": {
       "type": "array",
       "items": {

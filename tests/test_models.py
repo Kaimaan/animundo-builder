@@ -631,3 +631,22 @@ def test_reverify_drops_detail_complaints() -> None:
         "model_reverify", {"ISSUES": "[]", "SPECIES": "s", "ROUND": "1"}
     )
     assert "stays dropped" in prompt
+
+
+def test_blender_build_sees_no_secrets(tmp_path: Path, monkeypatch: Any) -> None:
+    import subprocess
+
+    from builder.stages import models as models_module
+
+    seen: dict[str, Any] = {}
+
+    def fake_run(*args: Any, **kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="BUILT x: y\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setenv("MODEL_API_KEY", "secret")
+    monkeypatch.setenv("PATH", "/bin")
+    models_module.build_in_sandbox(tmp_path, "red_deer")
+    assert "MODEL_API_KEY" not in seen["env"]
+    assert seen["env"]["PATH"] == "/bin"

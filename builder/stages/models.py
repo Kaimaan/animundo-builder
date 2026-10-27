@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -390,6 +391,22 @@ def _ensure_sandbox(job_dir: Path, world: Path) -> Path:
     return sandbox
 
 
+#: Secret-bearing variables Blender never sees (spec 05: the builder
+#: subprocess runs with no secrets in its environment).
+SECRET_ENV = (
+    "MODEL_API_KEY",
+    "BASETEN_API_KEY",
+    "FIREWORKS_API_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+)
+
+
+def _scrubbed_env() -> dict[str, str]:
+    return {k: v for k, v in os.environ.items() if k not in SECRET_ENV}
+
+
 def build_in_sandbox(sandbox: Path, spec: str) -> dict[str, Any]:
     """Run the world's build script; parse the BUILT line or keep the log.
 
@@ -403,6 +420,7 @@ def build_in_sandbox(sandbox: Path, spec: str) -> dict[str, Any]:
         capture_output=True,
         text=True,
         timeout=1800,
+        env=_scrubbed_env(),
     )
     log = (done.stdout + done.stderr).strip()
     match = re.search(r"^BUILT (\S+): (.+)$", log, re.MULTILINE)

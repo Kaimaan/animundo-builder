@@ -22,6 +22,22 @@ service firebase.storage {
         );
       allow write: if false;
     }
+
+    // One build report per round, same readers as the pack.
+    match /reports/{draftId}/{round}/{file} {
+      allow get: if request.auth != null
+        && (
+          firestore.exists(
+            /databases/(default)/documents/admins/$(request.auth.uid))
+          || (
+            firestore.exists(
+              /databases/(default)/documents/drafts/$(draftId))
+            && request.auth.uid in firestore.get(
+              /databases/(default)/documents/drafts/$(draftId)).data.family_uids
+          )
+        );
+      allow write: if false;
+    }
     // END animundo-builder
   }
 }

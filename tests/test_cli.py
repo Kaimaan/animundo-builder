@@ -28,10 +28,25 @@ def test_check_needs_world() -> None:
         main(["check"])
 
 
-def test_unbuilt_commands_say_so(capsys) -> None:
-    assert main(["worker"]) == NOT_BUILT_YET
+def test_unbuilt_commands_say_so(tmp_path: Path, capsys) -> None:
+    assert main(["worker", "--world", str(tmp_path)]) == NOT_BUILT_YET
     assert "not built yet" in capsys.readouterr().err
     assert main(["eval"]) == NOT_BUILT_YET
+
+
+def test_worker_listen_calls_listen(tmp_path: Path, monkeypatch) -> None:
+    import builder.worker
+
+    seen: dict[str, object] = {}
+
+    def fake_listen(*args: object) -> int:
+        seen["args"] = args
+        return 0
+
+    monkeypatch.setattr(builder.worker, "listen", fake_listen)
+    code = main(["worker", "--listen", "--world", str(tmp_path)])
+    assert code == 0
+    assert seen["args"][2] == tmp_path
 
 
 def test_build_stops_cleanly_without_a_key(tmp_path: Path, monkeypatch, capsys) -> None:

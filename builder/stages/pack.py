@@ -31,6 +31,9 @@ class PackStage:
 
     name = "pack"
 
+    def __init__(self, version: int = 1) -> None:
+        self.version = version
+
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
             raise ValueError("pack needs --world")
@@ -82,7 +85,7 @@ class PackStage:
             "draft_id": ctx.job_id,
             "draft_place_id": draft_place_id,
             "place_id": region["id"],
-            "version": 1,
+            "version": self.version,
             "format": PACK_FORMAT,
             "files": _manifest_files(pack),
             "new_species": sorted(new_ids),
@@ -105,7 +108,7 @@ class PackStage:
             "pack_dir": "pack",
             "pack_files": len(manifest["files"]),
             "pack_bytes": total,
-            "version": 1,
+            "version": self.version,
             "manifest": "pack/manifest.json",
         }
 

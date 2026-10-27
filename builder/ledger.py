@@ -112,6 +112,11 @@ class FileLedger:
         with _LockedFile(self.path) as locked:
             return float(locked.data.get("total", 0.0))
 
+    def day_spent(self, day: str | None = None) -> float:
+        """Today's (or one day's) spend, for the worker's daily limit."""
+        with _LockedFile(self.path) as locked:
+            return float(locked.data.get("days", {}).get(day or today_iso(), 0.0))
+
     def _spent(
         self, data: dict[str, Any], job_id: str, day: str
     ) -> tuple[float, float, float]:

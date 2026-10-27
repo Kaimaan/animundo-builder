@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/admin-action.schema.json",
+  "title": "What the admin panel asks the worker to do about a draft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["admin_uid", "draft_id", "action", "at"],
+  "properties": {
+    "admin_uid": {"type": "string", "minLength": 1},
+    "draft_id": {"type": "string", "minLength": 1},
+    "action": {"enum": ["send_on", "published", "not_accepted", "show_again", "remove"]},
+    "reason": {"type": "string", "maxLength": 300},
+    "answer": {"type": "string", "maxLength": 300},
+    "at": {"type": "string"},
+    "done_at": {"type": "string"},
+    "error": {"type": "string"}
+  }
+}

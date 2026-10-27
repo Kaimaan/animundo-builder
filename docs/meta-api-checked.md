@@ -196,27 +196,48 @@ response = client.chat.completions.create(
   builder's client does (429 and 5xx, at most 5 tries, then the step
   fails cleanly).
 
-## Open-weight models: an add-on, off by default
+## Open-weight models: Baseten serves the live builder
 
-Reviews and translations run on Muse Spark unless `BUILDER_OPEN_MODEL_HOST`
-says otherwise. The switch supports these hosts; partner hosts need their
-key plus an explicit `BUILDER_OPEN_BASE_URL` until their URLs are confirmed.
+`BUILDER_OPEN_MODEL_HOST` stays `meta` for development: every call runs
+on the Meta Model API. With `baseten`, all chat (planning, file writing,
+render reviews, child-safety review, translations) runs on Muse Spark
+Open on Baseten; only search grounding, image drawing and SAM 3.1 stay
+on Meta. Tool calling and JSON-schema output were tried there and work.
 
-- **Baseten:** Muse Spark Open, `meta-models/muse-spark-open-1026` (the
-  hackathon id, from the event's own credit form).
+- **Baseten, confirmed 2026-10-27 with live calls**
+  ([model page](https://www.baseten.co/library/muse-spark-open/)):
+  base URL `https://inference.baseten.co/v1`, model
+  `meta-models/muse-spark-open-1026` (the hackathon id; the docs show
+  the unpinned one). Auth is `Authorization: Api-Key $BASETEN_API_KEY`,
+  not Bearer. Prices, per million tokens: input $1.25, output $4.25,
+  cached input $0.15.
+- **It reasons first, and the reasoning counts against `max_tokens`.**
+  A two-image review burned 2,000 output tokens before answering, so
+  open calls default to 8,000 (that review used 4,073); translations
+  pass 1,500 with `chat_template_kwargs: {"reasoning_effort": "low"}`.
+  An empty `content` is a failure: the caller retries once, then the
+  job stops cleanly.
+- The reasoning comes back in `message.reasoning_content`. The client
+  never reads it: only `content` reaches callers, and the log holds
+  usage alone, never text.
+- **Money:** Baseten spend has its own pool ($100 of the $100 credit),
+  so a runaway there can't touch the Meta budget. Below $20 left it
+  warns on stderr (an admin-panel item lands with the panel). When
+  Baseten refuses, the call falls back to the Meta Model API inside
+  the Meta caps ($8 a job, $20 a day, $80 total); past those, builds
+  wait. Every log line records which host ran it.
 - **Fireworks:** Muse Glimmer, model id from `BUILDER_OPEN_MODEL`.
-  **To confirm** at T33/T43: that a LoRA fine-tune of it is served
+  **To confirm** at T43: that a LoRA fine-tune of it is served
   serverless.
-- **Modal:** refused until the model names are confirmed. **To confirm**
-  at T33, with Modal credits in hand.
+- **Modal:** refused until the model names are confirmed.
 
 ## Verified with live calls
 
 `tests/test_meta_live.py` (opt-in, needs `MODEL_API_KEY`) proves one real
 call each: chat with tools, structured output, search grounding with
-citations, image input, and a SAM 3.1 segmentation stream. Still open:
+citations, image input, and a SAM 3.1 segmentation stream. Baseten
+(needs `BASETEN_API_KEY`) proves a translation and a review-shaped
+call with an image and a JSON schema. Still open:
 
-- The open-weight add-on (needs partner keys and endpoint URLs; lands
-  with T33).
 - `web_search` on Chat Completions: untested. If it works, the survey can
   use one endpoint with everything else.

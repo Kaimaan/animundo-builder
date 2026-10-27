@@ -15,8 +15,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from .ledger import CapExceeded
-from .meta import MetaAuthError, MetaClient, Usage, usage_from_response
+from .ledger import CapExceeded, LedgerError
+from .meta import (
+    MetaAuthError,
+    MetaClient,
+    Usage,
+    is_open_host_refusal,
+    usage_from_response,
+)
 from .prices import Prices
 
 
@@ -113,6 +119,7 @@ class JobContext:
     client: MetaClient | None
     tracker: BudgetTracker
     world_path: Path | None = None
+    open_client: MetaClient | None = None
 
     def check_budget(self) -> None:
         self.tracker.check()
@@ -123,8 +130,26 @@ class JobContext:
         return self.client
 
     def chat(self, *args: Any, **kwargs: Any) -> Any:
+        """One chat call: the open host when set, else Muse Spark.
+
+        Planning, file writing, reviews, safety and translations all
+        prefer the open host; only search grounding, image drawing and
+        SAM stay on the Meta Model API (they use other methods). When
+        the open host refuses, the call falls back to Meta inside the
+        Meta caps; the log's host field shows which ran it.
+        """
         self.tracker.check()
-        client = self._client()
+        if self.open_client is not None:
+            try:
+                return self._chat_via(self.open_client, *args, **kwargs)
+            except (CapExceeded, LedgerError):
+                pass  # spent or unreadable: fall through to Meta
+            except Exception as error:  # noqa: BLE001 - sorted by refusal
+                if not is_open_host_refusal(error):
+                    raise
+        return self._chat_via(self._client(), *args, **kwargs)
+
+    def _chat_via(self, client: MetaClient, *args: Any, **kwargs: Any) -> Any:
         response = client.chat(*args, **kwargs)
         self.tracker.add(usage_from_response(response, client.model))
         return response

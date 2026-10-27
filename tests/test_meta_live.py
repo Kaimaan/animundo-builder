@@ -15,11 +15,15 @@ import zlib
 import httpx2
 import pytest
 
+from builder.config import Config
 from builder.config import load as load_config
 from builder.meta import CostLogger, MetaClient
 
 LIVE = os.environ.get("BUILDER_LIVE_TEST") == "1" and bool(
     os.environ.get("MODEL_API_KEY")
+)
+BASENTEN = os.environ.get("BUILDER_LIVE_TEST") == "1" and bool(
+    os.environ.get("BASETEN_API_KEY")
 )
 
 pytestmark = pytest.mark.skipif(
@@ -185,5 +189,74 @@ def test_live_images_generate(tmp_path) -> None:
     print(f"\nimage bytes: {len(data)}")
 
 
-def test_live_baseten_open_weights() -> None:
-    pytest.skip("Baseten call lands with T33 (needs key and endpoint URL)")
+def make_baseten_client(tmp_path) -> MetaClient:
+    key = os.environ.get("BASETEN_API_KEY")
+    assert key, "BASETEN_API_KEY is not set"
+    config = Config(open_model_host="baseten", baseten_api_key=key)
+    return MetaClient.for_open_weights(
+        config, logger=CostLogger(tmp_path / "baseten-cost.jsonl")
+    )
+
+
+@pytest.mark.skipif(
+    not BASENTEN, reason="live test: needs BUILDER_LIVE_TEST=1 and BASETEN_API_KEY"
+)
+def test_live_baseten_translate(tmp_path) -> None:
+    client = make_baseten_client(tmp_path)
+    response = client.chat(
+        [
+            {
+                "role": "user",
+                "content": "Translate to Finnish: The eagle circles above the cliffs.",
+            }
+        ],
+        max_tokens=1500,
+        extra_body={"chat_template_kwargs": {"reasoning_effort": "low"}},
+    )
+    content = response.choices[0].message.content or ""
+    assert content.strip(), "empty content counts as a failure"
+    usage = response.usage
+    print(f"\nbaseten translation: {usage.prompt_tokens} in")
+    print(f"completion tokens: {usage.completion_tokens}")
+
+
+@pytest.mark.skipif(
+    not BASENTEN, reason="live test: needs BUILDER_LIVE_TEST=1 and BASETEN_API_KEY"
+)
+def test_live_baseten_review_shaped(tmp_path) -> None:
+    client = make_baseten_client(tmp_path)
+    response = client.chat(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "List visible flaws as JSON."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{red_pixel_png_b64()}"
+                        },
+                    },
+                ],
+            }
+        ],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "Review",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "issues": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": ["issues"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+    )
+    content = response.choices[0].message.content or ""
+    assert content.strip(), "empty content counts as a failure"
+    assert "issues" in json.loads(content)
+    usage = response.usage
+    print(f"\nbaseten review: {usage.prompt_tokens} in, {usage.completion_tokens} out")

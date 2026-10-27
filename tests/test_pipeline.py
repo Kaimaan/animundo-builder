@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from builder.meta import Usage
+from builder.ledger import CapExceeded
+from builder.meta import MetaError, Usage
 from builder.pipeline import (
     BudgetExceeded,
     BudgetTracker,
@@ -79,6 +80,44 @@ def make_ctx(tmp_path: Path, budget: float = 8.0) -> tuple[JobContext, FakeClien
         tracker=BudgetTracker(budget_usd=budget),
     )
     return ctx, client
+
+
+class RefusingClient(FakeClient):
+    """An open host whose budget is spent."""
+
+    def chat(self, *args: Any, **kwargs: Any) -> Any:
+        raise CapExceeded("baseten total spent")
+
+
+class BrokenClient(FakeClient):
+    """An open host failing for no good reason."""
+
+    def chat(self, *args: Any, **kwargs: Any) -> Any:
+        raise MetaError("baseten: failed after 1 tries")
+
+
+def test_chat_prefers_the_open_host(tmp_path: Path) -> None:
+    ctx, meta = make_ctx(tmp_path)
+    open_client = FakeClient()
+    ctx.open_client = open_client  # type: ignore[assignment]
+    ctx.chat([{"role": "user", "content": "hi"}])
+    assert open_client.calls == 1
+    assert meta.calls == 0
+
+
+def test_chat_falls_back_when_the_open_host_refuses(tmp_path: Path) -> None:
+    ctx, meta = make_ctx(tmp_path)
+    ctx.open_client = RefusingClient()  # type: ignore[assignment]
+    ctx.chat([{"role": "user", "content": "hi"}])
+    assert meta.calls == 1
+
+
+def test_chat_reraises_unrelated_open_errors(tmp_path: Path) -> None:
+    ctx, meta = make_ctx(tmp_path)
+    ctx.open_client = BrokenClient()  # type: ignore[assignment]
+    with pytest.raises(MetaError, match="failed after 1 tries"):
+        ctx.chat([{"role": "user", "content": "hi"}])
+    assert meta.calls == 0
 
 
 def test_runs_stages_in_order_and_saves_state(tmp_path: Path) -> None:

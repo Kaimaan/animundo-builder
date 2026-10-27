@@ -25,6 +25,7 @@ from .pipeline import (
     StageFailedError,
     stages_for_kind,
 )
+from .prices import UnknownModelError
 from .report import build_report
 from .stages import (
     AnimalsStage,
@@ -71,6 +72,30 @@ def _caps(config: Any) -> Caps:
         day_usd=config.daily_budget_usd,
         total_usd=config.total_budget_usd,
     )
+
+
+def _open_client(config: Any, job_dir: Path, job_id: str) -> MetaClient | None:
+    """The open-weights client, or None when reviews stay on Muse Spark."""
+    if config.open_model_host == "meta":
+        return None
+    try:
+        return MetaClient.for_open_weights(
+            config,
+            logger=CostLogger(job_dir / "log.jsonl"),
+            ledger=FileLedger(config.baseten_ledger_path()),
+            job_id=job_id,
+            caps=Caps(
+                job_usd=config.job_budget_usd,
+                day_usd=config.daily_budget_usd,
+                total_usd=config.baseten_total_usd,
+            ),
+        )
+    except (MetaAuthError, ValueError, UnknownModelError) as error:
+        print(
+            f"open weights off ({config.open_model_host}): {error}; "
+            "reviews run on Muse Spark"
+        )
+        return None
 
 
 def _explain_stop(job_id: str, error: Exception) -> int:
@@ -210,6 +235,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         client=client,
         tracker=BudgetTracker(budget_usd=config.job_budget_usd),
         world_path=world,
+        open_client=_open_client(config, job_dir, job_id),
     )
     (job_dir / "state.json").write_text(
         json.dumps(
@@ -290,6 +316,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
         client=client,
         tracker=BudgetTracker(budget_usd=config.job_budget_usd),
         world_path=world,
+        open_client=_open_client(config, job_dir, args.job_id),
     )
     stage = IntakeStage(
         area_id=params.get("area"),

@@ -14,7 +14,7 @@ def test_defaults() -> None:
     assert config.open_model_host == "meta"
     assert config.daily_budget_usd == 20.0
     assert config.job_budget_usd == 8.0
-    assert config.total_budget_usd == 120.0
+    assert config.total_budget_usd == 80.0
     assert config.ledger_path == "spend-ledger.json"
     assert config.max_new_species == 3
     assert config.prices.input_per_million == 1.25

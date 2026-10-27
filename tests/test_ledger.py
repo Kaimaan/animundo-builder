@@ -66,6 +66,21 @@ def test_corrupt_ledger_refuses(tmp_path: Path) -> None:
         ledger.reserve("job-1", 0.01, CAPS)
 
 
+def test_total_spent_reads_the_pool(tmp_path: Path) -> None:
+    ledger = FileLedger(tmp_path / "spend.json")
+    assert ledger.total_spent() == 0.0
+    receipt = ledger.reserve("job-1", 1.00, CAPS)
+    ledger.settle(receipt, 0.25)
+    assert ledger.total_spent() == pytest.approx(0.25)
+
+
+def test_total_spent_refuses_a_broken_ledger(tmp_path: Path) -> None:
+    path = tmp_path / "spend.json"
+    path.write_text("not json{", encoding="utf-8")
+    with pytest.raises(LedgerError, match="cannot read"):
+        FileLedger(path).total_spent()
+
+
 def test_racing_jobs_cannot_both_spend(tmp_path: Path) -> None:
     ledger = FileLedger(tmp_path / "spend.json")
     caps = Caps(job_usd=10.0, day_usd=1.0, total_usd=10.0)
@@ -152,3 +167,11 @@ def test_firestore_outage_refuses() -> None:
     ledger = FirestoreLedger(db)
     with pytest.raises(LedgerError, match="cannot reserve"):
         ledger.reserve("job-1", 0.01, CAPS)
+
+
+def test_firestore_total_spent() -> None:
+    ledger = FirestoreLedger(_FakeDb())
+    assert ledger.total_spent() == 0.0
+    receipt = ledger.reserve("job-1", 1.00, CAPS)
+    ledger.settle(receipt, 0.25)
+    assert ledger.total_spent() == pytest.approx(0.25)

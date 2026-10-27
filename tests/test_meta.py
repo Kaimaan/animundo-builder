@@ -7,17 +7,23 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx2
+import openai
 import pytest
 
+import builder.meta as meta_module
 from builder.config import Config
 from builder.ledger import CapExceeded, Caps, LedgerError, Receipt
 from builder.meta import (
     BASE_URL,
+    BASENTEN_BASE_URL,
+    OPEN_DEFAULT_MAX_TOKENS,
     CostLogger,
     MetaAuthError,
     MetaClient,
     MetaError,
     Usage,
+    _ApiKeyAuth,
+    is_open_host_refusal,
 )
 from builder.prices import UnknownModelError, prices_for
 
@@ -239,20 +245,128 @@ def test_open_weights_default_is_meta(tmp_path: Path) -> None:
     assert str(client._client.base_url).rstrip("/") == BASE_URL
 
 
-def test_open_weights_baseten_needs_key_and_url() -> None:
+def test_open_weights_baseten_confirmed() -> None:
     config = Config(open_model_host="baseten")
     with pytest.raises(MetaAuthError, match="BASETEN_API_KEY"):
         MetaClient.for_open_weights(config)
     config = Config(open_model_host="baseten", baseten_api_key="b-key")
-    with pytest.raises(ValueError, match="BUILDER_OPEN_BASE_URL"):
-        MetaClient.for_open_weights(config)
+    client = MetaClient.for_open_weights(config)
+    assert client.model == "meta-models/muse-spark-open-1026"
+    assert str(client._client.base_url).rstrip("/") == BASENTEN_BASE_URL
+    assert client.host == "baseten"
+    assert client.default_max_tokens == OPEN_DEFAULT_MAX_TOKENS
+
+
+def test_open_weights_unknown_model_still_refused() -> None:
     config = Config(
-        open_model_host="baseten",
-        baseten_api_key="b-key",
-        open_base_url="https://example.org/v1",
+        open_model_host="baseten", baseten_api_key="b-key", open_model="nope"
     )
     with pytest.raises(UnknownModelError, match="no price"):
         MetaClient.for_open_weights(config)
+
+
+def test_open_weights_fireworks_still_needs_url() -> None:
+    config = Config(open_model_host="fireworks", fireworks_api_key="f-key")
+    with pytest.raises(ValueError, match="BUILDER_OPEN_BASE_URL"):
+        MetaClient.for_open_weights(config)
+
+
+def test_baseten_auth_sends_api_key_scheme() -> None:
+    auth = _ApiKeyAuth("b-key")
+    request = httpx2.Request(
+        "POST",
+        "https://inference.baseten.co/v1/chat/completions",
+        headers={"Authorization": "Bearer b-key"},
+    )
+    next(auth.auth_flow(request))
+    assert request.headers["Authorization"] == "Api-Key b-key"
+
+
+def test_baseten_client_installs_api_key_auth() -> None:
+    config = Config(open_model_host="baseten", baseten_api_key="b-key")
+    client = MetaClient.for_open_weights(config)
+    assert isinstance(client._client._client.auth, _ApiKeyAuth)
+
+
+def test_chat_logs_which_host_ran_it(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+    logger = CostLogger(tmp_path / "cost.jsonl")
+    config = Config(open_model_host="baseten", baseten_api_key="b-key")
+    client = MetaClient.for_open_weights(
+        config,
+        logger=logger,
+        http_client=httpx2.Client(transport=httpx2.MockTransport(script)),
+    )
+    client.chat([{"role": "user", "content": "hi"}])
+    (line,) = read_log(logger)
+    assert line["host"] == "baseten"
+    meta, meta_logger = make_client(Script([(200, chat_body())]), tmp_path / "meta")
+    meta.chat([{"role": "user", "content": "hi"}])
+    (meta_line,) = read_log(meta_logger)
+    assert meta_line["host"] == "meta"
+
+
+def test_chat_extra_body_reaches_request(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+    client, _ = make_client(script, tmp_path)
+    client.chat(
+        [{"role": "user", "content": "hi"}],
+        extra_body={"chat_template_kwargs": {"reasoning_effort": "low"}},
+    )
+    body = json.loads(script.requests[0].content)
+    assert body["chat_template_kwargs"] == {"reasoning_effort": "low"}
+
+
+def test_open_model_price_matches_baseten_page() -> None:
+    prices = prices_for("meta-models/muse-spark-open-1026")
+    assert (
+        prices.input_per_million,
+        prices.output_per_million,
+        prices.cached_input_per_million,
+    ) == (1.25, 4.25, 0.15)
+
+
+def _chained(status: int | None) -> MetaError:
+    error = MetaError("chat: failed")
+    if status is not None:
+        request = httpx2.Request("POST", "https://inference.baseten.co/v1/x")
+        error.__cause__ = openai.APIStatusError(
+            "refused", response=httpx2.Response(status, request=request), body={}
+        )
+    return error
+
+
+def test_open_host_refusal_sorting() -> None:
+    assert is_open_host_refusal(MetaAuthError("not authorised"))
+    assert is_open_host_refusal(_chained(402))
+    assert is_open_host_refusal(_chained(429))
+    assert not is_open_host_refusal(_chained(400))
+    assert not is_open_host_refusal(_chained(500))
+    assert not is_open_host_refusal(_chained(None))
+    assert not is_open_host_refusal(ValueError("boom"))
+
+
+def test_baseten_low_credit_warns_once(
+    tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(meta_module, "_baseten_low_warned", False)
+    script = Script([(200, chat_body()), (200, chat_body())])
+    logger = CostLogger(tmp_path / "cost.jsonl")
+    ledger = FakeLedger(Caps(8.0, 20.0, 100.0))
+    ledger.spent = 85.0
+    config = Config(open_model_host="baseten", baseten_api_key="b-key")
+    client = MetaClient.for_open_weights(
+        config,
+        logger=logger,
+        http_client=httpx2.Client(transport=httpx2.MockTransport(script)),
+        ledger=ledger,
+        job_id="job-1",
+        caps=ledger.caps,
+    )
+    client.chat([{"role": "user", "content": "hi"}])
+    client.chat([{"role": "user", "content": "hi"}])
+    err = capsys.readouterr().err
+    assert err.count("of Baseten credit left") == 1
 
 
 def test_open_weights_unconfirmed_host_refused() -> None:
@@ -283,6 +397,7 @@ class FakeLedger:
         self.caps = caps
         self.reserved: list[float] = []
         self.settled: list[float] = []
+        self.spent = 0.0
         self.job_id: str | None = None
 
     def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt:
@@ -292,6 +407,10 @@ class FakeLedger:
 
     def settle(self, receipt: Receipt, actual_usd: float) -> None:
         self.settled.append(actual_usd)
+        self.spent += actual_usd
+
+    def total_spent(self) -> float:
+        return self.spent
 
 
 def test_unknown_model_has_no_price() -> None:

@@ -32,8 +32,9 @@ class Config:
     world_path: str | None = None
     daily_budget_usd: float = 20.0
     job_budget_usd: float = 8.0
-    total_budget_usd: float = 120.0
+    total_budget_usd: float = 80.0
     ledger_path: str = "spend-ledger.json"
+    baseten_total_usd: float = 100.0
     max_new_species: int = 3
     model_api_key: str | None = None
     baseten_api_key: str | None = None
@@ -59,6 +60,11 @@ class Config:
         if self.open_model_host == "modal-glimmer":
             return None
         return self.model_api_key
+
+    def baseten_ledger_path(self) -> str:
+        """The Baseten pool's own ledger file, next to the Meta one."""
+        path = Path(self.ledger_path)
+        return str(path.with_name(f"{path.stem}-baseten{path.suffix}"))
 
 
 def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:

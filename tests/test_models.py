@@ -312,6 +312,19 @@ def test_rounds_run_out(tmp_path: Path) -> None:
     assert "2 rounds" in state["failed"]["error"]
 
 
+def test_empty_review_content_fails_the_stage(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    chat = ScriptChat([json.dumps(SPEC), "", ""])
+    with pytest.raises(StageFailedError, match="stage models failed"):
+        Pipeline(
+            [ModelsStage(chat=chat, build=_build_ok, check=lambda s, i: [])],
+            tmp_path / "state.json",
+        ).run(_ctx(tmp_path, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "never wrote a valid review" in state["failed"]["error"]
+
+
 def test_unfence() -> None:
     assert _unfence('{"a": 1}') == '{"a": 1}'
     assert _unfence('```json\n{"a": 1}\n```') == '{"a": 1}'

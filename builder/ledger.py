@@ -48,6 +48,7 @@ class Ledger(Protocol):
 
     def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt: ...
     def settle(self, receipt: Receipt, actual_usd: float) -> None: ...
+    def total_spent(self) -> float: ...
 
 
 def today_iso() -> str:
@@ -105,6 +106,11 @@ class FileLedger:
             )
             data["total"] = max(0.0, data.get("total", 0.0) - release)
             locked.write(data)
+
+    def total_spent(self) -> float:
+        """The whole pool's spend, for the low-credit warning."""
+        with _LockedFile(self.path) as locked:
+            return float(locked.data.get("total", 0.0))
 
     def _spent(
         self, data: dict[str, Any], job_id: str, day: str
@@ -241,6 +247,20 @@ class FirestoreLedger:
             self._db.run_transaction(txn)
         except Exception as error:  # noqa: BLE001 - settle must not hide
             raise LedgerError(f"cannot settle spend: {error}") from error
+
+    def total_spent(self) -> float:
+        """The whole pool's spend, read in one transaction."""
+        spent: dict[str, float] = {}
+
+        def txn(transaction: Any) -> None:
+            ref = self._db.collection("spend").document("total")
+            spent["total"] = _doc_spent(transaction.get(ref))
+
+        try:
+            self._db.run_transaction(txn)
+        except Exception as error:  # noqa: BLE001 - any failure refuses
+            raise LedgerError(f"cannot read spend: {error}") from error
+        return spent["total"]
 
 
 def _doc_spent(snapshot: Any) -> float:

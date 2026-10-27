@@ -41,6 +41,13 @@ PRICES: dict[str, Prices] = {
         output_per_million=0.0,
         cached_input_per_million=0.0,
     ),
+    # Muse Spark Open on Baseten, checked 2026-10-27 on Baseten's own
+    # model page. The hackathon pins the -1026 snapshot; same rates.
+    "meta-models/muse-spark-open-1026": Prices(
+        input_per_million=1.25,
+        output_per_million=4.25,
+        cached_input_per_million=0.15,
+    ),
 }
 
 

@@ -2,8 +2,9 @@
 
 Everything the builder asks a model goes through `MetaClient`: agent chat
 with tools and structured output on Chat Completions, search grounding and
-SAM 3.1 on the Responses API. Retries, timeouts, usage and cost logging all
-live here, so every stage gets them the same way.
+SAM 3.1 on the Responses API, and partner-hosted open weights (Baseten)
+for preview reviews and translations. Retries, timeouts, usage and cost
+logging all live here, so every stage gets them the same way.
 
 So do the hard spending caps. Every call carries `max_tokens`, reserves
 its worst-case cost against the job, day, and total caps before it is
@@ -18,6 +19,7 @@ from __future__ import annotations
 import base64
 import json
 import random
+import sys
 import time
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
@@ -28,14 +30,19 @@ from typing import Any
 import httpx2
 import openai
 
-from .ledger import CapExceeded, Caps, Ledger, Receipt
+from .ledger import CapExceeded, Caps, Ledger, LedgerError, Receipt
 from .prices import Prices, prices_for
 
 BASE_URL = "https://api.meta.ai/v1"
+BASENTEN_BASE_URL = "https://inference.baseten.co/v1"
+BASENTEN_LOW_USD = 20.0
 MAX_TRIES = 5
 TIMEOUT_TEXT = 60
 TIMEOUT_LONG = 180
 DEFAULT_MAX_TOKENS = 16384
+# Muse Spark Open reasons first and the reasoning counts against the
+# cap: a two-image review burns past 2000 tokens before answering.
+OPEN_DEFAULT_MAX_TOKENS = 8000
 MAX_IMAGES_PER_CALL = 4
 MAX_SEARCHES_PER_CALL = 5
 
@@ -84,11 +91,13 @@ class CostLogger:
         prices: Prices,
         duration_s: float,
         result: str,
+        host: str = "meta",
     ) -> None:
         line = {
             "at": datetime.now(UTC).isoformat(),
             "call": call,
             "model": usage.model,
+            "host": host,
             **{k: v for k, v in asdict(usage).items() if k != "model"},
             "cost_usd": round(usage.cost_usd(prices), 6),
             "duration_s": round(duration_s, 3),
@@ -131,11 +140,13 @@ class MetaClient:
         job_id: str = "local",
         caps: Caps | None = None,
         default_max_tokens: int = DEFAULT_MAX_TOKENS,
+        host: str = "meta",
     ) -> None:
         if not api_key:
             raise MetaAuthError("MODEL_API_KEY is not set")
         if ledger is not None and caps is None:
             raise ValueError("a ledger needs caps")
+        self.host = host
         self.model = model
         self.prices = prices or prices_for(model)
         self.logger = logger
@@ -163,10 +174,12 @@ class MetaClient:
     ) -> MetaClient:
         """Build the client open-weights jobs (reviews, translations) use.
 
-        Default host `meta` runs them on Muse Spark. Partner hosts need
-        their key and, until their URLs are confirmed, an explicit
-        `BUILDER_OPEN_BASE_URL`. Anything missing fails clearly here,
-        never mid-job.
+        Default host `meta` runs them on Muse Spark. Baseten is
+        confirmed (T33): its URL is built in, its key travels as
+        `Api-Key`, and the token default leaves room for the model's
+        reasoning, which counts against `max_tokens`. Other partner
+        hosts still need an explicit `BUILDER_OPEN_BASE_URL`. Anything
+        missing fails clearly here, never mid-job.
         """
         host = config.open_model_host
         if host == "meta":
@@ -182,13 +195,29 @@ class MetaClient:
             )
         if host == "modal-glimmer":
             raise ValueError("the modal-glimmer host is not confirmed yet (see T33)")
+        key = config.open_api_key()
         env_var = {"baseten": "BASETEN_API_KEY", "fireworks": "FIREWORKS_API_KEY"}[host]
-        if not config.open_api_key():
+        if not key:
             raise MetaAuthError(f"{env_var} is not set")
+        if host == "baseten":
+            if http_client is None:
+                http_client = httpx2.Client(auth=_ApiKeyAuth(key))
+            return cls(
+                api_key=key,
+                model=config.open_model_id(),
+                logger=logger,
+                http_client=http_client,
+                base_url=config.open_base_url or BASENTEN_BASE_URL,
+                ledger=ledger,
+                job_id=job_id,
+                caps=caps,
+                default_max_tokens=OPEN_DEFAULT_MAX_TOKENS,
+                host="baseten",
+            )
         if not config.open_base_url:
             raise ValueError(f"set BUILDER_OPEN_BASE_URL for host {host!r}")
         return cls(
-            api_key=config.open_api_key(),
+            api_key=key,
             model=config.open_model_id(),
             logger=logger,
             http_client=http_client,
@@ -196,6 +225,8 @@ class MetaClient:
             ledger=ledger,
             job_id=job_id,
             caps=caps,
+            default_max_tokens=OPEN_DEFAULT_MAX_TOKENS,
+            host=host,
         )
 
     def ensure_model(self) -> None:
@@ -212,6 +243,7 @@ class MetaClient:
         reasoning_effort: str | None = None,
         timeout: float = TIMEOUT_TEXT,
         max_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> Any:
         """One Chat Completions call, with caps, retries and cost logging."""
         limit = max_tokens or self.default_max_tokens
@@ -225,6 +257,7 @@ class MetaClient:
                 reasoning_effort=reasoning_effort,  # type: ignore[arg-type]
                 timeout=timeout,
                 max_tokens=limit,
+                extra_body=extra_body,
             )
 
         receipt = self._reserve(messages, limit, searches=0, images=0)
@@ -281,6 +314,7 @@ class MetaClient:
     def for_sam(self) -> MetaClient:
         """A sibling client for sam-3.1, sharing key, ledger, and log."""
         clone = MetaClient.__new__(MetaClient)
+        clone.host = self.host
         clone.model = "sam-3.1"
         clone.prices = prices_for("sam-3.1")
         clone.logger = self.logger
@@ -295,6 +329,7 @@ class MetaClient:
     def for_image(self) -> MetaClient:
         """A sibling client for muse-image-1.0, sharing key, ledger, log."""
         clone = MetaClient.__new__(MetaClient)
+        clone.host = self.host
         clone.model = "muse-image-1.0"
         clone.prices = prices_for("muse-image-1.0")
         clone.logger = self.logger
@@ -409,6 +444,33 @@ class MetaClient:
     def _settle(self, receipt: Receipt | None, actual_usd: float) -> None:
         if receipt is not None and self.ledger is not None:
             self.ledger.settle(receipt, actual_usd)
+            self._warn_when_baseten_runs_low()
+
+    def _warn_when_baseten_runs_low(self) -> None:
+        """Warn once per process when Baseten credit runs low.
+
+        The admin panel item this deserves lands with T24; until then
+        the warning goes to stderr, where the worker's logs keep it. A
+        failed warning read never breaks the call it follows.
+        """
+        global _baseten_low_warned
+        if (
+            _baseten_low_warned
+            or self.host != "baseten"
+            or self.ledger is None
+            or self.caps is None
+        ):
+            return
+        try:
+            left = self.caps.total_usd - self.ledger.total_spent()
+        except LedgerError:
+            return
+        if left < BASENTEN_LOW_USD:
+            _baseten_low_warned = True
+            print(
+                f"warning: only ${left:.2f} of Baseten credit left",
+                file=sys.stderr,
+            )
 
     def _with_retries(self, call: str, call_fn: Any) -> Any:
         last_error: Exception | None = None
@@ -427,7 +489,7 @@ class MetaClient:
     def _log(self, call: str, usage: Usage, duration_s: float) -> None:
         if self.logger is None:
             return
-        self.logger.log(call, usage, self.prices, duration_s, "ok")
+        self.logger.log(call, usage, self.prices, duration_s, "ok", self.host)
 
 
 def _estimate_input_tokens(payload: Any) -> int:
@@ -437,6 +499,22 @@ def _estimate_input_tokens(payload: Any) -> int:
 
 def _is_grounded(tools: list[dict[str, Any]] | None) -> bool:
     return any(tool.get("type") == "web_search" for tool in tools or [])
+
+
+_baseten_low_warned = False
+
+
+def is_open_host_refusal(error: Exception) -> bool:
+    """Baseten refusals worth a Meta fallback: auth, spent credit, throttle.
+
+    Anything else (a bad request, a partner outage) stays loud: falling
+    back would only spend Meta money on the same failure.
+    """
+    if isinstance(error, MetaAuthError):
+        return True
+    if isinstance(error, MetaError):
+        return getattr(error.__cause__, "status_code", None) in (402, 429)
+    return False
 
 
 def count_search_calls(response: Any) -> int:
@@ -464,6 +542,23 @@ def usage_from_response(response: Any, model: str, images: int = 0) -> Usage:
         searches=searches,
         images=images,
     )
+
+
+class _ApiKeyAuth(httpx2.Auth):
+    """Baseten's scheme: `Authorization: Api-Key`, not Bearer.
+
+    Runs per request, after the OpenAI client sets its own Bearer
+    header, so it wins. The `reasoning_content` the model sends back
+    is never read here: only `content` reaches callers, and the log
+    holds usage alone, never text.
+    """
+
+    def __init__(self, api_key: str) -> None:
+        self._api_key = api_key
+
+    def auth_flow(self, request: Any) -> Any:
+        request.headers["Authorization"] = f"Api-Key {self._api_key}"
+        yield request
 
 
 def _is_search_call(item: Any) -> bool:

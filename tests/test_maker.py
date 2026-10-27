@@ -25,11 +25,13 @@ from builder.stages.maker import (
     _measurements,
     _part_list,
     _reference_line,
+    _reference_looks,
     _reference_row,
     _run_adapt,
     _size_misses,
     _sourced_sizes,
     _Stopped,
+    _tool_marks,
 )
 from builder.strict import assert_strict_subset
 
@@ -358,7 +360,6 @@ def _edits_answer(**overrides: Any) -> str:
     edits: dict[str, Any] = {
         "colors": {"fur": "#8b7355", "belly": "#f0e8d8"},
         "new_colors": [],
-        "marks": [],
         "repaint": [],
         "unmakable": [],
     }
@@ -1170,11 +1171,28 @@ def test_reference_line_returns_the_row(tmp_path: Path) -> None:
         "| Bear, lynx | `fox`, scaled up | lynx: short tail, ear tufts |\n"
     )
     assert _reference_line(world, "fox", {"name": "Eurasian lynx"}) == (
+        "What the `fox` model looks like (1.0 keeps this): tall pointed dark "
+        "ears, a long bushy tail as long as half its body, a long narrow "
+        "muzzle, thin black legs with small paws, a red coat with a white "
+        "chest and tail tip\n"
         "Bear, lynx: lynx: short tail, ear tufts"
     )
     assert "not on the reference table" in _reference_line(
-        world, "vole", {"name": "Capybara"}
+        world, "grass_snake", {"name": "Green anaconda"}
     )
+
+
+def test_reference_looks_prefers_the_table_column(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    assert _reference_looks(world, "fox").startswith("tall pointed dark ears")
+    assert _reference_looks(world, "grass_snake") is None
+    (world / "models" / "README.md").write_text(
+        "# Models\n\n## Reference models\n\n"
+        "| New animal | Start from | Change | Looks |\n"
+        "|---|---|---|---|\n"
+        "| Snakes | `examples/grass_snake` | Size, head | long smooth coils |\n"
+    )
+    assert _reference_looks(world, "grass_snake") == "long smooth coils"
 
 
 def test_guide_turns_a_missing_text_into_guidance() -> None:
@@ -1387,12 +1405,18 @@ def test_edits_files_accepts_and_rejects(tmp_path: Path) -> None:
     assert errors[0].startswith("not JSON: ")
     _, errors = _edits_files(json.dumps({"colors": {}}), ref)
     assert "leave out" in errors[0]
-    _, errors = _edits_files(_edits_answer(marks=["stripes"]), ref)
-    assert "unmakable" in errors[0]
     _, errors = _edits_files(
         _edits_answer(repaint=[{"part": "nose", "color": "fur"}]), ref
     )
     assert "no part 'nose'" in errors[0]
+
+
+def test_tool_marks_map_words_to_the_tool() -> None:
+    marks, unmatched = _tool_marks(
+        ["ear tufts", "cheek ruff", "short black-tipped tail", "stripes"]
+    )
+    assert marks == ["ear_tufts", "ruff", "tail_tip"]
+    assert unmatched == ["stripes"]
 
 
 def test_edits_sizes_come_from_the_research() -> None:
@@ -1403,6 +1427,23 @@ def test_edits_sizes_come_from_the_research() -> None:
     assert _edits_sizes({}, {"prey": True, "size_cm": 120}) == {"length_m": 1.2}
     bare = {"size": {"length_cm": 100}}
     assert _edits_sizes(bare, {"prey": False, "size_cm": None}) == {"length_m": 1.0}
+    prey_looks = {
+        "size_cm": 120.0,
+        "shoulder_cm": 55.0,
+        "tail_cm": None,
+        "colours": ["brown"],
+        "marks": ["blunt snout"],
+    }
+    assert _edits_sizes({}, {"prey": True, "size_cm": 120, "looks": prey_looks}) == {
+        "length_m": 1.2,
+        "shoulder_m": 0.55,
+        "tail_m": 0.0,
+    }
+    short = {"size": {"length_cm": 100}, "looks": {"tail_cm": 2.0}}
+    assert _edits_sizes(short, {"prey": False, "size_cm": None}) == {
+        "length_m": 1.0,
+        "tail_m": 0.0,
+    }
 
 
 def test_size_misses_names_code_owned_sizes() -> None:
@@ -1600,6 +1641,35 @@ def test_plant_looks_reach_the_home_prompt(tmp_path: Path) -> None:
     _home_stage().run(_ctx(tmp_path, world, client))
     assert "colours: pale green" in client.prompts[0]
     assert "shape: rosette of ribbed leaves" in client.prompts[0]
+
+
+def test_code_marks_come_from_the_research_words(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    _write_looks_research(tmp_path)
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer(unmakable=["mane"])])
+    _stage().run(_ctx(tmp_path, world, client))
+    edits = json.loads(
+        (tmp_path / "tries" / "lynx" / "edits" / "1" / "edits.json").read_text()
+    )
+    assert edits["marks"] == ["ear_tufts", "tail_tip"]
+    checks = json.loads((tmp_path / "checks" / "oneshot.json").read_text())
+    assert checks["unmakable"] == {"lynx": ["mane"]}
+
+
+def test_unmatched_mark_words_go_unmakable(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    _write_looks_research(tmp_path)
+    research = json.loads((tmp_path / "research.json").read_text())
+    research["looks"]["marks"].append(
+        {"mark": "dark stripes", "source": "https://example.org/lynx"}
+    )
+    (tmp_path / "research.json").write_text(json.dumps(research))
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    _stage().run(_ctx(tmp_path, world, client))
+    checks = json.loads((tmp_path / "checks" / "oneshot.json").read_text())
+    assert checks["unmakable"] == {"lynx": ["dark stripes"]}
 
 
 def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:

@@ -3,6 +3,26 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #63 (lab-tried edits call)
+
+- #63.1: the edits call no longer names marks — `marks` left the schema
+  and prompt; `_tool_marks()` maps the research's own words to
+  ear_tufts/ruff/mane/tail_tip/tail_tuft, and words with no tool mark
+  (plus `unmakable` from the call) go to `checks/oneshot.json`, never
+  back to the lab. Code marks land in `edits.json` for the adapt tool.
+- #63.2: the edits call sees the reference as the lab sees it — a looks
+  line (`_reference_looks()` reads the Looks column of the world's
+  `models/README.md`, with fox/vole/moose lines in code until the column
+  lands) plus the table line.
+- #63.3: `ThingLooks` gained shoulder/height/tail cm with sources;
+  `_looks_sizes()` feeds the main animal and, behind `$PREY_LOOKS`, the
+  prey edits, in centimetres as found.
+- #63.4: no tail in the research (or under 3 cm) sends `tail_m 0`, never
+  a √2 guess; the adapt tool removes it.
+- Synced `web/build/animal-list.json` with the world (new brown_bear,
+  common_crane, horse references; ostrich/emu now makable).
+- Suite: 565 passed, 12 skipped; ruff check + format clean.
+
 ## 2026-10-27: inbox #58.5 (looks call) and #62 (D7 live fixes)
 
 - #58.5: a new `looks` stage after `minimum`: one short

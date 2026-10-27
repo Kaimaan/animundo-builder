@@ -43,9 +43,6 @@ from .species_plan import recorded_near, taxon_same
 #: Tries per thing: the write, then at most one fix round.
 MAX_TRIES = 2
 
-#: Marks the world's adapt tool can make (its MARKS, e560112).
-EDITS_MARKS = ("ear_tufts", "ruff", "tail_tip")
-
 #: Factors the edits call may set, 1 meaning as the reference.
 EDITS_FACTORS = (
     "head",
@@ -221,6 +218,19 @@ class AnimalMakerStage:
             edits, file_errors = _edits_files(answer, ref)
             spec: dict[str, Any] | None = None
             if edits is not None:
+                if target["prey"]:
+                    words = (target.get("looks") or {}).get("marks", [])
+                else:
+                    words = [
+                        mark["mark"]
+                        for mark in (research.get("looks") or {}).get("marks", [])
+                        if isinstance(mark, dict) and "mark" in mark
+                    ]
+                marks, unmatched = _tool_marks(words)
+                edits["marks"] = marks
+                edits["unmakable"] = list(
+                    dict.fromkeys([*(edits.get("unmakable") or []), *unmatched])
+                )
                 spec, file_errors = self._adapt_build_place(
                     ctx, world, animal_id, target, ref, edits, sizes, attempt
                 )
@@ -752,13 +762,61 @@ def _looks_description(entry: dict[str, Any], looks: dict[str, Any]) -> str:
     return " ".join(bits)
 
 
+# What the references look like, until the table carries a Looks
+# column of its own (#63.2). 1.0 keeps this.
+_REFERENCE_LOOKS = {
+    "fox": (
+        "tall pointed dark ears, a long bushy tail as long as half "
+        "its body, a long narrow muzzle, thin black legs with small "
+        "paws, a red coat with a white chest and tail tip"
+    ),
+    "vole": (
+        "a small round body, short legs, small round ears, a short "
+        "thin tail, a blunt short muzzle, brown fur"
+    ),
+    "moose": (
+        "very long legs, a deep heavy body, a long heavy head with "
+        "a big overhanging nose, broad flat antlers, a hump at the "
+        "shoulders, a very short tail, dark brown fur"
+    ),
+}
+
+
+def _reference_looks(world: Path, start_from: str) -> str | None:
+    """What the reference model looks like (#63.2).
+
+    The reference table's Looks column when it lands there,
+    else the three lines above.
+    """
+    readme = world / "models" / "README.md"
+    if readme.is_file():
+        for line in readme.read_text(encoding="utf-8").splitlines():
+            if not line.startswith("|"):
+                continue
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if len(cells) != 4 or cells[0].startswith("---"):
+                continue
+            starts = set(re.findall(r"[a-z][a-z0-9_]*", cells[1].lower()))
+            if start_from.lower() in starts and cells[3]:
+                return cells[3]
+    return _REFERENCE_LOOKS.get(start_from)
+
+
 def _reference_line(world: Path, start_from: str, entry: dict[str, Any]) -> str:
-    """The reference table's line for this start and species (#60.2)."""
+    """The reference's looks, then its table line (#60.2, #63.2)."""
+    bits = []
+    looks = _reference_looks(world, start_from)
+    if looks:
+        bits.append(
+            f"What the `{start_from}` model looks like (1.0 keeps this): {looks}"
+        )
     row = _reference_row(world, start_from, entry.get("name", ""))
     if row is None:
-        return "(the species is not on the reference table)"
-    new, change = row
-    return f"{new}: {change}"
+        bits.append("(the species is not on the reference table)")
+    else:
+        new, change = row
+        bits.append(f"{new}: {change}")
+    return "\n".join(bits)
 
 
 # Table rows name a kind ("Snakes"), the animal a species ("anaconda").
@@ -1011,7 +1069,6 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
             "colors",
             "new_colors",
             *EDITS_FACTORS,
-            "marks",
             "repaint",
             "unmakable",
         ],
@@ -1045,11 +1102,6 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
                 },
             },
             **factors,
-            "marks": {
-                "type": "array",
-                "description": "Marks this animal truly has, from this list only",
-                "items": {"type": "string", "enum": list(EDITS_MARKS)},
-            },
             "repaint": {
                 "type": "array",
                 "items": {
@@ -1088,7 +1140,7 @@ def _edits_files(
         return None, [f"not JSON: {error}"]
     if not isinstance(edits, dict):
         return None, ["reply with the edits as one JSON object"]
-    want = {"colors", "marks", "repaint", "unmakable", *EDITS_FACTORS}
+    want = {"colors", "repaint", "unmakable", *EDITS_FACTORS}
     missing = sorted(want - set(edits))
     if missing:
         return None, [f"the edits leave out {', '.join(missing)}"]
@@ -1101,29 +1153,62 @@ def _edits_files(
             return None, [f"repaint names no part {item.get('part')!r}"]
         if item.get("color") not in colours:
             return None, [f"repaint names no colour {item.get('color')!r}"]
-    for mark in edits.get("marks") or []:
-        if mark not in EDITS_MARKS:
-            return None, [
-                f"mark {mark!r} is not one the tool makes; "
-                "list it under unmakable instead"
-            ]
     return edits, []
+
+
+def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
+    """Look-mark words to the tool's marks (#63.1).
+
+    "ruff" gives `ruff`, "tuft" gives `ear_tufts`, "tail"
+    plus "tip" gives `tail_tip`. The rest go unmakable, for
+    the report.
+    """
+    marks: list[str] = []
+    unmatched: list[str] = []
+    for text in words:
+        low = text.lower()
+        found = []
+        if "ruff" in low:
+            found.append("ruff")
+        if "tuft" in low:
+            found.append("ear_tufts")
+        if "tail" in low and "tip" in low:
+            found.append("tail_tip")
+        if found:
+            marks.extend(mark for mark in found if mark not in marks)
+        else:
+            unmatched.append(text)
+    return marks, unmatched
+
+
+def _looks_sizes(looks: dict[str, Any]) -> dict[str, float]:
+    """Shoulder and tail for the adapt tool, from one looks block.
+
+    A missing shoulder stays out (the reference's proportions
+    hold); a missing tail, or one under 3 cm, sends 0 (#63.4).
+    """
+    sizes: dict[str, float] = {}
+    if looks.get("shoulder_cm") is not None:
+        sizes["shoulder_m"] = looks["shoulder_cm"] / 100
+    tail = looks.get("tail_cm")
+    sizes["tail_m"] = 0.0 if tail is None or tail < 3 else tail / 100
+    return sizes
 
 
 def _edits_sizes(research: dict[str, Any], target: dict[str, Any]) -> dict[str, float]:
     """Sizes for the adapt tool, from the research, never the AI (#60.3).
 
-    Length always; shoulder and tail only when the looks name
-    them, so the tool keeps the reference's proportions there.
+    Length always; shoulder and tail from the looks when some
+    exist (#63.3), so prey keep more than their length.
     """
     if target["prey"]:
-        return {"length_m": target["size_cm"] / 100}
+        sizes = {"length_m": target["size_cm"] / 100}
+        if target.get("looks"):
+            sizes.update(_looks_sizes(target["looks"]))
+        return sizes
     sizes = {"length_m": research["size"]["length_cm"] / 100}
-    looks = research.get("looks") or {}
-    if looks.get("shoulder_cm") is not None:
-        sizes["shoulder_m"] = looks["shoulder_cm"] / 100
-    if looks.get("tail_cm") is not None:
-        sizes["tail_m"] = looks["tail_cm"] / 100
+    if research.get("looks"):
+        sizes.update(_looks_sizes(research["looks"]))
     return sizes
 
 

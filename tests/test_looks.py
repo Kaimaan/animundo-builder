@@ -90,6 +90,12 @@ def _looks_answer(name: str, latin: str, plant: bool = False) -> str:
         {
             "latin": latin,
             "size_cm": 30.0 if plant else 120.0,
+            "shoulder_cm": None,
+            "shoulder_source": None,
+            "height_cm": None,
+            "height_source": None,
+            "tail_cm": None,
+            "tail_source": None,
             "colours": ["green"],
             "marks": ["broad leaves"] if plant else ["blunt snout"],
             "year": "Leaves all year." if plant else None,

@@ -37,14 +37,15 @@ The schema arrives with the call; its shape:
   front of the eyes), `ears`, `leg_thickness` (legs' width,
   never length), `paws` (the lowest part of each leg),
   `body_girth` (the body's width and depth), `tail_width`.
-- `marks`: the reference's kind of marks this animal truly
-  has: `ear_tufts`, `ruff`, `tail_tip`. Only those three exist.
 - `repaint`: parts to paint another colour, as
   `{"part", "color"}` with the part and colour names above.
 - `unmakable`: marks the animal has that no edit above can
   make (stripes, a mane, antlers), as plain words. They go to
   the build report for the reviewer to add to the tool; never
   fake them with factors or repaints.
+
+Marks need no entry: code adds ear tufts, ruffs and tail tips
+from the research's own words.
 
 ## Tools
 
@@ -58,8 +59,9 @@ None. Write from the input only.
   differences from the reference read clear at game distance
   (big paws and thick legs want 1.4–1.6, not 1.2). Small
   factors keep the reference's look.
-- Marks the animal does not have stay out; marks no edit can
-  make go in `unmakable`, never in `marks`.
+- Never invent marks, and never fake one with factors or
+  repaints: what the research names, code adds; the rest goes
+  in `unmakable`.
 
 ## Stop
 

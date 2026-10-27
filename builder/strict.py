@@ -192,11 +192,28 @@ class ThingLooks(_Strict):
 
     The prey or one new plant: latin, size, colours, marks or
     shape notes, the year for plants, and sources. Library
-    items get no call.
+    items get no call. Shoulder and tail like the research,
+    so prey keep more than their length (#63.3).
     """
 
     latin: str = Field(description="Its binomial, like 'Lepus timidus'")
     size_cm: float = Field(description="Body length (animals) or height (plants)")
+    shoulder_cm: float | None = Field(
+        description="Shoulder height in centimetres for mammals, else null"
+    )
+    shoulder_source: str | None = Field(
+        description="The page the shoulder height came from, else null"
+    )
+    height_cm: float | None = Field(
+        description="Height in centimetres for birds and fish, else null"
+    )
+    height_source: str | None = Field(
+        description="The page the height came from, else null"
+    )
+    tail_cm: float | None = Field(description="Tail length in centimetres, else null")
+    tail_source: str | None = Field(
+        description="The page the tail length came from, else null"
+    )
     colours: list[str] = Field(
         description="Main colours in plain words, like 'grey-brown'"
     )

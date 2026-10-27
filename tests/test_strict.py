@@ -106,6 +106,12 @@ def test_looks_answer_parses() -> None:
         {
             "latin": "Lepus timidus",
             "size_cm": 55.0,
+            "shoulder_cm": None,
+            "shoulder_source": None,
+            "height_cm": None,
+            "height_source": None,
+            "tail_cm": 8.0,
+            "tail_source": "https://example.org/hare",
             "colours": ["grey-brown", "white"],
             "marks": ["white tail", "long ears"],
             "year": None,

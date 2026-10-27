@@ -9,6 +9,8 @@ at most. Answer with JSON only, no prose.
 
 - `latin`: its binomial, like "Lepus timidus".
 - `size_cm`: body length for an animal, height for a plant.
+- `shoulder_cm` (or `height_cm` for birds and fish) and
+  `tail_cm`, each with its `source`; null when it has none.
 - `colours`: its main colours in plain words.
 - `marks`: 2 to 3 marks or shape notes, like "white tail" or
   "needle leaves".

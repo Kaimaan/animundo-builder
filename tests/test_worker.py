@@ -357,6 +357,7 @@ def test_create_home_runs_home_subset(tmp_path: Path) -> None:
         "intake",
         "research",
         "minimum",
+        "newhome",
         "home",
         "oneshot",
         "words",

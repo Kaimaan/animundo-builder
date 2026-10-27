@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -29,14 +31,22 @@ from ..animal_list import find_list as find_animal_list
 from ..prompts import PROMPTS_DIR, for_children
 from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
+from . import plants as plant_builders
 from .capability import NotPossibleError
 from .models import _ensure_sandbox, build_in_sandbox
+from .species_plan import taxon_same
 
 #: The four verdicts that decide a made animal (spec 04).
 VERDICTS = ("animals", "models", "taxa", "region")
 
 #: Tries per thing: the write, then at most one fix round.
 MAX_TRIES = 2
+
+#: At most two new plant specs per home (spec 04).
+MAX_NEW_PLANTS = 2
+
+#: The worked example every home is written from.
+CLOSEST_HOME = "boreal_forest"
 
 
 class AnimalMakerStage:
@@ -488,6 +498,417 @@ def _unfence(answer: str) -> str:
     text = answer.strip()
     match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     return match.group(1) if match else text
+
+
+class HomeMakerStage:
+    """Make the minimum set's home: the template plus its plants."""
+
+    name = "newhome"
+
+    def __init__(
+        self,
+        author: str = "Animundo Builder",
+        chat: Any | None = None,
+        build: Any | None = None,
+        check_homes: Any | None = None,
+        check_models: Any | None = None,
+        match: Any | None = None,
+    ) -> None:
+        self.author = author
+        self._chat = chat
+        self._build = build or _build_plant
+        self._check_homes = check_homes or check_homes_in_sandbox
+        self._check_models = check_models or check_models_in_sandbox
+        self._match = match or _match_plant
+
+    def run(self, ctx: Any) -> dict[str, Any]:
+        if ctx.world_path is None:
+            raise ValueError("newhome needs --world")
+        world = Path(ctx.world_path)
+        brief = json.loads((ctx.job_dir / "home.json").read_text(encoding="utf-8"))
+        research = json.loads(
+            (ctx.job_dir / "research.json").read_text(encoding="utf-8")
+        )
+        minset = json.loads((ctx.job_dir / "minset.json").read_text(encoding="utf-8"))
+        if not minset.get("make_home"):
+            return {"home_files": [], "cost_usd": 0.0}
+        habitat = brief["home"]
+        made = ctx.job_dir / "homes" / f"{habitat}.json"
+        if made.is_file():
+            return {"home_files": [f"homes/{habitat}.json"], "cost_usd": 0.0}
+        before = ctx.tracker.spent_usd
+        plants = self._make(ctx, world, brief, research, habitat)
+        cost = round(ctx.tracker.spent_usd - before, 6)
+        checks = ctx.job_dir / "checks"
+        checks.mkdir(parents=True, exist_ok=True)
+        (checks / "newhome.json").write_text(
+            json.dumps({"cost_usd": cost, "made": habitat, "plants": plants}, indent=2),
+            encoding="utf-8",
+        )
+        return {
+            "home_files": [f"homes/{habitat}.json"],
+            "plant_files": [f"models/plants/{i}.json" for i in plants],
+            "cost_usd": cost,
+        }
+
+    def _make(
+        self,
+        ctx: Any,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        habitat: str,
+    ) -> list[str]:
+        """One home, one try plus one fix round. Returns new plant ids."""
+        prompt = self._prompt(world, brief, research, habitat)
+        errors: list[str] | None = None
+        for attempt in range(1, MAX_TRIES + 1):
+            ctx.check_budget()
+            answer = self._ask(ctx, prompt, errors)
+            files, file_errors = self._files(world, answer, habitat)
+            if files is not None:
+                file_errors = self._resolve_taxa(world, files)
+            if files is not None and not file_errors:
+                self._place(ctx, world, habitat, files, attempt)
+                file_errors = self._build_and_check(ctx, world, habitat, files, attempt)
+            self._save_try(ctx, habitat, attempt, answer, files, file_errors)
+            if files is not None and not file_errors:
+                self._save_final(ctx, world, habitat, files)
+                return sorted(files["plants"])
+            errors = file_errors or ["the answer held no usable home"]
+        raise _Stopped(
+            f"{habitat}: still failing after one fix round "
+            f"({'; '.join(errors or [])}); a person makes it"
+        )
+
+    def _ask(self, ctx: Any, prompt: str, errors: list[str] | None) -> str:
+        if errors:
+            notes = "\n".join(f"- {error}" for error in errors)
+            prompt = (
+                f"{prompt}\n\nPREVIOUS TRY had these problems,"
+                f" fix exactly them:\n{notes}"
+            )
+        chat = self._chat or ctx.chat
+        response = chat([{"role": "user", "content": prompt}])
+        return (response.choices[0].message.content or "").strip()
+
+    def _files(
+        self, world: Path, answer: str, habitat: str
+    ) -> tuple[dict[str, Any] | None, list[str]]:
+        """The try's home and plant specs, or why the answer holds none."""
+        try:
+            wrapped = json.loads(_unfence(answer))
+        except json.JSONDecodeError as error:
+            return None, [f"not JSON: {error}"]
+        if not isinstance(wrapped, dict) or sorted(wrapped) != ["home", "plants"]:
+            return None, [
+                'reply with one object {"home": ..., "plants": {...}}, nothing else'
+            ]
+        home, plants = wrapped["home"], wrapped["plants"]
+        problems = []
+        if not isinstance(home, dict) or home.get("id") != habitat:
+            problems.append(f"home.id is not {habitat!r}")
+        if not isinstance(plants, dict):
+            problems.append("plants is not an object of specs")
+            plants = {}
+        if len(plants) > MAX_NEW_PLANTS:
+            problems.append(f"at most {MAX_NEW_PLANTS} new plants, not {len(plants)}")
+        for plant_id, spec in plants.items():
+            if not re.fullmatch(r"[a-z][a-z0-9_]*", plant_id):
+                problems.append(f"{plant_id!r} is not a usable plant id")
+            elif not isinstance(spec, dict) or spec.get("id") != plant_id:
+                problems.append(f"the {plant_id} spec's id is not {plant_id!r}")
+            else:
+                try:
+                    plant_builders._validate_plant(world, spec)
+                except jsonschema.ValidationError as error:
+                    problems.append(
+                        f"the {plant_id} spec broke its schema: {error.message}"
+                    )
+        if not problems:
+            known = {path.stem for path in (world / "models" / "plants").glob("*.json")}
+            for plant in home.get("ground_cover", {}).get("plants", []):
+                model = plant.get("model", "")
+                if model not in known and model not in plants:
+                    problems.append(
+                        f"ground cover uses {model!r}, which is neither "
+                        "an existing plant nor a new spec"
+                    )
+        if problems:
+            return None, problems
+        return {"home": home, "plants": dict(plants)}, []
+
+    def _resolve_taxa(self, world: Path, files: dict[str, Any]) -> list[str]:
+        """Give every new plant its GBIF taxon, or reuse what exists.
+
+        A latin the world already grows reuses its spec (the home
+        points at it); anything else keeps its taxon on the spec,
+        with GBIF's accepted name as its latin. Two new specs
+        never share one species.
+        """
+        errors = []
+        seen: dict[int, str] = {}
+        for plant_id in sorted(files["plants"]):
+            spec = files["plants"][plant_id]
+            try:
+                found = self._match(world, spec.get("latin", ""))
+            except Exception as error:  # noqa: BLE001 - GBIF or the latin
+                errors.append(f"{plant_id}: {error}")
+                continue
+            key = found["taxon"]["gbif_key"]
+            if key in seen:
+                errors.append(
+                    f"{plant_id} is the same species as {seen[key]}; "
+                    "one real species, one spec"
+                )
+                continue
+            seen[key] = plant_id
+            target = plant_builders._reuse_target(found)
+            if target is not None:
+                _rewrite_plant(files["home"], plant_id, target)
+                del files["plants"][plant_id]
+            else:
+                spec["taxon"] = found["taxon"]
+                spec["latin"] = found["taxon"]["name"]
+        return errors
+
+    def _place(
+        self,
+        ctx: Any,
+        world: Path,
+        habitat: str,
+        files: dict[str, Any],
+        attempt: int,
+    ) -> None:
+        """Lay the try's files where the build and the checker find them."""
+        homes_dir = ctx.job_dir / "homes"
+        homes_dir.mkdir(exist_ok=True)
+        (homes_dir / f"{habitat}.json").write_text(
+            json.dumps(files["home"], indent=2), encoding="utf-8"
+        )
+        plants_dir = ctx.job_dir / "models" / "plants"
+        plants_dir.mkdir(parents=True, exist_ok=True)
+        sandbox = _ensure_sandbox(ctx.job_dir, world)
+        (sandbox / "homes" / f"{habitat}.json").write_text(
+            json.dumps(files["home"], indent=2), encoding="utf-8"
+        )
+        for plant_id, spec in files["plants"].items():
+            text = json.dumps(spec, indent=2)
+            (plants_dir / f"{plant_id}.json").write_text(text, encoding="utf-8")
+            (sandbox / "models" / "plants" / f"{plant_id}.json").write_text(
+                text, encoding="utf-8"
+            )
+
+    def _build_and_check(
+        self,
+        ctx: Any,
+        world: Path,
+        habitat: str,
+        files: dict[str, Any],
+        attempt: int,
+    ) -> list[str]:
+        """Build the new plants, then read the world's verdicts."""
+        sandbox = _ensure_sandbox(ctx.job_dir, world)
+        folder = ctx.job_dir / "tries" / habitat / str(attempt)
+        folder.mkdir(parents=True, exist_ok=True)
+        errors = []
+        logs = []
+        for plant_id in sorted(files["plants"]):
+            built = self._build(sandbox, plant_id)
+            logs.append(f"== {plant_id} ==\n{built['log']}")
+            if not built["ok"] and not built["log"].strip():
+                raise _Stopped(
+                    f"{plant_id}: the build failed with no output: Blender "
+                    "itself did not run here, not the spec. A person looks."
+                )
+            if not built["ok"]:
+                errors.append(f"the {plant_id} build failed: {built['log']}")
+                continue
+            for name, rel in (
+                (f"{plant_id}.glb", Path("assets") / "plants" / f"{plant_id}.glb"),
+                (
+                    f"{plant_id}.png",
+                    Path("models") / "previews" / "plants" / f"{plant_id}.png",
+                ),
+            ):
+                src = sandbox / rel
+                if src.is_file():
+                    dest = ctx.job_dir / "models" / "plants" / name
+                    dest.write_bytes(src.read_bytes())
+        (folder / "build.log").write_text("\n".join(logs), encoding="utf-8")
+        errors.extend(self._check_homes(sandbox, habitat))
+        if files["plants"]:
+            errors.extend(self._check_models(sandbox, sorted(files["plants"])))
+        (folder / "errors.json").write_text(
+            json.dumps(errors, indent=2), encoding="utf-8"
+        )
+        return errors
+
+    def _save_try(
+        self,
+        ctx: Any,
+        habitat: str,
+        attempt: int,
+        answer: str,
+        files: dict[str, Any] | None,
+        errors: list[str],
+    ) -> None:
+        folder = ctx.job_dir / "tries" / habitat / str(attempt)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "answer.json").write_text(answer, encoding="utf-8")
+        if files is not None:
+            (folder / "home.json").write_text(
+                json.dumps(files["home"], indent=2), encoding="utf-8"
+            )
+            for plant_id, spec in files["plants"].items():
+                (folder / f"plant-{plant_id}.json").write_text(
+                    json.dumps(spec, indent=2), encoding="utf-8"
+                )
+        if not (folder / "errors.json").is_file():
+            (folder / "errors.json").write_text(
+                json.dumps(errors, indent=2), encoding="utf-8"
+            )
+
+    def _save_final(
+        self,
+        ctx: Any,
+        world: Path,
+        habitat: str,
+        files: dict[str, Any],
+    ) -> None:
+        """The passing files, where the pack and the report find them."""
+        sandbox = _ensure_sandbox(ctx.job_dir, world)
+        for plant_id in files["plants"]:
+            preview = sandbox / "models" / "previews" / "plants" / f"{plant_id}.png"
+            if preview.is_file():
+                dest = (
+                    ctx.job_dir / "models" / "previews" / "plants" / f"{plant_id}.png"
+                )
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(preview.read_bytes())
+
+    def _prompt(
+        self,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        habitat: str,
+    ) -> str:
+        template = (PROMPTS_DIR / "home_write.md").read_text(encoding="utf-8")
+        existing = sorted(
+            path.stem for path in (world / "models" / "plants").glob("*.json")
+        )
+        bush = (world / "models" / "plants" / "bilberry.json").read_text()
+        ground = (world / "models" / "plants" / "wood_anemone.json").read_text()
+        return Template(template).substitute(
+            {
+                "HABITAT": habitat,
+                "SURROUNDINGS": json.dumps(research["surroundings"], indent=2),
+                "CLOSEST_NAME": CLOSEST_HOME,
+                "CLOSEST_HOME": (
+                    (world / "homes" / f"{CLOSEST_HOME}.json").read_text()
+                ).replace("$", "$$"),
+                "MAX_PLANTS": str(MAX_NEW_PLANTS),
+                "EXISTING_PLANTS": ", ".join(existing) or "(none yet)",
+                "TREE_SHAPES": "spruce, pine, birch, round, rowan",
+                "PLANT_EXAMPLES": (
+                    f"A bush (bilberry):\n{bush}\n\n"
+                    f"A ground plant (wood anemone):\n{ground}"
+                ).replace("$", "$$"),
+                "REGION_RULES": _region_rules(world),
+                "PLANT_RULES": plant_builders._plant_rules(world),
+                "AUTHOR": self.author,
+                "FOR_CHILDREN": for_children(),
+            }
+        )
+
+
+def _region_rules(world: Path) -> str:
+    """The region-file section of the world's CONTRIBUTING.md."""
+    text = (world / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    start = text.find("## The region file")
+    rest = text.find("\n## ", start + 1)
+    return text[start:rest].strip() if start >= 0 else ""
+
+
+def _build_plant(sandbox: Path, plant_id: str) -> dict[str, Any]:
+    """Run the world's build script on one plant spec, in the sandbox."""
+    return build_in_sandbox(sandbox, f"models/plants/{plant_id}.json")
+
+
+def _match_plant(world: Path, latin: str) -> dict[str, Any]:
+    return taxon_same(world, latin, plant=True)
+
+
+def _rewrite_plant(home: dict[str, Any], plant_id: str, target: str) -> None:
+    """Point the home's ground cover at the existing spec."""
+    for plant in home.get("ground_cover", {}).get("plants", []):
+        if plant.get("model") == plant_id:
+            plant["model"] = target
+
+
+def check_homes_in_sandbox(sandbox: Path, habitat: str) -> list[str]:
+    """Our home's lines from the world's `homes.py check`.
+
+    Other homes' failures are the world's own state, not this
+    try's; only this habitat's block feeds back.
+    """
+    try:
+        done = subprocess.run(
+            [sys.executable, "tools/homes.py", "check"],
+            cwd=sandbox,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise _Stopped(f"homes.py check did not run: {error}")
+    want = f"homes/{habitat}.json"
+    errors: list[str] = []
+    ours = False
+    for line in (done.stdout + done.stderr).splitlines():
+        if line.startswith("FAIL ") or line.startswith("ok   "):
+            ours = line[5:].strip() == want and line.startswith("FAIL ")
+        elif ours and line.startswith("     - "):
+            errors.append(line[7:].strip())
+    if not ours and not errors and f"ok   {want}" not in done.stdout:
+        out = (done.stdout + done.stderr).strip()[:200]
+        raise _Stopped(f"homes.py check never mentioned {want}: {out}")
+    return errors
+
+
+def check_models_in_sandbox(sandbox: Path, plant_ids: list[str]) -> list[str]:
+    """Our plants' lines from the world's `check_models.py`.
+
+    It runs over the whole sandbox (the preview sheets only
+    exist there), but only `ERROR: <ours>: ...` lines feed
+    back; the world's own failures are not this try's. No
+    summary line means the tool itself broke.
+    """
+    try:
+        done = subprocess.run(
+            [sys.executable, "tools/check_models.py"],
+            cwd=sandbox,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise _Stopped(f"check_models.py did not run: {error}")
+    if "models checked," not in done.stdout:
+        raise _Stopped(
+            f"check_models.py broke: {(done.stdout + done.stderr).strip()[:200]}"
+        )
+    wanted = set(plant_ids)
+    errors = []
+    for line in done.stderr.splitlines():
+        if not line.startswith("ERROR: "):
+            continue
+        rest = line[len("ERROR: ") :]
+        pid, _, msg = rest.partition(": ")
+        if pid in wanted:
+            errors.append(f"{pid}: {msg}" if msg else pid)
+    return errors
 
 
 class _Stopped(Exception):

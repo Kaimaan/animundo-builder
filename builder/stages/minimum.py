@@ -53,7 +53,7 @@ class MinimumStage:
         if make_home:
             raise NotPossibleError(
                 f"the {brief['home']} home is made next; "
-                "the home maker lands after this review"
+                "run the newhome stage, then resume"
             )
         return result
 

@@ -3,6 +3,36 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #50: the new-home maker (rainforest)
+
+- The `newhome` stage makes the minimum set's home: one
+  model call (`home_write`: the research's surroundings,
+  `boreal_forest.json` as the worked example, the region
+  and plant rules, at most 2 new plant specs), built in a
+  scratch world. Done when the world's `homes.py check`
+  and `check_models.py` pass on it. One fix round at most;
+  still failing stops naming a person. Cost on
+  `checks/newhome.json`, the report's home line.
+- New plants resolve their latin with GBIF (`--same`):
+  already-grown reuses its spec (the home points at it),
+  else the spec keeps the taxon with GBIF's accepted name.
+  Two new specs never share one species.
+- `check_models.py` runs in the sandbox, not through
+  `check_draft.py`: the draft overlay has no previews
+  folder, and plants require their preview sheet. Only
+  this home's lines feed back either way. (The animal
+  maker is unaffected: animals need no preview sheet.)
+- `minimum` now says to run the newhome stage and resume;
+  home pipeline order is intake, research, minimum,
+  newhome, home, oneshot, words, pack.
+- Evidence: 9 maker tests (recorded pass + fail answers,
+  replayed keyless); probes vs the real checkout (boreal
+  home adapted to rainforest, bilberry spec adapted to
+  water lettuce, stub builds, real `homes.py`,
+  `check_models.py`, GBIF taxon): made first try both
+  legs. Live rainforest run is the reviewer's:
+  `builder stage newhome --job jobs/review-anaconda --record`.
+
 ## 2026-10-27: inbox #51.3, #51.4, #53: seasons, species keys, sources
 
 - #51.3: the children's block births animals with the real
@@ -173,6 +203,9 @@ noted; `<job>` holds the previous stages' outputs):
 - `oneshot` (1 model call per thing, at most 2): needs
   `home.json`, `research.json`, `minset.json`, `regions/`.
   `builder stage oneshot --job <job> [--record|--replay]`
+- `newhome` (1 model call, at most 2): needs `home.json`,
+  `research.json`, `minset.json`.
+  `builder stage newhome --job <job> [--record|--replay]`
 - `words` (model calls): needs `regions/` and
   `species-plan.json`.
   `builder stage words --job <job> [--record|--replay]`

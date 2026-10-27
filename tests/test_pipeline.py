@@ -199,7 +199,7 @@ def test_animal_home_runs_home_subset() -> None:
     stages = [NamedStage(n) for n in ("intake", "home", "survey", "words")]
     run, missing = stages_for_kind(stages, "animal_home")
     assert [s.name for s in run] == ["intake", "home", "words"]
-    assert missing == ["research", "minimum", "oneshot", "pack"]
+    assert missing == ["research", "minimum", "newhome", "oneshot", "pack"]
 
 
 def test_animal_home_safety_flag_restores_review() -> None:

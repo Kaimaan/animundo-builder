@@ -15,7 +15,9 @@ The survey:
 $SURVEY_JSON
 ```
 
-The GBIF match, fixed by the pipeline (decision per species id):
+The GBIF match, fixed by the pipeline (decision per species id).
+Some reuse lines name existing animals the survey missed but GBIF
+records at the place; list them like any surveyed species.
 
 ```
 $MATCH_TABLE
@@ -24,7 +26,7 @@ $MATCH_TABLE
 ## Output
 
 The species plan as strict JSON matching its schema: one entry per
-surveyed species with its `decision`, your `reason`, and the `taxon`
+match-table species with its `decision`, your `reason`, and the `taxon`
 copied from its match table line (`food_kind` copied the same way for
 food), plus `food_web_ok`, `missing_food`, and `sensitive_species`.
 The pipeline replaces both with the matcher's own values.

@@ -13,9 +13,10 @@ const STATUSES: Array[String] = ["requested", "queued", "building", "ready",
 
 
 ## The globe look for a draft: "your_draft" for an installed family draft,
-## "being_explored" while the family waits for one, "not_possible_yet" for a
-## place that can't be built, else "" (the globe stays as it was: published
-## places are the game's own lit places, strangers' drafts aren't shown).
+## "being_explored" while the family waits for one, else "" (the globe stays
+## as it was: published places are the game's own lit places, strangers'
+## drafts aren't shown, and not_possible_yet stays unmarked — the look
+## stays unused and the screen explains).
 static func look_for(status: String, is_family: bool, installed: bool) -> String:
 	if not is_family:
 		return ""
@@ -24,8 +25,6 @@ static func look_for(status: String, is_family: bool, installed: bool) -> String
 			return "your_draft" if installed else "being_explored"
 		"requested", "queued", "building", "improving":
 			return "being_explored"
-		"not_possible_yet":
-			return "not_possible_yet"
 	return ""
 
 

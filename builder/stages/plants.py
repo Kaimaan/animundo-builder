@@ -30,6 +30,7 @@ from ..prompts import PROMPTS_DIR, load_prompt
 from ..schemas import load_schema, validate
 from ..world import check_draft, mentions, problems_by_file
 from .models import build_in_sandbox
+from .region import new_plant_ids
 from .species_plan import taxon_same
 
 MAX_ROUNDS_PER_PLANT = 6
@@ -73,8 +74,7 @@ class PlantsStage:
             for plant in region.get("ground_cover", {}).get("plants", [])
         }
         entries.pop("", None)
-        checkout = {path.stem for path in (world / "models" / "plants").glob("*.json")}
-        new_ids = sorted(set(entries) - checkout)
+        new_ids = sorted(new_plant_ids(region, world))
         if len(new_ids) > self.max_new_plants:
             raise _Stopped(
                 f"the region names {len(new_ids)} new plants "

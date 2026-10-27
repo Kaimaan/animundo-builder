@@ -2,8 +2,9 @@
 
 Fixed shape, no model-decided flow: one land call, one species call, an
 extra gaps call only when fewer than three independent source sites turned
-up, then one structured write call with fix retries. Six model calls and 80
-searches at most; going over stops the job.
+up, then one structured write call with fix retries. A research answer cut
+off at max_tokens is continued, never taken as ok. Eight model calls and
+80 searches at most; going over stops the job.
 """
 
 from __future__ import annotations
@@ -14,12 +15,13 @@ from urllib.parse import urlparse
 
 import jsonschema
 
-from ..meta import count_search_calls
+from ..meta import DEFAULT_MAX_TOKENS, count_search_calls, is_cut_off
 from ..prompts import load_prompt
 from ..schemas import load_schema, validate
 
 SEARCH_TOOL = [{"type": "web_search"}]
 MIN_DOMAINS = 3
+MAX_CONTINUATIONS = 2
 
 
 def domain_of(url: str) -> str:
@@ -40,7 +42,7 @@ class SurveyStage:
 
     name = "survey"
 
-    def __init__(self, max_rounds: int = 6, max_searches: int = 80) -> None:
+    def __init__(self, max_rounds: int = 8, max_searches: int = 80) -> None:
         self.max_rounds = max_rounds
         self.max_searches = max_searches
         self.rounds = 0
@@ -86,13 +88,36 @@ class SurveyStage:
     def _research(
         self, ctx: Any, prompt_name: str, values: dict[str, str]
     ) -> tuple[str, set[str]]:
+        first = load_prompt(prompt_name, values)
         self._spend_round(ctx, searches=True)
         response = ctx.respond(
-            load_prompt(prompt_name, values), tools=SEARCH_TOOL, timeout=180
+            first,
+            tools=SEARCH_TOOL,
+            timeout=180,
+            max_tokens=DEFAULT_MAX_TOKENS,
         )
+        text = _response_text(response)
         found = _citation_urls(response)
         self.searches += count_search_calls(response)
-        return _response_text(response), found
+        for _ in range(MAX_CONTINUATIONS):
+            if not is_cut_off(response, DEFAULT_MAX_TOKENS):
+                return text, found
+            self._spend_round(ctx, searches=True)
+            response = ctx.respond(
+                _continue_prompt(first, text),
+                tools=SEARCH_TOOL,
+                timeout=180,
+                max_tokens=DEFAULT_MAX_TOKENS,
+            )
+            text += "\n" + _response_text(response)
+            found |= _citation_urls(response)
+            self.searches += count_search_calls(response)
+        if is_cut_off(response, DEFAULT_MAX_TOKENS):
+            raise _Stopped(
+                f"{prompt_name} was still cut off "
+                f"after {MAX_CONTINUATIONS} continuations"
+            )
+        return text, found
 
     def _write(
         self,
@@ -185,6 +210,15 @@ class SurveyStage:
 
 class _Stopped(Exception):
     """The stage ran out of rounds or searches. The job stops with a reason."""
+
+
+def _continue_prompt(first: str, text_so_far: str) -> str:
+    """Pick up cut-off research: same brief, no recap, no repeats."""
+    return (
+        f"{first}\n\nYou stopped mid-answer. Continue EXACTLY where you "
+        "stopped: no recap, no repeats, no new searches unless a fact "
+        "needs one.\n\nSo far:\n\n" + text_so_far
+    )
 
 
 def _response_text(response: Any) -> str:

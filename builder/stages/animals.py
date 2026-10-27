@@ -12,6 +12,7 @@ carries on with the rest. Translations come later (words stage).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -20,6 +21,7 @@ import jsonschema
 
 from ..prompts import PROMPTS_DIR
 from ..world import check_draft, mentions, problems_by_file
+from .region import MAX_NEW_PLANTS, new_plant_ids
 
 MAX_ROUNDS_PER_SPECIES = 6
 PROGRESS_FILE = "progress.json"
@@ -179,10 +181,12 @@ class AnimalsStage:
         result = check_draft(world, ctx.job_dir, "animals")
         by_check = {entry.get("check"): entry for entry in result.get("results", [])}
         region_entry = by_check.get("region", {})
-        if region_entry.get("status") == "fail":
+        region_problems = _unexcused_region_problems(
+            region, world, region_entry.get("problems", [])
+        )
+        if region_entry.get("status") == "fail" and region_problems:
             raise _Stopped(
-                "the region broke after stage 4: "
-                + "; ".join(region_entry.get("problems", [])[:5])
+                "the region broke after stage 4: " + "; ".join(region_problems[:5])
             )
         fatal = []
         for name in ("locale", "schema", "taxa", "animals"):
@@ -229,6 +233,37 @@ class AnimalsStage:
                     problems.setdefault(species_id, []).append(text)
             return
         fatal.append(line.strip() if not file else f"{file}: {line.strip()}")
+
+
+PLANT_MODEL_LINE = re.compile(
+    r'"ground_cover\.plants\[(\d+)\]\.model" must be a plant in models/plants/'
+)
+
+
+def _unexcused_region_problems(
+    region: dict[str, Any], world: Path, problems: list[str]
+) -> list[str]:
+    """The region failures that stop the animals stage.
+
+    Unknown-plant lines are excused exactly for the ids the plants
+    stage will build (at most MAX_NEW_PLANTS, none in the checkout
+    yet): their specs come later, and stopping here would never let
+    the plants stage run. Anything else still stops the job.
+    """
+    plants = region.get("ground_cover", {}).get("plants", [])
+    new = new_plant_ids(region, world)
+    excusable = new if len(new) <= MAX_NEW_PLANTS else set()
+    kept = []
+    for line in problems:
+        match = PLANT_MODEL_LINE.search(line)
+        if match is None:
+            kept.append(line)
+            continue
+        index = int(match.group(1))
+        model = plants[index].get("model", "") if index < len(plants) else ""
+        if model not in excusable:
+            kept.append(line)
+    return kept
 
 
 class _Stopped(Exception):

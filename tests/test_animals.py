@@ -391,3 +391,71 @@ def test_role_examples_in_prompt(tmp_path: Path) -> None:
     }  # type: ignore[union-attr]
     assert "mountain_hare" in by_species["zz_deer"]
     assert "Vulpes vulpes" in by_species["zz_owl"]
+
+
+PLANT_LINE = (
+    '"ground_cover.plants[0].model" must be a plant in models/plants/ '
+    "(known: ['bilberry'])"
+)
+
+
+def _region_with_plant(tmp_path: Path) -> None:
+    path = tmp_path / "regions" / "xx_test.json"
+    region = json.loads(path.read_text())
+    region["ground_cover"] = {"plants": [{"model": "zz_cloudberry"}]}
+    path.write_text(json.dumps(region))
+
+
+def _region_verdict(problems: list) -> str:
+    return (
+        "import json;print(json.dumps({'ok': False, 'results': ["
+        "{'check': 'region', 'status': 'fail', 'problems': "
+        + json.dumps(problems).replace("'", "\\'")
+        + "}]}))"
+    )
+
+
+def test_new_plant_region_failure_is_excused(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    _region_with_plant(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(_region_verdict([PLANT_LINE]))
+    client = ScriptClient(
+        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+    )
+    result = AnimalsStage().run(_ctx(tmp_path, client, world))
+    assert result["rounds"] == {"zz_deer": 1, "zz_owl": 1}
+
+
+def test_known_plant_region_failure_still_stops(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    _region_with_plant(tmp_path)
+    plants = world / "models" / "plants"
+    plants.mkdir(parents=True)
+    (plants / "zz_cloudberry.json").write_text("{}")
+    (world / "tools" / "check_draft.py").write_text(_region_verdict([PLANT_LINE]))
+    client = ScriptClient(
+        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+    )
+    pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage animals failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "the region broke after stage 4" in state["failed"]["error"]
+
+
+def test_other_region_failure_still_stops(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(
+        _region_verdict(["ERROR: the terrain seed is missing"])
+    )
+    client = ScriptClient(
+        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+    )
+    pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage animals failed"):
+        pipeline.run(_ctx(tmp_path, client, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "the region broke after stage 4" in state["failed"]["error"]

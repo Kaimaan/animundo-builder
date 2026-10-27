@@ -649,3 +649,25 @@ def test_for_image_shares_key_ledger_and_log(tmp_path: Path) -> None:
     assert image._client is client._client
     assert image.logger is logger
     assert image.ledger is ledger
+
+
+def test_is_cut_off() -> None:
+    from builder.meta import is_cut_off
+
+    def resp(**kwargs):  # type: ignore[no-untyped-def]
+        return SimpleNamespace(**kwargs)
+
+    assert is_cut_off(resp(status="incomplete"), 100) is True
+    assert is_cut_off(resp(status="completed"), 100) is False
+    assert (
+        is_cut_off(resp(choices=[SimpleNamespace(finish_reason="length")]), 100) is True
+    )
+    assert (
+        is_cut_off(resp(choices=[SimpleNamespace(finish_reason="stop")]), 100) is False
+    )
+    usage = SimpleNamespace(output_tokens=100, completion_tokens=0)
+    assert is_cut_off(resp(usage=usage), 100) is True
+    usage = SimpleNamespace(output_tokens=0, completion_tokens=99)
+    assert is_cut_off(resp(usage=usage), 100) is False
+    assert is_cut_off(resp(), 100) is False
+    assert is_cut_off(resp(), 0) is False

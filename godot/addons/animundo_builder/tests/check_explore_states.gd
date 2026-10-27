@@ -42,7 +42,7 @@ func _check_pure() -> void:
 			["requested", true, false, "being_explored"],
 			["building", true, false, "being_explored"],
 			["improving", true, false, "being_explored"],
-			["not_possible_yet", true, false, "not_possible_yet"],
+			["not_possible_yet", true, false, ""],
 			["public", true, true, ""], ["public", false, false, ""],
 			["failed", true, false, ""], ["expired", true, false, ""],
 			["ready", false, false, ""], ["mystery", true, true, ""]]:

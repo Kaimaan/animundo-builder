@@ -20,6 +20,7 @@ import json
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Collection
 from pathlib import Path
@@ -42,6 +43,7 @@ WATER_BREEDERS = frozenset({"gnat", "midge", "mosquito"})
 
 MatchFn = Callable[[Path, str], dict[str, Any]]
 ClassifyFn = Callable[[int], str]
+RecordedFn = Callable[[float, float, int], bool]
 
 
 TAXON_TRIES = 3
@@ -110,6 +112,38 @@ def gbif_phylum(gbif_key: int) -> str:
     raise _Stopped(f"could not read the GBIF phylum for key {gbif_key} ({last_error})")
 
 
+OCCURRENCE_SPAN = 0.5  # degrees around the center: recorded here means living here
+
+
+def recorded_near(lat: float, lon: float, gbif_key: int) -> bool:
+    """Whether GBIF holds an occurrence of the taxon near the place.
+
+    A count query over a one-degree box around the center: real
+    sightings, not a range guess. Transient failures are retried;
+    a stable failure raises, and the backfill skips that animal
+    visibly (it lands in `backfill_unchecked`, never silently).
+    """
+    south = max(-90.0, lat - OCCURRENCE_SPAN)
+    north = min(90.0, lat + OCCURRENCE_SPAN)
+    west = max(-180.0, lon - OCCURRENCE_SPAN)
+    east = min(180.0, lon + OCCURRENCE_SPAN)
+    box = (
+        f"POLYGON(({west} {south}, {east} {south}, {east} {north}, "
+        f"{west} {north}, {west} {south}))"
+    )
+    query = urllib.parse.urlencode({"taxon_key": gbif_key, "geometry": box, "limit": 0})
+    last_error = ""
+    for attempt in range(1, TAXON_TRIES + 1):
+        try:
+            url = f"https://api.gbif.org/v1/occurrence/search?{query}"
+            with urllib.request.urlopen(url, timeout=20) as response:
+                return json.load(response).get("count", 0) > 0
+        except (OSError, ValueError) as error:
+            last_error = str(error)
+            time.sleep(2.0**attempt)
+    raise _Stopped(f"could not read GBIF occurrences for key {gbif_key} ({last_error})")
+
+
 class SpeciesPlanStage:
     """Write `species-plan.json` and shrink the region to its final cast."""
 
@@ -120,10 +154,12 @@ class SpeciesPlanStage:
         max_new_species: int = DEFAULT_MAX_NEW_SPECIES,
         match: MatchFn | None = None,
         classify: ClassifyFn | None = None,
+        recorded: RecordedFn | None = None,
     ) -> None:
         self.max_new_species = max_new_species
         self._match = match or taxon_same
         self._classify = classify or gbif_phylum
+        self._recorded = recorded or recorded_near
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -133,6 +169,7 @@ class SpeciesPlanStage:
         region_path = self._region_path(ctx)
         table = read_table(world)
         fixed, rank = self._match_all(world, survey, table)
+        unchecked = self._backfill(world, region_path, fixed, rank)
         plan = self._write_with_model(ctx, survey, region_path, fixed, rank)
         self._attach_references(ctx, table, survey, plan)
         jsonschema.validate(plan, load_schema("species-plan"))
@@ -152,6 +189,12 @@ class SpeciesPlanStage:
             "candidate": sum(1 for d in decisions if d == "candidate"),
             "needs_code": sum(1 for d in decisions if d == "needs_code"),
             "added_young": plan.get("added_young", []),
+            "backfilled": sorted(
+                survey_id
+                for survey_id, record in fixed.items()
+                if record.get("backfilled")
+            ),
+            "backfill_unchecked": sorted(unchecked),
         }
 
     def _region_path(self, ctx: Any) -> Path:
@@ -210,6 +253,75 @@ class SpeciesPlanStage:
             rank[survey_id] = taxon
         return fixed, rank
 
+    def _backfill(
+        self,
+        world: Path,
+        region_path: Path,
+        fixed: dict[str, dict[str, Any]],
+        rank: dict[str, dict[str, Any]],
+    ) -> set[str]:
+        """Reuse the world's animals GBIF records at the place.
+
+        The survey misses residents (a cut-off species call listed one
+        animal for a whole park); reusing costs nothing, so every
+        existing animal with an occurrence near the center joins the
+        plan as reuse, in its file's name. Skipped without a sound:
+        young forms, surveyed species, files already reused, taxa the
+        survey already covers, the unrecorded, and animals the cast
+        gives no part. Returns the stems GBIF could not answer for.
+        """
+        region = json.loads(region_path.read_text(encoding="utf-8"))
+        center = region.get("center") or {}
+        lat, lon = center.get("lat"), center.get("lon")
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            return set()
+        taxa = _file_taxa(world)
+        taken_files = {
+            record["file"]
+            for record in fixed.values()
+            if record.get("decision") == "reuse"
+        }
+        taken_keys = {record["taxon"]["gbif_key"] for record in fixed.values()}
+        taken_keys |= {taxon["gbif_key"] for taxon in rank.values()}
+        surveyed = set(fixed) | set(rank)
+        cast = set(taken_files)
+        for stem in _cast_files(region):
+            if (world / "animals" / f"{stem}.json").is_file():
+                cast.add(stem)
+        hunts = {
+            tag
+            for stem in cast
+            for tag in _animal_file(world, stem).get("hunts", []) or []
+        }
+        unchecked = set()
+        for stem in sorted(taxa):
+            if stem in surveyed or stem in taken_files:
+                continue
+            taxon = taxa[stem]
+            if taxon.get("gbif_key") is None or taxon["gbif_key"] in taken_keys:
+                continue
+            data = _animal_file(world, stem)
+            if data.get("stage_of"):
+                continue
+            role = _backfill_role(data, hunts)
+            if role is None:
+                continue
+            try:
+                recorded = self._recorded(float(lat), float(lon), taxon["gbif_key"])
+            except Exception:
+                unchecked.add(stem)
+                continue
+            if not recorded:
+                continue
+            fixed[stem] = {
+                "decision": "reuse",
+                "file": stem,
+                "taxon": taxon,
+                "backfilled": True,
+                "role": role,
+            }
+        return unchecked
+
     def _is_food(self, taxon: dict[str, Any]) -> bool:
         """A non-chordate is food: small invertebrates, never files.
 
@@ -233,11 +345,17 @@ class SpeciesPlanStage:
                 record = fixed[survey_id]
                 if record["decision"] == "reuse":
                     taxon = record["taxon"]
-                    lines.append(
+                    line = (
                         f"- {survey_id}: reuse the file {record['file']} "
                         f"(GBIF {taxon['gbif_key']} {taxon['rank']} "
                         f"{taxon['name']})."
                     )
+                    if record.get("backfilled"):
+                        line += (
+                            " The survey missed it; GBIF records it at "
+                            "the place, so it joins the cast."
+                        )
+                    lines.append(line)
                 elif record["decision"] == "food":
                     lines.append(
                         f"- {survey_id}: food ({record['kind']}), never a file. "
@@ -340,7 +458,7 @@ class SpeciesPlanStage:
             return f"PREVIOUS TRY was not JSON: {error}", {}
         entries = plan.get("species", [])
         if {entry.get("species") for entry in entries} != set(fixed) | set(rank):
-            return "PREVIOUS TRY must list every surveyed species once.", {}
+            return "PREVIOUS TRY must list every match-table species once.", {}
         for entry in entries:
             survey_id = entry["species"]
             if survey_id in fixed:
@@ -369,7 +487,7 @@ class SpeciesPlanStage:
                     entry.get("reason", "")
                     + f" Saved for later: over the cap of {self.max_new_species}."
                 ).strip()
-        self._enforce_wild_and_prey(entries, survey)
+        self._enforce_wild_and_prey(entries, survey, fixed)
         for entry in entries:
             survey_id = entry["species"]
             taxon = fixed[survey_id]["taxon"] if survey_id in fixed else rank[survey_id]
@@ -393,7 +511,10 @@ class SpeciesPlanStage:
         return "", plan
 
     def _enforce_wild_and_prey(
-        self, entries: list[dict[str, Any]], survey: dict[str, Any]
+        self,
+        entries: list[dict[str, Any]],
+        survey: dict[str, Any],
+        fixed: dict[str, dict[str, Any]],
     ) -> None:
         """Demote unbuildable new species, refilling from candidates.
 
@@ -401,9 +522,14 @@ class SpeciesPlanStage:
         farmed, stocked) is saved for a person, and a new predator with
         no prey-role species in the cast waits until its prey is built.
         Each demotion promotes the next suitable candidate, in order, so
-        the cast keeps the model's ranking up to the cap.
+        the cast keeps the model's ranking up to the cap. Backfilled
+        reuse counts by the part the cast gives it, so a recorded hare
+        feeds a new fox.
         """
         roles = {s["species"]: s.get("role") for s in survey.get("species", [])}
+        for record in fixed.values():
+            if record.get("backfilled"):
+                roles[record["file"]] = record["role"]
         while True:
             final = [e for e in entries if e["decision"] in ("reuse", "new")]
             prey = {e["species"] for e in final if roles.get(e["species"]) == "prey"}
@@ -447,6 +573,43 @@ class SpeciesPlanStage:
                     prey.add(entry["species"])
             if not (demoted or promoted):
                 return
+
+    @staticmethod
+    def _place_backfilled(
+        world: Path,
+        region: dict[str, Any],
+        fixed: dict[str, dict[str, Any]],
+    ) -> None:
+        """Seat backfilled reuse in the cast, in place.
+
+        Fish swim, hunters hunt, the hunted are prey, the playable
+        play: the file says which, the same way the built places do.
+        Before the food kinds and the heal, so the rewrite's own
+        check proves the fuller cast.
+        """
+        for record in fixed.values():
+            if not record.get("backfilled"):
+                continue
+            stem = record["file"]
+            data = _animal_file(world, stem)
+            if data.get("archetype") == "fish":
+                fish = region.setdefault("fish", [])
+                if stem not in {entry.get("kind") for entry in fish}:
+                    fish.append({"kind": stem, "count": 5})
+            animals = region.setdefault("animals", {})
+            if data.get("playable"):
+                group = animals.setdefault("playable", [])
+                if stem not in group:
+                    group.append(stem)
+            group_name = None
+            if record["role"] == "predator":
+                group_name = "predators"
+            elif record["role"] == "prey" and data.get("archetype") != "fish":
+                group_name = "prey"
+            if group_name is not None:
+                group = animals.setdefault(group_name, [])
+                if stem not in group:
+                    group.append(stem)
 
     def _heal_cast(self, world: Path, region: dict[str, Any]) -> set[str]:
         """Feed the reuse cast: missing food kinds and young prey forms.
@@ -542,6 +705,7 @@ class SpeciesPlanStage:
         ]
         for fish in region.get("fish", []):
             fish["kind"] = rename.get(fish["kind"], fish["kind"])
+        self._place_backfilled(world, region, fixed)
         kinds = {food.get("kind", "") for food in region.get("food", [])}
         for entry in plan["species"]:
             if entry["decision"] != "food" or entry["food_kind"] in kinds:
@@ -660,6 +824,28 @@ def _grown_form(world: Path, files: Collection[str]) -> str:
         if not data.get("stage_of"):
             grown.append(Path(name).stem)
     return sorted(grown or [Path(n).stem for n in files], key=len)[0]
+
+
+def _backfill_role(data: dict[str, Any], hunts: set[str]) -> str | None:
+    """The cast part for a backfilled animal, if the cast gives it one.
+
+    Read off the file the way the built places do: the `predator` tag
+    hunts, fish swim, hunters without the tag play, the hunted are
+    prey, the playable play, and the rest (unplayable and unhunted)
+    sit out.
+    """
+    tags = set(data.get("tags", []) or [])
+    if "predator" in tags:
+        return "predator"
+    if data.get("archetype") == "fish":
+        return "prey" if tags & hunts else "fish"
+    if data.get("hunts"):
+        return "playable" if data.get("playable") else None
+    if tags & hunts:
+        return "prey"
+    if data.get("playable"):
+        return "playable"
+    return None
 
 
 def _refuse_collision(

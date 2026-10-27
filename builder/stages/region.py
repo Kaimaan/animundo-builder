@@ -28,6 +28,7 @@ from ..world import DraftError, check_draft, problems_by_file
 
 HOSTED_AUTHOR = "Animundo Builder"
 MIN_SOURCES = 3
+MAX_NEW_PLANTS = 3
 
 
 class RegionStage:
@@ -281,6 +282,20 @@ def _unknown_animals(world: Path, region_path: Path) -> set[str]:
     return _used_species(region_path) - _known_animals(world)
 
 
+def new_plant_ids(draft: dict[str, Any], world: Path) -> set[str]:
+    """The region's plant models the checkout has no spec for yet.
+
+    These are what the plants stage builds (at most MAX_NEW_PLANTS);
+    earlier excuses for unknown-plant checker lines cover exactly them.
+    """
+    used = {
+        plant.get("model", "")
+        for plant in draft.get("ground_cover", {}).get("plants", [])
+    } - {""}
+    checkout = {path.stem for path in (world / "models" / "plants").glob("*.json")}
+    return used - checkout
+
+
 def _plant_errors(draft: dict[str, Any], world: Path) -> list[str]:
     """New plant models beyond the 3 the plants stage builds, if any.
 
@@ -301,11 +316,11 @@ def _plant_errors(draft: dict[str, Any], world: Path) -> list[str]:
             + ", ".join(stale)
             + "; rebuild the world, then run again"
         )
-    new = sorted(used - checkout)
-    if len(new) > 3:
+    new = sorted(new_plant_ids(draft, world))
+    if len(new) > MAX_NEW_PLANTS:
         errors.append(
-            f"names {len(new)} new plant models ({', '.join(new)}), at most 3; "
-            "use built ones for the rest"
+            f"names {len(new)} new plant models ({', '.join(new)}), "
+            f"at most {MAX_NEW_PLANTS}; use built ones for the rest"
         )
     return errors
 

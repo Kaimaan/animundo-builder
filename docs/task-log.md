@@ -414,3 +414,24 @@ Job folders live under `jobs/` (local only, never committed).
 - Game-side note for Kai: a pack without locale/ or animals/
   logs "Couldn't open directory" from i18n.gd/species.gd on
   every boot; the readers want a dir_exists guard.
+
+## 2026-10-27: loop fixes #36.1 and #36.2, addon look fix (#29)
+
+- #36.1: the animals stage excused only nowhere the region's
+  not-yet-built plant lines, so every place with a new plant
+  stopped before the plants stage ran. It now excuses exactly
+  the ids the plants stage will build (`new_plant_ids`, shared
+  with region and plants); anything else still stops the job.
+- #36.2: a species call cut off at max_tokens read as ok and
+  left one animal for a whole park. `is_cut_off` (explicit
+  signal first, token count as fallback) now spots it, and
+  survey research continues where it stopped (twice at most,
+  then a loud stop). Rounds cap 6 to 8 for the headroom.
+- #36.2: the species plan backfills the world's animals GBIF
+  records near the center, even when the survey missed them:
+  a count query per file (fox and hare join Repovesi, the
+  Saimaa seal rightly doesn't), seated in the cast by the
+  file's own part, feeding predator gating. GBIF failures
+  land in `backfill_unchecked`, never silently.
+- #29 compliance: the addon's `not_possible_yet` globe look
+  is gone (the look stays unused); the screen explains.

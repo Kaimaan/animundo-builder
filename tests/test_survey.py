@@ -17,7 +17,7 @@ SPECIES_URLS = ["https://nature.example.com/deer", "https://gbif.example.net/dee
 
 
 def _research_response(
-    text: str, urls: list[str], searches: int = 1
+    text: str, urls: list[str], searches: int = 1, output_tokens: int = 50
 ) -> SimpleNamespace:
     parts = [
         SimpleNamespace(
@@ -32,7 +32,9 @@ def _research_response(
         model="fake-test-model",
         output=output,
         usage=SimpleNamespace(
-            prompt_tokens=100, completion_tokens=50, prompt_tokens_details=None
+            prompt_tokens=100,
+            completion_tokens=output_tokens,
+            prompt_tokens_details=None,
         ),
     )
 
@@ -62,7 +64,7 @@ class ScriptClient:
         return self.answers.pop(0)
 
     def responses_create(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
-        self.prompts.append(str(args[0])[:80])
+        self.prompts.append(str(args[0]))
         return self.answers.pop(0)
 
 
@@ -238,3 +240,37 @@ def test_domain_counting() -> None:
     assert domain_of("https://a.example.org/x") == domain_of("https://b.example.org/y")
     assert domain_of("https://example.org/x") != domain_of("https://example.com/x")
     assert domain_of("not a url") == ""
+
+
+def test_cut_off_species_research_is_continued(tmp_path: Path) -> None:
+    from builder.meta import DEFAULT_MAX_TOKENS
+
+    client = ScriptClient(
+        [
+            _research_response("LAND ...", LAND_URLS),
+            _research_response(
+                "MOOSE ...", SPECIES_URLS, output_tokens=DEFAULT_MAX_TOKENS
+            ),
+            _research_response("... AND HARE", SPECIES_URLS),
+            _chat_response(json.dumps(_good_survey())),
+        ]
+    )
+    SurveyStage().run(_ctx(tmp_path, client))
+    assert (tmp_path / "research_species.md").read_text() == "MOOSE ...\n... AND HARE"
+    assert "Continue EXACTLY where you stopped" in client.prompts[2]
+    assert len(client.prompts) == 4
+
+
+def test_cut_off_twice_stops_loud(tmp_path: Path) -> None:
+    from builder.meta import DEFAULT_MAX_TOKENS
+
+    cut = [
+        _research_response("MORE ...", SPECIES_URLS, output_tokens=DEFAULT_MAX_TOKENS)
+        for _ in range(3)
+    ]
+    client = ScriptClient([_research_response("LAND ...", LAND_URLS)] + cut)
+    pipeline = Pipeline([SurveyStage()], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage survey failed"):
+        pipeline.run(_ctx(tmp_path, client))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "still cut off after 2 continuations" in state["failed"]["error"]

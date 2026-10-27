@@ -31,9 +31,10 @@ any addon file names another game class directly.
 At boot it installs its words, re-checks and re-registers every installed
 pack, marks the family's drafts on the globe, and adds its two buttons.
 Installed family drafts are `your_draft` at their region; drafts the family
-waits for are `being_explored` at the draft's position; `not_possible_yet`
-marks its area faintly; published places are the game's own lit places, and
-strangers' drafts are never shown. A load that fails clears the draft looks
+waits for are `being_explored` at the draft's position. Published places
+are the game's own lit places, strangers' drafts are never shown, and a
+`not_possible_yet` draft stays unmarked (the look stays unused; the
+screen explains). A load that fails clears the draft looks
 and leaves the screen empty: the Cloud answers success or nothing, so an
 empty list and a broken load look the same.
 

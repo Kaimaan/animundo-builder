@@ -536,6 +536,32 @@ def count_search_calls(response: Any) -> int:
     )
 
 
+def is_cut_off(response: Any, limit: int) -> bool:
+    """Whether the answer stopped at `max_tokens` instead of finishing.
+
+    An explicit signal wins (an incomplete Responses answer, a
+    length-stopped chat choice); without one, output tokens at the cap
+    mean the same. A finished answer is never cut off, whatever it cost.
+    """
+    status = getattr(response, "status", "")
+    if status:
+        return status == "incomplete"
+    choices = getattr(response, "choices", None) or []
+    if choices:
+        reason = getattr(choices[0], "finish_reason", "")
+        if reason:
+            return reason == "length"
+    usage = getattr(response, "usage", None)
+    out = 0
+    if usage is not None:
+        out = (
+            getattr(usage, "output_tokens", 0)
+            or getattr(usage, "completion_tokens", 0)
+            or 0
+        )
+    return bool(limit) and out >= limit
+
+
 def usage_from_response(response: Any, model: str, images: int = 0) -> Usage:
     """Read token and search usage off a Chat or Responses API answer."""
     usage = response.usage

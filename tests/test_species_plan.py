@@ -230,6 +230,7 @@ def _no_revalidate(monkeypatch: pytest.MonkeyPatch) -> None:
 def _stage(**kwargs: Any) -> SpeciesPlanStage:
     kwargs.setdefault("match", _fake_match)
     kwargs.setdefault("classify", _fake_classify)
+    kwargs.setdefault("recorded", lambda lat, lon, key: False)
     return SpeciesPlanStage(**kwargs)
 
 
@@ -258,6 +259,8 @@ def test_match_rewrite_and_plan(tmp_path: Path, monkeypatch: Any) -> None:
         "candidate": 0,
         "needs_code": 0,
         "added_young": [],
+        "backfilled": [],
+        "backfill_unchecked": [],
     }
     written = json.loads((tmp_path / "species-plan.json").read_text())
     validate("species-plan", written)
@@ -777,3 +780,165 @@ def test_picker_backstop_saves_impossible(tmp_path: Path, monkeypatch: Any) -> N
     assert entry["decision"] == "needs_code"
     assert "Saved" in entry["reason"]
     assert "reference" not in entry
+
+
+HARE = {"gbif_key": 2436756, "rank": "SPECIES", "name": "Lepus timidus"}
+
+
+def _backfill_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    animals = world / "animals"
+    (animals / "fox.json").write_text(
+        json.dumps(
+            {
+                "taxon": FOX,
+                "tags": ["predator"],
+                "playable": True,
+                "hunts": ["small_mammal"],
+            }
+        )
+    )
+    (animals / "mountain_hare.json").write_text(
+        json.dumps({"taxon": HARE, "tags": ["small_mammal"], "playable": True})
+    )
+    return world
+
+
+def _backfill_region() -> dict:
+    return {
+        "id": "xx_test",
+        "center": {"lat": 61.18, "lon": 26.88},
+        "animals": {"playable": ["red_deer"], "predators": ["red_fox"], "prey": []},
+        "fish": [],
+        "food": [],
+        "places": [],
+    }
+
+
+def test_backfill_reuses_a_recorded_missed_animal(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    world = _backfill_world(tmp_path)
+    _inputs(
+        tmp_path,
+        [
+            _species("red_fox", "Vulpes vulpes", "predator"),
+            _species("red_deer", "Cervus elaphus", "playable"),
+        ],
+        _backfill_region(),
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient(
+        [
+            _plan(
+                [
+                    ("red_fox", "reuse"),
+                    ("red_deer", "new"),
+                    ("mountain_hare", "reuse"),
+                ]
+            )
+        ]
+    )
+    result = _stage(recorded=lambda lat, lon, key: key == 2436756).run(
+        _ctx(tmp_path, client, world)
+    )
+    assert result["backfilled"] == ["mountain_hare"]
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    validate("species-plan", written)
+    by_id = {entry["species"]: entry for entry in written["species"]}
+    assert by_id["mountain_hare"]["decision"] == "reuse"
+    assert by_id["mountain_hare"]["taxon"]["gbif_key"] == 2436756
+    region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
+    assert "mountain_hare" in region["animals"]["prey"]
+    assert "mountain_hare" in region["animals"]["playable"]
+
+
+def test_backfill_skips_without_a_sound(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _backfill_world(tmp_path)
+    animals = world / "animals"
+    (animals / "red_fox_twin.json").write_text(json.dumps({"taxon": FOX}))
+    (animals / "zz_stone.json").write_text(
+        json.dumps(
+            {
+                "taxon": {
+                    "gbif_key": 9990001,
+                    "rank": "SPECIES",
+                    "name": "Lapis testis",
+                },
+                "playable": False,
+            }
+        )
+    )
+    _inputs(
+        tmp_path,
+        [
+            _species("red_fox", "Vulpes vulpes", "predator"),
+            _species("red_deer", "Cervus elaphus", "playable"),
+        ],
+        _backfill_region(),
+    )
+    _no_revalidate(monkeypatch)
+    # Everything recorded: the young perch, the twin fox (same taxon as
+    # red_fox), the unplayable unhunted stone, and the hare.
+    client = ScriptClient([_plan([("red_fox", "reuse"), ("red_deer", "new")])])
+    result = _stage(recorded=lambda lat, lon, key: key != 2436756).run(
+        _ctx(tmp_path, client, world)
+    )
+    assert result["backfilled"] == []
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    assert {entry["species"] for entry in written["species"]} == {
+        "red_fox",
+        "red_deer",
+    }
+
+
+def test_backfilled_prey_keeps_a_new_predator(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _backfill_world(tmp_path)
+    _inputs(
+        tmp_path,
+        [
+            _species("red_fox", "Vulpes vulpes", "predator"),
+            _species("brown_bear", "Ursus arctos", "predator"),
+        ],
+        _backfill_region(),
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient(
+        [
+            _plan(
+                [
+                    ("red_fox", "reuse"),
+                    ("brown_bear", "new"),
+                    ("mountain_hare", "reuse"),
+                ]
+            )
+        ]
+    )
+    result = _stage(recorded=lambda lat, lon, key: key == 2436756).run(
+        _ctx(tmp_path, client, world)
+    )
+    assert result["backfilled"] == ["mountain_hare"]
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    by_id = {entry["species"]: entry for entry in written["species"]}
+    assert by_id["brown_bear"]["decision"] == "new"
+
+
+def test_backfill_reports_unchecked_animals(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _backfill_world(tmp_path)
+    _inputs(
+        tmp_path,
+        [
+            _species("red_fox", "Vulpes vulpes", "predator"),
+            _species("red_deer", "Cervus elaphus", "playable"),
+        ],
+        _backfill_region(),
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("red_fox", "reuse"), ("red_deer", "new")])])
+
+    def flaky(lat: float, lon: float, key: int) -> bool:
+        raise OSError("GBIF is down")
+
+    result = _stage(recorded=flaky).run(_ctx(tmp_path, client, world))
+    assert result["backfilled"] == []
+    assert result["backfill_unchecked"] == ["mountain_hare"]

@@ -172,7 +172,7 @@ def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
     assert region["welcome"] == (
         "This is a new world, and not many animals live here yet. "
         "Play as the fox, and add more animals later. "
-        "Go and find some berries to eat!"
+        "Go and find some bilberries to eat!"
     )
     assert len(region["welcome"]) <= 300
     assert region["sources"] == ["https://example.org/fox", "GBIF.org"]
@@ -285,6 +285,31 @@ def test_home_uses_made_template(tmp_path: Path) -> None:
     assert region["id"] == result["place_id"]
     assert region["name"] == "Fox copse"
     assert region["animals"]["playable"] == ["fox"]
+
+
+def test_home_welcome_names_seated_prey(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _write_inputs(tmp_path)
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [
+                    {
+                        "id": "hare",
+                        "name": "Mountain hare",
+                        "in_library": "hare",
+                    }
+                ],
+            }
+        )
+    )
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(
+        _ctx(tmp_path, ScriptClient([]), world)
+    )
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    assert region["welcome"].endswith("Go and find a mountain hare to eat!")
 
 
 def test_home_seats_made_animals_unasked(tmp_path: Path) -> None:

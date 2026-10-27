@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ..animal_list import short_name
+from ..animal_list import find_list, load_list, match_by_name, short_name
 from ..schemas import validate
 from .capability import NotPossibleError
 from .species_plan import (
@@ -75,7 +75,7 @@ class HomeStage:
             world, overlay, region, brief, research, stem
         )
         region["sources"] = _home_sources(research)
-        region["welcome"] = _welcome(world, overlay, region, brief, stem)
+        region["welcome"] = _welcome(world, overlay, region, brief, research, stem)
         region_path = ctx.job_dir / "regions" / f"{place_id}.json"
         region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
         brief["place_id"] = place_id
@@ -365,11 +365,12 @@ def _welcome(
     overlay: Path,
     region: dict[str, Any],
     brief: dict[str, Any],
+    research: dict[str, Any],
     stem: str,
 ) -> str:
     """The first-session hello, from the animal and its main food."""
     animal = short_name(brief.get("name", "")).lower() or stem.replace("_", " ")
-    food = _main_food(world, overlay, region, stem)
+    food = _main_food(world, overlay, region, research, stem)
     if food.endswith("s"):
         article = "some"
     elif food[:1].lower() in "aeiou":
@@ -383,19 +384,59 @@ def _welcome(
     )
 
 
-def _main_food(world: Path, overlay: Path, region: dict[str, Any], stem: str) -> str:
-    """The first named food in the animal's diet order."""
+def _main_food(
+    world: Path,
+    overlay: Path,
+    region: dict[str, Any],
+    research: dict[str, Any],
+    stem: str,
+) -> str:
+    """The research's main food, never carrion, always findable.
+
+    A hunter's prey only when it sits in this cast; otherwise the
+    first named food in diet order that is not carrion (#48.4).
+    """
+    cast = _cast_files(region)
+    entries = load_list(find_list(world))["animals"]
+    for food in [research["main_food"], *research.get("other_foods", [])]:
+        if food["kind"] == "carrion":
+            continue
+        if food["kind"] == "prey" and not _prey_seated(entries, cast, food["name"]):
+            continue
+        return food["name"]
     data = animal_file(world, stem, overlay)
     by_kind: dict[str, list[str]] = {}
     for item in region.get("food", []):
+        if item.get("kind", "") == "carrion":
+            continue
         by_kind.setdefault(item.get("kind", ""), item.get("names", []) or [])
     for kind in data.get("diet") or []:
         if by_kind.get(kind):
             return by_kind[kind][0]
     for item in region.get("food", []):
-        if item.get("names"):
+        if item.get("kind", "") != "carrion" and item.get("names"):
             return item["names"][0]
     return "food"
+
+
+def _cast_files(region: dict[str, Any]) -> set[str]:
+    """Every animal file stem seated in the region."""
+    files = set()
+    for group in region.get("animals", {}).values():
+        files.update(group or [])
+    for fish in region.get("fish", []) or []:
+        files.add(fish.get("file", ""))
+    return files - {""}
+
+
+def _prey_seated(
+    entries: list[dict[str, Any]], cast: set[str], name: str
+) -> bool:
+    """Whether the named prey sits in this cast, via the list."""
+    match = match_by_name(entries, name)
+    if match is None:
+        return False
+    return (match.get("in_library") or match.get("id", "")) in cast
 
 
 def _place_id(cell: str, stem: str, country: str) -> str:

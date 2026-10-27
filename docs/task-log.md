@@ -3,6 +3,24 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #52.3, #52.4: the fox pack in the game, release v0.1.0
+
+- #52.3: `tests/check_home_pack.gd` installs the fox's
+  real pack (`tests/fixture/fox-pack/`, from `jobs/review-fox`
+  replayed to pack) and checks it lists and loads like any
+  draft place: manifest and hashes, registered folder,
+  region found with its name; in the game, listed with its
+  title. 0 errors headless in a scratch project and in a
+  scratch copy of the game. Fixture ids are `review_fox`
+  (the game's folder pattern has no hyphen; real draft ids
+  never hyphenate).
+- #52.3 also: the recorded research requests (fixtures and
+  the review jobs' recordings) now carry `max_tool_calls`,
+  so replays run warning-free.
+- #52.4: `v0.1.0` is tagged on this commit. Reviewer: copy
+  the addon into the game (T36) and deploy with Kai's
+  go-ahead; the fox funnel is intake to pack to PR to game.
+
 ## 2026-10-27: inbox #51.1, #51.2, #52.1, #52.2: research reads its answer, fox to pack, submit carries the report
 
 - #51.1: grounded answers narrate first (`phase:

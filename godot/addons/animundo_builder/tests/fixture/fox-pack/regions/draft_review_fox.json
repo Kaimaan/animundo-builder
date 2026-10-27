@@ -1,0 +1,597 @@
+{
+  "id": "draft_review_fox",
+  "name": "Fox forest, Finland",
+  "country": "Finland",
+  "center": {
+    "lat": 61.55,
+    "lon": 26.05
+  },
+  "description": "A northern forest of spruce, pine and birch on rocky hills, with small lakes, bogs and streams.",
+  "author": "Animundo team",
+  "terrain": {
+    "size": 2048,
+    "base_height": 9,
+    "relief": 12,
+    "frequency": 0.04,
+    "rock_ridges": 0.4,
+    "rock_above": 18,
+    "lakes": 0.35,
+    "edge": "lake",
+    "seed": 1811587497
+  },
+  "palette": {
+    "ground_lush": "#5f9445",
+    "ground_dry": "#93a65a",
+    "ground_high": "#8c9a78",
+    "dirt": "#6e5640",
+    "rock": "#a89c97",
+    "sand": "#cfc2a0",
+    "water_deep": "#1f4654",
+    "water_shallow": "#3d6f73",
+    "ground_autumn": "#a59a5e",
+    "snow": "#eef2f6",
+    "heath_autumn": "#b04a32"
+  },
+  "sky": {
+    "day": "#8fc6ea",
+    "horizon": "#eef2ec",
+    "dusk": "#f2a07a",
+    "night": "#141a3a",
+    "sun": "#ffe8c4"
+  },
+  "seasons": {
+    "spring": "04-05",
+    "summer": "05-25",
+    "autumn": "09-20",
+    "winter": "11-25",
+    "snow": true
+  },
+  "trees": {
+    "density": 0.02,
+    "mix": [
+      {
+        "shape": "spruce",
+        "plant": "norway_spruce",
+        "food": "cones",
+        "weight": 43,
+        "leaves": "#2c5846",
+        "trunk": "#5b4433"
+      },
+      {
+        "shape": "pine",
+        "plant": "scots_pine",
+        "food": "cones",
+        "weight": 28,
+        "leaves": "#4f7d40",
+        "trunk": "#b0703f"
+      },
+      {
+        "shape": "birch",
+        "plant": "birch",
+        "food": "browse",
+        "weight": 20,
+        "leaves": "#9cc35a",
+        "trunk": "#ece6da",
+        "autumn": "#e8c13a"
+      },
+      {
+        "shape": "round",
+        "plant": "aspen",
+        "food": "browse",
+        "weight": 5,
+        "leaves": "#5f8f3a",
+        "trunk": "#6b4a33",
+        "autumn": "#d9772f"
+      },
+      {
+        "shape": "rowan",
+        "plant": "rowan",
+        "food": "browse",
+        "weight": 5,
+        "leaves": "#5f8a3a",
+        "autumn": "#c23b22"
+      }
+    ]
+  },
+  "ground_cover": {
+    "grass": 0.18,
+    "flowers": 0.04,
+    "flower_colors": [
+      "#f5f3ea",
+      "#b48ac4",
+      "#4b5fa0",
+      "#f2d64a"
+    ],
+    "flower_names": [
+      "oxeye daisy",
+      "heather",
+      "harebell",
+      "tormentil"
+    ],
+    "stones": 0.04,
+    "plants": [
+      {
+        "model": "bilberry",
+        "density": 0.22,
+        "near_trees": 5,
+        "food": {
+          "kind": "berries",
+          "part": "berry"
+        },
+        "names": [
+          "bilberries"
+        ],
+        "amount": 15
+      },
+      {
+        "model": "lingonberry",
+        "density": 0.09,
+        "near_trees": 8,
+        "food": {
+          "kind": "berries",
+          "part": "berry"
+        },
+        "names": [
+          "lingonberries"
+        ],
+        "amount": 15
+      },
+      {
+        "model": "heather",
+        "density": 0.1,
+        "on": [
+          "grass",
+          "rock"
+        ]
+      },
+      {
+        "model": "fly_agaric",
+        "density": 0.006,
+        "near_trees": 4
+      },
+      {
+        "model": "porcini",
+        "density": 0.005,
+        "near_trees": 4,
+        "food": "mushrooms",
+        "names": [
+          "porcini"
+        ],
+        "amount": 25
+      },
+      {
+        "model": "wild_raspberry",
+        "density": 0.025,
+        "near_trees": 10,
+        "food": {
+          "kind": "berries",
+          "part": "berry"
+        },
+        "names": [
+          "wild raspberries"
+        ],
+        "amount": 15
+      },
+      {
+        "model": "crowberry",
+        "density": 0.04,
+        "on": [
+          "grass",
+          "rock"
+        ],
+        "food": {
+          "kind": "berries",
+          "part": "berry"
+        },
+        "names": [
+          "crowberries"
+        ],
+        "amount": 10
+      },
+      {
+        "model": "wavy_hair_grass",
+        "density": 0.06,
+        "near_trees": 8
+      },
+      {
+        "model": "red_stemmed_feathermoss",
+        "density": 0.05,
+        "near_trees": 6
+      },
+      {
+        "model": "bracken",
+        "density": 0.03,
+        "near_trees": 8
+      },
+      {
+        "model": "reindeer_lichen",
+        "density": 0.03,
+        "on": [
+          "rock"
+        ]
+      },
+      {
+        "model": "wood_anemone",
+        "density": 0.02,
+        "near_trees": 6
+      },
+      {
+        "model": "spiny_wood_fern",
+        "density": 0.015,
+        "near_trees": 5
+      },
+      {
+        "model": "lily_of_the_valley",
+        "density": 0.01,
+        "near_trees": 8
+      },
+      {
+        "model": "white_clover",
+        "density": 0.008,
+        "food": "clover",
+        "names": [
+          "white clover"
+        ],
+        "amount": 15
+      },
+      {
+        "model": "red_clover",
+        "density": 0.006,
+        "food": "clover",
+        "names": [
+          "red clover"
+        ],
+        "amount": 15
+      },
+      {
+        "model": "fireweed",
+        "density": 0.008
+      },
+      {
+        "model": "juniper",
+        "density": 0.005,
+        "on": [
+          "grass",
+          "rock"
+        ]
+      },
+      {
+        "model": "chanterelle",
+        "density": 0.005,
+        "near_trees": 4,
+        "food": "mushrooms",
+        "names": [
+          "chanterelles"
+        ],
+        "amount": 20
+      },
+      {
+        "model": "goat_willow",
+        "density": 0.003
+      },
+      {
+        "model": "peat_moss",
+        "density": 0.7,
+        "habitat": "bog"
+      },
+      {
+        "model": "cottongrass",
+        "density": 0.15,
+        "habitat": "bog"
+      }
+    ]
+  },
+  "lakes": [
+    {
+      "name": "Long lake",
+      "x": 0.4,
+      "z": 0.5,
+      "length": 0.125,
+      "width": 0.02125,
+      "angle": 80,
+      "depth": 7,
+      "islands": 2,
+      "wreck": true
+    },
+    {
+      "name": "Round lake",
+      "x": 0.24,
+      "z": 0.67,
+      "length": 0.22,
+      "width": 0.11,
+      "angle": 55,
+      "depth": 7,
+      "islands": 1
+    },
+    {
+      "name": "Hidden lake",
+      "x": 0.59,
+      "z": 0.33,
+      "length": 0.17,
+      "width": 0.09,
+      "angle": 20,
+      "depth": 6,
+      "islands": 0
+    },
+    {
+      "name": "Narrow lake",
+      "x": 0.73,
+      "z": 0.49,
+      "length": 0.3,
+      "width": 0.065,
+      "angle": 85,
+      "depth": 7,
+      "islands": 0
+    }
+  ],
+  "places": [],
+  "lake_life": {
+    "reeds": 0.35,
+    "lilies": 0.15,
+    "pondweed": 0.1
+  },
+  "food": [
+    {
+      "kind": "grass",
+      "amount": 10,
+      "names": [
+        "wavy hair-grass",
+        "common bent",
+        "sheep's fescue",
+        "dandelion leaves",
+        "yarrow"
+      ]
+    },
+    {
+      "kind": "bark",
+      "amount": 15,
+      "names": [
+        "birch bark",
+        "aspen bark",
+        "rowan bark"
+      ]
+    },
+    {
+      "kind": "carrion",
+      "weight": 4,
+      "names": [
+        "roe deer remains",
+        "white-tailed deer remains"
+      ]
+    },
+    {
+      "kind": "clover",
+      "weight": 38,
+      "names": [
+        "red clover",
+        "white clover"
+      ]
+    },
+    {
+      "kind": "berries",
+      "weight": 30,
+      "names": [
+        "bilberries",
+        "lingonberries",
+        "wild raspberries",
+        "crowberries"
+      ]
+    },
+    {
+      "kind": "insects",
+      "weight": 15,
+      "names": [
+        "ground beetle",
+        "dung beetle",
+        "click beetle"
+      ]
+    },
+    {
+      "kind": "water_bugs",
+      "weight": 15,
+      "names": [
+        "mayfly larvae",
+        "caddisfly larvae",
+        "water boatmen"
+      ]
+    },
+    {
+      "kind": "browse",
+      "weight": 12,
+      "names": [
+        "birch leaves and twigs",
+        "willow twigs",
+        "aspen shoots",
+        "rowan leaves"
+      ]
+    },
+    {
+      "kind": "water_plants",
+      "weight": 8,
+      "names": [
+        "pondweed",
+        "water lily leaves",
+        "water horsetail"
+      ]
+    },
+    {
+      "kind": "cones",
+      "weight": 10,
+      "names": [
+        "spruce cones",
+        "pine cones"
+      ]
+    },
+    {
+      "kind": "bottom_bugs",
+      "weight": 8,
+      "names": [
+        "bloodworms",
+        "pond snails"
+      ]
+    },
+    {
+      "kind": "seeds",
+      "weight": 12,
+      "names": [
+        "spruce seeds",
+        "pine seeds",
+        "birch seeds"
+      ]
+    }
+  ],
+  "fish": [
+    {
+      "kind": "roach",
+      "count": 12
+    },
+    {
+      "kind": "young_roach",
+      "count": 10
+    },
+    {
+      "kind": "young_perch",
+      "count": 6
+    },
+    {
+      "kind": "perch",
+      "count": 5
+    },
+    {
+      "kind": "bream",
+      "count": 4
+    },
+    {
+      "kind": "pike",
+      "count": 2
+    }
+  ],
+  "migrants": [
+    {
+      "kind": "geese",
+      "names": [
+        "barnacle goose",
+        "bean goose"
+      ],
+      "south": [
+        "09-20",
+        "10-25"
+      ],
+      "north": [
+        "05-08",
+        "05-31"
+      ]
+    },
+    {
+      "kind": "cranes",
+      "names": [
+        "common crane"
+      ],
+      "south": [
+        "08-25",
+        "10-05"
+      ],
+      "north": [
+        "04-01",
+        "04-30"
+      ]
+    }
+  ],
+  "animals": {
+    "playable": [
+      "kestrel",
+      "moose",
+      "perch",
+      "pike",
+      "chaffinch",
+      "flying_squirrel",
+      "frog",
+      "great_tit",
+      "mallard",
+      "mountain_hare",
+      "squirrel",
+      "fox"
+    ],
+    "predators": [
+      "fox"
+    ],
+    "prey": [
+      "chaffinch",
+      "flying_squirrel",
+      "frog",
+      "great_tit",
+      "lizard",
+      "mallard",
+      "mountain_hare",
+      "squirrel",
+      "vole"
+    ]
+  },
+  "sources": [
+    "https://www.adfg.alaska.gov/index.cfm?adfg=redfox.main",
+    "https://wildlifepark.novascotia.ca/animals/red-fox.asp",
+    "https://www.smallmammalgroup.com/mammal-of-the-month/field-vole",
+    "https://en.wikipedia.org/wiki/Mountain_hare",
+    "https://virginforests.eu/pyhae-haekki/",
+    "GBIF.org"
+  ],
+  "bogs": [
+    {
+      "name": "Forest bog",
+      "x": 0.48,
+      "z": 0.58,
+      "radius": 60
+    },
+    {
+      "name": "Lakeside bog",
+      "x": 0.6,
+      "z": 0.43,
+      "radius": 45
+    }
+  ],
+  "streams": [
+    {
+      "width": 4,
+      "points": [
+        [
+          0.24,
+          0.67
+        ],
+        [
+          0.32,
+          0.58
+        ],
+        [
+          0.35,
+          0.54
+        ],
+        [
+          0.4,
+          0.5
+        ]
+      ]
+    },
+    {
+      "width": 5,
+      "points": [
+        [
+          0.59,
+          0.33
+        ],
+        [
+          0.56,
+          0.39
+        ],
+        [
+          0.61,
+          0.45
+        ],
+        [
+          0.73,
+          0.49
+        ]
+      ]
+    }
+  ],
+  "welcome": "This is a new world, and not many animals live here yet. Play as the fox, and add more animals later. Go and find a mountain hare to eat!"
+}

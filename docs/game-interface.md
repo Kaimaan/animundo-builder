@@ -72,12 +72,18 @@ owner only. The web app opens at `animundo.app/build`.
 `tests/check_explore_states.gd` covers every draft status in both languages,
 the buttons, the screen, Play and Report through a stub Cloud.
 `tests/check_content_packs.gd` covers the pack rules, newer-wins, and, in
-the game, built-in-wins and the saved life. Both run here in a scratch
-project (`.github/workflows/check.yml`) and in the game after each copy:
+the game, built-in-wins and the saved life.
+`tests/check_home_pack.gd` installs the fox's real pack
+(`tests/fixture/fox-pack/`, from `jobs/review-fox`) and checks it
+lists and loads like any draft place. All three run here in a
+scratch project (`.github/workflows/check.yml`) and in the game
+after each copy:
 
 ```
 godot --headless --path <project> --script \
   res://addons/animundo_builder/tests/check_explore_states.gd
 godot --headless --path <project> --script \
   res://addons/animundo_builder/tests/check_content_packs.gd
+godot --headless --path <project> --script \
+  res://addons/animundo_builder/tests/check_home_pack.gd
 ```

@@ -69,3 +69,5 @@ jobs:
             res://addons/animundo_builder/tests/check_explore_states.gd
           ~/godot/godot --headless --path /tmp/addon-check --script \
             res://addons/animundo_builder/tests/check_content_packs.gd
+          ~/godot/godot --headless --path /tmp/addon-check --script \
+            res://addons/animundo_builder/tests/check_home_pack.gd

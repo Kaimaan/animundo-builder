@@ -63,6 +63,9 @@ def test_addon_files_exist():
         "locale/fi.json",
         "tests/check_explore_states.gd",
         "tests/check_content_packs.gd",
+        "tests/check_home_pack.gd",
+        "tests/fixture/fox-pack/manifest.json",
+        "tests/fixture/fox-pack/regions/draft_review_fox.json",
         "tests/stubs/stub_cloud.gd",
         "tests/stubs/stub_hooks.gd",
     ]:
@@ -136,7 +139,11 @@ def test_game_interface_documents_every_plugin_call():
 
 
 def test_checks_report_and_quit():
-    for name in ("check_explore_states.gd", "check_content_packs.gd"):
+    for name in (
+        "check_explore_states.gd",
+        "check_content_packs.gd",
+        "check_home_pack.gd",
+    ):
         src = (ADDON / "tests" / name).read_text(encoding="utf-8")
         assert "errors" in src and "quit(" in src, f"{name} never reports"
 

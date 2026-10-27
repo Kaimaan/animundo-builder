@@ -258,6 +258,25 @@ def response_text(response: Any) -> str:
     return "\n".join(parts)
 
 
+def final_text(response: Any) -> str:
+    """The answer's own text: message parts that aren't commentary.
+
+    A grounded answer narrates first (`phase: "commentary"`
+    progress notes) and answers last (`phase` null); only the
+    non-commentary text parses (#51.1).
+    """
+    parts = []
+    for item in getattr(response, "output", []) or []:
+        if getattr(item, "type", "") == "message" and (
+            getattr(item, "phase", None) == "commentary"
+        ):
+            continue
+        for part in getattr(item, "content", []) or []:
+            if getattr(part, "type", "") == "output_text":
+                parts.append(getattr(part, "text", ""))
+    return "\n".join(parts)
+
+
 def _citation_urls(response: Any) -> set[str]:
     urls = set()
     for item in getattr(response, "output", []) or []:

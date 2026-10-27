@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .report import build_report, report_text
 from .world import check_draft
 
 
@@ -58,6 +59,7 @@ def run_submit(
     region = _read_region(job_dir)
     files = _layout(world, job_dir, manifest, region, place, branch)
     gate = _gate(world, job_dir, manifest, region, place, files, branch)
+    build_report(job_dir)
     pr_body = _pr_body(job_dir, manifest, region, place, gate)
     pr_path = job_dir / "pr.md"
     pr_path.write_text(pr_body, encoding="utf-8")
@@ -409,7 +411,7 @@ def _pr_body(
     name = region.get("name", place)
     country = region.get("country", "")
     area = f"{name} ({manifest['place_id']})"
-    if country:
+    if country and not name.endswith(country):
         area += f", {country}"
     rounds = manifest.get("version", 1) - 1
     if rounds <= 0:
@@ -466,6 +468,15 @@ def _pr_body(
             )
             for plant in _new_plants(manifest)
         ],
+        *(
+            ["- Nothing new: this place reuses the library."]
+            if not manifest["new_species"] and not _new_plants(manifest)
+            else []
+        ),
+        "",
+        "## Build report",
+        "",
+        *report_text(job_dir).splitlines(),
         "",
         "## Reviewer's notes",
         "",

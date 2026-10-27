@@ -20,27 +20,72 @@ from typing import Any
 from .config import Config
 
 
-def _new_things(job_dir: Path) -> str:
-    """A line per thing this home build made, and its cost (#42)."""
+def _new_things_data(job_dir: Path) -> list[tuple[str, str, Any]]:
+    """(kind, name, cost) per thing this home build made (#42)."""
     minset = _read_json(job_dir / "minset.json")
     if not minset:
-        return ""
+        return []
     brief = _read_json(job_dir / "home.json")
-    lines = []
-    research_cost = _read_json(job_dir / "checks" / "research.json").get("cost_usd")
-    lines.append(_thing_line("research", brief.get("latin", ""), research_cost))
+    things = [
+        (
+            "research",
+            str(brief.get("latin", "")),
+            _read_json(job_dir / "checks" / "research.json").get("cost_usd"),
+        )
+    ]
     if minset.get("make_animal"):
-        cost = _read_json(job_dir / "checks" / "oneshot.json").get("cost_usd")
-        lines.append(_thing_line("animal", brief.get("latin", ""), cost))
+        things.append(
+            (
+                "animal",
+                str(brief.get("latin", "")),
+                _read_json(job_dir / "checks" / "oneshot.json").get("cost_usd"),
+            )
+        )
     if minset.get("make_home"):
-        cost = _read_json(job_dir / "checks" / "newhome.json").get("cost_usd")
-        lines.append(_thing_line("home", minset.get("home_habitat", ""), cost))
+        things.append(
+            (
+                "home",
+                str(minset.get("home_habitat", "")),
+                _read_json(job_dir / "checks" / "newhome.json").get("cost_usd"),
+            )
+        )
     prey = minset.get("prey") or {}
     if prey:
-        cost = _read_json(job_dir / "checks" / "oneshot.json").get("cost_usd")
-        lines.append(_thing_line("prey", prey.get("name", ""), cost))
-    rows = "".join(f"<li>{line}</li>" for line in lines)
+        things.append(
+            (
+                "prey",
+                str(prey.get("name", "")),
+                _read_json(job_dir / "checks" / "oneshot.json").get("cost_usd"),
+            )
+        )
+    return things
+
+
+def _new_things(job_dir: Path) -> str:
+    """A line per thing this home build made, and its cost (#42)."""
+    things = _new_things_data(job_dir)
+    if not things:
+        return ""
+    rows = "".join(
+        f"<li>{_thing_line(kind, name, cost)}</li>" for kind, name, cost in things
+    )
     return f"<h2>New in this build</h2>\n<ul>{rows}</ul>"
+
+
+def report_text(job_dir: Path) -> str:
+    """The build report in plain text, for the pull request (#52.2)."""
+    lines = [
+        f"- {kind}: {name} — {_amount(cost)}"
+        for kind, name, cost in _new_things_data(job_dir)
+    ]
+    calls = _read_calls(job_dir / "log.jsonl")
+    total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
+    lines.append(f"- Total: {_amount(total)} over {len(calls)} calls.")
+    return "\n".join(lines)
+
+
+def _amount(cost: Any) -> str:
+    return f"${float(cost):.3f}" if isinstance(cost, (int, float)) else "—"
 
 
 def _thing_line(kind: str, name: str, cost: Any) -> str:

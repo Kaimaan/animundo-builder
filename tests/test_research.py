@@ -92,7 +92,8 @@ def test_research_writes_research_and_cost(tmp_path: Path) -> None:
     cost = json.loads(
         (tmp_path / "checks" / "research.json").read_text(encoding="utf-8")
     )
-    assert cost == {"cost_usd": result["cost_usd"]}
+    assert cost == {"cost_usd": result["cost_usd"], "searches": 1}
+    assert result["searches"] == 1
 
 
 def test_research_bad_answer_stops(tmp_path: Path) -> None:
@@ -101,8 +102,56 @@ def test_research_bad_answer_stops(tmp_path: Path) -> None:
         ResearchStage().run(_ctx(tmp_path, ScriptClient([_response("nope")])))
 
 
-def test_research_past_its_round_stops(tmp_path: Path) -> None:
+def test_research_keeps_a_good_answer_past_its_round(tmp_path: Path) -> None:
     (tmp_path / "home.json").write_text(json.dumps(_brief()))
-    answer = _response(json.dumps(VALID), searches=11)
-    with pytest.raises(Exception, match="past its round"):
-        ResearchStage().run(_ctx(tmp_path, ScriptClient([answer])))
+    answer = _response(json.dumps(VALID), searches=13)
+    result = ResearchStage().run(_ctx(tmp_path, ScriptClient([answer])))
+    assert result["main_food"] == "mountain hare"
+    assert result["searches"] == 13
+    cost = json.loads(
+        (tmp_path / "checks" / "research.json").read_text(encoding="utf-8")
+    )
+    assert cost["searches"] == 13
+
+
+def _live_response(text: str, searches: int = 2) -> SimpleNamespace:
+    """The live shape (#51.1): reasoning, commentary, searches, answer."""
+    output: list[SimpleNamespace] = [SimpleNamespace(type="reasoning")]
+    for _ in range(searches):
+        output.append(
+            SimpleNamespace(
+                type="message",
+                phase="commentary",
+                content=[
+                    SimpleNamespace(
+                        type="output_text",
+                        text="I'll research the red fox's diet.",
+                        annotations=[],
+                    )
+                ],
+            )
+        )
+        output.append(SimpleNamespace(type="web_search_call"))
+    output.append(SimpleNamespace(type="reasoning"))
+    output.append(
+        SimpleNamespace(
+            type="message",
+            phase=None,
+            content=[SimpleNamespace(type="output_text", text=text, annotations=[])],
+        )
+    )
+    return SimpleNamespace(
+        model="fake-test-model",
+        output=output,
+        usage=SimpleNamespace(
+            prompt_tokens=100, completion_tokens=50, prompt_tokens_details=None
+        ),
+    )
+
+
+def test_research_reads_the_final_message(tmp_path: Path) -> None:
+    (tmp_path / "home.json").write_text(json.dumps(_brief()))
+    answer = _live_response(json.dumps(VALID))
+    result = ResearchStage().run(_ctx(tmp_path, ScriptClient([answer])))
+    assert result["main_food"] == "mountain hare"
+    assert result["searches"] == 2

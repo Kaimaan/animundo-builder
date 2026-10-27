@@ -201,6 +201,27 @@ def test_submit_pr_body_is_complete_and_has_no_family_note(tmp_path: Path) -> No
     assert "Nothing is waiting for an expert." in body
     assert "my child loves deer" not in body
     assert "Grown-up note" not in body
+    assert "## Build report" in body
+    assert "- Total: $0.000 over 0 calls." in body
+    assert (job / "report.html").is_file()
+
+
+def test_submit_home_with_nothing_new_says_so(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    manifest = json.loads((job / "pack" / "manifest.json").read_text())
+    manifest["new_species"] = []
+    manifest["files"] = [
+        entry
+        for entry in manifest["files"]
+        if not entry["path"].startswith("models/plants/")
+    ]
+    manifest["reused_species"] = ["fox", "vole"]
+    (job / "pack" / "manifest.json").write_text(json.dumps(manifest))
+    run_submit("draft-1", tmp_path / "jobs", world, gh=str(_gh(tmp_path)))
+    body = (job / "pr.md").read_text()
+    assert "- Nothing new: this place reuses the library." in body
+    assert "## Build report" in body
 
 
 def test_submit_expert_flags_and_reviews_reach_the_body(tmp_path: Path) -> None:

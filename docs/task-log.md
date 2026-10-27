@@ -3,6 +3,27 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #51.1, #51.2, #52.1, #52.2: research reads its answer, fox to pack, submit carries the report
+
+- #51.1: grounded answers narrate first (`phase:
+  "commentary") and answer last; the research now parses
+  only the non-commentary text (`final_text`, with a test in
+  the live shape: reasoning, commentary, searches, final
+  message).
+- #51.2: a parsing answer past its search round is kept;
+  the search count is logged (`checks/research.json`,
+  result). The API caps the runaway (`max_tool_calls` 10).
+- #52.1: `jobs/review-fox` replays intake to pack keyless:
+  research parses (10 searches, $0.00), minimum makes
+  nothing, pack holds the region with 16 reused species.
+- #52.2: `builder submit` fits an `animal_home` draft: the
+  PR carries the region file (nothing new: reuses the
+  library), a Build report section (per-thing lines, total),
+  and `report.html` is rebuilt in the job. Tested against
+  a scratch clone of the world with a stub `gh`: branch
+  committed, gate green, no push; the real checkout
+  untouched. New homes join the layout with the home maker.
+
 ## 2026-10-27: inbox #50, #48.4: the one-shot animal maker, welcome's food
 
 - #48.4: the welcome names the research's `main_food`

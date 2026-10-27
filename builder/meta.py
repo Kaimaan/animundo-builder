@@ -290,6 +290,7 @@ class MetaClient:
         images: int = 0,
         timeout: float = TIMEOUT_LONG,
         max_tokens: int | None = None,
+        max_tool_calls: int | None = None,
     ) -> Any:
         """One Responses API call (search grounding, SAM), with caps."""
         if images > MAX_IMAGES_PER_CALL:
@@ -307,6 +308,7 @@ class MetaClient:
                 include=include,  # type: ignore[arg-type]
                 timeout=timeout,
                 max_output_tokens=limit,
+                max_tool_calls=max_tool_calls,
             )
 
         receipt = self._reserve(model_input, limit, searches=searches, images=images)

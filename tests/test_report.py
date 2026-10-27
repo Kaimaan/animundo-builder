@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from builder.report import build_report
+from builder.report import build_report, report_text
 
 
 def _png() -> bytes:
@@ -197,6 +197,22 @@ def test_report_lists_new_things(tmp_path: Path) -> None:
     assert "animal: Eunectes murinus — —" in text
     assert "home: rainforest — —" in text
     assert "prey: capybara — —" in text
+
+
+def test_report_text_is_the_plain_build_report(tmp_path: Path) -> None:
+    (tmp_path / "home.json").write_text(json.dumps({"latin": "Vulpes vulpes"}))
+    (tmp_path / "minset.json").write_text(
+        json.dumps({"make_animal": False, "make_home": False, "prey": None})
+    )
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    (checks / "research.json").write_text(json.dumps({"cost_usd": 0.14}))
+    (tmp_path / "log.jsonl").write_text(
+        json.dumps({"call": "responses", "model": "m", "cost_usd": 0.14}) + "\n"
+    )
+    text = report_text(tmp_path)
+    assert "- research: Vulpes vulpes — $0.140" in text
+    assert "- Total: $0.140 over 1 calls." in text
 
 
 def test_report_is_offline_safe(tmp_path: Path) -> None:

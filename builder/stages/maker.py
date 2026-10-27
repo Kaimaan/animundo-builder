@@ -28,17 +28,14 @@ from typing import Any
 
 import jsonschema
 
-from .. import taxa
 from ..animal_list import find_entry, load_list, match_by_name
 from ..animal_list import find_list as find_animal_list
 from ..prompts import PROMPTS_DIR, fix_messages, for_children
 from ..taxa import taxon_block
 from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
-from . import plants as plant_builders
 from .capability import NotPossibleError
 from .models import _ensure_sandbox, build_in_sandbox
-from .species_plan import recorded_near, taxon_same
 
 #: Tries per thing: the write, then at most one fix round.
 MAX_TRIES = 2
@@ -54,14 +51,47 @@ EDITS_FACTORS = (
     "tail_width",
 )
 
-#: At most two new plant specs per home (spec 04).
-MAX_NEW_PLANTS = 2
-
-#: The worked example every home is written from.
-CLOSEST_HOME = "boreal_forest"
-
 #: Tree shapes the game draws without a spec.
 TREE_SHAPES = ("spruce", "pine", "birch", "round", "rowan")
+
+#: The home choices form's words, as the lab tried them (#65.1).
+CHOICE_FOOD_KINDS = [
+    "grass",
+    "bark",
+    "carrion",
+    "clover",
+    "berries",
+    "insects",
+    "water_bugs",
+    "browse",
+    "water_plants",
+    "seeds",
+    "cones",
+    "bottom_bugs",
+    "carrot",
+]
+CHOICE_LEVELS = {
+    "land": ["flat", "rolling", "hilly"],
+    "water": ["river", "lake", "pools", "sea", "none"],
+    "wetness": ["dry", "wet", "very_wet"],
+    "density": ["none", "sparse", "medium", "dense"],
+    "grass": ["none", "some", "lush"],
+    "life": ["none", "some", "many"],
+}
+CHOICE_PALETTE = [
+    "ground_lush",
+    "ground_dry",
+    "ground_high",
+    "dirt",
+    "rock",
+    "sand",
+    "water_deep",
+    "water_shallow",
+]
+_CHOICE_HEX = {"type": "string", "description": "a colour as hex, like #5f9445"}
+
+#: The adapt tool runs the region checks too; give it two minutes.
+HOME_ADAPT_TIMEOUT = 120
 
 
 class AnimalMakerStage:
@@ -1352,27 +1382,17 @@ def _unfence(answer: str) -> str:
 
 
 class HomeMakerStage:
-    """Make the minimum set's home: the template plus its plants."""
+    """Make the minimum set's home: a choices call, then the adapt tool."""
 
     name = "newhome"
 
     def __init__(
         self,
-        author: str = "Animundo Builder",
         chat: Any | None = None,
-        build: Any | None = None,
-        check_homes: Any | None = None,
-        check_models: Any | None = None,
-        match: Any | None = None,
-        recorded: Any | None = None,
+        adapt: Any | None = None,
     ) -> None:
-        self.author = author
         self._chat = chat
-        self._build = build or _build_plant
-        self._check_homes = check_homes or check_homes_in_sandbox
-        self._check_models = check_models or check_models_in_sandbox
-        self._match = match or _match_plant
-        self._recorded = recorded or recorded_near
+        self._adapt = adapt or _run_adapt_home
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -1393,17 +1413,27 @@ class HomeMakerStage:
             # passing run counts as done, or the failure stands (#64.3).
             return {"home_files": [f"homes/{habitat}.json"], "cost_usd": 0.0}
         before = ctx.tracker.spent_usd
-        plants = self._make(ctx, world, brief, research, habitat)
+        base = _closest_home(world, habitat)
+        plants = sorted(
+            path.stem for path in (world / "models" / "plants").glob("*.json")
+        )
+        looks_path = ctx.job_dir / "looks.json"
+        looks: dict[str, Any] = (
+            json.loads(looks_path.read_text(encoding="utf-8"))
+            if looks_path.is_file()
+            else {}
+        )
+        self._make(ctx, world, brief, research, habitat, base, plants, looks)
         cost = round(ctx.tracker.spent_usd - before, 6)
         checks = ctx.job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
         (checks / "newhome.json").write_text(
-            json.dumps({"cost_usd": cost, "made": habitat, "plants": plants}, indent=2),
+            json.dumps({"cost_usd": cost, "made": habitat, "plants": []}, indent=2),
             encoding="utf-8",
         )
         return {
             "home_files": [f"homes/{habitat}.json"],
-            "plant_files": [f"models/plants/{i}.json" for i in plants],
+            "plant_files": [],
             "cost_usd": cost,
         }
 
@@ -1414,32 +1444,37 @@ class HomeMakerStage:
         brief: dict[str, Any],
         research: dict[str, Any],
         habitat: str,
-    ) -> list[str]:
-        """One home, one try plus one fix round. Returns new plant ids."""
-        looks_path = ctx.job_dir / "looks.json"
-        looks: dict[str, Any] = (
-            json.loads(looks_path.read_text(encoding="utf-8"))
-            if looks_path.is_file()
-            else {}
-        )
-        prompt = self._prompt(world, brief, research, habitat, looks)
+        base: Path,
+        plants: list[str],
+        looks: dict[str, Any],
+    ) -> None:
+        """One home: a choices call, then the adapt tool, plus one fix round."""
+        prompt = self._prompt(brief, research, habitat, base, plants, looks)
+        request = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "HomeChoices",
+                "schema": _home_choices_schema(plants),
+                "strict": True,
+            },
+        }
         errors: list[str] | None = None
         previous: str | None = None
         for attempt in range(1, MAX_TRIES + 1):
             ctx.check_budget()
-            answer = self._ask(ctx, prompt, errors, previous)
+            answer = self._ask(ctx, prompt, request, errors, previous)
             previous = answer
-            files, file_errors = self._files(world, answer, habitat, research, brief)
-            if files is not None:
-                file_errors = self._resolve_taxa(world, files)
-            if files is not None and not file_errors:
-                self._place(ctx, world, habitat, files, attempt)
-                file_errors = self._build_and_check(ctx, world, habitat, files, attempt)
-            self._save_try(ctx, habitat, attempt, answer, files, file_errors)
-            if files is not None and not file_errors:
-                self._save_final(ctx, world, habitat, files)
-                return sorted(files["plants"])
-            errors = file_errors or ["the answer held no usable home"]
+            choices, file_errors = _choices_files(answer)
+            if choices is not None:
+                _code_choices(choices, habitat, brief, research)
+                file_errors = self._adapt_try(
+                    ctx, world, base, choices, habitat, attempt
+                )
+            self._save_try(ctx, habitat, attempt, answer, file_errors)
+            if choices is not None and not file_errors:
+                _place_home(ctx, habitat, attempt)
+                return
+            errors = file_errors or ["the answer held no usable choices"]
         raise _Stopped(
             f"{habitat}: still failing after one fix round "
             f"({'; '.join(errors or [])}); a person makes it"
@@ -1449,6 +1484,7 @@ class HomeMakerStage:
         self,
         ctx: Any,
         prompt: str,
+        request: dict[str, Any],
         errors: list[str] | None,
         previous: str | None = None,
     ) -> str:
@@ -1459,328 +1495,24 @@ class HomeMakerStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = chat(messages)
+        response = chat(messages, response_format=request)
         return (response.choices[0].message.content or "").strip()
 
-    def _files(
-        self,
-        world: Path,
-        answer: str,
-        habitat: str,
-        research: dict[str, Any],
-        brief: dict[str, Any],
-    ) -> tuple[dict[str, Any] | None, list[str]]:
-        """The try's home and plant specs, or why the answer holds none."""
-        try:
-            wrapped = json.loads(_unfence(answer))
-        except json.JSONDecodeError as error:
-            return None, [f"not JSON: {error}"]
-        if not isinstance(wrapped, dict) or sorted(wrapped) != ["home", "plants"]:
-            return None, [
-                'reply with one object {"home": ..., "plants": {...}}, nothing else'
-            ]
-        home, plants = wrapped["home"], wrapped["plants"]
-        problems = []
-        if not isinstance(home, dict) or home.get("id") != habitat:
-            problems.append(f"home.id is not {habitat!r}")
-        if not isinstance(plants, dict):
-            problems.append("plants is not an object of specs")
-            plants = {}
-        if len(plants) > MAX_NEW_PLANTS:
-            problems.append(f"at most {MAX_NEW_PLANTS} new plants, not {len(plants)}")
-        for plant_id, spec in plants.items():
-            if not re.fullmatch(r"[a-z][a-z0-9_]*", plant_id):
-                problems.append(f"{plant_id!r} is not a usable plant id")
-            elif not isinstance(spec, dict) or spec.get("id") != plant_id:
-                problems.append(f"the {plant_id} spec's id is not {plant_id!r}")
-            else:
-                try:
-                    plant_builders._validate_plant(world, spec)
-                except jsonschema.ValidationError as error:
-                    problems.append(
-                        f"the {plant_id} spec broke its schema: {error.message}"
-                    )
-        if not problems:
-            known = {path.stem for path in (world / "models" / "plants").glob("*.json")}
-            for plant in home.get("ground_cover", {}).get("plants", []):
-                model = plant.get("model", "")
-                if model not in known and model not in plants:
-                    problems.append(
-                        f"ground cover uses {model!r}, which is neither "
-                        "an existing plant nor a new spec"
-                    )
-        if not problems:
-            problems.extend(_terrain_errors(home))
-        if not problems:
-            problems.extend(
-                self._carryover_errors(world, home, set(plants), research, brief)
-            )
-        if problems:
-            return None, problems
-        sources = _template_sources(research)
-        if sources:
-            home["sources"] = sources
-        else:
-            home.pop("sources", None)
-        return {"home": home, "plants": dict(plants)}, []
-
-    def _carryover_errors(
-        self,
-        world: Path,
-        home: dict[str, Any],
-        new_ids: set[str],
-        research: dict[str, Any],
-        brief: dict[str, Any],
-    ) -> list[str]:
-        """Nothing living carries over from the example home (#55).
-
-        Every fish, ground plant and tree plant id must be a
-        species the research named or GBIF recorded near the
-        spot; only land, sky and colour structure carry over.
-        """
-        surroundings = research.get("surroundings", [])
-        names = {
-            thing.get("name", "").strip().lower()
-            for thing in surroundings
-            if thing.get("name")
-        }
-        keys = set()
-        for thing in surroundings:
-            if thing.get("latin"):
-                taxon = taxa.resolve(world, thing["latin"], plant=True)
-                if taxon is not None:
-                    keys.add(taxon["gbif_key"])
-        center = brief.get("center", {})
-        lat, lon = float(center.get("lat", 0.0)), float(center.get("lon", 0.0))
-        errors = []
-        for fish in home.get("fish", []):
-            kind = fish.get("kind", "")
-            path = world / "animals" / f"{kind}.json"
-            if not path.is_file():
-                errors.append(f"fish {kind!r} is no animal the library has")
-                continue
-            key = (json.loads(path.read_text()).get("taxon") or {}).get("gbif_key")
-            if not isinstance(key, int) or not self._recorded_here(lat, lon, key):
-                errors.append(
-                    f"fish {kind!r} swims in the template's waters, not here; drop it"
-                )
-        for plant in home.get("ground_cover", {}).get("plants", []):
-            model = plant.get("model", "")
-            if model in new_ids:
-                continue
-            spec_path = world / "models" / "plants" / f"{model}.json"
-            if not spec_path.is_file():
-                continue  # reported above as neither existing nor new
-            spec = json.loads(spec_path.read_text(encoding="utf-8"))
-            labels = {
-                model.replace("_", " "),
-                str(spec.get("latin", "")).lower(),
-                str(spec.get("name", "")).lower(),
-            } - {""}
-            named = spec.get("latin") and self._latin_key(world, spec["latin"]) in keys
-            named = named or any(
-                name == label or name in label or label in name
-                for name in names
-                for label in labels
-            )
-            key = (spec.get("taxon") or {}).get("gbif_key")
-            recorded = isinstance(key, int) and self._recorded_here(lat, lon, key)
-            if not named and not recorded:
-                errors.append(
-                    f"{model} grows in the template's land, not here; "
-                    "drop it or write a spec for what the research names"
-                )
-        pages = _tree_pages(world)
-        specs = _tree_specs(world)
-        for entry in home.get("trees", {}).get("mix", []):
-            shape = entry.get("shape", "")
-            plant = entry.get("plant") or ""
-            if shape in specs:
-                if plant != shape:
-                    errors.append(
-                        f"tree shape {shape!r} is a spec, so its plant "
-                        f"is {shape!r} itself, not {plant!r}"
-                    )
-                    continue
-                if not self._tree_named(world, specs[shape], shape, names, keys):
-                    errors.append(
-                        f"tree spec {shape!r} is named nowhere in the "
-                        "surroundings; leave plant out"
-                    )
-                continue
-            if shape not in TREE_SHAPES:
-                errors.append(
-                    f"tree shape {shape!r} is neither a shape nor an offered tree spec"
-                )
-                continue
-            if not plant:
-                continue
-            if plant not in pages:
-                errors.append(
-                    f"tree plant {plant!r} has no spec or page; leave plant out"
-                )
-                continue
-            label = plant.replace("_", " ")
-            if not any(name in label or label in name for name in names):
-                errors.append(
-                    f"tree plant {plant!r} is named nowhere in the surroundings; "
-                    "leave plant out"
-                )
-        return errors
-
-    def _tree_named(
-        self,
-        world: Path,
-        path: Path,
-        stem: str,
-        names: set[str],
-        keys: set[int],
-    ) -> bool:
-        """A spec tree the research names: latin key or plain words."""
-        try:
-            spec = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError:
-            return False
-        latin = spec.get("latin") or ""
-        if latin and self._latin_key(world, latin) in keys:
-            return True
-        labels = {stem.replace("_", " "), str(spec.get("name", "")).lower()}
-        return any(name in label or label in name for name in names for label in labels)
-
-    def _latin_key(self, world: Path, latin: str) -> int | None:
-        taxon = taxa.resolve(world, latin, plant=True)
-        return taxon["gbif_key"] if taxon is not None else None
-
-    def _recorded_here(self, lat: float, lon: float, key: int) -> bool:
-        """GBIF occurrences near the spot; unknown on an outage.
-
-        A failed query must not fail the try: the named path
-        still guards, and the reviewer re-runs.
-        """
-        try:
-            return bool(self._recorded(lat, lon, key))
-        except Exception:  # noqa: BLE001 - GBIF is down, not the home
-            return True
-
-    def _resolve_taxa(self, world: Path, files: dict[str, Any]) -> list[str]:
-        """Give every new plant its GBIF taxon, or reuse what exists.
-
-        A latin the world already grows reuses its spec (the home
-        points at it); anything else keeps its taxon on the spec,
-        with GBIF's accepted name as its latin. Two new specs
-        never share one species.
-        """
-        errors = []
-        seen: dict[int, str] = {}
-        for plant_id in sorted(files["plants"]):
-            spec = files["plants"][plant_id]
-            try:
-                found = self._match(world, spec.get("latin", ""))
-            except Exception as error:  # noqa: BLE001 - GBIF or the latin
-                errors.append(f"{plant_id}: {error}")
-                continue
-            key = found["taxon"]["gbif_key"]
-            if key in seen:
-                errors.append(
-                    f"{plant_id} is the same species as {seen[key]}; "
-                    "one real species, one spec"
-                )
-                continue
-            seen[key] = plant_id
-            target = plant_builders._reuse_target(found)
-            if target is not None:
-                _rewrite_plant(files["home"], plant_id, target)
-                del files["plants"][plant_id]
-            else:
-                spec["taxon"] = found["taxon"]
-                spec["latin"] = found["taxon"]["name"]
-        return errors
-
-    def _place(
+    def _adapt_try(
         self,
         ctx: Any,
         world: Path,
+        base: Path,
+        choices: dict[str, Any],
         habitat: str,
-        files: dict[str, Any],
-        attempt: int,
-    ) -> None:
-        """Lay the try's files where the build and the checker find them."""
-        homes_dir = ctx.job_dir / "homes"
-        homes_dir.mkdir(exist_ok=True)
-        (homes_dir / f"{habitat}.json").write_text(
-            json.dumps(files["home"], indent=2), encoding="utf-8"
-        )
-        plants_dir = ctx.job_dir / "models" / "plants"
-        plants_dir.mkdir(parents=True, exist_ok=True)
-        sandbox = _ensure_sandbox(ctx.job_dir, world)
-        (sandbox / "homes" / f"{habitat}.json").write_text(
-            json.dumps(files["home"], indent=2), encoding="utf-8"
-        )
-        for plant_id, spec in files["plants"].items():
-            text = json.dumps(spec, indent=2)
-            (plants_dir / f"{plant_id}.json").write_text(text, encoding="utf-8")
-            (sandbox / "models" / "plants" / f"{plant_id}.json").write_text(
-                text, encoding="utf-8"
-            )
-        specs = _tree_specs(world)
-        wanted = {
-            entry.get("shape", "")
-            for entry in files["home"].get("trees", {}).get("mix", [])
-        } & set(specs)
-        if wanted:
-            trees_dir = ctx.job_dir / "models" / "trees"
-            trees_dir.mkdir(parents=True, exist_ok=True)
-            sandbox_trees = sandbox / "models" / "trees"
-            sandbox_trees.mkdir(parents=True, exist_ok=True)
-            for stem in sorted(wanted):
-                text = specs[stem].read_text(encoding="utf-8")
-                (trees_dir / f"{stem}.json").write_text(text, encoding="utf-8")
-                (sandbox_trees / f"{stem}.json").write_text(text, encoding="utf-8")
-
-    def _build_and_check(
-        self,
-        ctx: Any,
-        world: Path,
-        habitat: str,
-        files: dict[str, Any],
         attempt: int,
     ) -> list[str]:
-        """Build the new plants, then read the world's verdicts."""
-        sandbox = _ensure_sandbox(ctx.job_dir, world)
+        """The try's choices through the world's adapt tool, with its checks."""
         folder = ctx.job_dir / "tries" / habitat / str(attempt)
         folder.mkdir(parents=True, exist_ok=True)
-        errors = []
-        logs = []
-        for plant_id in sorted(files["plants"]):
-            built = self._build(sandbox, plant_id)
-            logs.append(f"== {plant_id} ==\n{built['log']}")
-            if not built["ok"] and not built["log"].strip():
-                raise _Stopped(
-                    f"{plant_id}: the build failed with no output: Blender "
-                    "itself did not run here, not the spec. A person looks."
-                )
-            if not built["ok"]:
-                errors.append(f"the {plant_id} build failed: {built['log']}")
-                continue
-            for name, rel in (
-                (f"{plant_id}.glb", Path("assets") / "plants" / f"{plant_id}.glb"),
-                (
-                    f"{plant_id}.png",
-                    Path("models") / "previews" / "plants" / f"{plant_id}.png",
-                ),
-            ):
-                src = sandbox / rel
-                if src.is_file():
-                    dest = ctx.job_dir / "models" / "plants" / name
-                    dest.write_bytes(src.read_bytes())
-        (folder / "build.log").write_text("\n".join(logs), encoding="utf-8")
-        errors.extend(self._check_homes(sandbox, habitat))
-        if files["plants"]:
-            errors.extend(self._check_models(sandbox, sorted(files["plants"])))
-        (folder / "errors.json").write_text(
-            json.dumps(errors, indent=2), encoding="utf-8"
-        )
-        return errors
+        choices_path = folder / "choices.json"
+        choices_path.write_text(json.dumps(choices, indent=2), encoding="utf-8")
+        return self._adapt(world, base, choices_path, folder / "home.json")
 
     def _save_try(
         self,
@@ -1788,267 +1520,290 @@ class HomeMakerStage:
         habitat: str,
         attempt: int,
         answer: str,
-        files: dict[str, Any] | None,
         errors: list[str],
     ) -> None:
         folder = ctx.job_dir / "tries" / habitat / str(attempt)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "answer.json").write_text(answer, encoding="utf-8")
-        if files is not None:
-            (folder / "home.json").write_text(
-                json.dumps(files["home"], indent=2), encoding="utf-8"
-            )
-            for plant_id, spec in files["plants"].items():
-                (folder / f"plant-{plant_id}.json").write_text(
-                    json.dumps(spec, indent=2), encoding="utf-8"
-                )
-        if not (folder / "errors.json").is_file():
-            (folder / "errors.json").write_text(
-                json.dumps(errors, indent=2), encoding="utf-8"
-            )
-
-    def _save_final(
-        self,
-        ctx: Any,
-        world: Path,
-        habitat: str,
-        files: dict[str, Any],
-    ) -> None:
-        """The passing files, where the pack and the report find them."""
-        sandbox = _ensure_sandbox(ctx.job_dir, world)
-        for plant_id in files["plants"]:
-            preview = sandbox / "models" / "previews" / "plants" / f"{plant_id}.png"
-            if preview.is_file():
-                dest = (
-                    ctx.job_dir / "models" / "previews" / "plants" / f"{plant_id}.png"
-                )
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(preview.read_bytes())
+        (folder / "errors.json").write_text(
+            json.dumps(errors, indent=2), encoding="utf-8"
+        )
 
     def _prompt(
         self,
-        world: Path,
         brief: dict[str, Any],
         research: dict[str, Any],
         habitat: str,
-        looks: dict[str, Any] | None = None,
+        base: Path,
+        plants: list[str],
+        looks: dict[str, Any],
     ) -> str:
-        template = (PROMPTS_DIR / "home_write.md").read_text(encoding="utf-8")
-        existing = sorted(
-            path.stem for path in (world / "models" / "plants").glob("*.json")
-        )
-        bush = (world / "models" / "plants" / "bilberry.json").read_text()
-        ground = (world / "models" / "plants" / "wood_anemone.json").read_text()
+        template = (PROMPTS_DIR / "home_choices.md").read_text(encoding="utf-8")
+        closest = json.loads(base.read_text(encoding="utf-8"))
+        excerpt = {
+            key: closest[key]
+            for key in ("description", "palette", "trees", "lake_life")
+        }
+        center = brief.get("center", {})
         return Template(template).substitute(
             {
                 "HABITAT": habitat,
-                "SURROUNDINGS": json.dumps(research["surroundings"], indent=2),
-                "PLANT_LOOKS": _plant_looks_text((looks or {}).get("plants", {})),
-                "CLOSEST_NAME": CLOSEST_HOME,
-                "CLOSEST_HOME": (
-                    (world / "homes" / f"{CLOSEST_HOME}.json").read_text()
-                ).replace("$", "$$"),
-                "MAX_PLANTS": str(MAX_NEW_PLANTS),
-                "EXISTING_PLANTS": ", ".join(existing) or "(none yet)",
-                "TREE_SHAPES": ", ".join(TREE_SHAPES),
-                "TREE_SPECS": _tree_specs_text(world),
-                "TREE_PLANTS": ", ".join(sorted(_tree_pages(world))) or "(none yet)",
-                "PLANT_EXAMPLES": (
-                    f"A bush (bilberry):\n{bush}\n\n"
-                    f"A ground plant (wood anemone):\n{ground}"
-                ).replace("$", "$$"),
-                "REGION_RULES": _region_rules(world),
-                "PLANT_RULES": plant_builders._plant_rules(world),
-                "AUTHOR": self.author,
-                "FOR_CHILDREN": for_children(),
+                "ANIMAL": brief.get("name", "") or "animal",
+                "LAT": str(center.get("lat", 0.0)),
+                "LON": str(center.get("lon", 0.0)),
+                "SURROUNDINGS": _surroundings_text(research, looks),
+                "FOODS": _foods_text(research),
+                "BASE": json.dumps(excerpt, indent=1).replace("$", "$$"),
+                "PLANTS": ", ".join(plants),
             }
         )
 
 
-def _region_rules(world: Path) -> str:
-    """The region-file section of the world's CONTRIBUTING.md."""
-    text = (world / "CONTRIBUTING.md").read_text(encoding="utf-8")
-    start = text.find("## The region file")
-    rest = text.find("\n## ", start + 1)
-    return text[start:rest].strip() if start >= 0 else ""
+def _closest_home(world: Path, habitat: str) -> Path:
+    """The starting home: the lake one for lake and sea habitats (#65.3)."""
+    name = "boreal_lake" if "lake" in habitat or "sea" in habitat else "boreal_forest"
+    path = world / "homes" / f"{name}.json"
+    if not path.is_file():
+        raise _Stopped(f"no home template {name} in this checkout")
+    return path
 
 
-def _terrain_errors(home: dict[str, Any]) -> list[str]:
-    """The land stays out of the water (#64.1).
-
-    The game builds land from `base_height` up by `relief`
-    (`world.gd height()`), with the water at `water_level`
-    (default 8): a base below water_level + 3 floods the
-    place. Only present numbers are checked; missing ones
-    are the world's check's business.
-    """
-    terrain = home.get("terrain")
-    if not isinstance(terrain, dict):
-        return []
-    base = terrain.get("base_height")
-    if isinstance(base, bool) or not isinstance(base, (int, float)):
-        return []
-    water = terrain.get("water_level", 8)
-    if isinstance(water, bool) or not isinstance(water, (int, float)):
-        return []
-    floor = water + 3
-    if base >= floor:
-        return []
-    return [
-        f"the land sits under the water: terrain.base_height {base:g} "
-        f"with water_level {water:g} floods the place; base_height "
-        f"must be at least water_level + 3 ({floor:g}). A flat wet "
-        "place is low land near the water, not land under it"
-    ]
-
-
-def _template_sources(research: dict[str, Any]) -> list[str]:
-    """The research's sources, in order, for the made home (#64.3)."""
-    ordered = []
-    for url in research.get("sources", []) or []:
-        if isinstance(url, str) and url.strip() and url not in ordered:
-            ordered.append(url)
-    return ordered
-
-
-def _tree_specs(world: Path) -> dict[str, Path]:
-    """Offered tree spec ids: the shipped library only (#64.5).
-
-    The worked examples in models/examples/trees/ are
-    reference work, not the library, so they stay unoffered.
-    """
-    return {path.stem: path for path in (world / "models" / "trees").glob("*.json")}
-
-
-def _plant_looks_text(plants: dict[str, Any]) -> str:
-    """Grounded plant looks for the home prompt (#58.5)."""
-    if not plants:
-        return "(no grounded plant looks; write from the surroundings' names)"
+def _surroundings_text(research: dict[str, Any], looks: dict[str, Any]) -> str:
+    """The surroundings as the lab listed them, with the plant looks."""
     lines = []
-    for name in sorted(plants):
-        looks = plants[name]
-        bits = [f"- {name}"]
-        if looks.get("latin"):
-            bits.append(f"({looks['latin']})")
-        if looks.get("size_cm") is not None:
-            bits.append(f"{looks['size_cm']} cm tall")
-        if looks.get("colours"):
-            bits.append(f"colours: {', '.join(looks['colours'])}")
-        if looks.get("marks"):
-            bits.append(f"shape: {', '.join(looks['marks'])}")
-        if looks.get("year"):
-            bits.append(f"year: {looks['year']}")
-        lines.append(" ".join(bits))
+    for thing in research["surroundings"]:
+        line = f"- {thing['name']} ({thing['kind']})"
+        if thing.get("food_kind"):
+            line += f", animals eat it as {thing['food_kind']}"
+        lines.append(line)
+    for name, found in (looks.get("plants") or {}).items():
+        colours = ", ".join(found.get("colours", []))
+        marks = ", ".join(found.get("marks", []))
+        lines.append(f"  - {name}: {colours}; {marks}")
     return "\n".join(lines)
 
 
-def _tree_specs_text(world: Path) -> str:
-    """Offered tree specs for the prompt: id, name, latin (#58.6)."""
-    lines = []
-    for stem, path in sorted(_tree_specs(world).items()):
-        try:
-            spec = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError:
-            continue
-        name = spec.get("name", stem) or stem
-        latin = spec.get("latin", "") or "no latin"
-        lines.append(f"- {stem}: {name} ({latin})")
-    return "\n".join(lines) if lines else "(none yet)"
+def _foods_text(research: dict[str, Any]) -> str:
+    """The animal's foods as `name (kind)`, the main food first."""
+    foods = [research["main_food"], *research.get("other_foods", [])]
+    return ", ".join(f"{food['name']} ({food['kind']})" for food in foods)
 
 
-def _tree_pages(world: Path) -> set[str]:
-    """Tree ids a `plant` may name: specs or locale plant pages."""
-    ids = set(_tree_specs(world))
-    pages = world / "locale" / "en" / "plants.json"
-    if pages.is_file():
-        try:
-            keys = json.loads(pages.read_text(encoding="utf-8"))
-        except ValueError:
-            return ids
-        for key in keys:
-            if key.startswith("plant.") and key.count(".") >= 2:
-                ids.add(key.split(".")[1])
-    return ids
+def _home_choices_schema(plants: list[str]) -> dict[str, Any]:
+    """The choices form, strict: words, enums and hex colours only (#65.1)."""
+
+    def obj(props: dict[str, Any], req: list[str] | None = None) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "required": req or list(props),
+            "properties": props,
+        }
+
+    def enum(vals: list[str], description: str) -> dict[str, Any]:
+        return {"type": "string", "enum": vals, "description": description}
+
+    return obj(
+        {
+            "description": {
+                "type": "string",
+                "description": (
+                    "one plain sentence a child understands: "
+                    "the land, the trees, the water"
+                ),
+            },
+            "land": enum(CHOICE_LEVELS["land"], "how the ground rises"),
+            "water": enum(
+                CHOICE_LEVELS["water"],
+                (
+                    "the main water: river (runs through the land), "
+                    "lake (a big lake, the land around it), pools, "
+                    "sea (a shore), none"
+                ),
+            ),
+            "wetness": enum(
+                CHOICE_LEVELS["wetness"],
+                "ponds, bogs and side streams besides the main water",
+            ),
+            "water_name": {
+                "type": "string",
+                "description": (
+                    "a plain name for the main water, like 'Slow river'; "
+                    "no real place names"
+                ),
+            },
+            "palette": obj({key: _CHOICE_HEX for key in CHOICE_PALETTE}),
+            "trees": obj(
+                {
+                    "density": enum(CHOICE_LEVELS["density"], "how many trees"),
+                    "mix": {
+                        "type": "array",
+                        "maxItems": 4,
+                        "items": obj(
+                            {
+                                "shape": enum(
+                                    list(TREE_SHAPES),
+                                    "the closest of the game's tree shapes",
+                                ),
+                                "leaves": _CHOICE_HEX,
+                                "trunk": _CHOICE_HEX,
+                                "weight": {
+                                    "type": "integer",
+                                    "description": (
+                                        "share of the trees, all weights "
+                                        "add to about 100"
+                                    ),
+                                },
+                                "food": {
+                                    "anyOf": [
+                                        enum(
+                                            [
+                                                "browse",
+                                                "cones",
+                                                "bark",
+                                                "berries",
+                                                "seeds",
+                                            ],
+                                            "what animals eat from it",
+                                        ),
+                                        {"type": "null"},
+                                    ]
+                                },
+                                "autumn": {
+                                    "anyOf": [_CHOICE_HEX, {"type": "null"}],
+                                    "description": (
+                                        "leaf colour in autumn if the leaves "
+                                        "turn and fall; null in the tropics "
+                                        "or for evergreens"
+                                    ),
+                                },
+                            }
+                        ),
+                    },
+                }
+            ),
+            "grass": enum(CHOICE_LEVELS["grass"], "grass on open ground"),
+            "flowers": {
+                "type": "array",
+                "maxItems": 4,
+                "items": obj({"name": {"type": "string"}, "color": _CHOICE_HEX}),
+            },
+            "plants": {
+                "type": "array",
+                "items": obj(
+                    {
+                        "model": enum(
+                            plants or ["none"],
+                            (
+                                "a plant the game already has; "
+                                "only one that truly grows here"
+                            ),
+                        )
+                    }
+                ),
+            },
+            "water_life": obj(
+                {
+                    key: enum(CHOICE_LEVELS["life"], key)
+                    for key in ("reeds", "lilies", "pondweed")
+                }
+            ),
+            "food": {
+                "type": "array",
+                "items": obj(
+                    {
+                        "kind": enum(CHOICE_FOOD_KINDS, "a food kind"),
+                        "names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "real foods of this kind here, plain names"
+                            ),
+                        },
+                    }
+                ),
+            },
+        }
+    )
 
 
-def _build_plant(sandbox: Path, plant_id: str) -> dict[str, Any]:
-    """Run the world's build script on one plant spec, in the sandbox."""
-    return build_in_sandbox(sandbox, f"models/plants/{plant_id}.json")
-
-
-def _match_plant(world: Path, latin: str) -> dict[str, Any]:
-    return taxon_same(world, latin, plant=True)
-
-
-def _rewrite_plant(home: dict[str, Any], plant_id: str, target: str) -> None:
-    """Point the home's ground cover at the existing spec."""
-    for plant in home.get("ground_cover", {}).get("plants", []):
-        if plant.get("model") == plant_id:
-            plant["model"] = target
-
-
-def check_homes_in_sandbox(sandbox: Path, habitat: str) -> list[str]:
-    """Our home's lines from the world's `homes.py check`.
-
-    Other homes' failures are the world's own state, not this
-    try's; only this habitat's block feeds back.
-    """
+def _choices_files(answer: str) -> tuple[dict[str, Any] | None, list[str]]:
+    """The try's choices, without the shape's `none` plants."""
     try:
-        done = subprocess.run(
-            [sys.executable, "tools/homes.py", "check"],
-            cwd=sandbox,
+        choices = json.loads(_unfence(answer))
+    except json.JSONDecodeError as error:
+        return None, [f"not JSON: {error}"]
+    if not isinstance(choices, dict):
+        return None, ["reply with one choices object, nothing else"]
+    if isinstance(choices.get("plants"), list):
+        choices["plants"] = [
+            plant
+            for plant in choices["plants"]
+            if not (isinstance(plant, dict) and plant.get("model") == "none")
+        ]
+    return choices, []
+
+
+def _code_choices(
+    choices: dict[str, Any],
+    habitat: str,
+    brief: dict[str, Any],
+    research: dict[str, Any],
+) -> None:
+    """Code's part of the choices: the id, the tropics, the sources (#65.2)."""
+    lat = float((brief.get("center") or {}).get("lat", 0.0))
+    choices.update(
+        {
+            "id": habitat,
+            "tropical": abs(lat) < 23,
+            "sources": [*research["sources"], "GBIF.org"],
+        }
+    )
+
+
+def _place_home(ctx: Any, habitat: str, attempt: int) -> None:
+    """The passing try's home, where the home stage finds it."""
+    homes_dir = ctx.job_dir / "homes"
+    homes_dir.mkdir(exist_ok=True)
+    src = ctx.job_dir / "tries" / habitat / str(attempt) / "home.json"
+    (homes_dir / f"{habitat}.json").write_text(
+        src.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
+
+def _run_adapt_home(
+    world: Path, base: Path, choices_path: Path, out_path: Path
+) -> list[str]:
+    """The world's adapt tool with its checks; its ERROR/FAIL lines, if any."""
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(world / "tools" / "adapt_home.py"),
+                str(base),
+                str(choices_path),
+                "--check",
+                "--out",
+                str(out_path),
+            ],
             capture_output=True,
             text=True,
-            timeout=300,
+            check=False,
+            timeout=HOME_ADAPT_TIMEOUT,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise _Stopped(f"homes.py check did not run: {error}")
-    want = f"homes/{habitat}.json"
-    errors: list[str] = []
-    ours = False
-    for line in (done.stdout + done.stderr).splitlines():
-        if line.startswith("FAIL ") or line.startswith("ok   "):
-            ours = line[5:].strip() == want and line.startswith("FAIL ")
-        elif ours and line.startswith("     - "):
-            errors.append(line[7:].strip())
-    if not ours and not errors and f"ok   {want}" not in done.stdout:
-        out = (done.stdout + done.stderr).strip()[:200]
-        raise _Stopped(f"homes.py check never mentioned {want}: {out}")
-    return errors
-
-
-def check_models_in_sandbox(sandbox: Path, plant_ids: list[str]) -> list[str]:
-    """Our plants' lines from the world's `check_models.py`.
-
-    It runs over the whole sandbox (the preview sheets only
-    exist there), but only `ERROR: <ours>: ...` lines feed
-    back; the world's own failures are not this try's. No
-    summary line means the tool itself broke.
-    """
-    try:
-        done = subprocess.run(
-            [sys.executable, "tools/check_models.py"],
-            cwd=sandbox,
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise _Stopped(f"check_models.py did not run: {error}")
-    if "models checked," not in done.stdout:
-        raise _Stopped(
-            f"check_models.py broke: {(done.stdout + done.stderr).strip()[:200]}"
-        )
-    wanted = set(plant_ids)
+        raise _Stopped(f"adapt_home.py did not run: {error}")
+    if proc.returncode == 0:
+        return []
     errors = []
-    for line in done.stderr.splitlines():
-        if not line.startswith("ERROR: "):
-            continue
-        rest = line[len("ERROR: ") :]
-        pid, _, msg = rest.partition(": ")
-        if pid in wanted:
-            errors.append(f"{pid}: {msg}" if msg else pid)
-    return errors
+    for line in (proc.stdout + proc.stderr).splitlines():
+        if line.startswith("ERROR: "):
+            errors.append(line[len("ERROR: ") :].strip())
+        elif line.startswith("FAIL "):
+            errors.append(line[len("FAIL ") :].strip())
+    if errors:
+        return errors
+    raise _Stopped(f"adapt_home.py broke: {(proc.stdout + proc.stderr).strip()[:200]}")
 
 
 class _Stopped(Exception):

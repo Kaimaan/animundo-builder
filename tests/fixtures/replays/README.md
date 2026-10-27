@@ -17,9 +17,10 @@ the way the one-shot writer adapts its `start_from`:
 - `anaconda/oneshot-anaconda.json`: the fox's animal file (diet
   carrion, hunts small mammals) and the grass-snake example
   spec, relabelled anaconda.
-- `anaconda/newhome.json`: the boreal home with a rainforest id
-  and name, food for the fox check plus the habitat's kinds,
-  and a water-lettuce spec adapted from the bilberry.
+- `anaconda/newhome.json`: the lab's real rainforest choices
+  (the AI's answer, without the id, tropics and sources the
+  code adds), and `anaconda/newhome-made.json`: the made home
+  standing in for the adapt tool's output downstream.
 
 When the reviewer records the live maker runs, these stand-ins
 can be replaced with the real recordings.

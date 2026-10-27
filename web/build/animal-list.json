@@ -1354,7 +1354,7 @@
    "name": "Emperor penguin",
    "latin": "Aptenodytes forsteri",
    "gbif_key": 2481661,
-   "start_from": "mallard",
+   "start_from": "emperor_penguin",
    "habitats": [
     "ice",
     "sea"
@@ -1366,7 +1366,7 @@
    "name": "King penguin",
    "latin": "Aptenodytes patagonicus",
    "gbif_key": 2481660,
-   "start_from": "mallard",
+   "start_from": "emperor_penguin",
    "habitats": [
     "ice",
     "sea"
@@ -1378,7 +1378,7 @@
    "name": "Atlantic puffin",
    "latin": "Fratercula arctica",
    "gbif_key": 2481353,
-   "start_from": "mallard",
+   "start_from": "emperor_penguin",
    "habitats": [
     "sea"
    ],

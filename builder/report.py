@@ -79,6 +79,7 @@ def report_text(job_dir: Path) -> str:
         for kind, name, cost in _new_things_data(job_dir)
     ]
     lines.extend(_unmakable_lines(job_dir))
+    lines.extend(_later_plants_lines(job_dir))
     calls = _read_calls(job_dir / "log.jsonl")
     total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
     lines.append(f"- Total: {_amount(total)} over {len(calls)} calls.")
@@ -111,6 +112,29 @@ def _unmakable(job_dir: Path) -> str:
     return "<h2>Marks the tool can't make yet</h2>\n<ul>" + rows + "</ul>"
 
 
+def _later_plants_lines(job_dir: Path) -> list[str]:
+    """Looks-stage plants the home couldn't use yet, for the reviewer (#65.4)."""
+    plants = _read_json(job_dir / "looks.json").get("plants", {})
+    if not isinstance(plants, dict):
+        return []
+    lines = []
+    for name in sorted(plants):
+        found = plants[name] if isinstance(plants[name], dict) else {}
+        latin = found.get("latin") or ""
+        label = f"{name} ({latin})" if latin else str(name)
+        lines.append(f"- {label}: looks grounded, make its spec later.")
+    return lines
+
+
+def _later_plants(job_dir: Path) -> str:
+    """The plants-to-make-later section, when the looks named any."""
+    lines = _later_plants_lines(job_dir)
+    if not lines:
+        return ""
+    rows = "".join(f"<li>{html.escape(line[2:])}</li>" for line in lines)
+    return "<h2>Plants to make later</h2>\n<ul>" + rows + "</ul>"
+
+
 def _amount(cost: Any) -> str:
     return f"${float(cost):.3f}" if isinstance(cost, (int, float)) else "—"
 
@@ -135,6 +159,7 @@ def build_report(job_dir: Path) -> Path:
         _head(params, job_dir.name),
         _new_things(job_dir),
         _unmakable(job_dir),
+        _later_plants(job_dir),
         _stages(state),
         _cost(calls),
         _sources(survey),

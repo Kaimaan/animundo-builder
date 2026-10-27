@@ -3,6 +3,37 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #65 (decision D8: homes work like animals)
+
+- #65.1: the free-form `home_write` call is out; the AI fills a strict
+  choices form instead. `prompts/home_choices.md` and
+  `_home_choices_schema()` are the lab's `PROMPT` and `schema()`
+  verbatim (template-ized): surroundings plus looks-stage plant looks,
+  the animal's foods, the closest home's description/palette/trees/lake
+  life, the library plant ids as an enum. Verified: the rendered
+  rainforest prompt diffs clean against the lab's (only the real animal
+  name and exact center differ — the lab fell back to "animal" and the
+  rounded cell), and the schema is JSON-identical to the lab's.
+- #65.2: code adds `id`, `tropical` (|lat| < 23) and `sources`
+  (research's plus GBIF.org), then runs the world's
+  `tools/adapt_home.py --check --out`. Its ERROR/FAIL lines feed the
+  fix round, which changes the choices with #59's memory. Tries keep
+  answer/choices/home/errors; only a passing try lands in `homes/`.
+- #65.3: closest home is `boreal_lake` for lake and sea habitats,
+  `boreal_forest` otherwise.
+- #65.4: no new plant specs; looks-stage plants go into the report
+  (HTML and plain text) as "Plants to make later".
+- #65.5: place name without country already landed in #64.4; dry
+  middle comes from the adapt tool itself.
+- Removed with the old maker: `home_write.md`, the carryover/taxa/
+  terrain/sources/tree-spec machinery, the sandbox plant builds and
+  both sandbox check readers (~700 lines out).
+- Replay: `anaconda/newhome.json` is now the lab's real rainforest
+  choices (the AI's part); `newhome-made.json` stands in for the
+  adapt tool's output downstream. Synced `web/build/animal-list.json`
+  (emperor penguin reference).
+- Suite: 570 passed, 12 skipped; ruff check + format clean.
+
 ## 2026-10-27: inbox #64 (made rainforest home, five fixes)
 
 - #64.1: land stays out of the water. Prompt rule plus `_terrain_errors`

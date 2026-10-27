@@ -208,7 +208,16 @@ def _world(tmp_path: Path) -> Path:
     )
     (world / "homes").mkdir(parents=True)
     (world / "homes" / "boreal_forest.json").write_text(
-        json.dumps({"id": "boreal_forest", "name": "Northern forest home"})
+        json.dumps(
+            {
+                "id": "boreal_forest",
+                "name": "Northern forest home",
+                "description": "A northern forest.",
+                "palette": {"ground_lush": "#5f9445"},
+                "trees": {"density": 0.02, "mix": []},
+                "lake_life": {"reeds": 0.1, "lilies": 0.0, "pondweed": 0.0},
+            }
+        )
     )
     (world / "models").mkdir(parents=True)
     colours = {
@@ -343,49 +352,15 @@ def _build_animal(sandbox: Path, species_id: str) -> dict[str, Any]:
     }
 
 
-def _build_plant(sandbox: Path, plant_id: str) -> dict[str, Any]:
-    (sandbox / "assets" / "plants").mkdir(parents=True, exist_ok=True)
-    (sandbox / "assets" / "plants" / f"{plant_id}.glb").write_bytes(b"glb-bytes")
-    previews = sandbox / "models" / "previews" / "plants"
-    previews.mkdir(parents=True, exist_ok=True)
-    (previews / f"{plant_id}.png").write_bytes(b"png-bytes")
-    return {"ok": True, "summary": f"{plant_id}: built", "log": f"BUILT {plant_id}: ok"}
-
-
-def _check_homes(sandbox: Path, habitat: str) -> list[str]:
-    """The made home parses, is itself, and feeds the fox check."""
-    path = sandbox / "homes" / f"{habitat}.json"
-    try:
-        home = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return [f"homes/{habitat}.json is missing or not JSON"]
-    errors = []
-    if home.get("id") != habitat:
-        errors.append(f"home.id is not {habitat!r}")
-    kinds = {food.get("kind") for food in home.get("food", [])}
-    for kind in ("berries", "insects", "carrion"):
-        if kind not in kinds:
-            errors.append(f"the home's food has no {kind}")
-    return errors
-
-
-def _check_models(sandbox: Path, plant_ids: list[str]) -> list[str]:
-    """Every new plant spec, build and preview is in the sandbox."""
-    errors = []
-    for plant_id in plant_ids:
-        for rel in (
-            f"models/plants/{plant_id}.json",
-            f"assets/plants/{plant_id}.glb",
-            f"models/previews/plants/{plant_id}.png",
-        ):
-            if not (sandbox / rel).is_file():
-                errors.append(f"{rel} is missing from the build")
-    return errors
-
-
-def _match_taxon(world: Path, latin: str) -> dict[str, Any]:
-    taxon = {"gbif_key": 2870583, "rank": "SPECIES", "name": latin}
-    return {"taxon": taxon, "files": []}
+def _adapt_home(
+    world: Path, base: Path, choices_path: Path, out_path: Path
+) -> list[str]:
+    """The adapt tool, stubbed: the recorded made home, as the tool left it."""
+    out_path.write_text(
+        (FIXTURES / "anaconda" / "newhome-made.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    return []
 
 
 def _research(tmp_path: Path, job: Path, world: Path, tracker: BudgetTracker) -> None:
@@ -492,13 +467,15 @@ def test_anaconda_replays_through_both_makers_to_its_pack(
         tracker=tracker,
         world_path=world,
     )
-    home_result = HomeMakerStage(
-        build=_build_plant,
-        check_homes=_check_homes,
-        check_models=_check_models,
-        match=_match_taxon,
-    ).run(maker)
+    home_result = HomeMakerStage(adapt=_adapt_home).run(maker)
     assert home_result["home_files"] == ["homes/rainforest.json"]
+    tried = json.loads(
+        (job / "tries" / "rainforest" / "1" / "choices.json").read_text()
+    )
+    assert tried["id"] == "rainforest"
+    assert tried["tropical"] is True
+    assert tried["land"] == "flat" and tried["water"] == "river"
+    assert tried["sources"][-1] == "GBIF.org"
     result = HomeStage(recorded=_recorded).run(ctx)
     assert result["animal"] == "anaconda"
     region = _region(job)

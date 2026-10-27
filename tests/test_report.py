@@ -241,6 +241,32 @@ def test_report_logs_unmakable_marks(tmp_path: Path) -> None:
     assert "stripes, mane" in html
 
 
+def test_report_lists_plants_to_make_later(tmp_path: Path) -> None:
+    (tmp_path / "state.json").write_text(
+        json.dumps({"params": {"kind": "animal_home"}, "completed": []})
+    )
+    (tmp_path / "home.json").write_text(json.dumps({"latin": "Eunectes murinus"}))
+    (tmp_path / "minset.json").write_text(
+        json.dumps({"make_animal": False, "make_home": True, "prey": None})
+    )
+    (tmp_path / "looks.json").write_text(
+        json.dumps(
+            {
+                "plants": {
+                    "water lettuce": {"latin": "Pistia stratiotes"},
+                    "kapok": {},
+                }
+            }
+        )
+    )
+    text = report_text(tmp_path)
+    assert "- kapok: looks grounded, make its spec later." in text
+    assert "- water lettuce (Pistia stratiotes): looks grounded" in text
+    html = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "Plants to make later" in html
+    assert "water lettuce (Pistia stratiotes)" in html
+
+
 def test_report_is_offline_safe(tmp_path: Path) -> None:
     _job(tmp_path)
     text = build_report(tmp_path).read_text(encoding="utf-8")

@@ -1,531 +1,60 @@
 {
-  "home": {
-    "id": "rainforest",
-    "name": "Rainforest home",
-    "country": "",
-    "center": {
-      "lat": 0,
-      "lon": 0
-    },
-    "description": "A northern forest of spruce, pine and birch on rocky hills, with small lakes, bogs and streams.",
-    "about": "Home template. boreal forest of spruce, pine and birch on rolling rocky ground, with small lakes, bogs and streams. Based on Nuuksio. The builder copies it for an animal whose home is a northern forest, then names it, sets its center and adds the animal, its food and its neighbours.",
-    "author": "Animundo team",
-    "terrain": {
-      "size": 2048,
-      "base_height": 11,
-      "relief": 12,
-      "frequency": 0.04,
-      "rock_ridges": 0.4,
-      "rock_above": 18,
-      "lakes": 0.35,
-      "edge": "lake",
-      "seed": 1811587497
-    },
-    "palette": {
-      "ground_lush": "#5f9445",
-      "ground_dry": "#93a65a",
-      "ground_high": "#8c9a78",
-      "dirt": "#6e5640",
-      "rock": "#a89c97",
-      "sand": "#cfc2a0",
-      "water_deep": "#1f4654",
-      "water_shallow": "#3d6f73",
-      "ground_autumn": "#a59a5e",
-      "snow": "#eef2f6",
-      "heath_autumn": "#b04a32"
-    },
-    "sky": {
-      "day": "#8fc6ea",
-      "horizon": "#eef2ec",
-      "dusk": "#f2a07a",
-      "night": "#141a3a",
-      "sun": "#ffe8c4"
-    },
-    "seasons": {
-      "spring": "04-05",
-      "summer": "05-25",
-      "autumn": "09-20",
-      "winter": "11-25",
-      "snow": true
-    },
-    "trees": {
-      "density": 0.02,
-      "mix": [
-        {
-          "shape": "spruce",
-          "food": "cones",
-          "weight": 43,
-          "leaves": "#2c5846",
-          "trunk": "#5b4433"
-        },
-        {
-          "shape": "pine",
-          "food": "cones",
-          "weight": 28,
-          "leaves": "#4f7d40",
-          "trunk": "#b0703f"
-        },
-        {
-          "shape": "birch",
-          "food": "browse",
-          "weight": 20,
-          "leaves": "#9cc35a",
-          "trunk": "#ece6da",
-          "autumn": "#e8c13a"
-        },
-        {
-          "shape": "round",
-          "food": "browse",
-          "weight": 5,
-          "leaves": "#5f8f3a",
-          "trunk": "#6b4a33",
-          "autumn": "#d9772f"
-        },
-        {
-          "shape": "rowan",
-          "food": "browse",
-          "weight": 5,
-          "leaves": "#5f8a3a",
-          "autumn": "#c23b22"
-        }
+  "description": "Flat muddy rainforest with huge green leafy trees beside a slow brown river.",
+  "flowers": [],
+  "food": [
+    {
+      "kind": "browse",
+      "names": [
+        "kapok leaves"
       ]
     },
-    "ground_cover": {
-      "grass": 0.18,
-      "flowers": 0.04,
-      "flower_colors": [
-        "#f5f3ea",
-        "#b48ac4",
-        "#4b5fa0",
-        "#f2d64a"
-      ],
-      "flower_names": [
-        "oxeye daisy",
-        "heather",
-        "harebell",
-        "tormentil"
-      ],
-      "stones": 0.04,
-      "plants": [
-        {
-          "model": "water_lettuce",
-          "density": 0.15
-        }
+    {
+      "kind": "water_plants",
+      "names": [
+        "water lettuce"
       ]
-    },
-    "lakes": [
+    }
+  ],
+  "grass": "some",
+  "land": "flat",
+  "palette": {
+    "dirt": "#5e422e",
+    "ground_dry": "#6f9a3f",
+    "ground_high": "#2a6b2e",
+    "ground_lush": "#2f7d2c",
+    "rock": "#7d7a72",
+    "sand": "#c2ad85",
+    "water_deep": "#3f4a2c",
+    "water_shallow": "#7a7e5e"
+  },
+  "plants": [],
+  "trees": {
+    "density": "dense",
+    "mix": [
       {
-        "name": "Long lake",
-        "x": 0.4,
-        "z": 0.5,
-        "length": 0.125,
-        "width": 0.02125,
-        "angle": 80,
-        "depth": 7,
-        "islands": 2,
-        "wreck": true
+        "autumn": null,
+        "food": "browse",
+        "leaves": "#2e8b3d",
+        "shape": "round",
+        "trunk": "#8d857a",
+        "weight": 55
       },
       {
-        "name": "Round lake",
-        "x": 0.24,
-        "z": 0.67,
-        "length": 0.22,
-        "width": 0.11,
-        "angle": 55,
-        "depth": 7,
-        "islands": 1
-      },
-      {
-        "name": "Hidden lake",
-        "x": 0.59,
-        "z": 0.33,
-        "length": 0.17,
-        "width": 0.09,
-        "angle": 20,
-        "depth": 6,
-        "islands": 0
-      },
-      {
-        "name": "Narrow lake",
-        "x": 0.73,
-        "z": 0.49,
-        "length": 0.3,
-        "width": 0.065,
-        "angle": 85,
-        "depth": 7,
-        "islands": 0
-      }
-    ],
-    "places": [],
-    "lake_life": {
-      "reeds": 0.35,
-      "lilies": 0.15,
-      "pondweed": 0.1
-    },
-    "food": [
-      {
-        "kind": "berries",
-        "amount": 10,
-        "names": [
-          "acai berries"
-        ]
-      },
-      {
-        "kind": "insects",
-        "amount": 10,
-        "names": [
-          "insects"
-        ]
-      },
-      {
-        "kind": "carrion",
-        "amount": 10,
-        "names": [
-          "carrion"
-        ]
-      },
-      {
-        "kind": "grass",
-        "amount": 10,
-        "names": [
-          "guinea grass"
-        ]
-      },
-      {
-        "kind": "clover",
-        "amount": 10,
-        "names": [
-          "clover"
-        ]
-      }
-    ],
-    "fish": [],
-    "migrants": [
-      {
-        "kind": "geese",
-        "names": [
-          "barnacle goose",
-          "bean goose"
-        ],
-        "south": [
-          "09-20",
-          "10-25"
-        ],
-        "north": [
-          "05-08",
-          "05-31"
-        ]
-      },
-      {
-        "kind": "cranes",
-        "names": [
-          "common crane"
-        ],
-        "south": [
-          "08-25",
-          "10-05"
-        ],
-        "north": [
-          "04-01",
-          "04-30"
-        ]
-      }
-    ],
-    "animals": {
-      "playable": [],
-      "predators": [],
-      "prey": []
-    },
-    "sources": [
-      "https://uuvi.fi/en/area/kattilajarvi-recreation-area/",
-      "https://www.nuuksiolakeland.fi/kartat",
-      "https://www.doria.fi/bitstream/handle/10024/134954/UUSra17_2008%20Selvitys%20Espoon%20j%C3%A4rvien%20tilasta_ElinaOinonen.pdf"
-    ],
-    "bogs": [
-      {
-        "name": "Forest bog",
-        "x": 0.48,
-        "z": 0.58,
-        "radius": 60
-      },
-      {
-        "name": "Lakeside bog",
-        "x": 0.6,
-        "z": 0.43,
-        "radius": 45
-      }
-    ],
-    "streams": [
-      {
-        "width": 4,
-        "points": [
-          [
-            0.24,
-            0.67
-          ],
-          [
-            0.32,
-            0.58
-          ],
-          [
-            0.35,
-            0.54
-          ],
-          [
-            0.4,
-            0.5
-          ]
-        ]
-      },
-      {
-        "width": 5,
-        "points": [
-          [
-            0.59,
-            0.33
-          ],
-          [
-            0.56,
-            0.39
-          ],
-          [
-            0.61,
-            0.45
-          ],
-          [
-            0.73,
-            0.49
-          ]
-        ]
+        "autumn": null,
+        "food": null,
+        "leaves": "#1f6f2f",
+        "shape": "round",
+        "trunk": "#5f4632",
+        "weight": 45
       }
     ]
   },
-  "plants": {
-    "water_lettuce": {
-      "id": "water_lettuce",
-      "name": "Water lettuce",
-      "latin": "Pistia stratiotes",
-      "taxon": {
-        "gbif_key": 2882833,
-        "rank": "SPECIES",
-        "name": "Vaccinium myrtillus"
-      },
-      "author": "Animundo team",
-      "kind": "bush",
-      "year": {
-        "leaves": "deciduous",
-        "flowers": "Small pinkish bells under the leaves, mid May to mid June. One of the bumblebee's first big foods of the year.",
-        "fruit": "Blue-black berries ripen from mid-July into September.",
-        "notes": "Leaves turn red in autumn and fall. The angular stems stay green all winter, under the snow. Grows as a carpet in shady spruce and pine forest."
-      },
-      "sources": [
-        "https://en.wikipedia.org/wiki/Vaccinium_myrtillus"
-      ],
-      "colors": {
-        "stem": "#5e9a3a",
-        "leaf": "#78b045",
-        "leaf_dark": "#5c933b",
-        "flower": "#e8a7a0",
-        "berry": "#36437a"
-      },
-      "seasons": {
-        "spring": {
-          "leaf": "#9ccc5e",
-          "leaf_dark": "#82b94e"
-        },
-        "autumn": {
-          "leaf": "#c4493a",
-          "leaf_dark": "#a53c36"
-        }
-      },
-      "parts": [
-        {
-          "name": "stem",
-          "shape": "cylinder",
-          "size": [
-            0.012,
-            0.24,
-            0.012
-          ],
-          "at": [
-            0,
-            0.11,
-            0.035
-          ],
-          "rot": [
-            18,
-            0,
-            0
-          ],
-          "color": "stem",
-          "detail": 0.4,
-          "around": 3,
-          "jitter": 0.6
-        },
-        {
-          "name": "leaf_low",
-          "shape": "leaf",
-          "size": [
-            0.063,
-            0,
-            0.094
-          ],
-          "at": [
-            0,
-            0.1,
-            0.12
-          ],
-          "rot": [
-            -5,
-            0,
-            0
-          ],
-          "color": "leaf_dark",
-          "around": 7,
-          "jitter": 0.8,
-          "show": {
-            "from": "spring+35",
-            "until": "autumn+40"
-          },
-          "detail": 0.5
-        },
-        {
-          "name": "leaf_mid",
-          "shape": "leaf",
-          "size": [
-            0.063,
-            0,
-            0.088
-          ],
-          "at": [
-            0,
-            0.16,
-            0.13
-          ],
-          "rot": [
-            -20,
-            0,
-            0
-          ],
-          "color": "leaf",
-          "around": 7,
-          "turn": 16,
-          "jitter": 0.8,
-          "show": {
-            "from": "spring+35",
-            "until": "autumn+40"
-          },
-          "detail": 0.5
-        },
-        {
-          "name": "leaf_high",
-          "shape": "leaf",
-          "size": [
-            0.057,
-            0,
-            0.083
-          ],
-          "at": [
-            0,
-            0.22,
-            0.1
-          ],
-          "rot": [
-            -30,
-            0,
-            0
-          ],
-          "color": "leaf",
-          "around": 6,
-          "turn": 8,
-          "jitter": 0.8,
-          "show": {
-            "from": "spring+35",
-            "until": "autumn+40"
-          },
-          "detail": 0.5
-        },
-        {
-          "name": "leaf_top",
-          "shape": "leaf",
-          "size": [
-            0.052,
-            0,
-            0.077
-          ],
-          "at": [
-            0,
-            0.27,
-            0.05
-          ],
-          "rot": [
-            -45,
-            0,
-            0
-          ],
-          "color": "leaf",
-          "around": 4,
-          "turn": 30,
-          "jitter": 0.8,
-          "show": {
-            "from": "spring+35",
-            "until": "autumn+40"
-          },
-          "detail": 0.5
-        },
-        {
-          "name": "flower",
-          "shape": "cone",
-          "size": [
-            0.022,
-            0.026,
-            0.022
-          ],
-          "at": [
-            0,
-            0.135,
-            0.1
-          ],
-          "rot": [
-            180,
-            0,
-            0
-          ],
-          "color": "flower",
-          "detail": 0.4,
-          "around": 6,
-          "turn": 10,
-          "jitter": 0.8,
-          "show": {
-            "from": "spring+38",
-            "until": "summer+25"
-          },
-          "nectar": true
-        },
-        {
-          "name": "berry",
-          "shape": "ball",
-          "size": [
-            0.026,
-            0.026,
-            0.026
-          ],
-          "at": [
-            0,
-            0.13,
-            0.1
-          ],
-          "color": "berry",
-          "detail": 0.3,
-          "around": 6,
-          "turn": 10,
-          "jitter": 0.8,
-          "show": {
-            "from": "summer+50",
-            "until": "autumn+20"
-          }
-        }
-      ]
-    }
-  }
+  "water": "river",
+  "water_life": {
+    "lilies": "many",
+    "pondweed": "some",
+    "reeds": "some"
+  },
+  "water_name": "Slow river",
+  "wetness": "very_wet"
 }

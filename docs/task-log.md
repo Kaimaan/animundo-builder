@@ -3,6 +3,50 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #60 (D7): the maker edits references instead of writing specs
+
+- Two calls per animal now: `animal_write` for the animal
+  file, then a strict edits call (colours, 7 factors, marks,
+  repaints, unmakable) whose schema is built per call from
+  the reference spec's own colour and part names. Code adds
+  the sourced sizes and runs the world's
+  `tools/adapt_model.py`; the 70k-character rules and the
+  hand-written spec are gone (`model_spec.md` stays only
+  for kinds with no `start_from`, which the list doesn't
+  offer). Prey goes through the same tool.
+- The edits call sees only what it needs: the looks, the
+  reference-table line, and the part list (name, colour,
+  bone role). The fix round revises the edits, with the
+  previous answer as an assistant message (#59).
+- Code owns the sizes: when only length, shoulder or tail
+  miss after a clean build, code rescales and re-runs adapt
+  without spending a model call; if the tool saturates
+  (legs clamp at 1.8x), the run stops with the exact
+  numbers for a person. Verified against the real tool: an
+  adapted lynx measures shoulder 0.60 m and tail 0.151 m
+  for 0.60/0.15 sourced — the measure check now uses the
+  tool's own definitions (back-top shoulders, tail-part
+  span), and the old live lynx spec still flags its tail
+  (22 cm vs 15).
+- Ordering fix the split surfaced: the animals verdict
+  needs the built `.glb`, so the animal phase filters
+  "model file not found" (the model phase resolves it);
+  every other verdict error stays the file's own fault.
+- #60.5: marks no edit can make ride `unmakable` into
+  `checks/oneshot.json` and the build report ("Marks the
+  tool can't make yet", plus a line in the PR text) for the
+  reviewer to add to the tool.
+- #60.6: replay stand-ins split into animal + edits
+  answers. Reviewer, after the #58.4 research test: run the
+  lynx live (`builder stage oneshot --job jobs/review-lynx
+  --record --world ../animundo-world`), and the same
+  `oneshot` on the anaconda job for the capybara (prey runs
+  first; the run then stops on the anaconda's missing
+  `grass_snake` files — expected, the `examples/`
+  resolution is still open). Their real answers then
+  replace the stand-ins as the replay test.
+- Suite: 554 passed, 12 skipped.
+
 ## 2026-10-27: inbox #58 part 1: strict research, tree specs (looks call waits on #58.4)
 
 - #58.1–3: one Pydantic model per builder schema

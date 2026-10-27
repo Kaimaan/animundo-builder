@@ -215,6 +215,32 @@ def test_report_text_is_the_plain_build_report(tmp_path: Path) -> None:
     assert "- Total: $0.140 over 1 calls." in text
 
 
+def test_report_logs_unmakable_marks(tmp_path: Path) -> None:
+    (tmp_path / "state.json").write_text(
+        json.dumps({"params": {"kind": "animal_home"}, "completed": []})
+    )
+    (tmp_path / "home.json").write_text(json.dumps({"latin": "Lynx lynx"}))
+    (tmp_path / "minset.json").write_text(
+        json.dumps({"make_animal": True, "make_home": False, "prey": None})
+    )
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    (checks / "oneshot.json").write_text(
+        json.dumps(
+            {
+                "cost_usd": 0.17,
+                "made": ["lynx"],
+                "unmakable": {"lynx": ["stripes", "mane"]},
+            }
+        )
+    )
+    text = report_text(tmp_path)
+    assert "- lynx: the tool can't make stripes, mane yet" in text
+    html = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "Marks the tool can't make yet" in html
+    assert "stripes, mane" in html
+
+
 def test_report_is_offline_safe(tmp_path: Path) -> None:
     _job(tmp_path)
     text = build_report(tmp_path).read_text(encoding="utf-8")

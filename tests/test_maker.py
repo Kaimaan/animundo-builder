@@ -12,17 +12,26 @@ import pytest
 from builder.pipeline import BudgetTracker, JobContext
 from builder.prompts import PROMPTS_DIR
 from builder.stages.maker import (
+    EDITS_FACTORS,
     AnimalMakerStage,
     HomeMakerStage,
-    _change_text,
     _description,
+    _edits_files,
+    _edits_schema,
+    _edits_sizes,
     _guide,
     _measure_errors,
     _measure_spec,
     _measurements,
+    _part_list,
+    _reference_line,
     _reference_row,
+    _run_adapt,
+    _size_misses,
+    _sourced_sizes,
     _Stopped,
 )
+from builder.strict import assert_strict_subset
 
 DRAFT_STUB = """\
 import glob
@@ -110,7 +119,59 @@ def _world(tmp_path: Path) -> Path:
     (world / "models").mkdir(parents=True)
     (world / "models" / "README.md").write_text("# Models\n\nOverlap.\n")
     (world / "models" / "fox.json").write_text(
-        json.dumps({"id": "fox", "parts": [{"name": "body"}]})
+        json.dumps(
+            {
+                "id": "fox",
+                "colors": {"fur": "#c4622b", "belly": "#efe3cf"},
+                "bones": [
+                    {
+                        "name": "body",
+                        "head": [0, 0.32, -0.18],
+                        "tail": [0, 0.34, 0.15],
+                        "role": "body",
+                    },
+                    {
+                        "name": "leg_f_l",
+                        "head": [0, 0.3, 0.1],
+                        "tail": [0, 0, 0.1],
+                        "role": "leg",
+                    },
+                    {
+                        "name": "tail_1",
+                        "head": [0, 0.32, -0.18],
+                        "tail": [0, 0.3, -0.5],
+                        "role": "tail",
+                    },
+                ],
+                "parts": [
+                    {
+                        "name": "body",
+                        "shape": "ball",
+                        "size": [0.17, 0.19, 0.46],
+                        "at": [0, 0.32, 0],
+                        "color": "fur",
+                        "bone": "body",
+                    },
+                    {
+                        "name": "arm_l",
+                        "shape": "ball",
+                        "size": [0.06, 0.18, 0.07],
+                        "at": [0.06, 0.24, 0.1],
+                        "color": "fur",
+                        "bone": "leg_f_l",
+                        "mirror": True,
+                    },
+                    {
+                        "name": "tail_1",
+                        "shape": "ball",
+                        "size": [0.09, 0.09, 0.1],
+                        "at": [0, 0.31, -0.3],
+                        "color": "fur",
+                        "bone": "tail_1",
+                    },
+                ],
+            }
+        )
     )
     animals = world / "animals"
     animals.mkdir(parents=True)
@@ -225,9 +286,11 @@ class ScriptClient:
         self.answers = list(answers)
         self.prompts: list[str] = []
         self.calls: list[list[dict]] = []
+        self.options: list[dict[str, Any]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         self.calls.append(messages)
+        self.options.append(kwargs)
         content = messages[-1]["content"]
         self.prompts.append(content if isinstance(content, str) else content[0]["text"])
         message = SimpleNamespace(content=self.answers.pop(0), tool_calls=None)
@@ -248,7 +311,38 @@ def _build_ok(sandbox: Path, spec: str) -> dict[str, Any]:
     return {"ok": True, "summary": f"{spec}: built", "log": f"BUILT {spec}: ok"}
 
 
-def _answer(animal_id: str, **overrides: Any) -> str:
+def _adapt_ok(
+    world: Path, start_from: str, edits_path: Path, out_path: Path
+) -> dict[str, Any]:
+    """The adapt tool, stubbed: a spec measuring the edits' sizes."""
+    edits = json.loads(edits_path.read_text(encoding="utf-8"))
+    length = edits.get("length_m", 1.0)
+    spec = {
+        "id": edits.get("id", "x"),
+        "bones": [
+            {
+                "name": "body",
+                "head": [0, length / 2, -length / 2],
+                "tail": [0, length / 2, length / 2],
+                "role": "body",
+            }
+        ],
+        "parts": [
+            {
+                "name": "body",
+                "shape": "ball",
+                "size": [0.2, 0.2, length],
+                "at": [0, length / 2, 0],
+                "color": "fur",
+                "bone": "body",
+            }
+        ],
+    }
+    out_path.write_text(json.dumps(spec), encoding="utf-8")
+    return {"ok": True, "log": "adapted"}
+
+
+def _animal_answer(animal_id: str, **overrides: Any) -> str:
     animal: dict[str, Any] = {
         "id": animal_id,
         "name": "Good",
@@ -257,9 +351,27 @@ def _answer(animal_id: str, **overrides: Any) -> str:
         "text": {"title": "T"},
     }
     animal.update(overrides)
-    return json.dumps(
-        {"animal": animal, "model": {"id": animal_id, "parts": [{"name": "body"}]}}
-    )
+    return json.dumps(animal)
+
+
+def _edits_answer(**overrides: Any) -> str:
+    edits: dict[str, Any] = {
+        "colors": {"fur": "#8b7355", "belly": "#f0e8d8"},
+        "new_colors": [],
+        "marks": [],
+        "repaint": [],
+        "unmakable": [],
+    }
+    for name in EDITS_FACTORS:
+        edits[name] = 1.0
+    edits.update(overrides)
+    return json.dumps(edits)
+
+
+def _stage(**over: Any) -> AnimalMakerStage:
+    args: dict[str, Any] = {"build": _build_ok, "adapt": _adapt_ok}
+    args.update(over)
+    return AnimalMakerStage(**args)
 
 
 def _minset_with_prey() -> dict[str, Any]:
@@ -277,55 +389,102 @@ def _minset_with_prey() -> dict[str, Any]:
 def test_makes_animal_first_try(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    client = ScriptClient([_answer("lynx")])
-    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/lynx.json"]
     assert (tmp_path / "animals" / "lynx.json").is_file()
     assert (tmp_path / "models" / "lynx.json").is_file()
     assert (tmp_path / "models" / "lynx.glb").is_file()
     assert (tmp_path / "models" / "previews" / "lynx.png").is_file()
-    assert (tmp_path / "tries" / "lynx" / "1" / "answer.json").is_file()
-    assert (tmp_path / "tries" / "lynx" / "1" / "build.log").is_file()
+    assert (tmp_path / "tries" / "lynx" / "animal" / "1" / "answer.json").is_file()
+    assert (tmp_path / "tries" / "lynx" / "edits" / "1" / "edits.json").is_file()
+    assert (tmp_path / "tries" / "lynx" / "edits" / "1" / "build.log").is_file()
     checks = json.loads((tmp_path / "checks" / "oneshot.json").read_text())
     assert checks["made"] == ["lynx"]
+    assert checks["unmakable"] == {}
     assert checks["cost_usd"] == result["cost_usd"]
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2
 
 
-def test_prompt_is_one_shot(tmp_path: Path) -> None:
+def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    client = ScriptClient([_answer("lynx")])
-    AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    _stage().run(_ctx(tmp_path, world, client))
     prompt = client.prompts[0]
     assert '"species": "lynx"' in prompt
     assert '"gbif_key": 2435240' in prompt
     assert "Vulpes vulpes" in prompt
     assert "only one example: one shot" in prompt
-    assert '{"animal": <the animal file>, "model": <the model spec>}' in prompt
     assert "$FOR_CHILDREN" not in prompt
     assert "Young animals" in prompt
+    assert client.options[0] == {}
+
+
+def test_edits_prompt_carries_looks_and_parts(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (tmp_path / "research.json").write_text(
+        json.dumps(
+            {
+                "size": {"length_cm": 110, "weight_kg": 22},
+                "year": {
+                    "winter": "active",
+                    "shelter": "It dens in rocky hollows.",
+                    "young": "Kittens are born in spring.",
+                    "food": "It hunts at dusk.",
+                },
+                "main_food": {"name": "roe deer", "kind": "prey", "size_cm": 130},
+                "other_foods": [],
+                "surroundings": [],
+                "sources": ["https://example.org/lynx"],
+                "looks": _looks_research()["looks"],
+            }
+        )
+    )
+    (world / "models" / "README.md").write_text(
+        "# Models\n\n## Reference models\n\n"
+        "| New animal | Start from | Change |\n"
+        "|---|---|---|\n"
+        "| Bear, lynx | `fox`, scaled up | lynx: short tail, ear tufts |\n"
+    )
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    _stage().run(_ctx(tmp_path, world, client))
+    prompt = client.prompts[1]
+    assert "ear tufts" in prompt
+    assert "lynx: short tail, ear tufts" in prompt
+    assert "- body: fur, body" in prompt
+    assert "- arm_l: fur, leg" in prompt
+    request = client.options[1]["response_format"]
+    assert request["type"] == "json_schema"
+    assert request["json_schema"]["name"] == "ModelEdits"
+    assert request["json_schema"]["strict"] is True
+    assert_strict_subset(request["json_schema"]["schema"])
 
 
 def test_fix_round_repairs_check_errors(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     client = ScriptClient(
-        [_answer("lynx", diet=["nectar"]), _answer("lynx", diet=["grass"])]
+        [
+            _animal_answer("lynx", diet=["nectar"]),
+            _animal_answer("lynx", diet=["grass"]),
+            _edits_answer(),
+        ]
     )
-    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/lynx.json"]
-    assert len(client.prompts) == 2
+    assert len(client.prompts) == 3
     assert "Change only what these problems name" in client.prompts[1]
     assert "nectar" in client.prompts[1]
-    assert (tmp_path / "tries" / "lynx" / "2" / "answer.json").is_file()
+    assert (tmp_path / "tries" / "lynx" / "animal" / "2" / "answer.json").is_file()
 
 
 def test_bad_json_gets_the_fix_round(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    client = ScriptClient(["not json at all", _answer("lynx")])
-    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    client = ScriptClient(["not json at all", _animal_answer("lynx"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/lynx.json"]
     assert "not JSON" in client.prompts[1]
 
@@ -334,10 +493,13 @@ def test_still_failing_stops_for_a_person(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     client = ScriptClient(
-        [_answer("lynx", diet=["nectar"]), _answer("lynx", diet=["nectar"])]
+        [
+            _animal_answer("lynx", diet=["nectar"]),
+            _animal_answer("lynx", diet=["nectar"]),
+        ]
     )
-    with pytest.raises(_Stopped, match="a person makes it"):
-        AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    with pytest.raises(_Stopped, match="its file still failing"):
+        _stage().run(_ctx(tmp_path, world, client))
     assert len(client.prompts) == 2
     assert not (tmp_path / "checks" / "oneshot.json").is_file()
 
@@ -345,11 +507,18 @@ def test_still_failing_stops_for_a_person(tmp_path: Path) -> None:
 def test_prey_comes_before_the_animal(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())
-    client = ScriptClient([_answer("capybara"), _answer("lynx")])
-    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    client = ScriptClient(
+        [
+            _animal_answer("capybara"),
+            _edits_answer(),
+            _animal_answer("lynx"),
+            _edits_answer(),
+        ]
+    )
+    result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
     assert '"species": "capybara"' in client.prompts[0]
-    assert '"species": "lynx"' in client.prompts[1]
+    assert '"species": "lynx"' in client.prompts[2]
     assert (tmp_path / "animals" / "capybara.json").is_file()
 
 
@@ -375,8 +544,15 @@ def test_oneshot_adds_made_prey_to_the_plan(tmp_path: Path) -> None:
             }
         )
     )
-    client = ScriptClient([_answer("capybara"), _answer("lynx")])
-    AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    client = ScriptClient(
+        [
+            _animal_answer("capybara"),
+            _edits_answer(),
+            _animal_answer("lynx"),
+            _edits_answer(),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
     plan = json.loads((tmp_path / "species-plan.json").read_text())
     assert [(e["species"], e["decision"]) for e in plan["species"]] == [
         ("lynx", "new"),
@@ -391,8 +567,8 @@ def test_prey_matches_by_species_key(tmp_path: Path) -> None:
     minset["make_animal"] = False
     minset["prey"] = {"name": "Water hog", "size_cm": 110, "gbif_key": 2437585}
     _inputs(tmp_path, minset=minset)
-    client = ScriptClient([_answer("capybara")])
-    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    client = ScriptClient([_animal_answer("capybara"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/capybara.json"]
     assert '"species": "capybara"' in client.prompts[0]
 
@@ -404,10 +580,10 @@ def test_skips_already_made_prey(tmp_path: Path) -> None:
     (tmp_path / "animals" / "capybara.json").write_text("{}")
     (tmp_path / "models").mkdir()
     (tmp_path / "models" / "capybara.json").write_text("{}")
-    client = ScriptClient([_answer("lynx")])
-    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/lynx.json"]
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 2
 
 
 def test_nothing_to_make_calls_nothing(tmp_path: Path) -> None:
@@ -425,22 +601,22 @@ def test_nothing_to_make_calls_nothing(tmp_path: Path) -> None:
         },
     )
     client = ScriptClient([])
-    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == []
     checks = json.loads((tmp_path / "checks" / "oneshot.json").read_text())
-    assert checks == {"cost_usd": 0.0, "made": []}
+    assert checks == {"cost_usd": 0.0, "made": [], "unmakable": {}}
 
 
 def test_build_with_no_output_is_blender_not_the_spec(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    client = ScriptClient([_answer("lynx")])
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
 
     def _build_empty(sandbox: Path, spec: str) -> dict[str, Any]:
         return {"ok": False, "summary": "failed", "log": ""}
 
     with pytest.raises(_Stopped, match="Blender itself did not run"):
-        AnimalMakerStage(build=_build_empty).run(_ctx(tmp_path, world, client))
+        _stage(build=_build_empty).run(_ctx(tmp_path, world, client))
 
 
 def _home_world(tmp_path: Path) -> Path:
@@ -985,9 +1161,7 @@ def test_reference_row_aliases_snake_kinds(tmp_path: Path) -> None:
     assert _reference_row(world, "fox", "Green anaconda") is None
 
 
-def test_change_text_carries_the_row_and_the_proportions(
-    tmp_path: Path,
-) -> None:
+def test_reference_line_returns_the_row(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (world / "models" / "README.md").write_text(
         "# Models\n\n## Reference models\n\n"
@@ -995,10 +1169,12 @@ def test_change_text_carries_the_row_and_the_proportions(
         "|---|---|---|\n"
         "| Bear, lynx | `fox`, scaled up | lynx: short tail, ear tufts |\n"
     )
-    text = _change_text(world, "fox", {"name": "Eurasian lynx"})
-    assert "lynx: short tail, ear tufts" in text
-    assert "Keep its proportions" in text
-    assert "do not copy its sizes" not in text
+    assert _reference_line(world, "fox", {"name": "Eurasian lynx"}) == (
+        "Bear, lynx: lynx: short tail, ear tufts"
+    )
+    assert "not on the reference table" in _reference_line(
+        world, "vole", {"name": "Capybara"}
+    )
 
 
 def test_guide_turns_a_missing_text_into_guidance() -> None:
@@ -1116,14 +1292,270 @@ def test_newhome_rejects_spec_tree_with_other_plant(tmp_path: Path) -> None:
     assert "is a spec, so its plant" in client.prompts[1]
 
 
+def _write_looks_research(tmp_path: Path) -> None:
+    (tmp_path / "research.json").write_text(
+        json.dumps(
+            {
+                "size": {"length_cm": 110, "weight_kg": 22},
+                "year": {
+                    "winter": "active",
+                    "shelter": "It dens in rocky hollows.",
+                    "young": "Kittens are born in spring.",
+                    "food": "It hunts at dusk.",
+                },
+                "main_food": {"name": "roe deer", "kind": "prey", "size_cm": 130},
+                "other_foods": [],
+                "surroundings": [],
+                "sources": ["https://example.org/lynx"],
+                "looks": _looks_research()["looks"],
+            }
+        )
+    )
+
+
+def _tail_adapt(factor: float | None):
+    """An adapt stub with a systematic tail error, or a fixed one.
+
+    A factor scales the edits' tail (code-fix converges); None
+    writes a fixed wrong tail (the tool saturates).
+    """
+
+    def adapt(
+        world: Path, start_from: str, edits_path: Path, out_path: Path
+    ) -> dict[str, Any]:
+        edits = json.loads(edits_path.read_text(encoding="utf-8"))
+        tail = 0.30 if factor is None else edits.get("tail_m", 0.15) * factor
+        spec = {
+            "id": edits.get("id", "x"),
+            "bones": [
+                {
+                    "name": "body",
+                    "head": [0, 0.55, -0.45],
+                    "tail": [0, 0.58, 0.45],
+                    "role": "body",
+                },
+                {
+                    "name": "tail_1",
+                    "head": [0, 0.55, -0.45],
+                    "tail": [0, 0.55, -0.45 - tail],
+                    "role": "tail",
+                },
+            ],
+            "parts": [
+                {
+                    "name": "body",
+                    "shape": "ball",
+                    "size": [0.26, 0.3, 1.1],
+                    "at": [0, 0.55, 0],
+                    "color": "fur",
+                    "bone": "body",
+                },
+                {
+                    "name": "tail_1",
+                    "shape": "ball",
+                    "size": [0.09, 0.09, tail],
+                    "at": [0, 0.55, -0.45 - tail / 2],
+                    "color": "fur",
+                    "bone": "tail_1",
+                },
+            ],
+        }
+        out_path.write_text(json.dumps(spec), encoding="utf-8")
+        return {"ok": True, "log": "adapted"}
+
+    return adapt
+
+
+def test_edits_schema_meets_the_strict_subset(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    ref = json.loads((world / "models" / "fox.json").read_text())
+    schema = _edits_schema(ref)
+    assert_strict_subset(schema)
+    assert sorted(schema["properties"]["colors"]["required"]) == ["belly", "fur"]
+    repaint = schema["properties"]["repaint"]["items"]["properties"]
+    assert sorted(repaint["part"]["enum"]) == ["arm_l", "body", "tail_1"]
+    assert sorted(repaint["color"]["enum"]) == ["belly", "fur"]
+
+
+def test_edits_files_accepts_and_rejects(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    ref = json.loads((world / "models" / "fox.json").read_text())
+    edits, errors = _edits_files(_edits_answer(), ref)
+    assert errors == []
+    assert edits is not None and edits["head"] == 1.0
+    _, errors = _edits_files("not json", ref)
+    assert errors[0].startswith("not JSON: ")
+    _, errors = _edits_files(json.dumps({"colors": {}}), ref)
+    assert "leave out" in errors[0]
+    _, errors = _edits_files(_edits_answer(marks=["stripes"]), ref)
+    assert "unmakable" in errors[0]
+    _, errors = _edits_files(
+        _edits_answer(repaint=[{"part": "nose", "color": "fur"}]), ref
+    )
+    assert "no part 'nose'" in errors[0]
+
+
+def test_edits_sizes_come_from_the_research() -> None:
+    research = _looks_research()
+    research["size"] = {"length_cm": 100, "weight_kg": 20}
+    sizes = _edits_sizes(research, {"prey": False, "size_cm": None})
+    assert sizes == {"length_m": 1.0, "shoulder_m": 0.6, "tail_m": 0.15}
+    assert _edits_sizes({}, {"prey": True, "size_cm": 120}) == {"length_m": 1.2}
+    bare = {"size": {"length_cm": 100}}
+    assert _edits_sizes(bare, {"prey": False, "size_cm": None}) == {"length_m": 1.0}
+
+
+def test_size_misses_names_code_owned_sizes() -> None:
+    found = {"length_m": 1.0, "shoulder_m": 0.55, "tail_m": 0.23}
+    sourced = _sourced_sizes(_looks_research(), {"prey": False, "size_cm": None})
+    assert sourced["length_m"] == 1.0
+    misses = _size_misses(found, sourced)
+    assert list(misses) == ["tail_m"]
+    assert misses["tail_m"] == (0.23, 0.15)
+
+
+def test_part_list_names_colour_and_role(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    ref = json.loads((world / "models" / "fox.json").read_text())
+    assert _part_list(ref) == (
+        "- body: fur, body\n- arm_l: fur, leg\n- tail_1: fur, tail"
+    )
+
+
+def test_code_fix_rescales_a_missed_tail(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    _write_looks_research(tmp_path)
+    calls: list[dict[str, Any]] = []
+    inner = _tail_adapt(2.0)
+
+    def adapt(
+        world: Path, start_from: str, edits_path: Path, out_path: Path
+    ) -> dict[str, Any]:
+        calls.append(json.loads(edits_path.read_text(encoding="utf-8")))
+        return inner(world, start_from, edits_path, out_path)
+
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    result = _stage(adapt=adapt).run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/lynx.json"]
+    assert len(client.prompts) == 2, "no model call spent on sizes"
+    assert len(calls) == 2
+    assert calls[0]["tail_m"] == 0.15
+    assert calls[1]["tail_m"] == pytest.approx(0.075)
+
+
+def test_saturated_sizes_stop_for_a_person(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    _write_looks_research(tmp_path)
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    with pytest.raises(_Stopped, match="saturated its range"):
+        _stage(adapt=_tail_adapt(None)).run(_ctx(tmp_path, world, client))
+    assert len(client.prompts) == 2, "no fix call fixes code-owned sizes"
+
+
+def test_unmakable_marks_land_in_checks(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient(
+        [_animal_answer("lynx"), _edits_answer(unmakable=["stripes"])]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    checks = json.loads((tmp_path / "checks" / "oneshot.json").read_text())
+    assert checks["unmakable"] == {"lynx": ["stripes"]}
+
+
+def test_adapt_failure_gets_the_fix_round(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    calls = 0
+
+    def adapt(
+        world: Path, start_from: str, edits_path: Path, out_path: Path
+    ) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"ok": False, "log": "ERROR: unknown mark 'mane'"}
+        return _adapt_ok(world, start_from, edits_path, out_path)
+
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer(), _edits_answer()])
+    result = _stage(adapt=adapt).run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/lynx.json"]
+    assert "adapt tool refused" in client.prompts[2]
+
+
+def test_animal_phase_ignores_the_unbuilt_model(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(
+        DRAFT_STUB.replace(
+            "report = {",
+            "animals_problems.append(\n"
+            '    "ERROR: lynx: model file not found:'
+            ' res://assets/animals/lynx.glb"\n'
+            ")\n"
+            "report = {",
+        )
+    )
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/lynx.json"]
+    assert len(client.prompts) == 2
+
+
+def test_missing_reference_spec_stops(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "models" / "fox.json").unlink()
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    with pytest.raises(_Stopped, match="no reference spec 'fox'"):
+        _stage().run(_ctx(tmp_path, world, client))
+
+
+def test_model_fix_round_revises_the_edits(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    bad = _edits_answer(colors={"fur": "#8b7355"})
+    client = ScriptClient([_animal_answer("lynx"), bad, _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/lynx.json"]
+    assert "every reference colour" in client.prompts[2]
+    fix = client.calls[2]
+    assert [message["role"] for message in fix] == ["user", "assistant", "user"]
+    assert fix[1]["content"] == bad
+
+
+def test_run_adapt_runs_the_tool(tmp_path: Path) -> None:
+    world = tmp_path / "world"
+    (world / "tools").mkdir(parents=True)
+    (world / "tools" / "adapt_model.py").write_text(
+        "import json, sys\n"
+        "edits = json.load(open(sys.argv[2]))\n"
+        "json.dump({'id': edits['id']}, open(sys.argv[4], 'w'))\n"
+    )
+    (world / "models").mkdir(parents=True)
+    (world / "models" / "fox.json").write_text("{}")
+    edits_path = tmp_path / "edits.json"
+    edits_path.write_text(json.dumps({"id": "lynx"}))
+    out_path = tmp_path / "spec.json"
+    assert _run_adapt(world, "fox", edits_path, out_path)["ok"] is True
+    assert json.loads(out_path.read_text()) == {"id": "lynx"}
+    (world / "tools" / "adapt_model.py").write_text("import sys; sys.exit(1)\n")
+    failed = _run_adapt(world, "fox", edits_path, out_path)
+    assert failed["ok"] is False
+
+
 def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:
     """#59: user (first prompt), assistant (its answer), user (fixes)."""
     world = _world(tmp_path)
     _inputs(tmp_path)
-    first = _answer("lynx", diet=["nectar"])
-    client = ScriptClient([first, _answer("lynx", diet=["grass"])])
-    AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
-    assert len(client.calls) == 2
+    first = _animal_answer("lynx", diet=["nectar"])
+    client = ScriptClient(
+        [first, _animal_answer("lynx", diet=["grass"]), _edits_answer()]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    assert len(client.calls) == 3
     assert client.calls[0] == [
         {"role": "user", "content": client.calls[0][0]["content"]}
     ]

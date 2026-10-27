@@ -1,14 +1,15 @@
 """The one-shot animal maker (spec 04 "The makers (animal first)").
 
 The minimum set says what's missing; this stage makes the animals:
-the one prey first, then the animal itself, each in one go. One
-model call writes the animal file and its model spec together (the
-`animal_write` and `model_spec` prompts, one shot: the `start_from`
-spec as the only example, no reference sheet); `tools/build_model.sh`
-builds it in a scratch copy of the world; the world's own checks
-decide. One try, then at most one fix round with the checks' errors.
-Still failing: the build stops with the reason, and the thing goes
-to a person, as the eagle did.
+the one prey first, then the animal itself, each in one go. Two
+calls per animal (#60): `animal_write` for the animal file, then a
+strict edits call describing how the model differs from its
+`start_from` reference (colours, factors, marks, repaints). Code
+adds the sourced sizes and runs the world's `tools/adapt_model.py`;
+`tools/build_model.sh` builds it in a scratch copy of the world;
+the world's own checks decide. One try, then at most one fix round
+with the checks' errors. Still failing: the build stops with the
+reason, and the thing goes to a person, as the eagle did.
 
 Runs alone: `builder stage oneshot --job <dir> --record`. Writes
 into the job's own folder, never into the world checkout.
@@ -39,11 +40,22 @@ from .capability import NotPossibleError
 from .models import _ensure_sandbox, build_in_sandbox
 from .species_plan import recorded_near, taxon_same
 
-#: The four verdicts that decide a made animal (spec 04).
-VERDICTS = ("animals", "models", "taxa", "region")
-
 #: Tries per thing: the write, then at most one fix round.
 MAX_TRIES = 2
+
+#: Marks the world's adapt tool can make (its MARKS, e560112).
+EDITS_MARKS = ("ear_tufts", "ruff", "tail_tip")
+
+#: Factors the edits call may set, 1 meaning as the reference.
+EDITS_FACTORS = (
+    "head",
+    "muzzle",
+    "ears",
+    "leg_thickness",
+    "paws",
+    "body_girth",
+    "tail_width",
+)
 
 #: At most two new plant specs per home (spec 04).
 MAX_NEW_PLANTS = 2
@@ -65,10 +77,12 @@ class AnimalMakerStage:
         author: str = "Animundo Builder",
         chat: Any | None = None,
         build: Any | None = None,
+        adapt: Any | None = None,
     ) -> None:
         self.author = author
         self._chat = chat
         self._build = build or build_in_sandbox
+        self._adapt = adapt or _run_adapt
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -86,14 +100,21 @@ class AnimalMakerStage:
         targets = _targets(brief, minset, data["animals"], ctx.job_dir)
         before = ctx.tracker.spent_usd
         made = []
+        unmakable: dict[str, list[str]] = {}
         for target in targets:
-            made.append(self._make(ctx, world, brief, research, region, target))
+            animal_id, marks = self._make(ctx, world, brief, research, region, target)
+            made.append(animal_id)
+            if marks:
+                unmakable[animal_id] = marks
         self._update_plan(ctx, brief, targets)
         cost = round(ctx.tracker.spent_usd - before, 6)
         checks = ctx.job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
         (checks / "oneshot.json").write_text(
-            json.dumps({"cost_usd": cost, "made": made}, indent=2), encoding="utf-8"
+            json.dumps(
+                {"cost_usd": cost, "made": made, "unmakable": unmakable}, indent=2
+            ),
+            encoding="utf-8",
         )
         return {
             "animal_files": [f"animals/{animal_id}.json" for animal_id in made],
@@ -108,33 +129,140 @@ class AnimalMakerStage:
         research: dict[str, Any],
         region: dict[str, Any],
         target: dict[str, Any],
-    ) -> str:
-        """One animal, one try plus one fix round. Returns its id."""
+    ) -> tuple[str, list[str]]:
+        """One animal: its file, then its model from edits (#60).
+
+        Two calls instead of one combined one: the animal file
+        first, then the edits the world's adapt tool turns into
+        the spec. Returns the id and the marks the tool can't
+        make yet.
+        """
         animal_id = target["id"]
-        prompt = self._prompt(world, brief, research, region, target)
+        self._make_animal(ctx, world, brief, research, region, target)
+        marks = self._make_model(ctx, world, brief, research, target)
+        self._save_final(ctx, world, animal_id)
+        return animal_id, marks
+
+    def _make_animal(
+        self,
+        ctx: Any,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        region: dict[str, Any],
+        target: dict[str, Any],
+    ) -> None:
+        """The animal file, one try plus one fix round."""
+        animal_id = target["id"]
+        prompt = self._animal_prompt(world, brief, research, region, target)
         errors: list[str] | None = None
         previous: str | None = None
         for attempt in range(1, MAX_TRIES + 1):
             ctx.check_budget()
-            answer = self._ask(ctx, prompt, errors, previous)
+            answer = self._ask_animal(ctx, prompt, errors, previous)
             previous = answer
-            files, file_errors = self._files(world, answer, animal_id)
+            files, file_errors = self._animal_files(world, answer)
             if files is not None:
-                self._place(ctx, world, animal_id, files, attempt)
-                build_errors = self._build_and_check(ctx, world, animal_id, attempt)
-                file_errors = build_errors
-                file_errors += _measure_errors(files["model"], research, target, world)
-            self._save_try(ctx, animal_id, attempt, answer, files, file_errors)
+                self._place_animal(ctx, animal_id, files)
+                file_errors = self._check_animal(world, ctx, animal_id, attempt)
+            self._save_try(
+                ctx, animal_id, "animal", attempt, answer, files, file_errors
+            )
             if not file_errors:
-                self._save_final(ctx, world, animal_id)
-                return animal_id
+                return
             errors = file_errors
         raise _Stopped(
-            f"{animal_id}: still failing after one fix round "
+            f"{animal_id}: its file still failing after one fix round "
             f"({'; '.join(errors or [])}); a person makes it"
         )
 
-    def _ask(
+    def _make_model(
+        self,
+        ctx: Any,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        target: dict[str, Any],
+    ) -> list[str]:
+        """The model from the reference plus edits, then its checks."""
+        animal_id = target["id"]
+        start_from = target["start_from"]
+        ref = _reference_spec(world, start_from)
+        if ref is None:
+            raise _Stopped(
+                f"{animal_id}: no reference spec {start_from!r} to adapt; "
+                "a person picks one"
+            )
+        prompt = self._edits_prompt(world, brief, research, target, ref)
+        request = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "ModelEdits",
+                "schema": _edits_schema(ref),
+                "strict": True,
+            },
+        }
+        sizes = _edits_sizes(research, target)
+        errors: list[str] | None = None
+        previous: str | None = None
+        code_fixed = False
+        for attempt in range(1, MAX_TRIES + 1):
+            ctx.check_budget()
+            answer = self._ask_edits(ctx, prompt, request, errors, previous)
+            previous = answer
+            edits, file_errors = _edits_files(answer, ref)
+            spec: dict[str, Any] | None = None
+            if edits is not None:
+                spec, file_errors = self._adapt_build_place(
+                    ctx, world, animal_id, target, ref, edits, sizes, attempt
+                )
+                if spec is not None and not file_errors:
+                    found = _measure_spec(spec)
+                    sourced = _sourced_sizes(research, target)
+                    misses = _size_misses(found, sourced)
+                    if misses and not code_fixed:
+                        # Code owns the sizes: rescale and re-run,
+                        # no model call spent (#60.4).
+                        sizes = {
+                            **sizes,
+                            **{
+                                key: sizes[key] * want / have
+                                for key, (have, want) in misses.items()
+                            },
+                        }
+                        code_fixed = True
+                        spec, file_errors = self._adapt_build_place(
+                            ctx, world, animal_id, target, ref, edits, sizes, attempt
+                        )
+                    if spec is not None and not file_errors:
+                        found = _measure_spec(spec)
+                        misses = _size_misses(found, sourced)
+                        file_errors += _size_errors(found, sourced)
+                        file_errors += _ratio_errors(found, target, world)
+                        if (
+                            code_fixed
+                            and misses
+                            and not [
+                                error
+                                for error in file_errors
+                                if not error.startswith("the spec's ")
+                            ]
+                        ):
+                            raise _Stopped(
+                                f"{animal_id}: {'; '.join(file_errors)}: the tool "
+                                "saturated its range; a person looks"
+                            )
+            self._save_try(ctx, animal_id, "edits", attempt, answer, edits, file_errors)
+            if edits is not None and not file_errors:
+                marks = edits.get("unmakable") or []
+                return [mark for mark in marks if isinstance(mark, str)]
+            errors = file_errors
+        raise _Stopped(
+            f"{animal_id}: its model still failing after one fix round "
+            f"({'; '.join(errors or [])}); a person makes it"
+        )
+
+    def _ask_animal(
         self,
         ctx: Any,
         prompt: str,
@@ -151,73 +279,135 @@ class AnimalMakerStage:
         response = chat(messages)
         return (response.choices[0].message.content or "").strip()
 
-    def _files(
-        self, world: Path, answer: str, animal_id: str
+    def _ask_edits(
+        self,
+        ctx: Any,
+        prompt: str,
+        request: dict[str, Any],
+        errors: list[str] | None,
+        previous: str | None = None,
+    ) -> str:
+        first = {"role": "user", "content": prompt}
+        if errors and previous is not None:
+            notes = "\n".join(f"- {error}" for error in errors)
+            messages = fix_messages(first, previous, notes)
+        else:
+            messages = [first]
+        chat = self._chat or ctx.chat
+        response = chat(messages, response_format=request)
+        return (response.choices[0].message.content or "").strip()
+
+    def _animal_files(
+        self, world: Path, answer: str
     ) -> tuple[dict[str, Any] | None, list[str]]:
-        """The try's two files, or why the answer holds none."""
+        """The try's animal file, or why the answer holds none."""
         try:
-            wrapped = json.loads(_unfence(answer))
+            animal = json.loads(_unfence(answer))
         except json.JSONDecodeError as error:
             return None, [f"not JSON: {error}"]
-        if not isinstance(wrapped, dict) or sorted(wrapped) != ["animal", "model"]:
-            return None, [
-                'reply with one object {"animal": ..., "model": ...}, nothing else'
-            ]
-        problems = []
+        if not isinstance(animal, dict):
+            return None, ["reply with the animal file as one JSON object"]
         animal_schema = json.loads(
             (world / "schemas" / "animal.schema.json").read_text(encoding="utf-8")
         )
         try:
-            jsonschema.validate(wrapped["animal"], animal_schema)
+            jsonschema.validate(animal, animal_schema)
         except jsonschema.ValidationError as error:
-            problems.append(f"the animal file broke its schema: {error.message}")
-        spec_schema = json.loads(
-            (world / "schemas" / "model.schema.json").read_text(encoding="utf-8")
-        )
-        try:
-            jsonschema.validate(wrapped["model"], spec_schema)
-        except jsonschema.ValidationError as error:
-            problems.append(f"the model spec broke its schema: {error.message}")
-        if problems:
-            return None, problems
-        if wrapped["model"].get("id") != animal_id:
-            return None, [
-                f"the model spec's id is {wrapped['model'].get('id')!r},"
-                f" not {animal_id!r}"
-            ]
-        return {"animal": wrapped["animal"], "model": wrapped["model"]}, []
+            return None, [f"the animal file broke its schema: {error.message}"]
+        return {"animal": animal}, []
 
-    def _place(
-        self,
-        ctx: Any,
-        world: Path,
-        animal_id: str,
-        files: dict[str, Any],
-        attempt: int,
-    ) -> None:
-        """Lay the try's files where the build and the checker find them."""
+    def _place_animal(self, ctx: Any, animal_id: str, files: dict[str, Any]) -> None:
+        """Lay the animal file where the checker finds it."""
         animals_dir = ctx.job_dir / "animals"
         animals_dir.mkdir(exist_ok=True)
         (animals_dir / f"{animal_id}.json").write_text(
             json.dumps(files["animal"], indent=2), encoding="utf-8"
         )
+
+    def _check_animal(
+        self, world: Path, ctx: Any, animal_id: str, attempt: int
+    ) -> list[str]:
+        """The file's verdicts: animals, taxa, region.
+
+        The build hasn't run yet, so "model file not found" is
+        noise the model phase resolves; everything else is the
+        file's own fault.
+        """
+        errors = _verdict_errors(
+            _verdicts(world, ctx, animal_id, "animal", attempt),
+            ("animals", "taxa", "region"),
+            animal_id,
+        )
+        return [error for error in errors if "model file not found" not in error]
+
+    def _adapt_build_place(
+        self,
+        ctx: Any,
+        world: Path,
+        animal_id: str,
+        target: dict[str, Any],
+        ref: dict[str, Any],
+        edits: dict[str, Any],
+        sizes: dict[str, float],
+        attempt: int,
+    ) -> tuple[dict[str, Any] | None, list[str]]:
+        """Edits plus code sizes through adapt, placed, built, checked."""
+        folder = ctx.job_dir / "tries" / animal_id / "edits" / str(attempt)
+        folder.mkdir(parents=True, exist_ok=True)
+        full = {
+            **edits,
+            **sizes,
+            "id": animal_id,
+            "name": target["entry"].get("name", animal_id),
+            "author": self.author,
+        }
+        for extra in ("new_colors", "unmakable"):
+            full.pop(extra, None)
+        if edits.get("new_colors"):
+            full["colors"] = {
+                **full.get("colors", {}),
+                **{
+                    item["name"]: item["hex"]
+                    for item in edits["new_colors"]
+                    if isinstance(item, dict)
+                },
+            }
+        edits_path = folder / "edits.json"
+        edits_path.write_text(json.dumps(full, indent=2), encoding="utf-8")
+        spec_path = folder / "spec.json"
+        adapted = self._adapt(world, target["start_from"], edits_path, spec_path)
+        if not adapted["ok"]:
+            return None, [f"the adapt tool refused the edits: {adapted['log']}"]
+        try:
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        except ValueError as error:
+            return None, [f"the adapt tool wrote no spec: {error}"]
+        if not isinstance(spec, dict):
+            return None, ["the adapt tool wrote no spec"]
+        self._place_spec(ctx, world, animal_id, spec)
+        return spec, self._build_and_check(ctx, world, animal_id, attempt)
+
+    def _place_spec(
+        self, ctx: Any, world: Path, animal_id: str, spec: dict[str, Any]
+    ) -> None:
+        """Lay the adapted spec where the build and the checker find it."""
         models_dir = ctx.job_dir / "models"
         models_dir.mkdir(exist_ok=True)
         (models_dir / f"{animal_id}.json").write_text(
-            json.dumps(files["model"], indent=2), encoding="utf-8"
+            json.dumps(spec, indent=2), encoding="utf-8"
         )
         sandbox = _ensure_sandbox(ctx.job_dir, world)
         (sandbox / "models" / f"{animal_id}.json").write_text(
-            json.dumps(files["model"], indent=2), encoding="utf-8"
+            json.dumps(spec, indent=2), encoding="utf-8"
         )
 
     def _build_and_check(
         self, ctx: Any, world: Path, animal_id: str, attempt: int
     ) -> list[str]:
-        """Build the spec, then read the four verdicts. Errors, if any."""
+        """Build the adapted spec, then read the models verdict. Errors, if any."""
         sandbox = _ensure_sandbox(ctx.job_dir, world)
         built = self._build(sandbox, animal_id)
-        folder = ctx.job_dir / "tries" / animal_id / str(attempt)
+        folder = ctx.job_dir / "tries" / animal_id / "edits" / str(attempt)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "build.log").write_text(built["log"], encoding="utf-8")
         if not built["ok"] and not built["log"].strip():
@@ -235,21 +425,10 @@ class AnimalMakerStage:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(src.read_bytes())
         errors = [] if built["ok"] else [f"the build failed: {built['log']}"]
-        verdicts = _verdicts(world, ctx, animal_id, attempt)
-        for name in VERDICTS:
-            entry = verdicts.get(name, {})
-            if entry.get("status") != "fail":
-                continue
-            if not entry.get("problems"):
-                raise _Stopped(
-                    f"{animal_id}: the {name} check failed without problems; "
-                    "a person looks"
-                )
-            for file, lines in problems_by_file(entry["problems"]).items():
-                for line in lines:
-                    text = line[2:].strip() if line.startswith("- ") else line.strip()
-                    errors.append(f"{file}: {text}" if file else text)
-        (ctx.job_dir / "tries" / animal_id / str(attempt) / "errors.json").write_text(
+        errors += _verdict_errors(
+            _verdicts(world, ctx, animal_id, "edits", attempt), ("models",), animal_id
+        )
+        (folder / "errors.json").write_text(
             json.dumps(errors, indent=2), encoding="utf-8"
         )
         return errors
@@ -258,22 +437,25 @@ class AnimalMakerStage:
         self,
         ctx: Any,
         animal_id: str,
+        phase: str,
         attempt: int,
         answer: str,
         files: dict[str, Any] | None,
         errors: list[str],
     ) -> None:
-        folder = ctx.job_dir / "tries" / animal_id / str(attempt)
+        folder = ctx.job_dir / "tries" / animal_id / phase / str(attempt)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "answer.json").write_text(answer, encoding="utf-8")
         if files is not None:
-            (folder / "animal.json").write_text(
-                json.dumps(files["animal"], indent=2), encoding="utf-8"
-            )
-            (folder / "spec.json").write_text(
-                json.dumps(files["model"], indent=2), encoding="utf-8"
-            )
-        # Always: the measure check appends after the build wrote it.
+            if "animal" in files:
+                (folder / "animal.json").write_text(
+                    json.dumps(files["animal"], indent=2), encoding="utf-8"
+                )
+            else:
+                (folder / "edits_answer.json").write_text(
+                    json.dumps(files, indent=2), encoding="utf-8"
+                )
+        # Always: later checks append after earlier ones wrote it.
         (folder / "errors.json").write_text(
             json.dumps(errors, indent=2), encoding="utf-8"
         )
@@ -320,7 +502,7 @@ class AnimalMakerStage:
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(preview.read_bytes())
 
-    def _prompt(
+    def _animal_prompt(
         self,
         ctx_world: Path,
         brief: dict[str, Any],
@@ -336,7 +518,7 @@ class AnimalMakerStage:
         template = _with_start_from(template, world, start_from)
         roles = animal_writers._roles_in_region(region)
         role = roles.get(animal_id, "prey" if target["prey"] else "playable")
-        animal_prompt = Template(template).substitute(
+        return Template(template).substitute(
             {
                 "SPECIES_JSON": json.dumps(
                     _species_json(animal_id, entry, brief, research, target),
@@ -359,33 +541,32 @@ class AnimalMakerStage:
                 "FOR_CHILDREN": for_children(),
             }
         )
-        spec_template = (PROMPTS_DIR / "model_spec.md").read_text(encoding="utf-8")
-        rules = (
-            (world / "ART.md").read_text(encoding="utf-8")
-            + "\n\n"
-            + (world / "models" / "README.md").read_text(encoding="utf-8")
-        )
-        spec_prompt = Template(spec_template).substitute(
+
+    def _edits_prompt(
+        self,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        target: dict[str, Any],
+        ref: dict[str, Any],
+    ) -> str:
+        """What the edits call sees: looks, the table line, the part list."""
+        entry = target["entry"]
+        start_from = target["start_from"]
+        template = (PROMPTS_DIR / "model_edits.md").read_text(encoding="utf-8")
+        return Template(template).substitute(
             {
-                "SPECIES": animal_id,
-                "TITLE": entry.get("name", animal_id),
+                "TITLE": entry.get("name", target["id"]),
                 "LATIN": entry.get("latin", ""),
-                "AUTHOR": self.author,
-                "DESCRIPTION": _description(entry, research, target),
-                "MEASUREMENTS": json.dumps(_measurements(research, target), indent=2),
                 "CLOSEST_NAME": start_from,
-                "CLOSEST_SPEC": (world / "models" / f"{start_from}.json").read_text(
-                    encoding="utf-8"
+                "LOOKS": (
+                    _description(entry, research, target)
+                    + "\n"
+                    + json.dumps(_measurements(research, target), indent=2)
                 ),
-                "CHANGE": _change_text(world, start_from, entry),
-                "RULES": rules,
+                "REFERENCE_LINE": _reference_line(world, start_from, entry),
+                "PART_LIST": _part_list(ref),
             }
-        )
-        return (
-            f"{animal_prompt}\n\n---\n\n{spec_prompt}\n\n"
-            "## Combined output\n\n"
-            "Reply with one JSON object, nothing else: "
-            '{"animal": <the animal file>, "model": <the model spec>}.'
         )
 
 
@@ -552,23 +733,13 @@ def _looks_description(entry: dict[str, Any], looks: dict[str, Any]) -> str:
     return " ".join(bits)
 
 
-def _change_text(world: Path, start_from: str, entry: dict[str, Any]) -> str:
-    """What to change from the closest spec (#57.2, #57.3).
-
-    The reference table's own line when the species is on it,
-    then the proportions rule: start scaled, change only what
-    the measurements or the marks move.
-    """
-    keep = (
-        "Start from the closest spec scaled to the sourced body "
-        "length. Keep its proportions, except where the measurements "
-        "or the marks say otherwise: change only those."
-    )
+def _reference_line(world: Path, start_from: str, entry: dict[str, Any]) -> str:
+    """The reference table's line for this start and species (#60.2)."""
     row = _reference_row(world, start_from, entry.get("name", ""))
     if row is None:
-        return f"One shot, no reference sheet: {keep}"
+        return "(the species is not on the reference table)"
     new, change = row
-    return f"Reference row ({new}): {change} One shot, no reference sheet: {keep}"
+    return f"{new}: {change}"
 
 
 # Table rows name a kind ("Snakes"), the animal a species ("anaconda").
@@ -622,6 +793,22 @@ def _reference_table(text: str) -> list[tuple[str, str, str]]:
     return rows
 
 
+def _part_list(ref: dict[str, Any]) -> str:
+    """The reference spec's parts: name, colour, bone role (#60.2)."""
+    roles = {
+        bone["name"]: bone.get("role", "none")
+        for bone in ref.get("bones", [])
+        if isinstance(bone, dict) and "name" in bone
+    }
+    lines = []
+    for part in ref.get("parts", []):
+        if not isinstance(part, dict) or "name" not in part:
+            continue
+        role = roles.get(part.get("bone"), "none")
+        lines.append(f"- {part['name']}: {part.get('color', '?')}, {role}")
+    return "\n".join(lines)
+
+
 def _with_start_from(template: str, world: Path, start_from: str) -> str:
     """The one-shot example: the `start_from` animal, and only it."""
     content = (world / "animals" / f"{start_from}.json").read_text(encoding="utf-8")
@@ -634,13 +821,15 @@ def _with_start_from(template: str, world: Path, start_from: str) -> str:
 
 
 def _measure_spec(spec: dict[str, Any]) -> dict[str, float]:
-    """What the spec measures, in metres (#57.4).
+    """What the spec measures, in metres (#57.4, #60).
 
-    Shoulder: the body bone's head height. Length: the torso's
-    span (parts off the tail and leg bones). Tail: the tail
-    bones' chain. Legs: the top of the leg parts (they reach
-    y = 0). Depth: the body part's length axis. Anything the
-    spec doesn't name stays out.
+    The tool's own definitions, so code and adapt agree:
+    shoulder is the top of the back above the front legs,
+    tail its parts' span, length the torso's span. Legs are
+    the top of the leg parts (they reach y = 0); depth the
+    body part's length axis. Specs without bone roles fall
+    back to bone names. Anything the spec doesn't name stays
+    out.
     """
     bones = {
         bone["name"]: bone
@@ -654,10 +843,33 @@ def _measure_spec(spec: dict[str, Any]) -> dict[str, float]:
         and isinstance(part.get("at"), list)
         and isinstance(part.get("size"), list)
     ]
+    roles = {name: bone.get("role", "none") for name, bone in bones.items()}
+
+    def role_of(part: dict[str, Any]) -> str:
+        return roles.get(part.get("bone") or "", "none")
+
     found: dict[str, float] = {}
-    body_bone = bones.get("body")
-    if body_bone and isinstance(body_bone.get("head"), list):
-        found["shoulder_m"] = float(body_bone["head"][1])
+    front = [
+        bone
+        for bone in bones.values()
+        if bone.get("role") == "leg"
+        and isinstance(bone.get("head"), list)
+        and bone["head"][2] > 0
+    ]
+    backs = [part for part in parts if role_of(part) == "body"]
+    if front and backs:
+        z = front[0]["head"][2]
+        tops = [
+            part["at"][1] + part["size"][1] / 2
+            for part in backs
+            if abs(part["at"][2] - z) <= part["size"][2] / 2 + 0.05
+        ]
+        if tops:
+            found["shoulder_m"] = max(tops)
+    if "shoulder_m" not in found:
+        body_bone = bones.get("body")
+        if body_bone and isinstance(body_bone.get("head"), list):
+            found["shoulder_m"] = float(body_bone["head"][1])
     torso = [
         part
         for part in parts
@@ -667,15 +879,27 @@ def _measure_spec(spec: dict[str, Any]) -> dict[str, float]:
         found["length_m"] = max(
             part["at"][2] + part["size"][2] / 2 for part in torso
         ) - min(part["at"][2] - part["size"][2] / 2 for part in torso)
-    tails = [
-        bone
-        for name, bone in bones.items()
-        if name.startswith("tail")
-        and isinstance(bone.get("head"), list)
-        and isinstance(bone.get("tail"), list)
+    tail_parts = [
+        part
+        for part in parts
+        if (part.get("bone") or "").startswith("tail") or role_of(part) == "tail"
     ]
-    if tails:
-        found["tail_m"] = sum(math.dist(bone["head"], bone["tail"]) for bone in tails)
+    if tail_parts:
+        found["tail_m"] = max(
+            part["at"][2] + part["size"][2] / 2 for part in tail_parts
+        ) - min(part["at"][2] - part["size"][2] / 2 for part in tail_parts)
+    else:
+        tails = [
+            bone
+            for name, bone in bones.items()
+            if name.startswith("tail")
+            and isinstance(bone.get("head"), list)
+            and isinstance(bone.get("tail"), list)
+        ]
+        if tails:
+            found["tail_m"] = sum(
+                math.dist(bone["head"], bone["tail"]) for bone in tails
+            )
     legs = [part for part in parts if (part.get("bone") or "").startswith("leg")]
     if legs:
         found["leg_m"] = max(part["at"][1] + part["size"][1] / 2 for part in legs)
@@ -700,48 +924,9 @@ def _measure_errors(
     shift between species). Each miss names exact numbers for the
     fix round. Missing numbers on either side skip quietly.
     """
-    errors = []
     found = _measure_spec(spec)
-    if target["prey"]:
-        sourced = {"length_m": (target.get("size_cm") or 0) / 100}
-    else:
-        looks = research.get("looks") or {}
-        sourced = {"length_m": research["size"]["length_cm"] / 100}
-        if looks.get("shoulder_cm") is not None:
-            sourced["shoulder_m"] = looks["shoulder_cm"] / 100
-        if looks.get("height_cm") is not None:
-            sourced["top_m"] = looks["height_cm"] / 100
-        if looks.get("tail_cm") is not None:
-            sourced["tail_m"] = looks["tail_cm"] / 100
-    names = {
-        "length_m": "body",
-        "shoulder_m": "shoulder",
-        "tail_m": "tail",
-        "top_m": "height",
-    }
-    for key, name in names.items():
-        if key not in found or key not in sourced or not sourced[key]:
-            continue
-        if abs(found[key] - sourced[key]) / sourced[key] <= 0.20:
-            continue
-        errors.append(
-            f"the spec's {name} is {found[key] * 100:.0f} cm, "
-            f"sourced {sourced[key] * 100:.0f} cm: size it to the source"
-        )
-    if "leg_m" in found and "depth_m" in found and found["depth_m"]:
-        ratio = found["leg_m"] / found["depth_m"]
-        reference = _reference_spec(world, target["start_from"])
-        if reference is not None:
-            theirs = _measure_spec(reference)
-            if "leg_m" in theirs and "depth_m" in theirs and theirs["depth_m"]:
-                want = theirs["leg_m"] / theirs["depth_m"]
-                if abs(ratio - want) / want > 0.30:
-                    errors.append(
-                        f"legs are {ratio:.1f}x the body's depth, "
-                        f"the {target['start_from']}'s are {want:.1f}x: "
-                        "shorten the legs or deepen the body"
-                    )
-    return errors
+    sourced = _sourced_sizes(research, target)
+    return _size_errors(found, sourced) + _ratio_errors(found, target, world)
 
 
 def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:
@@ -756,11 +941,272 @@ def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:
     return spec if isinstance(spec, dict) else None
 
 
+def _run_adapt(
+    world: Path, start_from: str, edits_path: Path, out_path: Path
+) -> dict[str, Any]:
+    """The world's adapt tool: reference plus edits become the spec."""
+    tool = world / "tools" / "adapt_model.py"
+    ref = world / "models" / f"{start_from}.json"
+    try:
+        done = subprocess.run(
+            [
+                sys.executable,
+                str(tool),
+                str(ref),
+                str(edits_path),
+                "--out",
+                str(out_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return {"ok": False, "log": str(error)}
+    log = (done.stderr or done.stdout or "").strip()
+    return {"ok": done.returncode == 0, "log": log or "adapted"}
+
+
+def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
+    """The edits call's strict schema, built from the reference (#60.2).
+
+    Colours and part names come from the reference spec itself,
+    so the answer can only name what exists; factors stay in the
+    tool's 0.4–2.5. Every key required, nothing extra, flat.
+    """
+    colours = list(ref.get("colors", {}))
+    parts = [part["name"] for part in ref.get("parts", []) if "name" in part]
+    factors = {
+        name: {
+            "type": "number",
+            "minimum": 0.4,
+            "maximum": 2.5,
+            "description": f"{name}, 1 meaning as the reference",
+        }
+        for name in EDITS_FACTORS
+    }
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "colors",
+            "new_colors",
+            *EDITS_FACTORS,
+            "marks",
+            "repaint",
+            "unmakable",
+        ],
+        "properties": {
+            "colors": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": colours,
+                "properties": {
+                    name: {
+                        "type": "string",
+                        "description": f"{name} as hex, like #7a4a2b",
+                    }
+                    for name in colours
+                },
+            },
+            "new_colors": {
+                "type": "array",
+                "description": "More colours the animal needs; usually empty",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["name", "hex"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "hex": {
+                            "type": "string",
+                            "description": "Hex, like #7a4a2b",
+                        },
+                    },
+                },
+            },
+            **factors,
+            "marks": {
+                "type": "array",
+                "description": "Marks this animal truly has, from this list only",
+                "items": {"type": "string", "enum": list(EDITS_MARKS)},
+            },
+            "repaint": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["part", "color"],
+                    "properties": {
+                        "part": {"type": "string", "enum": parts},
+                        "color": {"type": "string", "enum": colours},
+                    },
+                },
+            },
+            "unmakable": {
+                "type": "array",
+                "description": (
+                    "Marks the animal has that no edit above can make "
+                    "(stripes, a mane, antlers), as plain words"
+                ),
+                "items": {"type": "string"},
+            },
+        },
+    }
+
+
+def _edits_files(
+    answer: str, ref: dict[str, Any]
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """The try's edits, or why the answer holds none.
+
+    Decoding already follows the strict schema; code only
+    checks the shape survived and the names exist.
+    """
+    try:
+        edits = json.loads(_unfence(answer))
+    except json.JSONDecodeError as error:
+        return None, [f"not JSON: {error}"]
+    if not isinstance(edits, dict):
+        return None, ["reply with the edits as one JSON object"]
+    want = {"colors", "marks", "repaint", "unmakable", *EDITS_FACTORS}
+    missing = sorted(want - set(edits))
+    if missing:
+        return None, [f"the edits leave out {', '.join(missing)}"]
+    colours = set(ref.get("colors", {}))
+    if set(edits.get("colors") or {}) != colours:
+        return None, ["the edits must colour every reference colour, no others"]
+    parts = {part["name"] for part in ref.get("parts", []) if "name" in part}
+    for item in edits.get("repaint") or []:
+        if item.get("part") not in parts:
+            return None, [f"repaint names no part {item.get('part')!r}"]
+        if item.get("color") not in colours:
+            return None, [f"repaint names no colour {item.get('color')!r}"]
+    for mark in edits.get("marks") or []:
+        if mark not in EDITS_MARKS:
+            return None, [
+                f"mark {mark!r} is not one the tool makes; "
+                "list it under unmakable instead"
+            ]
+    return edits, []
+
+
+def _edits_sizes(research: dict[str, Any], target: dict[str, Any]) -> dict[str, float]:
+    """Sizes for the adapt tool, from the research, never the AI (#60.3).
+
+    Length always; shoulder and tail only when the looks name
+    them, so the tool keeps the reference's proportions there.
+    """
+    if target["prey"]:
+        return {"length_m": target["size_cm"] / 100}
+    sizes = {"length_m": research["size"]["length_cm"] / 100}
+    looks = research.get("looks") or {}
+    if looks.get("shoulder_cm") is not None:
+        sizes["shoulder_m"] = looks["shoulder_cm"] / 100
+    if looks.get("tail_cm") is not None:
+        sizes["tail_m"] = looks["tail_cm"] / 100
+    return sizes
+
+
+def _sourced_sizes(
+    research: dict[str, Any], target: dict[str, Any]
+) -> dict[str, float]:
+    """What the spec must measure, in metres, from the research."""
+    if target["prey"]:
+        return {"length_m": (target.get("size_cm") or 0) / 100}
+    looks = research.get("looks") or {}
+    sourced = {"length_m": research["size"]["length_cm"] / 100}
+    if looks.get("shoulder_cm") is not None:
+        sourced["shoulder_m"] = looks["shoulder_cm"] / 100
+    if looks.get("height_cm") is not None:
+        sourced["top_m"] = looks["height_cm"] / 100
+    if looks.get("tail_cm") is not None:
+        sourced["tail_m"] = looks["tail_cm"] / 100
+    return sourced
+
+
+def _size_misses(
+    found: dict[str, float], sourced: dict[str, float]
+) -> dict[str, tuple[float, float]]:
+    """Code-owned sizes off by more than a fifth: key to (have, want)."""
+    misses = {}
+    for key in ("length_m", "shoulder_m", "tail_m"):
+        if key not in found or key not in sourced or not sourced[key]:
+            continue
+        if abs(found[key] - sourced[key]) / sourced[key] > 0.20:
+            misses[key] = (found[key], sourced[key])
+    return misses
+
+
+def _size_errors(found: dict[str, float], sourced: dict[str, float]) -> list[str]:
+    """Absolute misses with exact numbers, for the fix round."""
+    names = {
+        "length_m": "body",
+        "shoulder_m": "shoulder",
+        "tail_m": "tail",
+        "top_m": "height",
+    }
+    errors = []
+    for key, name in names.items():
+        if key not in found or key not in sourced or not sourced[key]:
+            continue
+        if abs(found[key] - sourced[key]) / sourced[key] <= 0.20:
+            continue
+        errors.append(
+            f"the spec's {name} is {found[key] * 100:.0f} cm, "
+            f"sourced {sourced[key] * 100:.0f} cm: size it to the source"
+        )
+    return errors
+
+
+def _ratio_errors(
+    found: dict[str, float], target: dict[str, Any], world: Path
+) -> list[str]:
+    """Legs-against-depth drift from the reference's ratio."""
+    if "leg_m" not in found or "depth_m" not in found or not found["depth_m"]:
+        return []
+    ratio = found["leg_m"] / found["depth_m"]
+    reference = _reference_spec(world, target["start_from"])
+    if reference is None:
+        return []
+    theirs = _measure_spec(reference)
+    if "leg_m" not in theirs or "depth_m" not in theirs or not theirs["depth_m"]:
+        return []
+    want = theirs["leg_m"] / theirs["depth_m"]
+    if abs(ratio - want) / want <= 0.30:
+        return []
+    return [
+        f"legs are {ratio:.1f}x the body's depth, "
+        f"the {target['start_from']}'s are {want:.1f}x: "
+        "shorten the legs or deepen the body"
+    ]
+
+
 def _verdicts(
-    world: Path, ctx: Any, animal_id: str, attempt: int
+    world: Path, ctx: Any, animal_id: str, phase: str, attempt: int
 ) -> dict[str, dict[str, Any]]:
-    result = check_draft(world, ctx.job_dir, f"oneshot-{animal_id}-{attempt}")
+    result = check_draft(world, ctx.job_dir, f"oneshot-{animal_id}-{phase}-{attempt}")
     return {entry.get("check", ""): entry for entry in result.get("results", [])}
+
+
+def _verdict_errors(
+    verdicts: dict[str, dict[str, Any]], names: tuple[str, ...], animal_id: str
+) -> list[str]:
+    """The named verdicts' problems as fix-round errors."""
+    errors = []
+    for name in names:
+        entry = verdicts.get(name, {})
+        if entry.get("status") != "fail":
+            continue
+        if not entry.get("problems"):
+            raise _Stopped(
+                f"{animal_id}: the {name} check failed without problems; a person looks"
+            )
+        for file, lines in problems_by_file(entry["problems"]).items():
+            for line in lines:
+                text = line[2:].strip() if line.startswith("- ") else line.strip()
+                errors.append(f"{file}: {text}" if file else text)
+    return errors
 
 
 # Text the checks demand, and the flag that demands it (#56.1).

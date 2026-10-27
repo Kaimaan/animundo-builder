@@ -78,10 +78,37 @@ def report_text(job_dir: Path) -> str:
         f"- {kind}: {name} — {_amount(cost)}"
         for kind, name, cost in _new_things_data(job_dir)
     ]
+    lines.extend(_unmakable_lines(job_dir))
     calls = _read_calls(job_dir / "log.jsonl")
     total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
     lines.append(f"- Total: {_amount(total)} over {len(calls)} calls.")
     return "\n".join(lines)
+
+
+def _unmakable_lines(job_dir: Path) -> list[str]:
+    """Marks the adapt tool can't make yet, for the reviewer (#60.5)."""
+    missing = _read_json(job_dir / "checks" / "oneshot.json").get("unmakable", {})
+    if not isinstance(missing, dict):
+        return []
+    lines = []
+    for animal_id in sorted(missing):
+        marks = [mark for mark in missing[animal_id] if isinstance(mark, str)]
+        if marks:
+            lines.append(
+                f"- {animal_id}: the tool can't make "
+                f"{', '.join(marks)} yet — reviewer, please add "
+                f"{'it' if len(marks) == 1 else 'them'}."
+            )
+    return lines
+
+
+def _unmakable(job_dir: Path) -> str:
+    """The marks section, when some animal wants what the tool lacks."""
+    lines = _unmakable_lines(job_dir)
+    if not lines:
+        return ""
+    rows = "".join(f"<li>{html.escape(line[2:])}</li>" for line in lines)
+    return "<h2>Marks the tool can't make yet</h2>\n<ul>" + rows + "</ul>"
 
 
 def _amount(cost: Any) -> str:
@@ -107,6 +134,7 @@ def build_report(job_dir: Path) -> Path:
     parts = [
         _head(params, job_dir.name),
         _new_things(job_dir),
+        _unmakable(job_dir),
         _stages(state),
         _cost(calls),
         _sources(survey),

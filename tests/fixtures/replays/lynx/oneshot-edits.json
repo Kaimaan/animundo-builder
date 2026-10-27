@@ -1,0 +1,21 @@
+{
+  "colors": {
+    "fur": "#8b7355",
+    "belly": "#f0e8d8"
+  },
+  "new_colors": [],
+  "head": 1.15,
+  "muzzle": 0.6,
+  "ears": 0.85,
+  "leg_thickness": 1.35,
+  "paws": 1.6,
+  "body_girth": 1.1,
+  "tail_width": 0.8,
+  "marks": [
+    "ear_tufts",
+    "ruff",
+    "tail_tip"
+  ],
+  "repaint": [],
+  "unmakable": []
+}

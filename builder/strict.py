@@ -218,6 +218,35 @@ def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
     return _inline(schema, defs)
 
 
+def assert_strict_subset(schema: dict[str, Any], path: str = "root") -> None:
+    """Meta's strict subset: flat, closed, every key required.
+
+    Plain object root, no `allOf`/`oneOf`/`$ref`/`const`,
+    `additionalProperties: false` on every object, `required`
+    naming every key. Raises AssertionError naming the spot.
+    """
+    assert schema.get("type") == "object", f"{path}: root must be a plain object"
+
+    def walk(node: Any, at: str) -> None:
+        if isinstance(node, dict):
+            for bad in ("allOf", "oneOf", "$ref", "$defs", "const", "not"):
+                assert bad not in node, f"{at}: forbids {bad}"
+            if node.get("type") == "object" or "properties" in node:
+                assert node.get("additionalProperties") is False, (
+                    f"{at}: every object closes with additionalProperties: false"
+                )
+                assert sorted(node.get("required", [])) == sorted(
+                    node.get("properties", {})
+                ), f"{at}: required names every key"
+            for key, value in node.items():
+                walk(value, f"{at}.{key}")
+        elif isinstance(node, list):
+            for n, value in enumerate(node):
+                walk(value, f"{at}[{n}]")
+
+    walk(schema, path)
+
+
 def _inline(node: Any, defs: dict[str, Any]) -> Any:
     """Inline internal `$ref`s; the schemas stay flat (#58.3).
 

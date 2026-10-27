@@ -211,9 +211,16 @@ def _world(tmp_path: Path) -> Path:
         json.dumps({"id": "boreal_forest", "name": "Northern forest home"})
     )
     (world / "models").mkdir(parents=True)
+    colours = {
+        "fox": {"fur": "#c4622b", "belly": "#efe3cf"},
+        "vole": {"fur": "#7a6a55", "belly": "#cfc0a8"},
+        "grass_snake": {"scales": "#4a5d3a", "belly": "#cfc39a"},
+    }
     for stem in ("fox", "vole", "grass_snake"):
         (world / "models" / f"{stem}.json").write_text(
-            json.dumps({"id": stem, "parts": [{"name": "body"}]})
+            json.dumps(
+                {"id": stem, "colors": colours[stem], "parts": [{"name": "body"}]}
+            )
         )
     (world / "models" / "README.md").write_text("# Models\n\n## Plants\n\nGrow.\n")
     plants = world / "models" / "plants"
@@ -291,6 +298,37 @@ def _recorded(lat: float, lon: float, key: int) -> bool:
     if lat < 0:
         return False
     return key in {FOX_KEY, HARE_KEY}
+
+
+def _adapt_sizes(
+    world: Path, start_from: str, edits_path: Path, out_path: Path
+) -> dict[str, Any]:
+    """The adapt tool, stubbed: a spec measuring the edits' sizes."""
+    edits = json.loads(edits_path.read_text(encoding="utf-8"))
+    length = edits.get("length_m", 1.0)
+    spec = {
+        "id": edits.get("id", "x"),
+        "bones": [
+            {
+                "name": "body",
+                "head": [0, length / 2, -length / 2],
+                "tail": [0, length / 2, length / 2],
+                "role": "body",
+            }
+        ],
+        "parts": [
+            {
+                "name": "body",
+                "shape": "ball",
+                "size": [0.2, 0.2, length],
+                "at": [0, length / 2, 0],
+                "color": "fur",
+                "bone": "body",
+            }
+        ],
+    }
+    out_path.write_text(json.dumps(spec), encoding="utf-8")
+    return {"ok": True, "log": "adapted"}
 
 
 def _build_animal(sandbox: Path, species_id: str) -> dict[str, Any]:
@@ -378,7 +416,12 @@ def test_fox_replays_to_its_pack(tmp_path: Path, capsys: pytest.CaptureFixture) 
     assert MinimumStage().run(ctx)["make"] == []
     result = HomeStage(recorded=_recorded).run(ctx)
     assert result["animal"] == "fox"
-    assert AnimalMakerStage(build=_build_animal).run(ctx)["animal_files"] == []
+    assert (
+        AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(ctx)[
+            "animal_files"
+        ]
+        == []
+    )
     assert WordsStage().run(ctx)["locale_files"] == []
     PackStage().run(ctx)
     manifest = json.loads((job / "pack" / "manifest.json").read_text())
@@ -408,11 +451,13 @@ def test_lynx_replays_through_oneshot_to_its_pack(
     maker = JobContext(
         job_id=job.name,
         job_dir=job,
-        client=ScriptClient(_answers("oneshot.json", animal="lynx")),
+        client=ScriptClient(
+            _answers("oneshot.json", "oneshot-edits.json", animal="lynx")
+        ),
         tracker=tracker,
         world_path=world,
     )
-    made = AnimalMakerStage(build=_build_animal).run(maker)
+    made = AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(maker)
     assert made["animal_files"] == ["animals/lynx.json"]
     assert WordsStage().run(ctx)["locale_files"] == []
     PackStage().run(ctx)
@@ -463,13 +508,17 @@ def test_anaconda_replays_through_both_makers_to_its_pack(
         job_dir=job,
         client=ScriptClient(
             _answers(
-                "oneshot-capybara.json", "oneshot-anaconda.json", animal="anaconda"
+                "oneshot-capybara.json",
+                "oneshot-capybara-edits.json",
+                "oneshot-anaconda.json",
+                "oneshot-anaconda-edits.json",
+                animal="anaconda",
             )
         ),
         tracker=tracker,
         world_path=world,
     )
-    made = AnimalMakerStage(build=_build_animal).run(maker)
+    made = AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(maker)
     assert made["animal_files"] == ["animals/capybara.json", "animals/anaconda.json"]
     assert WordsStage().run(ctx)["locale_files"] == []
     PackStage().run(ctx)

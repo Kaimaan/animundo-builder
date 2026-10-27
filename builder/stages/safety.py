@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..prompts import load_prompt
+from ..schemas import validate
 
 TRIES = 2
 
@@ -106,6 +107,12 @@ class SafetyStage:
             ),
             encoding="utf-8",
         )
+        record = {"items": [{"key": key, **verdicts[key]} for key in sorted(verdicts)]}
+        if record["items"]:
+            validate("safety", record)
+            (ctx.job_dir / "safety.json").write_text(
+                json.dumps(record, indent=2), encoding="utf-8"
+            )
         if failed:
             first = failed[0]
             raise _Stopped(

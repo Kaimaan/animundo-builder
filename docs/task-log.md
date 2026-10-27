@@ -214,3 +214,23 @@ Job folders live under `jobs/` (local only, never committed).
   it; it is empty and core-team-maintained. Kai: it needs its
   first real entries (sanctioned/conflict/disputed areas) before
   any public running.
+
+## 2026-10-27: T21 pack step (submit still to come)
+
+- New `PackStage`, last in the pipeline: gates on the root
+  `safety.json` (all pass) plus a fresh full `check_draft.py`
+  run, ignoring only the known missing-preview line, then lays
+  out `pack/` per spec 01 (draft region id, only new files and
+  keys, locale keys redrafted, manifest with sha256 + bytes)
+  and refuses packs over the size limits (2 MB a model, 8 MB
+  a pack).
+- `SafetyStage` now also writes the root `safety.json` gate
+  record (`{"items": [...]}`) next to `checks/safety.json`.
+- Build/resume tails are honest now: they name the actual next
+  unfinished stage, or say the job is done (exit 0), instead of
+  a hardcoded list. Improve with `other` still gates on the
+  unbuilt `improve_plan`.
+- Proved with a zero-cost probe (`/tmp/pack_probe.py`, scratch
+  copy only): t14-deer's real texts and safety verdicts plus
+  deer-demo's approved model files pack clean through the real
+  world checker — all six gates pass, 6 files, 1.29 MB.

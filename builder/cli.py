@@ -32,6 +32,7 @@ from .stages import (
     CapabilityStage,
     IntakeStage,
     ModelsStage,
+    PackStage,
     PlantsStage,
     ReferencesStage,
     RegionStage,
@@ -42,7 +43,6 @@ from .stages import (
 )
 
 NOT_BUILT_YET = 3
-NEXT_STAGE = "pack"
 
 
 def _pipeline_stages(
@@ -64,6 +64,7 @@ def _pipeline_stages(
         PlantsStage(max_new_plants=max_new_plants, author=author),
         WordsStage(),
         SafetyStage(),
+        PackStage(),
     ]
 
 
@@ -118,6 +119,23 @@ def _explain_stop(job_id: str, error: Exception) -> int:
         return NOT_BUILT_YET
     print(f"error: job {job_id}: {error.__cause__}", file=sys.stderr)
     return 1
+
+
+def _finish(job_id: str, run: list[Any], state_file: Path) -> int:
+    """Say what is left after the pipeline ran, or that the job is done."""
+    try:
+        completed = set(
+            json.loads(state_file.read_text(encoding="utf-8")).get("completed", [])
+        )
+    except (OSError, ValueError):
+        completed = set()
+    rest = [stage.name for stage in run if stage.name not in completed]
+    if rest:
+        print(f"job {job_id}: carried on")
+        print(f"next stage: {rest[0]}")
+        return NOT_BUILT_YET
+    print(f"job {job_id}: done")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -266,27 +284,18 @@ def cmd_build(args: argparse.Namespace) -> int:
         ),
         encoding="utf-8",
     )
+    stages = _pipeline_stages(
+        stage,
+        args.author,
+        config.max_new_species,
+        config.reference,
+        config.max_new_plants,
+    )
     try:
-        Pipeline(
-            _pipeline_stages(
-                stage,
-                args.author,
-                config.max_new_species,
-                config.reference,
-                config.max_new_plants,
-            ),
-            job_dir / "state.json",
-        ).run(ctx)
+        Pipeline(stages, job_dir / "state.json").run(ctx)
     except (StageFailedError, CapExceeded, MetaAuthError) as error:
         return _explain_stop(job_id, error)
-    print(
-        "job "
-        + job_id
-        + ": intake, survey, capability, region, species plan, animals, "
-        + "references, models done"
-    )
-    print(f"next stage: {NEXT_STAGE} (not built yet)")
-    return NOT_BUILT_YET
+    return _finish(job_id, stages, job_dir / "state.json")
 
 
 def cmd_resume(args: argparse.Namespace) -> int:
@@ -355,9 +364,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
         Pipeline(run, state_file).run(ctx)
     except (StageFailedError, CapExceeded, MetaAuthError) as error:
         return _explain_stop(args.job_id, error)
-    print(f"job {args.job_id}: carried on")
-    print(f"next stage: {NEXT_STAGE} (not built yet)")
-    return NOT_BUILT_YET
+    return _finish(args.job_id, run, state_file)
 
 
 def cmd_check(world: str) -> int:

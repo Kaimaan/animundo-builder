@@ -1,6 +1,6 @@
 {
-  "app.title": "Animundo Builder",
-  "app.credit": "Kartta: OpenStreetMapin tekijät. Ekoalueet: RESOLVE 2017. Karttapalat: OpenStreetMap.",
+  "app.credit": "Kartta © OpenStreetMapin tekijät. Karttapalat © CARTO. Ekoalueet: RESOLVE 2017.",
+  "app.play": "Pelaa Animundoa",
   "auth.email_ph": "aikuinen@example.org",
   "auth.send": "Lähetä kirjautumislinkki",
   "auth.note": "Vain aikuisille: kirjaudu sähköpostilinkillä.",
@@ -8,6 +8,8 @@
   "auth.bad_link": "Linkki ei toiminut. Lähetä uusi.",
   "auth.out": "Kirjaudu ulos",
   "auth.signed_in": "Kirjautunut: {email}",
+  "auth.test": "Kirjaudu testikäyttäjänä",
+  "auth.seed_first": "Testikäyttäjää ei vielä ole. Aja ensin seed-skripti (katso README).",
   "map.biome": "Elinympäristö",
   "map.state": "Näytä",
   "map.all": "Kaikki",

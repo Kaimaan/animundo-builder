@@ -351,3 +351,25 @@ Job folders live under `jobs/` (local only, never committed).
   Kai's terminal (`cd web/build && python3 -m http.server`
   per the README); `animundo.app` must be an authorized
   domain in the Firebase console or sign-in fails there.
+
+## 2026-10-27: web app fixes (inbox #33)
+
+- `[hidden]` now really hides (Leaflet CSS beat it), and
+  unselected language buttons got their dark text back.
+- The Firebase web key is whole again, allowlisted in
+  `.gitleaks.toml` for exactly that key in exactly
+  `web/build/app.js` (verified both ways: ours passes there,
+  any other GCP key anywhere still flags). Key restriction
+  and authorized-domain notes are in the README.
+- `?emulator=1` connects Auth, Firestore and Storage to the
+  local emulators (ports pinned to `firebase.json` by test)
+  and offers a test grown-up button; `firebase/seed-emulator.mjs`
+  (no dependencies) creates `test@example.org` with a verified
+  email, idempotently, and fails loudly if the flag does not
+  stick. The seed script is unrun from here (no listening
+  sockets); the reviewer confirms it with the next run.
+- The app now wears the game site's look: dark forest
+  background, cream text, sun-yellow pills and headings, the
+  ANIMUNDO brand row, English/Suomi toggle and a matching
+  footer, with CARTO's dark basemap under OSM attribution and
+  area colors retuned for it (no more purple).

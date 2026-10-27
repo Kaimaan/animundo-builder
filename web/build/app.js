@@ -10,9 +10,9 @@
 
 const FIREBASE_CONFIG = {
   // Public by design (the same key the game ships): Firebase web
-  // keys are restricted by domain, not by secrecy. Split so the
-  // secret scanner does not flag it.
-  apiKey: "AIzaSy" + "AXX6Gz5aN5QQ2txFQMkUGHX9D1fppyEWA",
+  // keys are restricted by domain, not by secrecy. Allowlisted in
+  // .gitleaks.toml for exactly this key in exactly this file.
+  apiKey: "AIzaSyAXX6Gz5aN5QQ2txFQMkUGHX9D1fppyEWA",
   authDomain: "animundo-dev.firebaseapp.com",
   projectId: "animundo-dev",
   storageBucket: "animundo-dev.firebasestorage.app",
@@ -21,12 +21,20 @@ const FIREBASE_CONFIG = {
 };
 
 const BUILDING = ["requested", "queued", "building", "improving"];
+
+// Local emulators, from firebase/firebase.json. Only used with ?emulator=1.
+const EMULATORS = {
+  auth: "http://127.0.0.1:9099",
+  firestore: ["127.0.0.1", 8080],
+  storage: ["127.0.0.1", 9199],
+};
+const TEST_GROWN_UP = { email: "test@example.org", password: "grown-up-1" };
 const LOOK_COLORS = {
-  yours: "#2e7d32",
-  building: "#ef6c00",
-  buildable: "#1565c0",
-  lit: "#6a1b9a",
-  notpossible: "#9e9e9e",
+  yours: "#6fbf4a",
+  building: "#e0873a",
+  buildable: "#f2b84b",
+  lit: "#fff3d6",
+  notpossible: "#8a8a72",
 };
 
 const state = {
@@ -88,8 +96,8 @@ function applyStaticStrings() {
   for (const el of document.querySelectorAll("[data-i18n-ph]")) {
     el.placeholder = t(el.getAttribute("data-i18n-ph"));
   }
-  $("lang-en").classList.toggle("active", state.lang === "en");
-  $("lang-fi").classList.toggle("active", state.lang === "fi");
+  $("lang-en").setAttribute("aria-pressed", String(state.lang === "en"));
+  $("lang-fi").setAttribute("aria-pressed", String(state.lang === "fi"));
 }
 
 async function setLang(lang) {
@@ -111,6 +119,23 @@ async function setLang(lang) {
 
 function firebaseAuth() {
   return firebase.auth();
+}
+
+function emulatorMode() {
+  return new URLSearchParams(window.location.search).has("emulator");
+}
+
+async function signInTestGrownUp() {
+  clearError();
+  try {
+    await firebaseAuth().signInWithEmailAndPassword(
+      TEST_GROWN_UP.email,
+      TEST_GROWN_UP.password,
+    );
+  } catch (error) {
+    console.error(error);
+    showError(t("auth.seed_first"));
+  }
 }
 
 function returnUrl() {
@@ -294,9 +319,10 @@ function initMap() {
     return;
   }
   state.map = L.map("map", { worldCopyJump: true }).setView([30, 10], 2);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 18,
-    attribution: "&copy; OpenStreetMap contributors",
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19,
+    subdomains: "abcd",
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
   }).addTo(state.map);
 }
 
@@ -738,6 +764,12 @@ function renderFeed(draftId) {
 
 async function start() {
   firebase.initializeApp(FIREBASE_CONFIG);
+  if (emulatorMode()) {
+    firebaseAuth().useEmulator(EMULATORS.auth, { disableWarnings: true });
+    db().useEmulator(...EMULATORS.firestore);
+    storage().useEmulator(...EMULATORS.storage);
+    $("auth-test").hidden = false;
+  }
   const params = new URLSearchParams(window.location.search);
   const explorer = params.get("explorer");
   if (explorer) {
@@ -759,6 +791,7 @@ async function start() {
   $("lang-en").addEventListener("click", () => setLang("en"));
   $("lang-fi").addEventListener("click", () => setLang("fi"));
   $("auth-send").addEventListener("click", sendLink);
+  $("auth-test").addEventListener("click", signInTestGrownUp);
   $("auth-out").addEventListener("click", () => firebaseAuth().signOut());
   $("area-build").addEventListener("click", buildThisPlace);
   $("area-wish").addEventListener("click", wishForPlace);

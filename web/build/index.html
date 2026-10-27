@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Animundo Builder</title>
+<title>Build the world · Animundo</title>
+<meta name="theme-color" content="#1d2a22">
+<link rel="icon" href="/icon_192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="styles.css">
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -14,20 +16,23 @@
 </head>
 <body>
 <header>
-  <h1 data-i18n="app.title">Animundo Builder</h1>
-  <div class="header-right">
-    <div class="lang" role="group" aria-label="Language">
-      <button id="lang-en" type="button">EN</button>
-      <button id="lang-fi" type="button">FI</button>
-    </div>
-    <div id="auth-signed-out">
-      <input id="auth-email" type="email" data-i18n-ph="auth.email_ph" placeholder="grown-up@example.org" autocomplete="email">
-      <button id="auth-send" type="button" data-i18n="auth.send">Send sign-in link</button>
-      <p id="auth-note" class="muted" data-i18n="auth.note">Grown-ups only: sign in with an email link.</p>
-    </div>
-    <div id="auth-signed-in" hidden>
-      <span id="auth-who"></span>
-      <button id="auth-out" type="button" data-i18n="auth.out">Sign out</button>
+  <div class="top">
+    <a class="brand" href="/"><img src="/icon_192.png" alt="" width="44" height="44" onerror="this.remove()">ANIMUNDO</a>
+    <div class="header-right">
+      <div class="langs" role="group" aria-label="Language">
+        <button id="lang-en" type="button" aria-pressed="true">English</button>
+        <button id="lang-fi" type="button" aria-pressed="false">Suomi</button>
+      </div>
+      <div id="auth-signed-out">
+        <input id="auth-email" type="email" data-i18n-ph="auth.email_ph" placeholder="grown-up@example.org" autocomplete="email">
+        <button id="auth-send" type="button" data-i18n="auth.send">Send sign-in link</button>
+        <button id="auth-test" type="button" data-i18n="auth.test" hidden>Use the test grown-up</button>
+        <p id="auth-note" class="muted" data-i18n="auth.note">Grown-ups only: sign in with an email link.</p>
+      </div>
+      <div id="auth-signed-in" hidden>
+        <span id="auth-who"></span>
+        <button id="auth-out" type="button" data-i18n="auth.out">Sign out</button>
+      </div>
     </div>
   </div>
 </header>
@@ -65,7 +70,8 @@
 </main>
 
 <footer>
-  <span data-i18n="app.credit">Map: OpenStreetMap contributors. Ecoregions: RESOLVE 2017. Tiles: OpenStreetMap.</span>
+  <span data-i18n="app.credit">Map © OpenStreetMap contributors. Tiles © CARTO. Ecoregions: RESOLVE 2017.</span>
+  <a href="/" data-i18n="app.play">Play Animundo</a>
 </footer>
 <script src="app.js"></script>
 </body>

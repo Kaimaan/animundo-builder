@@ -12,16 +12,19 @@ the game's copy publishes this folder as it is.
 - `vendor/leaflet/`: Leaflet 1.9.4 (BSD-2-Clause), vendored so
   the app needs no JavaScript CDN besides Firebase itself.
 
-Map data: OpenStreetMap tiles (© OpenStreetMap contributors,
-ODbL) with the required attribution on the map. Ecoregion names
-come from RESOLVE 2017 (Dinerstein et al.). Both are credited in
-the page footer.
+Map data: © OpenStreetMap contributors (ODbL) with CARTO's free
+dark basemap on top, both attributed on the map and in the
+footer. Ecoregion names come from RESOLVE 2017 (Dinerstein et
+al.), also credited in the footer. The stylesheet follows the
+game site's own look (dark forest, cream, sun yellow).
 
 Firebase: the app signs grown-ups in with email links and reads
 and writes Firestore and Storage with their own account on the
 `animundo-dev` project (the same public web config the game
-ships). `animundo.app` must be an authorized domain in the
-Firebase console, or sign-in fails there.
+ships). The key is public by design; its HTTP-referrer
+restriction lives in Google Cloud, and `animundo.app` must be an
+authorized domain in the Firebase console, or sign-in fails
+there.
 
 Run it locally (localhost is authorized by default):
 
@@ -33,3 +36,21 @@ python3 -m http.server 8000
 then open http://localhost:8000 in a browser. Opening
 `index.html` straight from disk does not work: the page fetches
 its JSON over HTTP.
+
+Run it against the emulators instead (no real account, no real
+data): in one terminal,
+
+```sh
+cd firebase && firebase emulators:start --only auth,firestore,storage
+```
+
+in another, from the repository root,
+
+```sh
+node firebase/seed-emulator.mjs
+```
+
+then open http://localhost:8000/?emulator=1 and press **Use the
+test grown-up**. The seed script creates `test@example.org`
+with a verified email; the email-link flow also works in
+emulator mode (the link lands in the emulator output).

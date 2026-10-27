@@ -1,6 +1,6 @@
 {
-  "app.title": "Animundo Builder",
-  "app.credit": "Map: OpenStreetMap contributors. Ecoregions: RESOLVE 2017. Tiles: OpenStreetMap.",
+  "app.credit": "Map © OpenStreetMap contributors. Tiles © CARTO. Ecoregions: RESOLVE 2017.",
+  "app.play": "Play Animundo",
   "auth.email_ph": "grown-up@example.org",
   "auth.send": "Send sign-in link",
   "auth.note": "Grown-ups only: sign in with an email link.",
@@ -8,6 +8,8 @@
   "auth.bad_link": "That link did not work. Send a fresh one.",
   "auth.out": "Sign out",
   "auth.signed_in": "Signed in as {email}",
+  "auth.test": "Use the test grown-up",
+  "auth.seed_first": "No test grown-up yet. Run the seed script first (see the README).",
   "map.biome": "Biome",
   "map.state": "Show",
   "map.all": "Everything",

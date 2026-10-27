@@ -46,12 +46,21 @@ def test_feed_strings_cover_the_worker() -> None:
     assert needed <= set(en), needed - set(en)
 
 
+def test_emulator_ports_match_firebase_json() -> None:
+    config = _json(ROOT / "firebase" / "firebase.json")["emulators"]
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    for service in ("auth", "firestore", "storage"):
+        entry = config[service]
+        assert str(entry["port"]) in app, service
+        assert entry["host"] in app, service
+
+
 def test_app_references_only_shipped_files() -> None:
     html = (WEB / "index.html").read_text(encoding="utf-8")
     local = set(
         ref
         for ref in re.findall(r'(?:src|href)="([^"]+)"', html)
-        if not ref.startswith(("http", "data:", "#"))
+        if not ref.startswith(("http", "data:", "#", "/"))
     )
     assert local
     for ref in local:

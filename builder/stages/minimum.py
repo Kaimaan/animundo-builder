@@ -13,7 +13,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..animal_list import find_entry, find_list, load_list, match_by_name
+from ..animal_list import find_entry, find_list, load_list
+from ..taxa import match_entry
 from .capability import NotPossibleError
 from .species_plan import animal_file
 
@@ -86,15 +87,19 @@ class MinimumStage:
         hunts = self._hunts(world, brief, research)
         if not hunts:
             return None, f"{brief['latin']} does not hunt"
-        if brief.get("in_library") and self._library_prey(
-            world, data, brief, entry, hunts
-        ):
+        if self._library_prey(world, data, brief, entry, hunts):
             return None, "a library prey shares its habitat"
-        candidates = self._named_prey(data, brief, research, world, hunts)
+        candidates, skipped = self._named_prey(data, research, world)
         if not candidates:
-            return None, "no named prey can be made yet"
-        name, size_cm, reason = candidates[0]
-        return {"name": name, "size_cm": size_cm}, reason
+            reason = "no named prey can be made yet"
+            if skipped:
+                reason += f" ({'; '.join(skipped)})"
+            return None, reason
+        name, size_cm, key, reason = candidates[0]
+        prey: dict[str, Any] = {"name": name, "size_cm": size_cm}
+        if key is not None:
+            prey["gbif_key"] = key
+        return prey, reason
 
     def _hunts(
         self, world: Path, brief: dict[str, Any], research: dict[str, Any]
@@ -118,8 +123,15 @@ class MinimumStage:
         entry: dict[str, Any],
         hunts: set[str],
     ) -> bool:
-        """Whether library prey already shares one of its habitats."""
-        habitats = set(entry.get("habitats", []))
+        """Whether library prey already shares one of its habitats.
+
+        A known hunter needs a library animal carrying a tag it
+        hunts; a new hunter (generic `{"prey"}` hunts, which no
+        file hunts) needs any library animal that hunts nothing.
+        Only the home being built counts: a frog in a Finnish
+        wetland feeds no Amazon anaconda.
+        """
+        habitats = {brief["home"]}
         for other in data["animals"]:
             if other is entry or not other.get("in_library"):
                 continue
@@ -128,48 +140,47 @@ class MinimumStage:
             prey = animal_file(world, other["in_library"])
             if not prey:
                 continue
-            if set(prey.get("tags", []) or []) & hunts:
+            if hunts == {"prey"}:
+                if not prey.get("hunts"):
+                    return True
+            elif set(prey.get("tags", []) or []) & hunts:
                 return True
         return False
 
     def _named_prey(
         self,
         data: dict[str, Any],
-        brief: dict[str, Any],
         research: dict[str, Any],
         world: Path,
-        hunts: set[str],
-    ) -> list[tuple[str, float, str]]:
-        """Named prey that can be made, smallest first."""
+    ) -> tuple[list[tuple[str, float, int | None, str]], list[str]]:
+        """Named prey that can be made, smallest first, and why not."""
         foods = [research["main_food"], *research["other_foods"]]
         found = []
+        skipped = []
         for food in foods:
             if food["kind"] != "prey" or food.get("size_cm") is None:
                 continue
-            match = match_by_name(data["animals"], food["name"])
-            if match is None or not match.get("can_make", False):
+            match, key = match_entry(data["animals"], world, food)
+            if match is None:
+                skipped.append(f"{food['name']} is not on the animal list")
                 continue
-            if brief.get("in_library") and not self._is_prey(world, match, hunts):
+            if match.get("in_library"):
+                skipped.append(f"{food['name']} is already in the library")
+                continue
+            if not match.get("can_make", False):
+                skipped.append(f"{food['name']} cannot be made yet")
                 continue
             found.append(
                 (
                     food["name"],
                     float(food["size_cm"]),
+                    key,
                     f"smallest-bodied named prey that can be made "
                     f"({food['size_cm']} cm)",
                 )
             )
         found.sort(key=lambda item: item[1])
-        return found
-
-    def _is_prey(self, world: Path, match: dict[str, Any], hunts: set[str]) -> bool:
-        stem = match.get("in_library")
-        if not stem:
-            return True
-        prey = animal_file(world, stem)
-        if not prey:
-            return True
-        return bool(set(prey.get("tags", []) or []) & hunts)
+        return found, skipped
 
 
 def _making(minset: dict[str, Any]) -> list[str]:

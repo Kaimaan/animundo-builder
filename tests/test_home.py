@@ -312,6 +312,46 @@ def test_home_welcome_names_seated_prey(tmp_path: Path) -> None:
     assert region["welcome"].endswith("Go and find a mountain hare to eat!")
 
 
+def test_home_seats_prey_by_species_key(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _write_inputs(tmp_path)
+    research = _research(
+        main_food={
+            "name": "blue hare",
+            "kind": "prey",
+            "size_cm": 55,
+            "latin": "Lepus timidus",
+        }
+    )
+    (tmp_path / "research.json").write_text(json.dumps(research))
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [
+                    {
+                        "id": "hare",
+                        "name": "Mountain hare",
+                        "gbif_key": 2436756,
+                        "in_library": "hare",
+                    }
+                ],
+            }
+        )
+    )
+    (world / "tools" / "taxon.py").write_text(
+        "import json, sys\n"
+        'print(json.dumps({"gbif_key": 2436756, "rank": "SPECIES", '
+        '"name": sys.argv[-1]}))\n'
+    )
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(
+        _ctx(tmp_path, ScriptClient([]), world)
+    )
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    assert region["welcome"].endswith("Go and find a blue hare to eat!")
+
+
 def test_home_seats_made_animals_unasked(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _write_inputs(tmp_path)

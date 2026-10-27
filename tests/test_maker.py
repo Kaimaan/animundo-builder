@@ -338,6 +338,18 @@ def test_prey_comes_before_the_animal(tmp_path: Path) -> None:
     assert (tmp_path / "animals" / "capybara.json").is_file()
 
 
+def test_prey_matches_by_species_key(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    minset = _minset_with_prey()
+    minset["make_animal"] = False
+    minset["prey"] = {"name": "Water hog", "size_cm": 110, "gbif_key": 2437585}
+    _inputs(tmp_path, minset=minset)
+    client = ScriptClient([_answer("capybara")])
+    result = AnimalMakerStage(build=_build_ok).run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/capybara.json"]
+    assert '"species": "capybara"' in client.prompts[0]
+
+
 def test_skips_already_made_prey(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())

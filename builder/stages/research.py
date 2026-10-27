@@ -23,6 +23,26 @@ SEARCHES = 5
 SEARCH_SLACK = 5
 
 
+def _source_urls(sources: Any) -> Any:
+    """Sources as URL strings: objects give their `url` (#53.2).
+
+    Anything without a usable URL is dropped, so one chatty
+    source never fails the schema; anything else passes through
+    for the schema to judge.
+    """
+    if not isinstance(sources, list):
+        return sources
+    urls = []
+    for source in sources:
+        if isinstance(source, dict):
+            url = source.get("url")
+            if isinstance(url, str) and url.strip():
+                urls.append(url)
+        else:
+            urls.append(source)
+    return urls
+
+
 class _Stopped(Exception):
     """The research cannot be used as it came back."""
 
@@ -79,6 +99,8 @@ class ResearchStage:
             raise _Stopped("the research came back empty")
         try:
             data = json.loads(text)
+            if isinstance(data, dict):
+                data["sources"] = _source_urls(data.get("sources"))
             validate("research", data)
         except ValueError as error:
             raise _Stopped(f"the research came back unparsable: {error}")

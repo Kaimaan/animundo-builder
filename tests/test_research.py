@@ -94,6 +94,7 @@ def test_research_writes_research_and_cost(tmp_path: Path) -> None:
     )
     assert cost == {"cost_usd": result["cost_usd"], "searches": 1}
     assert result["searches"] == 1
+    assert "`latin`" in client.prompts[0]
 
 
 def test_research_bad_answer_stops(tmp_path: Path) -> None:
@@ -147,6 +148,24 @@ def _live_response(text: str, searches: int = 2) -> SimpleNamespace:
             prompt_tokens=100, completion_tokens=50, prompt_tokens_details=None
         ),
     )
+
+
+def test_research_takes_urls_from_source_objects(tmp_path: Path) -> None:
+    (tmp_path / "home.json").write_text(json.dumps(_brief()))
+    answer = dict(
+        VALID,
+        sources=[
+            "https://example.org/fox",
+            {"title": "Finland - Wikipedia", "url": "https://example.org/fi"},
+            {"title": "nowhere"},
+        ],
+    )
+    result = ResearchStage().run(
+        _ctx(tmp_path, ScriptClient([_response(json.dumps(answer))]))
+    )
+    assert result["sources"] == 2
+    saved = json.loads((tmp_path / "research.json").read_text(encoding="utf-8"))
+    assert saved["sources"] == ["https://example.org/fox", "https://example.org/fi"]
 
 
 def test_research_reads_the_final_message(tmp_path: Path) -> None:

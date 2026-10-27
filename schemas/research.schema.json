@@ -24,6 +24,7 @@
           "name": { "type": "string", "minLength": 1 },
           "kind": { "enum": ["tree", "plant", "ground", "water"] },
           "food_kind": { "$ref": "#/$defs/diet_kind" },
+          "latin": { "type": "string", "minLength": 1 },
           "note": { "type": "string" }
         }
       }
@@ -71,6 +72,7 @@
           ]
         },
         "size_cm": { "type": "number", "exclusiveMinimum": 0 },
+        "latin": { "type": "string", "minLength": 1 },
         "note": { "type": "string" }
       }
     }

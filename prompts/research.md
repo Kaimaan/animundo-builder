@@ -16,10 +16,14 @@ Five searches at most. Answer with JSON only, no prose.
   animal it hunts, a food kind otherwise.
 - `other_foods`: up to 3 more foods it eats, same shape as
   `main_food`, each with `size_cm` when it is an animal.
+- Every food that is a species also carries `latin` (its
+  binomial, like "Lepus timidus"); anything else (bird eggs,
+  carrion, a nameless browse) leaves it out.
 - `surroundings`: about 5 things around it where it lives:
   trees, plants, the ground and water. Each has `name`, `kind`
   (tree, plant, ground or water), and `food_kind` when animals
-  eat it (one of the food kinds above, not prey).
+  eat it (one of the food kinds above, not prey). A tree or
+  plant that is a species also carries its `latin`.
 - `size`: its own body, `length_cm` (required) and
   `weight_kg` when known.
 - `year`: how it lives through the seasons: `winter` (active,

@@ -17,8 +17,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ..animal_list import find_list, load_list, match_by_name, short_name
+from ..animal_list import find_list, load_list, short_name
 from ..schemas import validate
+from ..taxa import match_entry
 from .capability import NotPossibleError
 from .species_plan import (
     RecordedFn,
@@ -401,7 +402,7 @@ def _main_food(
     for food in [research["main_food"], *research.get("other_foods", [])]:
         if food["kind"] == "carrion":
             continue
-        if food["kind"] == "prey" and not _prey_seated(entries, cast, food["name"]):
+        if food["kind"] == "prey" and not _prey_seated(world, entries, cast, food):
             continue
         return food["name"]
     data = animal_file(world, stem, overlay)
@@ -429,9 +430,11 @@ def _cast_files(region: dict[str, Any]) -> set[str]:
     return files - {""}
 
 
-def _prey_seated(entries: list[dict[str, Any]], cast: set[str], name: str) -> bool:
+def _prey_seated(
+    world: Path, entries: list[dict[str, Any]], cast: set[str], food: dict[str, Any]
+) -> bool:
     """Whether the named prey sits in this cast, via the list."""
-    match = match_by_name(entries, name)
+    match, _ = match_entry(entries, world, food)
     if match is None:
         return False
     return (match.get("in_library") or match.get("id", "")) in cast

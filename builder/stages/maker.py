@@ -344,7 +344,18 @@ def _targets(
     targets = []
     prey = minset.get("prey") or {}
     if prey:
-        match = match_by_name(entries, prey["name"])
+        match = None
+        if prey.get("gbif_key") is not None:
+            match = next(
+                (
+                    entry
+                    for entry in entries
+                    if entry.get("gbif_key") == prey["gbif_key"]
+                ),
+                None,
+            )
+        if match is None:
+            match = match_by_name(entries, prey["name"])
         if match is None:
             raise NotPossibleError(
                 f"{prey['name']} is no longer on the animal list; "

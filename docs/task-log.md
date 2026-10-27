@@ -3,6 +3,33 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #51.3, #51.4, #53: seasons, species keys, sources
+
+- #51.3: the children's block births animals with the real
+  season only where the place has seasons.
+- #51.4: the research asks each food's and surrounding's
+  `latin` (schema, prompt); `builder/taxa.py` resolves it
+  with the world's `tools/taxon.py`, and the minimum, the
+  maker and the home match the list by `gbif_key`, falling
+  back to the English name for old answers. A resolved key
+  on no entry is never substituted; minset prey carries its
+  key for the maker.
+- #51.4 also fixed live: named prey already in the library
+  is never made, and library prey is checked for new
+  hunters too (any library animal in the home-to-build that
+  hunts nothing). All three review jobs now give #51's
+  sets: nothing for the fox, the lynx for the lynx, and the
+  anaconda, the rainforest home and the capybara.
+- #53.2: source objects (`{title, url}`) normalise to their
+  URL before the schema; the lynx research replays.
+- #53.1 already fixed at `ff07611` (recorded requests carry
+  `max_tool_calls`); #53.3 already held (`minset.json` is
+  written before the home stop). Recorded requests were
+  regenerated for the new prompt text, answers untouched.
+- Note: `builder stage` replays a finished stage's saved
+  result; pop it from `state.json`'s `completed` for a
+  genuine re-run.
+
 ## 2026-10-27: inbox #52.3, #52.4: the fox pack in the game, release v0.1.0
 
 - #52.3: `tests/check_home_pack.gd` installs the fox's

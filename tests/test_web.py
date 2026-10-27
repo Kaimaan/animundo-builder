@@ -79,3 +79,10 @@ def test_app_references_only_shipped_files() -> None:
     assert local
     for ref in local:
         assert (WEB / ref).is_file(), ref
+
+
+def test_nothing_shows_until_sign_in() -> None:
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert re.search(r'<main id="app" hidden>', html)
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert '$("app").hidden = !user' in app

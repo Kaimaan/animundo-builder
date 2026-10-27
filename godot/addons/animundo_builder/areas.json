@@ -1,0 +1,98 @@
+[
+ {
+  "area_id": "fi_repovesi",
+  "name": "Repovesi",
+  "country": "FI",
+  "biome": "boreal forest",
+  "lat": 61.18,
+  "lon": 26.88
+ },
+ {
+  "area_id": "fi_urho_kekkonen",
+  "name": "Urho Kekkonen",
+  "country": "FI",
+  "biome": "tundra",
+  "lat": 68.25,
+  "lon": 28.3
+ },
+ {
+  "area_id": "gb_cairngorms",
+  "name": "Cairngorms",
+  "country": "GB",
+  "biome": "temperate coniferous forest",
+  "lat": 57.07,
+  "lon": -3.67
+ },
+ {
+  "area_id": "no_hardangervidda",
+  "name": "Hardangervidda",
+  "country": "NO",
+  "biome": "montane grassland",
+  "lat": 60.17,
+  "lon": 7.42
+ },
+ {
+  "area_id": "pl_bialowieza",
+  "name": "Białowieża",
+  "country": "PL",
+  "biome": "temperate broadleaf forest",
+  "lat": 52.72,
+  "lon": 23.86
+ },
+ {
+  "area_id": "ch_swiss_np",
+  "name": "Swiss National Park",
+  "country": "CH",
+  "biome": "montane coniferous forest",
+  "lat": 46.66,
+  "lon": 10.17
+ },
+ {
+  "area_id": "no_naeroyfjord",
+  "name": "Nærøyfjord",
+  "country": "NO",
+  "biome": "fjord",
+  "lat": 60.94,
+  "lon": 7.03
+ },
+ {
+  "area_id": "es_donana",
+  "name": "Doñana",
+  "country": "ES",
+  "biome": "mediterranean",
+  "lat": 37.02,
+  "lon": -6.38
+ },
+ {
+  "area_id": "tz_serengeti",
+  "name": "Serengeti",
+  "country": "TZ",
+  "biome": "savanna",
+  "lat": -2.33,
+  "lon": 34.83
+ },
+ {
+  "area_id": "no_svalbard",
+  "name": "Svalbard",
+  "country": "NO",
+  "biome": "arctic tundra",
+  "lat": 77.95,
+  "lon": 15.7
+ },
+ {
+  "area_id": "au_ningaloo",
+  "name": "Ningaloo",
+  "country": "AU",
+  "biome": "coral reef",
+  "lat": -22.55,
+  "lon": 113.62
+ },
+ {
+  "area_id": "bd_sundarbans",
+  "name": "Sundarbans",
+  "country": "BD",
+  "biome": "mangrove",
+  "lat": 21.95,
+  "lon": 89.55
+ }
+]

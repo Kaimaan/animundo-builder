@@ -48,3 +48,10 @@ def test_every_area_validates_and_is_buildable() -> None:
         lats = [point[1] for point in outline]
         assert min(lons) <= area["centroid"]["lon"] <= max(lons)
         assert min(lats) <= area["centroid"]["lat"] <= max(lats)
+
+
+def test_no_excluded_area_is_listed() -> None:
+    excluded = json.loads((ROOT / "exclusions.json").read_text(encoding="utf-8"))
+    for area in _load():
+        assert area["area_id"] not in excluded["area_ids"], area["area_id"]
+        assert area["country"] not in excluded["country_codes"], area["country"]

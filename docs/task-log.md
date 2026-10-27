@@ -391,3 +391,26 @@ Job folders live under `jobs/` (local only, never committed).
   no 404 locally or published), and the area card shows spec
   06's plain words above Build this place (EN exact, FI mine).
 - T39 replay moves up per Kai: right after T25 + short T24.
+
+## 2026-10-27: T25 builder addon in the game (inbox #29)
+
+- The addon lives at `godot/addons/animundo_builder/`, the path the
+  game's `tools/sync_builder.sh` copies in; entry `builder_mode.gd`,
+  started as the BuilderMode autoload. Uses only BuilderHooks and
+  the generic Cloud calls, backend injected, so the checks run the
+  same code against stubs in a scratch project (new `godot` CI job).
+- Boot reinstalls packs (checked again, failures unregistered),
+  marks family drafts on the globe (your_draft, being_explored,
+  not_possible_yet), and adds the grown-up and places buttons. The
+  Builder screen lists test areas and drafts with Play (download,
+  verify, install, record) and Report (owner only, the rules'
+  shape). The addon carries its own EN/FI words; reason labels
+  mirror the web app word for word (tested).
+- Both headless checks pass here and in the game (0 errors):
+  every draft status in both languages, buttons, screen, Play,
+  Report, pack rules, newer-wins, built-in-wins, saved life kept
+  while its pack is missing. `docs/game-interface.md` lists the
+  plug-in calls and nine places reality differs from the spec.
+- Game-side note for Kai: a pack without locale/ or animals/
+  logs "Couldn't open directory" from i18n.gd/species.gd on
+  every boot; the readers want a dir_exists guard.

@@ -134,3 +134,21 @@ Job folders live under `jobs/` (local only, never committed).
   needed. Kai's approval of the final render still stands as
   the T16 gate: `jobs/eagle-r3/models/golden_eagle.png`, with
   the bar beside it in `jobs/eagle-r3/report.html`.
+
+## 2026-10-27: T17 words (translations)
+
+- New `WordsStage` after animals: each new species' texts plus
+  the region name into every language in `locale/languages.json`
+  (today Finnish), written as new-keys-only `locale/<lang>/`
+  files, proved by the draft checker's locale verdict.
+- Tone comes from the game's own Finnish (the moose's lines in
+  the prompt); `{placeholders}` preserved; keys must match
+  exactly (one retry, then a loud stop).
+- `reasoning_effort="low"` on every call; `MetaClient` nests it
+  into `chat_template_kwargs` on Baseten (top-level 400s there)
+  and keeps it top-level on Meta (probed: Meta 400s the nested
+  form). Live Baseten translation with the nesting works.
+- Live check on the deer (`jobs/t14-deer/`, gitignored): 2 calls,
+  $0.01; locale passes; Finnish reads naturally ("Saksanhirvi",
+  "Sinulla on nälkä", "Lepäät kuusen alla tuulensuojassa").
+  A Finnish speaker's verdict is still Kai's.

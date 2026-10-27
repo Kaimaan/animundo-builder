@@ -8,6 +8,7 @@ from .references import ReferencesStage
 from .region import RegionStage
 from .species_plan import SpeciesPlanStage
 from .survey import SurveyStage
+from .words import WordsStage
 
 __all__ = [
     "AnimalsStage",
@@ -18,4 +19,5 @@ __all__ = [
     "RegionStage",
     "SpeciesPlanStage",
     "SurveyStage",
+    "WordsStage",
 ]

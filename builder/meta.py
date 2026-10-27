@@ -247,6 +247,16 @@ class MetaClient:
     ) -> Any:
         """One Chat Completions call, with caps, retries and cost logging."""
         limit = max_tokens or self.default_max_tokens
+        body = dict(extra_body or {})
+        if (
+            reasoning_effort
+            and self.host == "baseten"
+            and "chat_template_kwargs" not in body
+        ):
+            # Baseten's front end speaks vLLM: the effort nests in the
+            # chat template kwargs, and the top-level field 400s.
+            body["chat_template_kwargs"] = {"reasoning_effort": reasoning_effort}
+            reasoning_effort = None
 
         def call() -> Any:
             return self._client.chat.completions.create(
@@ -257,7 +267,7 @@ class MetaClient:
                 reasoning_effort=reasoning_effort,  # type: ignore[arg-type]
                 timeout=timeout,
                 max_tokens=limit,
-                extra_body=extra_body,
+                extra_body=body or None,
             )
 
         receipt = self._reserve(messages, limit, searches=0, images=0)

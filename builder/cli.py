@@ -36,10 +36,11 @@ from .stages import (
     RegionStage,
     SpeciesPlanStage,
     SurveyStage,
+    WordsStage,
 )
 
 NOT_BUILT_YET = 3
-NEXT_STAGE = "words"
+NEXT_STAGE = "plants"
 
 
 def _pipeline_stages(
@@ -52,6 +53,7 @@ def _pipeline_stages(
         RegionStage(author=author),
         SpeciesPlanStage(max_new_species=max_new_species),
         AnimalsStage(),
+        WordsStage(),
         ReferencesStage(reference=reference),
         ModelsStage(reference=reference, author=author),
     ]

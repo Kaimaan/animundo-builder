@@ -317,6 +317,27 @@ def test_chat_extra_body_reaches_request(tmp_path: Path) -> None:
     assert body["chat_template_kwargs"] == {"reasoning_effort": "low"}
 
 
+def test_chat_nests_effort_on_baseten(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+    client, _ = make_client(script, tmp_path, host="baseten")
+    client.chat([{"role": "user", "content": "hi"}], reasoning_effort="low")
+    body = json.loads(script.requests[0].content)
+    assert body["chat_template_kwargs"] == {"reasoning_effort": "low"}
+    assert body.get("reasoning_effort") is None
+
+
+def test_chat_explicit_body_wins_on_baseten(tmp_path: Path) -> None:
+    script = Script([(200, chat_body())])
+    client, _ = make_client(script, tmp_path, host="baseten")
+    client.chat(
+        [{"role": "user", "content": "hi"}],
+        reasoning_effort="low",
+        extra_body={"chat_template_kwargs": {"reasoning_effort": "minimal"}},
+    )
+    body = json.loads(script.requests[0].content)
+    assert body["chat_template_kwargs"] == {"reasoning_effort": "minimal"}
+
+
 def test_open_model_price_matches_baseten_page() -> None:
     prices = prices_for("meta-models/muse-spark-open-1026")
     assert (

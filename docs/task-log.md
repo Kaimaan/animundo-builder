@@ -21,6 +21,15 @@ Job folders live under `jobs/` (local only, never committed).
   and tipped), and the writer drifted `fly_pitch` 45 to 68 chasing
   it. Fixed the bar to the achievable look, pinned the pose keys
   in the spec prompt, softened the re-raise.
+- Attempt 3 ($0.63 over 16 calls, incl. two API-timeout resumes)
+  ran all 6 rounds with a new failure mode: identical issues every
+  round, with fixes landing but overshooting (beak tiny to huge,
+  tail stick to detached slabs) while the reviewer repeated R1
+  wording verbatim ("beak tiny" over a giant beak). Two causes:
+  the fixer never saw its own build, and the old issues in the
+  review prompt anchored re-raises. Fix prompt now includes the
+  previous preview; the review judges blind, with the re-verify
+  follow-up keeping the old-issue check.
 - Evidence: `jobs/eagle-r2/` (re-run with the fixed reviewer).
 
 ## 2026-10-27: inbox #1, #2, draft checker

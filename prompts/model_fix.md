@@ -8,6 +8,10 @@ issues and errors name.
 
 ## Input
 
+Images: the reference sheet first (when there is one), then your
+previous build. Look at the previous build to see each issue's true
+size and place before changing it; match the issue, don't overshoot.
+
 The current spec:
 
 ```

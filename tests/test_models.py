@@ -151,9 +151,10 @@ def test_fix_round_then_pass(tmp_path: Path) -> None:
     assert "great_tit" in chat.prompts[0]
     assert "900 triangles" in chat.prompts[1], "review sees the build stats"
     assert "Floats." in chat.prompts[2], "fix sees the issue"
-    assert "Floats." in chat.prompts[3], "review re-checks last round"
+    assert "previous build" in chat.prompts[2], "fix looks at its work"
+    assert "Floats." not in chat.prompts[3], "review judges blind"
     assert "Floats." in chat.prompts[4], "verify names the old issue"
-    assert chat.images == [1, 2, 1, 2, 2], "sheet+preview where each needs them"
+    assert chat.images == [1, 2, 2, 2, 2], "sheet+preview where each needs them"
     assert (tmp_path / "rounds" / "golden_eagle" / "1" / "preview.png").is_file()
     assert (tmp_path / "rounds" / "golden_eagle" / "2" / "build.log").is_file()
     assert (tmp_path / "reviews" / "golden_eagle-1.json").is_file()

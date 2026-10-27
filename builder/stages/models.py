@@ -133,7 +133,11 @@ class ModelsStage:
                         "RULES": rules,
                     },
                 )
-            spec = self._write_spec(ctx, world, prompt, sheet)
+            prev = (
+                ctx.job_dir / "rounds" / species_id / str(round_no - 1) / "preview.png"
+            )
+            prior = [prev] if round_no > 1 and prev.is_file() else []
+            spec = self._write_spec(ctx, world, prompt, sheet, prior)
             (sandbox / "models" / f"{species_id}.json").write_text(
                 json.dumps(spec, indent=2), encoding="utf-8"
             )
@@ -164,13 +168,19 @@ class ModelsStage:
         )
 
     def _write_spec(
-        self, ctx: Any, world: Path, prompt: str, sheet: Path | None
+        self,
+        ctx: Any,
+        world: Path,
+        prompt: str,
+        sheet: Path | None,
+        prior: list[Path] | None = None,
     ) -> dict[str, Any]:
         schema = json.loads((world / "schemas" / "model.schema.json").read_text())
+        images = ([sheet] if sheet else []) + list(prior or [])
         problems = ""
         for _ in range(SPEC_RETRIES):
             text = prompt if not problems else f"{prompt}\n\n{problems}"
-            answer = _content(self._ask(ctx, text, [sheet] if sheet else None, None))
+            answer = _content(self._ask(ctx, text, images or None, None))
             try:
                 spec = json.loads(_unfence(answer))
             except json.JSONDecodeError as error:
@@ -204,15 +214,6 @@ class ModelsStage:
             },
         )
         previous = _previous_blocking(ctx.job_dir, species_id, round_no)
-        if previous:
-            listed = "\n".join(
-                f"- {issue['part']}: {issue['problem']}" for issue in previous
-            )
-            prompt += (
-                "\n\nCompare this render against the reference afresh, "
-                "part by part. Last round flagged these; re-raise only "
-                f"what still visibly mismatches:\n{listed}"
-            )
         preview = sandbox / "models" / "previews" / f"{species_id}.png"
         images = [path for path in (sheet, preview) if path is not None]
         review = self._read_review(ctx, species_id, round_no, prompt, images)

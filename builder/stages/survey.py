@@ -110,7 +110,7 @@ class SurveyStage:
             timeout=180,
             max_tokens=DEFAULT_MAX_TOKENS,
         )
-        text = _response_text(response)
+        text = response_text(response)
         found = _citation_urls(response)
         self._spend_call(prompt_name, response)
         for _ in range(MAX_CONTINUATIONS):
@@ -123,7 +123,7 @@ class SurveyStage:
                 timeout=180,
                 max_tokens=DEFAULT_MAX_TOKENS,
             )
-            text += "\n" + _response_text(response)
+            text += "\n" + response_text(response)
             found |= _citation_urls(response)
             self._spend_call(prompt_name, response)
         if is_cut_off(response, DEFAULT_MAX_TOKENS):
@@ -248,7 +248,8 @@ def _continue_prompt(first: str, text_so_far: str) -> str:
     )
 
 
-def _response_text(response: Any) -> str:
+def response_text(response: Any) -> str:
+    """Plain text of every output_text part, joined."""
     parts = []
     for item in getattr(response, "output", []) or []:
         for part in getattr(item, "content", []) or []:

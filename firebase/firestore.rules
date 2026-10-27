@@ -33,14 +33,17 @@ service cloud.firestore {
             request.resource.data.kind == 'animal_home'
             && request.resource.data.keys().hasOnly(
               ['kind', 'species_key', 'cell', 'place_name', 'country',
-               'owner_uid', 'family_uids', 'status', 'created_at'])
+               'country_name', 'owner_uid', 'family_uids', 'status',
+               'created_at'])
             && request.resource.data.keys().hasAll(
-              ['kind', 'species_key', 'cell', 'place_name', 'owner_uid',
-               'family_uids', 'status'])
+              ['kind', 'species_key', 'cell', 'place_name', 'country_name',
+               'owner_uid', 'family_uids', 'status'])
             && request.resource.data.species_key is int
             && request.resource.data.species_key > 0
             && request.resource.data.place_name is string
             && request.resource.data.place_name.size() <= 120
+            && request.resource.data.country_name is string
+            && request.resource.data.country_name.size() <= 60
             && (!('country' in request.resource.data)
               || (request.resource.data.country is string
                 && request.resource.data.country.size() == 2))

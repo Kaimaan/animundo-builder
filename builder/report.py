@@ -63,7 +63,12 @@ _CSS = (
 
 
 def _head(params: dict[str, Any], job_id: str) -> str:
-    area = params.get("area") or params.get("name") or "(unknown area)"
+    area = (
+        params.get("area")
+        or params.get("name")
+        or params.get("place_name")
+        or "(unknown area)"
+    )
     rows = [
         ("Job", job_id),
         ("Area", str(area)),

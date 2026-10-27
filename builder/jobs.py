@@ -17,6 +17,7 @@ from .prices import UnknownModelError
 from .stages import (
     AnimalsStage,
     CapabilityStage,
+    HomeStage,
     IntakeStage,
     ModelsStage,
     PackStage,
@@ -41,6 +42,7 @@ def pipeline_stages(
     """Every stage in run order, with the pack stamped for its round."""
     return [
         intake,
+        HomeStage(),
         SurveyStage(),
         CapabilityStage(),
         RegionStage(author=author),

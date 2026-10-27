@@ -212,7 +212,7 @@ class SpeciesPlanStage:
         or needs_code record, rank maps an id to its GBIF taxon for the
         model to order.
         """
-        taxa = _file_taxa(world)
+        taxa = file_taxa(world)
         fixed: dict[str, dict[str, Any]] = {}
         rank: dict[str, dict[str, Any]] = {}
         for species in survey.get("species", []):
@@ -275,7 +275,7 @@ class SpeciesPlanStage:
         lat, lon = center.get("lat"), center.get("lon")
         if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
             return set()
-        taxa = _file_taxa(world)
+        taxa = file_taxa(world)
         taken_files = {
             record["file"]
             for record in fixed.values()
@@ -291,7 +291,7 @@ class SpeciesPlanStage:
         hunts = {
             tag
             for stem in cast
-            for tag in _animal_file(world, stem).get("hunts", []) or []
+            for tag in animal_file(world, stem).get("hunts", []) or []
         }
         unchecked = set()
         for stem in sorted(taxa):
@@ -300,10 +300,10 @@ class SpeciesPlanStage:
             taxon = taxa[stem]
             if taxon.get("gbif_key") is None or taxon["gbif_key"] in taken_keys:
                 continue
-            data = _animal_file(world, stem)
+            data = animal_file(world, stem)
             if data.get("stage_of"):
                 continue
-            role = _backfill_role(data, hunts)
+            role = backfill_role(data, hunts)
             if role is None:
                 continue
             try:
@@ -575,7 +575,7 @@ class SpeciesPlanStage:
                 return
 
     @staticmethod
-    def _place_backfilled(
+    def place_backfilled(
         world: Path,
         region: dict[str, Any],
         fixed: dict[str, dict[str, Any]],
@@ -591,7 +591,7 @@ class SpeciesPlanStage:
             if not record.get("backfilled"):
                 continue
             stem = record["file"]
-            data = _animal_file(world, stem)
+            data = animal_file(world, stem)
             if data.get("archetype") == "fish":
                 fish = region.setdefault("fish", [])
                 if stem not in {entry.get("kind") for entry in fish}:
@@ -611,7 +611,7 @@ class SpeciesPlanStage:
                 if stem not in group:
                     group.append(stem)
 
-    def _heal_cast(self, world: Path, region: dict[str, Any]) -> set[str]:
+    def heal_cast(self, world: Path, region: dict[str, Any]) -> set[str]:
         """Feed the reuse cast: missing food kinds and young prey forms.
 
         Every diet kind of a reused cast animal must be food the region
@@ -631,7 +631,7 @@ class SpeciesPlanStage:
         for _ in range(3):
             cast = _cast_files(region)
             known = cast | added
-            files = {stem: _animal_file(world, stem) for stem in known}
+            files = {stem: animal_file(world, stem) for stem in known}
             kinds = _available_food(region)
             changed = False
             for stem, data in files.items():
@@ -655,7 +655,7 @@ class SpeciesPlanStage:
                 if young is None:
                     continue
                 added.add(young)
-                parent = _animal_file(world, young).get("stage_of", "")
+                parent = animal_file(world, young).get("stage_of", "")
                 placed = False
                 for fish in region.get("fish", []):
                     if fish.get("kind") == parent:
@@ -705,7 +705,7 @@ class SpeciesPlanStage:
         ]
         for fish in region.get("fish", []):
             fish["kind"] = rename.get(fish["kind"], fish["kind"])
-        self._place_backfilled(world, region, fixed)
+        self.place_backfilled(world, region, fixed)
         kinds = {food.get("kind", "") for food in region.get("food", [])}
         for entry in plan["species"]:
             if entry["decision"] != "food" or entry["food_kind"] in kinds:
@@ -718,7 +718,7 @@ class SpeciesPlanStage:
                     "names": [entry["species"].replace("_", " ")],
                 }
             )
-        added_young = self._heal_cast(world, region)
+        added_young = self.heal_cast(world, region)
         region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
         new_ids = {
             entry["species"] for entry in plan["species"] if entry["decision"] == "new"
@@ -743,7 +743,7 @@ def _cast_files(region: dict[str, Any]) -> set[str]:
     return cast - {""}
 
 
-def _animal_file(world: Path, stem: str) -> dict[str, Any]:
+def animal_file(world: Path, stem: str) -> dict[str, Any]:
     path = world / "animals" / f"{stem}.json"
     if not path.is_file():
         return {}
@@ -804,7 +804,7 @@ def _young_carrying(world: Path, cast: set[str], tag: str) -> str | None:
     return None
 
 
-def _file_taxa(world: Path) -> dict[str, dict[str, Any]]:
+def file_taxa(world: Path) -> dict[str, dict[str, Any]]:
     """GBIF taxon block per animal file stem (skipping the index)."""
     taxa = {}
     for path in (world / "animals").glob("*.json"):
@@ -826,7 +826,7 @@ def _grown_form(world: Path, files: Collection[str]) -> str:
     return sorted(grown or [Path(n).stem for n in files], key=len)[0]
 
 
-def _backfill_role(data: dict[str, Any], hunts: set[str]) -> str | None:
+def backfill_role(data: dict[str, Any], hunts: set[str]) -> str | None:
     """The cast part for a backfilled animal, if the cast gives it one.
 
     Read off the file the way the built places do: the `predator` tag

@@ -248,11 +248,18 @@ def cmd_build(args: argparse.Namespace) -> int:
         config.reference,
         config.max_new_plants,
     )
+    run, missing = stages_for_kind(stages, args.kind, [])
+    if missing:
+        print(
+            f"error: {args.kind} needs {', '.join(missing)}, not built yet",
+            file=sys.stderr,
+        )
+        return 1
     try:
-        Pipeline(stages, job_dir / "state.json").run(ctx)
+        Pipeline(run, job_dir / "state.json").run(ctx)
     except (StageFailedError, CapExceeded, MetaAuthError) as error:
         return _explain_stop(job_id, error)
-    return _finish(job_id, stages, job_dir / "state.json")
+    return _finish(job_id, run, job_dir / "state.json")
 
 
 def cmd_resume(args: argparse.Namespace) -> int:

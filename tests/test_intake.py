@@ -95,7 +95,7 @@ def test_find_by_name_needs_country_when_ambiguous(tmp_path: Path) -> None:
 
 
 def test_needs_area_or_name() -> None:
-    with pytest.raises(ValueError, match="--area or --name"):
+    with pytest.raises(ValueError, match="--area, --name or a species key"):
         IntakeStage()
 
 

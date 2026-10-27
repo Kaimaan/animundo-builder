@@ -49,6 +49,7 @@ DELETE = object()
 #: Pipeline stage -> the feed's five building phases.
 PHASES = {
     "intake": "land",
+    "home": "animals",
     "survey": "land",
     "capability": "land",
     "region": "land",
@@ -168,21 +169,32 @@ class Worker:
             return
         if "error" in doc:
             self._update(draft_id, {"error": DELETE})
-        try:
-            area = self._area(doc.get("area_id", ""))
-        except RoundFailed as failed:
-            self._fail(draft_id, failed.code, None)
-            return
-        if area.get("buildable") is False:
-            self._fail_status(draft_id, "not_possible_yet", "not_buildable")
-            return
+        kind = doc.get("kind", "new_place")
+        if kind == "animal_home":
+            missing = [
+                field
+                for field in ("species_key", "cell", "place_name", "country_name")
+                if not doc.get(field)
+            ]
+            if missing:
+                self._fail(draft_id, "bad_draft", None)
+                return
+        else:
+            try:
+                area = self._area(doc.get("area_id", ""))
+            except RoundFailed as failed:
+                self._fail(draft_id, failed.code, None)
+                return
+            if area.get("buildable") is False:
+                self._fail_status(draft_id, "not_possible_yet", "not_buildable")
+                return
         limited = self._limited(doc, draft_id)
         if limited is not None:
             self._fail(draft_id, limited, None)
             return
         self._update(draft_id, {"status": "queued"})
         try:
-            manifest = self.run_round(draft_id, "new_place", 1, [])
+            manifest = self.run_round(draft_id, kind, 1, [])
         except NotPossibleError as error:
             self._fail_status(draft_id, "not_possible_yet", "needs_code")
             self.feed(
@@ -208,7 +220,7 @@ class Worker:
                 "country": region.get("country", ""),
                 "center": _rounded(region.get("center")),
                 "draft_place_id": f"draft_{draft_id}",
-                "place_id": doc["area_id"],
+                "place_id": doc.get("area_id", "") or region.get("id", ""),
             },
         )
         self.feed(
@@ -395,37 +407,54 @@ class Worker:
         """Build round `round_no` into `jobs/<draft_id>`. Returns the manifest."""
         job_dir = self.jobs_dir / draft_id
         state_file = job_dir / "state.json"
-        if kind == "new_place" and not state_file.is_file():
+        if kind in ("new_place", "animal_home") and not state_file.is_file():
             job_dir.mkdir(parents=True, exist_ok=True)
             draft = self.store.get_draft(draft_id)
             if draft is None:
                 raise RoundFailed("no_draft", "the draft is gone")
-            area = self._area(draft.get("area_id", ""))
-            state_file.write_text(
-                json.dumps(
-                    fresh_state(
-                        {
-                            "area": area["area_id"],
-                            "name": area.get("name"),
-                            "country": area.get("country"),
-                            "world": str(self.world),
-                            "author": self.author,
-                            "kind": kind,
-                            "choices": [],
-                        }
-                    )
-                ),
-                encoding="utf-8",
-            )
+            if kind == "animal_home":
+                params = {
+                    "species_key": draft.get("species_key"),
+                    "cell": draft.get("cell"),
+                    "place_name": draft.get("place_name"),
+                    "country_name": draft.get("country_name"),
+                    "country": draft.get("country", ""),
+                    "world": str(self.world),
+                    "author": self.author,
+                    "kind": kind,
+                    "choices": [],
+                }
+            else:
+                area = self._area(draft.get("area_id", ""))
+                params = {
+                    "area": area["area_id"],
+                    "name": area.get("name"),
+                    "country": area.get("country"),
+                    "world": str(self.world),
+                    "author": self.author,
+                    "kind": kind,
+                    "choices": [],
+                }
+            state_file.write_text(json.dumps(fresh_state(params)), encoding="utf-8")
         if not state_file.is_file():
             raise RoundFailed("no_job", "no local job for this draft")
         params = json.loads(state_file.read_text(encoding="utf-8")).get("params", {})
-        intake = IntakeStage(
-            area_id=params.get("area"),
-            area_name=params.get("name"),
-            country=params.get("country"),
-            areas_path=self.areas_path,
-        )
+        if params.get("kind") == "animal_home":
+            intake = IntakeStage(
+                species_key=params.get("species_key"),
+                cell=params.get("cell"),
+                place_name=params.get("place_name"),
+                country_name=params.get("country_name"),
+                country=params.get("country") or None,
+                areas_path=self.areas_path,
+            )
+        else:
+            intake = IntakeStage(
+                area_id=params.get("area"),
+                area_name=params.get("name"),
+                country=params.get("country"),
+                areas_path=self.areas_path,
+            )
         stages = pipeline_stages(
             intake,
             self.author,
@@ -458,7 +487,9 @@ class Worker:
                     },
                 },
             )
-        phase_status = "building" if kind == "new_place" else "improving"
+        phase_status = (
+            "building" if kind in ("new_place", "animal_home") else "improving"
+        )
         self._update(draft_id, {"status": phase_status, "stage": "land"})
         self.feed(
             draft_id,

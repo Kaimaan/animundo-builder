@@ -295,6 +295,82 @@ def test_create_builds_ready_with_feed_and_cost(tmp_path: Path) -> None:
     assert store.inbox == []
 
 
+def _seed_home(job_dir: Path) -> None:
+    pack = job_dir / "pack"
+    (pack / "regions").mkdir(parents=True)
+    (pack / "manifest.json").write_text(
+        json.dumps(
+            {
+                "draft_id": job_dir.name,
+                "draft_place_id": f"draft_{job_dir.name}",
+                "place_id": "fi_home_601_249_fox",
+                "version": 1,
+                "format": 1,
+                "files": [],
+                "new_species": [],
+                "reused_species": ["fox", "hare", "lynx"],
+            }
+        )
+    )
+    regions = job_dir / "regions"
+    regions.mkdir(exist_ok=True)
+    (regions / "fi_home_601_249_fox.json").write_text(
+        json.dumps(
+            {
+                "id": "fi_home_601_249_fox",
+                "name": "Fox copse",
+                "country": "Finland",
+                "center": {"lat": 60.151, "lon": 24.951},
+            }
+        )
+    )
+
+
+def _home_draft(owner: str = "grown", **over: Any) -> dict[str, Any]:
+    doc = {
+        "kind": "animal_home",
+        "species_key": 5219243,
+        "cell": "60.1_24.9",
+        "place_name": "Fox copse",
+        "country_name": "Finland",
+        "owner_uid": owner,
+        "family_uids": [owner],
+        "status": "requested",
+    }
+    doc.update(over)
+    return doc
+
+
+def test_create_home_runs_home_subset(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _home_draft()
+    worker = _worker(tmp_path, store)
+    runner = ScriptRunner()
+    worker.runner = runner
+    job_dir = tmp_path / "jobs" / "d1"
+    _seed_home(job_dir)
+    worker.handle_create("d1")
+    draft = store.drafts["d1"]
+    assert draft["status"] == "ready"
+    assert draft["place_name"] == "Fox copse"
+    assert draft["place_id"] == "fi_home_601_249_fox"
+    assert runner.ran == ["intake", "home", "words", "safety", "pack"]
+    assert store.jobs["d1-r1"]["kind"] == "animal_home"
+    assert ("pack", "d1", "1", str(job_dir / "pack")) in store.uploads
+    assert ("report", "d1", "1", str(job_dir / "report.html")) in store.uploads
+    assert store.inbox == []
+
+
+def test_create_home_missing_fields_fails(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _home_draft(cell="")
+    worker = _worker(tmp_path, store)
+    worker.runner = ScriptRunner()
+    worker.handle_create("d1")
+    assert store.drafts["d1"]["status"] == "failed"
+    assert store.drafts["d1"]["error"] == "bad_draft"
+
+
 def test_create_refuses_unknown_areas(tmp_path: Path) -> None:
     store = FakeStore()
     store.drafts["d1"] = _draft(area_id="xx_nowhere")

@@ -226,14 +226,21 @@ def fix_items(
 
 def collect_texts(job_dir: Path, world: Path) -> list[dict[str, Any]]:
     """Every new text item: key, English, Finnish, sources."""
-    survey = json.loads((job_dir / "survey.json").read_text(encoding="utf-8"))
+    survey_path = job_dir / "survey.json"
+    survey = (
+        json.loads(survey_path.read_text(encoding="utf-8"))
+        if survey_path.is_file()
+        else {}
+    )
     sources = {
         entry["species"]: entry.get("sources", [])
         for entry in survey.get("species", [])
     }
     items: list[dict[str, Any]] = []
     fi_animals = _locale(job_dir, "fi", "animals")
-    for path in sorted((job_dir / "animals").glob("*.json")):
+    animals_dir = job_dir / "animals"
+    animal_paths = sorted(animals_dir.glob("*.json")) if animals_dir.is_dir() else []
+    for path in animal_paths:
         if path.name == "progress.json":
             continue
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -405,7 +412,10 @@ def _merge_locale(
 
 
 def _sensitive(job_dir: Path) -> str:
-    survey = json.loads((job_dir / "survey.json").read_text(encoding="utf-8"))
+    survey_path = job_dir / "survey.json"
+    if not survey_path.is_file():
+        return "(no sensitive species in this place)"
+    survey = json.loads(survey_path.read_text(encoding="utf-8"))
     flagged = sorted(
         entry["species"]
         for entry in survey.get("species", [])

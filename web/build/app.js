@@ -45,7 +45,10 @@ const state = {
   strings: {},
   user: null,
   animalList: [],
+  animalHomes: [],
+  notYet: {},
   picked: null,
+  pickedHome: null,
   gbifLayer: null,
   adminShapes: null,
   urbanShapes: null,
@@ -203,7 +206,9 @@ function onUser(user) {
     state.drafts = {};
     state.feeds = {};
     state.picked = null;
+    state.pickedHome = null;
     state.selectedCell = null;
+    setGbifLayer(null);
     return;
   }
   $("auth-who").textContent = t("auth.signed_in", { email: user.email || "" });
@@ -227,7 +232,9 @@ async function boot() {
       fetch("vendor/natural-earth/ne_110m_admin_0_countries.geojson").then((r) => r.json()),
       fetch("vendor/natural-earth/ne_50m_urban_areas.geojson").then((r) => r.json()),
     ]);
-    state.animalList = animals;
+    state.animalList = animals.animals || [];
+    state.animalHomes = animals.homes || [];
+    state.notYet = animals.not_yet || {};
     state.adminShapes = admin.features || [];
     state.urbanShapes = urban.features || [];
     state.dataLoaded = true;
@@ -348,15 +355,26 @@ function renderSuggestions() {
 }
 
 function pickAnimal(animal) {
-  state.picked = animal;
+  state.picked = null;
+  state.pickedHome = null;
   state.selectedCell = null;
   $("cell-card").hidden = true;
   $("animal-suggest").innerHTML = "";
+  setGbifLayer(null);
   if (!animal.can_make) {
-    setGbifLayer(null);
-    $("animal-msg").textContent = t("home.cannot", { name: animal.name });
+    $("animal-msg").textContent =
+      state.notYet[animal.not_yet] || t("home.cannot", { name: animal.name });
     return;
   }
+  // The worker resolves the same home the same way: the animal's
+  // first habitat with a built home.
+  const home = (animal.habitats || []).find((h) => state.animalHomes.includes(h));
+  if (!home) {
+    $("animal-msg").textContent = t("home.no_home");
+    return;
+  }
+  state.picked = animal;
+  state.pickedHome = home;
   setGbifLayer(animal.gbif_key);
   $("animal-msg").textContent = t("home.picked", { name: animal.name });
 }
@@ -432,6 +450,7 @@ async function onMapTap(latlng) {
     return;
   }
   const animal = state.picked;
+  const homeWords = state.pickedHome.replace(/_/g, " ");
   const cell = snapCell(latlng.lat, latlng.lng);
   const check = ++state.cellCheck;
   const card = $("cell-card");
@@ -439,7 +458,7 @@ async function onMapTap(latlng) {
   $("cell-make").hidden = true;
   $("cell-msg").textContent = "";
   const country = countryAt(latlng.lat, latlng.lng);
-  if (!country || urbanAt(latlng.lat, latlng.lng)) {
+  if (!country || !country.name || urbanAt(latlng.lat, latlng.lng)) {
     $("cell-name").textContent = "";
     $("cell-facts").textContent = "";
     $("cell-state").textContent = t(country ? "home.in_city" : "home.outside", {
@@ -448,7 +467,7 @@ async function onMapTap(latlng) {
     state.selectedCell = null;
     return;
   }
-  const title = `${animal.name} ${animal.habitat}, ${country.name}`;
+  const title = `${animal.name} ${homeWords}, ${country.name}`;
   $("cell-name").textContent = title;
   $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
   $("cell-state").textContent = t("home.checking");
@@ -506,6 +525,7 @@ async function makeHome() {
   if (selected.country.iso) {
     fields.country = selected.country.iso;
   }
+  fields.country_name = selected.country.name;
   try {
     await db().collection("drafts").add(fields);
     $("cell-msg").textContent = t("home.started");

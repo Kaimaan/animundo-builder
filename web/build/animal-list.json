@@ -1,66 +1,2718 @@
-[
+{
+ "about": "The animals a grown-up can ask for in Animundo Builder. Written by tools/animal_list.py; edit the table there.",
+ "habitats": [
+  "boreal_forest",
+  "boreal_lake",
+  "desert",
+  "forest",
+  "grassland",
+  "ice",
+  "lake",
+  "mangrove",
+  "mountain",
+  "rainforest",
+  "reef",
+  "river",
+  "savanna",
+  "sea",
+  "tundra",
+  "wetland"
+ ],
+ "homes": [
+  "boreal_forest",
+  "boreal_lake"
+ ],
+ "not_yet": {
+  "bats": "Bats fly with their arms, and night animals come later.",
+  "great_whales": "Great whales are bigger than any place's sea.",
+  "dragonflies": "Dragonflies beat two pairs of wings apart.",
+  "body_plan": "Animundo can't make this kind of body yet."
+ },
+ "animals": [
   {
-    "name": "Red fox",
-    "latin": "Vulpes vulpes",
-    "gbif_key": 5219243,
-    "body_plan": "land_mammal",
-    "can_make": true,
-    "habitat": "forest"
+   "id": "fox",
+   "name": "Red fox",
+   "latin": "Vulpes vulpes",
+   "gbif_key": 5219243,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "grassland",
+    "mountain"
+   ],
+   "can_make": true,
+   "in_library": "fox"
   },
   {
-    "name": "Moose",
-    "latin": "Alces alces",
-    "gbif_key": 2440940,
-    "body_plan": "land_mammal",
-    "can_make": true,
-    "habitat": "forest"
+   "id": "moose",
+   "name": "Moose",
+   "latin": "Alces alces",
+   "gbif_key": 2440940,
+   "start_from": "moose",
+   "habitats": [
+    "boreal_forest",
+    "boreal_lake",
+    "wetland"
+   ],
+   "can_make": true,
+   "in_library": "moose"
   },
   {
-    "name": "Mountain hare",
-    "latin": "Lepus timidus",
-    "gbif_key": 2436756,
-    "body_plan": "land_mammal",
-    "can_make": true,
-    "habitat": "forest"
+   "id": "mountain_hare",
+   "name": "Mountain hare",
+   "latin": "Lepus timidus",
+   "gbif_key": 2436756,
+   "start_from": "mountain_hare",
+   "habitats": [
+    "boreal_forest",
+    "tundra",
+    "mountain"
+   ],
+   "can_make": true,
+   "in_library": "mountain_hare"
   },
   {
-    "name": "Eurasian lynx",
-    "latin": "Lynx lynx",
-    "gbif_key": 2435240,
-    "body_plan": "land_mammal",
-    "can_make": true,
-    "habitat": "forest"
+   "id": "squirrel",
+   "name": "Red squirrel",
+   "latin": "Sciurus vulgaris",
+   "gbif_key": 8211070,
+   "start_from": "squirrel",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true,
+   "in_library": "squirrel"
   },
   {
-    "name": "Common frog",
-    "latin": "Rana temporaria",
-    "gbif_key": 2426805,
-    "body_plan": "amphibian",
-    "can_make": true,
-    "habitat": "lake"
+   "id": "flying_squirrel",
+   "name": "Siberian flying squirrel",
+   "latin": "Pteromys volans",
+   "gbif_key": 2437258,
+   "start_from": "flying_squirrel",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true,
+   "in_library": "flying_squirrel"
   },
   {
-    "name": "Common kestrel",
-    "latin": "Falco tinnunculus",
-    "gbif_key": 9616058,
-    "body_plan": "bird",
-    "can_make": true,
-    "habitat": "forest"
+   "id": "vole",
+   "name": "Bank vole",
+   "latin": "Myodes glareolus",
+   "gbif_key": 5706764,
+   "start_from": "vole",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true,
+   "in_library": "vole"
   },
   {
-    "name": "Mallard",
-    "latin": "Anas platyrhynchos",
-    "gbif_key": 9761484,
-    "body_plan": "bird",
-    "can_make": true,
-    "habitat": "lake"
+   "id": "saimaa_seal",
+   "name": "Saimaa ringed seal",
+   "latin": "Pusa hispida saimensis",
+   "gbif_key": 5219371,
+   "start_from": "saimaa_seal",
+   "habitats": [
+    "boreal_lake"
+   ],
+   "can_make": true,
+   "in_library": "saimaa_seal"
   },
   {
-    "name": "Serotine bat",
-    "latin": "Eptesicus serotinus",
-    "gbif_key": 2433599,
-    "body_plan": "bat",
-    "can_make": false,
-    "habitat": "forest"
+   "id": "kestrel",
+   "name": "Common kestrel",
+   "latin": "Falco tinnunculus",
+   "gbif_key": 9616058,
+   "start_from": "kestrel",
+   "habitats": [
+    "grassland",
+    "boreal_forest"
+   ],
+   "can_make": true,
+   "in_library": "kestrel"
+  },
+  {
+   "id": "great_tit",
+   "name": "Great tit",
+   "latin": "Parus major",
+   "gbif_key": 9705453,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true,
+   "in_library": "great_tit"
+  },
+  {
+   "id": "chaffinch",
+   "name": "Common chaffinch",
+   "latin": "Fringilla coelebs",
+   "gbif_key": 2494422,
+   "start_from": "chaffinch",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true,
+   "in_library": "chaffinch"
+  },
+  {
+   "id": "mallard",
+   "name": "Mallard",
+   "latin": "Anas platyrhynchos",
+   "gbif_key": 9761484,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake",
+    "river",
+    "wetland"
+   ],
+   "can_make": true,
+   "in_library": "mallard"
+  },
+  {
+   "id": "frog",
+   "name": "Common frog",
+   "latin": "Rana temporaria",
+   "gbif_key": 2426805,
+   "start_from": "frog",
+   "habitats": [
+    "boreal_forest",
+    "boreal_lake",
+    "wetland"
+   ],
+   "can_make": true,
+   "in_library": "frog"
+  },
+  {
+   "id": "lizard",
+   "name": "Viviparous lizard",
+   "latin": "Zootoca vivipara",
+   "gbif_key": 9702100,
+   "start_from": "lizard",
+   "habitats": [
+    "boreal_forest",
+    "wetland"
+   ],
+   "can_make": true,
+   "in_library": "lizard"
+  },
+  {
+   "id": "bee",
+   "name": "Buff-tailed bumblebee",
+   "latin": "Bombus lucorum",
+   "gbif_key": 1340298,
+   "start_from": "bee",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true,
+   "in_library": "bee"
+  },
+  {
+   "id": "perch",
+   "name": "European perch",
+   "latin": "Perca fluviatilis",
+   "gbif_key": 8140485,
+   "start_from": "perch",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true,
+   "in_library": "perch"
+  },
+  {
+   "id": "pike",
+   "name": "Northern pike",
+   "latin": "Esox lucius",
+   "gbif_key": 2346633,
+   "start_from": "pike",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true,
+   "in_library": "pike"
+  },
+  {
+   "id": "roach",
+   "name": "Roach",
+   "latin": "Rutilus rutilus",
+   "gbif_key": 2359706,
+   "start_from": "roach",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true,
+   "in_library": "roach"
+  },
+  {
+   "id": "bream",
+   "name": "Common bream",
+   "latin": "Abramis brama",
+   "gbif_key": 9809222,
+   "start_from": "bream",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true,
+   "in_library": "bream"
+  },
+  {
+   "id": "lynx",
+   "name": "Eurasian lynx",
+   "latin": "Lynx lynx",
+   "gbif_key": 2435240,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "wolf",
+   "name": "Grey wolf",
+   "latin": "Canis lupus",
+   "gbif_key": 5219173,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "tundra",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "brown_bear",
+   "name": "Brown bear",
+   "latin": "Ursus arctos",
+   "gbif_key": 2433433,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "wolverine",
+   "name": "Wolverine",
+   "latin": "Gulo gulo",
+   "gbif_key": 5219073,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "tundra",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "pine_marten",
+   "name": "Pine marten",
+   "latin": "Martes martes",
+   "gbif_key": 5218878,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "otter",
+   "name": "Eurasian otter",
+   "latin": "Lutra lutra",
+   "gbif_key": 2433753,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "badger",
+   "name": "European badger",
+   "latin": "Meles meles",
+   "gbif_key": 2433875,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "stoat",
+   "name": "Stoat",
+   "latin": "Mustela erminea",
+   "gbif_key": 5219019,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "tundra",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "raccoon_dog",
+   "name": "Raccoon dog",
+   "latin": "Nyctereutes procyonoides",
+   "gbif_key": 2434552,
+   "start_from": "fox",
+   "habitats": [
+    "boreal_forest",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "beaver",
+   "name": "Eurasian beaver",
+   "latin": "Castor fiber",
+   "gbif_key": 4409131,
+   "start_from": "vole",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "reindeer",
+   "name": "Reindeer (caribou)",
+   "latin": "Rangifer tarandus",
+   "gbif_key": 5220114,
+   "start_from": "moose",
+   "habitats": [
+    "tundra",
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "red_deer",
+   "name": "Red deer",
+   "latin": "Cervus elaphus",
+   "gbif_key": 2440958,
+   "start_from": "moose",
+   "habitats": [
+    "boreal_forest",
+    "grassland",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "roe_deer",
+   "name": "Roe deer",
+   "latin": "Capreolus capreolus",
+   "gbif_key": 5220126,
+   "start_from": "moose",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "white_tailed_deer",
+   "name": "White-tailed deer",
+   "latin": "Odocoileus virginianus",
+   "gbif_key": 2440965,
+   "start_from": "moose",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "wild_boar",
+   "name": "Wild boar",
+   "latin": "Sus scrofa",
+   "gbif_key": 7705930,
+   "start_from": "moose",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "hedgehog",
+   "name": "European hedgehog",
+   "latin": "Erinaceus europaeus",
+   "gbif_key": 5219616,
+   "start_from": "vole",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "brown_hare",
+   "name": "European hare",
+   "latin": "Lepus europaeus",
+   "gbif_key": 7952072,
+   "start_from": "mountain_hare",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "rabbit",
+   "name": "European rabbit",
+   "latin": "Oryctolagus cuniculus",
+   "gbif_key": 2436940,
+   "start_from": "mountain_hare",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "lemming",
+   "name": "Norway lemming",
+   "latin": "Lemmus lemmus",
+   "gbif_key": 5219840,
+   "start_from": "vole",
+   "habitats": [
+    "tundra",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "shrew",
+   "name": "Common shrew",
+   "latin": "Sorex araneus",
+   "gbif_key": 8316400,
+   "start_from": "vole",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "wood_mouse",
+   "name": "Wood mouse",
+   "latin": "Apodemus sylvaticus",
+   "gbif_key": 2437760,
+   "start_from": "vole",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "muskrat",
+   "name": "Muskrat",
+   "latin": "Ondatra zibethicus",
+   "gbif_key": 5219858,
+   "start_from": "vole",
+   "habitats": [
+    "boreal_lake",
+    "wetland",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "grey_seal",
+   "name": "Grey seal",
+   "latin": "Halichoerus grypus",
+   "gbif_key": 2434806,
+   "start_from": "saimaa_seal",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "harbour_seal",
+   "name": "Harbour seal",
+   "latin": "Phoca vitulina",
+   "gbif_key": 2434793,
+   "start_from": "saimaa_seal",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "ural_owl",
+   "name": "Ural owl",
+   "latin": "Strix uralensis",
+   "gbif_key": 2497509,
+   "start_from": "kestrel",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "snowy_owl",
+   "name": "Snowy owl",
+   "latin": "Bubo scandiacus",
+   "gbif_key": 5959143,
+   "start_from": "kestrel",
+   "habitats": [
+    "tundra"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "eagle_owl",
+   "name": "Eurasian eagle-owl",
+   "latin": "Bubo bubo",
+   "gbif_key": 5959092,
+   "start_from": "kestrel",
+   "habitats": [
+    "boreal_forest",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "golden_eagle",
+   "name": "Golden eagle",
+   "latin": "Aquila chrysaetos",
+   "gbif_key": 2480506,
+   "start_from": "kestrel",
+   "habitats": [
+    "mountain",
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "white_tailed_eagle",
+   "name": "White-tailed eagle",
+   "latin": "Haliaeetus albicilla",
+   "gbif_key": 2480449,
+   "start_from": "kestrel",
+   "habitats": [
+    "boreal_lake",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "osprey",
+   "name": "Osprey",
+   "latin": "Pandion haliaetus",
+   "gbif_key": 2480726,
+   "start_from": "kestrel",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "buzzard",
+   "name": "Common buzzard",
+   "latin": "Buteo buteo",
+   "gbif_key": 2480537,
+   "start_from": "kestrel",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "goshawk",
+   "name": "Northern goshawk",
+   "latin": "Accipiter gentilis",
+   "gbif_key": 2480589,
+   "start_from": "kestrel",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "peregrine",
+   "name": "Peregrine falcon",
+   "latin": "Falco peregrinus",
+   "gbif_key": 2481047,
+   "start_from": "kestrel",
+   "habitats": [
+    "mountain",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "raven",
+   "name": "Common raven",
+   "latin": "Corvus corax",
+   "gbif_key": 2482492,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "magpie",
+   "name": "Eurasian magpie",
+   "latin": "Pica pica",
+   "gbif_key": 5229490,
+   "start_from": "great_tit",
+   "habitats": [
+    "grassland",
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "jay",
+   "name": "Eurasian jay",
+   "latin": "Garrulus glandarius",
+   "gbif_key": 5229493,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "robin",
+   "name": "European robin",
+   "latin": "Erithacus rubecula",
+   "gbif_key": 2492462,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "blue_tit",
+   "name": "Blue tit",
+   "latin": "Cyanistes caeruleus",
+   "gbif_key": 2487879,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "bullfinch",
+   "name": "Eurasian bullfinch",
+   "latin": "Pyrrhula pyrrhula",
+   "gbif_key": 2494543,
+   "start_from": "chaffinch",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "blackbird",
+   "name": "Common blackbird",
+   "latin": "Turdus merula",
+   "gbif_key": 2490719,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "swallow",
+   "name": "Barn swallow",
+   "latin": "Hirundo rustica",
+   "gbif_key": 9515886,
+   "start_from": "great_tit",
+   "habitats": [
+    "grassland",
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "great_spotted_woodpecker",
+   "name": "Great spotted woodpecker",
+   "latin": "Dendrocopos major",
+   "gbif_key": 2477968,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "black_woodpecker",
+   "name": "Black woodpecker",
+   "latin": "Dryocopus martius",
+   "gbif_key": 2477872,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "crossbill",
+   "name": "Common crossbill",
+   "latin": "Loxia curvirostra",
+   "gbif_key": 9629160,
+   "start_from": "chaffinch",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "waxwing",
+   "name": "Bohemian waxwing",
+   "latin": "Bombycilla garrulus",
+   "gbif_key": 2484605,
+   "start_from": "chaffinch",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "cuckoo",
+   "name": "Common cuckoo",
+   "latin": "Cuculus canorus",
+   "gbif_key": 5231918,
+   "start_from": "great_tit",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "capercaillie",
+   "name": "Western capercaillie",
+   "latin": "Tetrao urogallus",
+   "gbif_key": 2473577,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "black_grouse",
+   "name": "Black grouse",
+   "latin": "Lyrurus tetrix",
+   "gbif_key": 2473682,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_forest",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "ptarmigan",
+   "name": "Rock ptarmigan",
+   "latin": "Lagopus muta",
+   "gbif_key": 5227679,
+   "start_from": "mallard",
+   "habitats": [
+    "tundra",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "whooper_swan",
+   "name": "Whooper swan",
+   "latin": "Cygnus cygnus",
+   "gbif_key": 2498347,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "mute_swan",
+   "name": "Mute swan",
+   "latin": "Cygnus olor",
+   "gbif_key": 2498343,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "canada_goose",
+   "name": "Canada goose",
+   "latin": "Branta canadensis",
+   "gbif_key": 5232437,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "goldeneye",
+   "name": "Common goldeneye",
+   "latin": "Bucephala clangula",
+   "gbif_key": 2498326,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "black_throated_loon",
+   "name": "Black-throated loon",
+   "latin": "Gavia arctica",
+   "gbif_key": 2481959,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "common_crane",
+   "name": "Common crane",
+   "latin": "Grus grus",
+   "gbif_key": 2474950,
+   "start_from": "mallard",
+   "habitats": [
+    "wetland",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "grey_heron",
+   "name": "Grey heron",
+   "latin": "Ardea cinerea",
+   "gbif_key": 9797180,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake",
+    "river",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "white_stork",
+   "name": "White stork",
+   "latin": "Ciconia ciconia",
+   "gbif_key": 2481912,
+   "start_from": "mallard",
+   "habitats": [
+    "wetland",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "common_tern",
+   "name": "Common tern",
+   "latin": "Sterna hirundo",
+   "gbif_key": 9367409,
+   "start_from": "mallard",
+   "habitats": [
+    "boreal_lake",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "herring_gull",
+   "name": "Herring gull",
+   "latin": "Larus argentatus",
+   "gbif_key": 2481139,
+   "start_from": "mallard",
+   "habitats": [
+    "sea",
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "kingfisher",
+   "name": "Common kingfisher",
+   "latin": "Alcedo atthis",
+   "gbif_key": 2475532,
+   "start_from": "great_tit",
+   "habitats": [
+    "river",
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "dipper",
+   "name": "White-throated dipper",
+   "latin": "Cinclus cinclus",
+   "gbif_key": 2495093,
+   "start_from": "great_tit",
+   "habitats": [
+    "river",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "atlantic_salmon",
+   "name": "Atlantic salmon",
+   "latin": "Salmo salar",
+   "gbif_key": 7595433,
+   "start_from": "pike",
+   "habitats": [
+    "river",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "brown_trout",
+   "name": "Brown trout",
+   "latin": "Salmo trutta",
+   "gbif_key": 8215487,
+   "start_from": "pike",
+   "habitats": [
+    "river",
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "arctic_char",
+   "name": "Arctic char",
+   "latin": "Salvelinus alpinus",
+   "gbif_key": 4284021,
+   "start_from": "pike",
+   "habitats": [
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "zander",
+   "name": "Zander",
+   "latin": "Sander lucioperca",
+   "gbif_key": 2382155,
+   "start_from": "pike",
+   "habitats": [
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "burbot",
+   "name": "Burbot",
+   "latin": "Lota lota",
+   "gbif_key": 2415460,
+   "start_from": "pike",
+   "habitats": [
+    "boreal_lake",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "eel",
+   "name": "European eel",
+   "latin": "Anguilla anguilla",
+   "gbif_key": 5212973,
+   "start_from": "grass_snake",
+   "habitats": [
+    "river",
+    "boreal_lake",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "common_toad",
+   "name": "Common toad",
+   "latin": "Bufo bufo",
+   "gbif_key": 5217160,
+   "start_from": "frog",
+   "habitats": [
+    "boreal_forest",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "moor_frog",
+   "name": "Moor frog",
+   "latin": "Rana arvalis",
+   "gbif_key": 2426789,
+   "start_from": "frog",
+   "habitats": [
+    "wetland",
+    "boreal_lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "smooth_newt",
+   "name": "Smooth newt",
+   "latin": "Lissotriton vulgaris",
+   "gbif_key": 5218405,
+   "start_from": "lizard",
+   "habitats": [
+    "boreal_lake",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "adder",
+   "name": "Common European adder",
+   "latin": "Vipera berus",
+   "gbif_key": 5960862,
+   "start_from": "grass_snake",
+   "habitats": [
+    "boreal_forest",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "grass_snake",
+   "name": "Grass snake",
+   "latin": "Natrix natrix",
+   "gbif_key": 6161347,
+   "start_from": "grass_snake",
+   "habitats": [
+    "boreal_lake",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "slow_worm",
+   "name": "Slow worm",
+   "latin": "Anguis fragilis",
+   "gbif_key": 2468095,
+   "start_from": "grass_snake",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "sand_lizard",
+   "name": "Sand lizard",
+   "latin": "Lacerta agilis",
+   "gbif_key": 6159223,
+   "start_from": "lizard",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "honey_bee",
+   "name": "Western honey bee",
+   "latin": "Apis mellifera",
+   "gbif_key": 1341976,
+   "start_from": "bee",
+   "habitats": [
+    "grassland",
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "wasp",
+   "name": "Common wasp",
+   "latin": "Vespula vulgaris",
+   "gbif_key": 1311671,
+   "start_from": "bee",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "peacock_butterfly",
+   "name": "Peacock butterfly",
+   "latin": "Aglais io",
+   "gbif_key": 4535827,
+   "start_from": "peacock_butterfly",
+   "habitats": [
+    "grassland",
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "brimstone",
+   "name": "Common brimstone",
+   "latin": "Gonepteryx rhamni",
+   "gbif_key": 1920712,
+   "start_from": "peacock_butterfly",
+   "habitats": [
+    "boreal_forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "swallowtail",
+   "name": "Old World swallowtail",
+   "latin": "Papilio machaon",
+   "gbif_key": 8225376,
+   "start_from": "peacock_butterfly",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "small_tortoiseshell",
+   "name": "Small tortoiseshell",
+   "latin": "Aglais urticae",
+   "gbif_key": 1894840,
+   "start_from": "peacock_butterfly",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "arctic_fox",
+   "name": "Arctic fox",
+   "latin": "Vulpes lagopus",
+   "gbif_key": 5219303,
+   "start_from": "fox",
+   "habitats": [
+    "tundra",
+    "ice"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "polar_bear",
+   "name": "Polar bear",
+   "latin": "Ursus maritimus",
+   "gbif_key": 2433451,
+   "start_from": "fox",
+   "habitats": [
+    "ice",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "musk_ox",
+   "name": "Muskox",
+   "latin": "Ovibos moschatus",
+   "gbif_key": 2441108,
+   "start_from": "moose",
+   "habitats": [
+    "tundra"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "ibex",
+   "name": "Alpine ibex",
+   "latin": "Capra ibex",
+   "gbif_key": 2441055,
+   "start_from": "moose",
+   "habitats": [
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "chamois",
+   "name": "Chamois",
+   "latin": "Rupicapra rupicapra",
+   "gbif_key": 5220170,
+   "start_from": "moose",
+   "habitats": [
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "mountain_goat",
+   "name": "Mountain goat",
+   "latin": "Oreamnos americanus",
+   "gbif_key": 2441151,
+   "start_from": "moose",
+   "habitats": [
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "bighorn_sheep",
+   "name": "Bighorn sheep",
+   "latin": "Ovis canadensis",
+   "gbif_key": 2441119,
+   "start_from": "moose",
+   "habitats": [
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "snow_leopard",
+   "name": "Snow leopard",
+   "latin": "Panthera uncia",
+   "gbif_key": 2435238,
+   "start_from": "fox",
+   "habitats": [
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "marmot",
+   "name": "Alpine marmot",
+   "latin": "Marmota marmota",
+   "gbif_key": 2437377,
+   "start_from": "squirrel",
+   "habitats": [
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "pika",
+   "name": "American pika",
+   "latin": "Ochotona princeps",
+   "gbif_key": 2436982,
+   "start_from": "mountain_hare",
+   "habitats": [
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "walrus",
+   "name": "Walrus",
+   "latin": "Odobenus rosmarus",
+   "gbif_key": 5218819,
+   "start_from": "saimaa_seal",
+   "habitats": [
+    "ice",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "ringed_seal",
+   "name": "Ringed seal",
+   "latin": "Pusa hispida",
+   "gbif_key": 5219369,
+   "start_from": "saimaa_seal",
+   "habitats": [
+    "ice",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "harp_seal",
+   "name": "Harp seal",
+   "latin": "Pagophilus groenlandicus",
+   "gbif_key": 2434801,
+   "start_from": "saimaa_seal",
+   "habitats": [
+    "ice",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "emperor_penguin",
+   "name": "Emperor penguin",
+   "latin": "Aptenodytes forsteri",
+   "gbif_key": 2481661,
+   "start_from": "mallard",
+   "habitats": [
+    "ice",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "king_penguin",
+   "name": "King penguin",
+   "latin": "Aptenodytes patagonicus",
+   "gbif_key": 2481660,
+   "start_from": "mallard",
+   "habitats": [
+    "ice",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "puffin",
+   "name": "Atlantic puffin",
+   "latin": "Fratercula arctica",
+   "gbif_key": 2481353,
+   "start_from": "mallard",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "snow_bunting",
+   "name": "Snow bunting",
+   "latin": "Plectrophenax nivalis",
+   "gbif_key": 2491719,
+   "start_from": "chaffinch",
+   "habitats": [
+    "tundra"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "arctic_tern",
+   "name": "Arctic tern",
+   "latin": "Sterna paradisaea",
+   "gbif_key": 5229230,
+   "start_from": "mallard",
+   "habitats": [
+    "sea",
+    "tundra"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "snowshoe_hare",
+   "name": "Snowshoe hare",
+   "latin": "Lepus americanus",
+   "gbif_key": 2436794,
+   "start_from": "mountain_hare",
+   "habitats": [
+    "boreal_forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "harbour_porpoise",
+   "name": "Harbour porpoise",
+   "latin": "Phocoena phocoena",
+   "gbif_key": 2440669,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "bottlenose_dolphin",
+   "name": "Bottlenose dolphin",
+   "latin": "Tursiops truncatus",
+   "gbif_key": 2440447,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "orca",
+   "name": "Orca",
+   "latin": "Orcinus orca",
+   "gbif_key": 2440483,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "beluga",
+   "name": "Beluga whale",
+   "latin": "Delphinapterus leucas",
+   "gbif_key": 5220003,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea",
+    "ice"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "narwhal",
+   "name": "Narwhal",
+   "latin": "Monodon monoceros",
+   "gbif_key": 5220008,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea",
+    "ice"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "blue_whale",
+   "name": "Blue whale",
+   "latin": "Balaenoptera musculus",
+   "gbif_key": 2440735,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "great_whales"
+  },
+  {
+   "id": "humpback_whale",
+   "name": "Humpback whale",
+   "latin": "Megaptera novaeangliae",
+   "gbif_key": 5220086,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "great_whales"
+  },
+  {
+   "id": "sperm_whale",
+   "name": "Sperm whale",
+   "latin": "Physeter macrocephalus",
+   "gbif_key": 8123917,
+   "start_from": "harbour_porpoise",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "great_whales"
+  },
+  {
+   "id": "sea_otter",
+   "name": "Sea otter",
+   "latin": "Enhydra lutris",
+   "gbif_key": 2433670,
+   "start_from": "fox",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "sea_lion",
+   "name": "California sea lion",
+   "latin": "Zalophus californianus",
+   "gbif_key": 2433458,
+   "start_from": "saimaa_seal",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "great_white_shark",
+   "name": "Great white shark",
+   "latin": "Carcharodon carcharias",
+   "gbif_key": 2420694,
+   "start_from": "pike",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "hammerhead",
+   "name": "Scalloped hammerhead",
+   "latin": "Sphyrna lewini",
+   "gbif_key": 2418789,
+   "start_from": "pike",
+   "habitats": [
+    "sea",
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "whale_shark",
+   "name": "Whale shark",
+   "latin": "Rhincodon typus",
+   "gbif_key": 2417522,
+   "start_from": "pike",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "great_whales"
+  },
+  {
+   "id": "manta_ray",
+   "name": "Giant manta ray",
+   "latin": "Mobula birostris",
+   "gbif_key": 9548142,
+   "start_from": null,
+   "habitats": [
+    "sea",
+    "reef"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "atlantic_cod",
+   "name": "Atlantic cod",
+   "latin": "Gadus morhua",
+   "gbif_key": 8084280,
+   "start_from": "pike",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "herring",
+   "name": "Atlantic herring",
+   "latin": "Clupea harengus",
+   "gbif_key": 8351946,
+   "start_from": "roach",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "mackerel",
+   "name": "Atlantic mackerel",
+   "latin": "Scomber scombrus",
+   "gbif_key": 2374149,
+   "start_from": "pike",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "tuna",
+   "name": "Atlantic bluefin tuna",
+   "latin": "Thunnus thynnus",
+   "gbif_key": 2373980,
+   "start_from": "perch",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "swordfish",
+   "name": "Swordfish",
+   "latin": "Xiphias gladius",
+   "gbif_key": 2397850,
+   "start_from": "pike",
+   "habitats": [
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "moray_eel",
+   "name": "Green moray",
+   "latin": "Gymnothorax funebris",
+   "gbif_key": 2403964,
+   "start_from": "grass_snake",
+   "habitats": [
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "octopus",
+   "name": "Common octopus",
+   "latin": "Octopus vulgaris",
+   "gbif_key": 2289671,
+   "start_from": null,
+   "habitats": [
+    "sea",
+    "reef"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "jellyfish",
+   "name": "Moon jellyfish",
+   "latin": "Aurelia aurita",
+   "gbif_key": 2264442,
+   "start_from": null,
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "starfish",
+   "name": "Common starfish",
+   "latin": "Asterias rubens",
+   "gbif_key": 7765831,
+   "start_from": null,
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "crab",
+   "name": "Shore crab",
+   "latin": "Carcinus maenas",
+   "gbif_key": 5178595,
+   "start_from": null,
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "lobster",
+   "name": "European lobster",
+   "latin": "Homarus gammarus",
+   "gbif_key": 5972003,
+   "start_from": null,
+   "habitats": [
+    "sea"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "seahorse",
+   "name": "Long-snouted seahorse",
+   "latin": "Hippocampus guttulatus",
+   "gbif_key": 5201064,
+   "start_from": null,
+   "habitats": [
+    "sea",
+    "reef"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "green_sea_turtle",
+   "name": "Green sea turtle",
+   "latin": "Chelonia mydas",
+   "gbif_key": 2442225,
+   "start_from": null,
+   "habitats": [
+    "sea",
+    "reef"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "clownfish",
+   "name": "Orange clownfish",
+   "latin": "Amphiprion percula",
+   "gbif_key": 5212094,
+   "start_from": "perch",
+   "habitats": [
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "blue_tang",
+   "name": "Blue tang",
+   "latin": "Paracanthurus hepatus",
+   "gbif_key": 2379534,
+   "start_from": "bream",
+   "habitats": [
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "parrotfish",
+   "name": "Stoplight parrotfish",
+   "latin": "Sparisoma viride",
+   "gbif_key": 2393894,
+   "start_from": "perch",
+   "habitats": [
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "butterflyfish",
+   "name": "Threadfin butterflyfish",
+   "latin": "Chaetodon auriga",
+   "gbif_key": 2385390,
+   "start_from": "bream",
+   "habitats": [
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "lionfish",
+   "name": "Red lionfish",
+   "latin": "Pterois volitans",
+   "gbif_key": 2334438,
+   "start_from": "perch",
+   "habitats": [
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "reef_shark",
+   "name": "Blacktip reef shark",
+   "latin": "Carcharhinus melanopterus",
+   "gbif_key": 2417981,
+   "start_from": "pike",
+   "habitats": [
+    "reef"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "lion",
+   "name": "Lion",
+   "latin": "Panthera leo",
+   "gbif_key": 5219404,
+   "start_from": "fox",
+   "habitats": [
+    "savanna",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "cheetah",
+   "name": "Cheetah",
+   "latin": "Acinonyx jubatus",
+   "gbif_key": 2435270,
+   "start_from": "fox",
+   "habitats": [
+    "savanna",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "leopard",
+   "name": "Leopard",
+   "latin": "Panthera pardus",
+   "gbif_key": 5219436,
+   "start_from": "fox",
+   "habitats": [
+    "savanna",
+    "forest",
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "hyena",
+   "name": "Spotted hyena",
+   "latin": "Crocuta crocuta",
+   "gbif_key": 5218781,
+   "start_from": "fox",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "african_wild_dog",
+   "name": "African wild dog",
+   "latin": "Lycaon pictus",
+   "gbif_key": 5219317,
+   "start_from": "fox",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "zebra",
+   "name": "Plains zebra",
+   "latin": "Equus quagga",
+   "gbif_key": 2440892,
+   "start_from": "moose",
+   "habitats": [
+    "savanna",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "giraffe",
+   "name": "Giraffe",
+   "latin": "Giraffa camelopardalis",
+   "gbif_key": 2441205,
+   "start_from": "moose",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "african_elephant",
+   "name": "African elephant",
+   "latin": "Loxodonta africana",
+   "gbif_key": 2435350,
+   "start_from": null,
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "asian_elephant",
+   "name": "Asian elephant",
+   "latin": "Elephas maximus",
+   "gbif_key": 5219461,
+   "start_from": null,
+   "habitats": [
+    "forest",
+    "rainforest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "rhino",
+   "name": "White rhinoceros",
+   "latin": "Ceratotherium simum",
+   "gbif_key": 2440880,
+   "start_from": "moose",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "hippo",
+   "name": "Hippopotamus",
+   "latin": "Hippopotamus amphibius",
+   "gbif_key": 2441247,
+   "start_from": "moose",
+   "habitats": [
+    "river",
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "wildebeest",
+   "name": "Blue wildebeest",
+   "latin": "Connochaetes taurinus",
+   "gbif_key": 2441105,
+   "start_from": "moose",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "gazelle",
+   "name": "Thomson's gazelle",
+   "latin": "Eudorcas thomsonii",
+   "gbif_key": 7261427,
+   "start_from": "moose",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "impala",
+   "name": "Impala",
+   "latin": "Aepyceros melampus",
+   "gbif_key": 2441144,
+   "start_from": "moose",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "warthog",
+   "name": "Common warthog",
+   "latin": "Phacochoerus africanus",
+   "gbif_key": 2441212,
+   "start_from": "moose",
+   "habitats": [
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "meerkat",
+   "name": "Meerkat",
+   "latin": "Suricata suricatta",
+   "gbif_key": 2434126,
+   "start_from": "squirrel",
+   "habitats": [
+    "desert",
+    "savanna"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "ostrich",
+   "name": "Common ostrich",
+   "latin": "Struthio camelus",
+   "gbif_key": 2495150,
+   "start_from": null,
+   "habitats": [
+    "savanna",
+    "desert"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "bison",
+   "name": "American bison",
+   "latin": "Bison bison",
+   "gbif_key": 2441176,
+   "start_from": "moose",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "pronghorn",
+   "name": "Pronghorn",
+   "latin": "Antilocapra americana",
+   "gbif_key": 2440902,
+   "start_from": "moose",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "prairie_dog",
+   "name": "Black-tailed prairie dog",
+   "latin": "Cynomys ludovicianus",
+   "gbif_key": 2437232,
+   "start_from": "squirrel",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "coyote",
+   "name": "Coyote",
+   "latin": "Canis latrans",
+   "gbif_key": 5219153,
+   "start_from": "fox",
+   "habitats": [
+    "grassland",
+    "desert",
+    "forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "kangaroo",
+   "name": "Red kangaroo",
+   "latin": "Osphranter rufus",
+   "gbif_key": 5219963,
+   "start_from": "mountain_hare",
+   "habitats": [
+    "grassland",
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "wombat",
+   "name": "Common wombat",
+   "latin": "Vombatus ursinus",
+   "gbif_key": 2440301,
+   "start_from": "vole",
+   "habitats": [
+    "forest",
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "emu",
+   "name": "Emu",
+   "latin": "Dromaius novaehollandiae",
+   "gbif_key": 2495134,
+   "start_from": null,
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "horse",
+   "name": "Przewalski's horse",
+   "latin": "Equus ferus",
+   "gbif_key": 4409270,
+   "start_from": "moose",
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "camel",
+   "name": "Dromedary",
+   "latin": "Camelus dromedarius",
+   "gbif_key": 9055455,
+   "start_from": "moose",
+   "habitats": [
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "fennec_fox",
+   "name": "Fennec fox",
+   "latin": "Vulpes zerda",
+   "gbif_key": 5219310,
+   "start_from": "fox",
+   "habitats": [
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "jerboa",
+   "name": "Lesser Egyptian jerboa",
+   "latin": "Jaculus jaculus",
+   "gbif_key": 5219895,
+   "start_from": "mountain_hare",
+   "habitats": [
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "roadrunner",
+   "name": "Greater roadrunner",
+   "latin": "Geococcyx californianus",
+   "gbif_key": 2496459,
+   "start_from": "mallard",
+   "habitats": [
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "rattlesnake",
+   "name": "Western diamondback rattlesnake",
+   "latin": "Crotalus atrox",
+   "gbif_key": 2444356,
+   "start_from": "grass_snake",
+   "habitats": [
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "gila_monster",
+   "name": "Gila monster",
+   "latin": "Heloderma suspectum",
+   "gbif_key": 2460817,
+   "start_from": "lizard",
+   "habitats": [
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "thorny_devil",
+   "name": "Thorny devil",
+   "latin": "Moloch horridus",
+   "gbif_key": 2466435,
+   "start_from": "lizard",
+   "habitats": [
+    "desert"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "jaguar",
+   "name": "Jaguar",
+   "latin": "Panthera onca",
+   "gbif_key": 5219426,
+   "start_from": "fox",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "tiger",
+   "name": "Tiger",
+   "latin": "Panthera tigris",
+   "gbif_key": 5219416,
+   "start_from": "fox",
+   "habitats": [
+    "forest",
+    "rainforest",
+    "mangrove"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "tapir",
+   "name": "Lowland tapir",
+   "latin": "Tapirus terrestris",
+   "gbif_key": 2440898,
+   "start_from": "moose",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "capybara",
+   "name": "Capybara",
+   "latin": "Hydrochoerus hydrochaeris",
+   "gbif_key": 5786666,
+   "start_from": "vole",
+   "habitats": [
+    "rainforest",
+    "wetland",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "giant_anteater",
+   "name": "Giant anteater",
+   "latin": "Myrmecophaga tridactyla",
+   "gbif_key": 2436346,
+   "start_from": "fox",
+   "habitats": [
+    "grassland",
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "okapi",
+   "name": "Okapi",
+   "latin": "Okapia johnstoni",
+   "gbif_key": 2441207,
+   "start_from": "moose",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "red_panda",
+   "name": "Red panda",
+   "latin": "Ailurus fulgens",
+   "gbif_key": 5219446,
+   "start_from": "fox",
+   "habitats": [
+    "forest",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "giant_panda",
+   "name": "Giant panda",
+   "latin": "Ailuropoda melanoleuca",
+   "gbif_key": 2433399,
+   "start_from": "fox",
+   "habitats": [
+    "forest",
+    "mountain"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "sun_bear",
+   "name": "Sun bear",
+   "latin": "Helarctos malayanus",
+   "gbif_key": 2433403,
+   "start_from": "fox",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "orangutan",
+   "name": "Bornean orangutan",
+   "latin": "Pongo pygmaeus",
+   "gbif_key": 5219532,
+   "start_from": null,
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "chimpanzee",
+   "name": "Chimpanzee",
+   "latin": "Pan troglodytes",
+   "gbif_key": 5219534,
+   "start_from": null,
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "gorilla",
+   "name": "Western gorilla",
+   "latin": "Gorilla gorilla",
+   "gbif_key": 2436441,
+   "start_from": null,
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "ring_tailed_lemur",
+   "name": "Ring-tailed lemur",
+   "latin": "Lemur catta",
+   "gbif_key": 2436412,
+   "start_from": null,
+   "habitats": [
+    "forest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "sloth",
+   "name": "Brown-throated sloth",
+   "latin": "Bradypus variegatus",
+   "gbif_key": 2436353,
+   "start_from": null,
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "koala",
+   "name": "Koala",
+   "latin": "Phascolarctos cinereus",
+   "gbif_key": 2440012,
+   "start_from": null,
+   "habitats": [
+    "forest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "toucan",
+   "name": "Toco toucan",
+   "latin": "Ramphastos toco",
+   "gbif_key": 2478765,
+   "start_from": "great_tit",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "scarlet_macaw",
+   "name": "Scarlet macaw",
+   "latin": "Ara macao",
+   "gbif_key": 5959227,
+   "start_from": "great_tit",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "hummingbird",
+   "name": "Ruby-throated hummingbird",
+   "latin": "Archilochus colubris",
+   "gbif_key": 5228514,
+   "start_from": "great_tit",
+   "habitats": [
+    "forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "flamingo",
+   "name": "Greater flamingo",
+   "latin": "Phoenicopterus roseus",
+   "gbif_key": 4352332,
+   "start_from": "mallard",
+   "habitats": [
+    "wetland",
+    "lake"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "peacock",
+   "name": "Indian peafowl",
+   "latin": "Pavo cristatus",
+   "gbif_key": 9451184,
+   "start_from": "mallard",
+   "habitats": [
+    "forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "harpy_eagle",
+   "name": "Harpy eagle",
+   "latin": "Harpia harpyja",
+   "gbif_key": 2480516,
+   "start_from": "kestrel",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "poison_dart_frog",
+   "name": "Strawberry poison-dart frog",
+   "latin": "Oophaga pumilio",
+   "gbif_key": 2429135,
+   "start_from": "frog",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "red_eyed_tree_frog",
+   "name": "Red-eyed tree frog",
+   "latin": "Agalychnis callidryas",
+   "gbif_key": 2428197,
+   "start_from": "frog",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "green_iguana",
+   "name": "Green iguana",
+   "latin": "Iguana iguana",
+   "gbif_key": 2459658,
+   "start_from": "lizard",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "chameleon",
+   "name": "Veiled chameleon",
+   "latin": "Chamaeleo calyptratus",
+   "gbif_key": 2449133,
+   "start_from": "lizard",
+   "habitats": [
+    "forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "komodo_dragon",
+   "name": "Komodo dragon",
+   "latin": "Varanus komodoensis",
+   "gbif_key": 2470854,
+   "start_from": "lizard",
+   "habitats": [
+    "grassland",
+    "forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "anaconda",
+   "name": "Green anaconda",
+   "latin": "Eunectes murinus",
+   "gbif_key": 5225712,
+   "start_from": "grass_snake",
+   "habitats": [
+    "rainforest",
+    "wetland",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "python",
+   "name": "Burmese python",
+   "latin": "Python bivittatus",
+   "gbif_key": 4820533,
+   "start_from": "grass_snake",
+   "habitats": [
+    "rainforest",
+    "wetland"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "king_cobra",
+   "name": "King cobra",
+   "latin": "Ophiophagus hannah",
+   "gbif_key": 2469850,
+   "start_from": "grass_snake",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "crocodile",
+   "name": "Saltwater crocodile",
+   "latin": "Crocodylus porosus",
+   "gbif_key": 2441333,
+   "start_from": "lizard",
+   "habitats": [
+    "mangrove",
+    "river",
+    "sea"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "alligator",
+   "name": "American alligator",
+   "latin": "Alligator mississippiensis",
+   "gbif_key": 2441370,
+   "start_from": "lizard",
+   "habitats": [
+    "wetland",
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "piranha",
+   "name": "Red-bellied piranha",
+   "latin": "Pygocentrus nattereri",
+   "gbif_key": 2352479,
+   "start_from": "bream",
+   "habitats": [
+    "river"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "blue_morpho",
+   "name": "Blue morpho",
+   "latin": "Morpho peleides",
+   "gbif_key": 5133433,
+   "start_from": "peacock_butterfly",
+   "habitats": [
+    "rainforest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "monarch",
+   "name": "Monarch butterfly",
+   "latin": "Danaus plexippus",
+   "gbif_key": 5133088,
+   "start_from": "peacock_butterfly",
+   "habitats": [
+    "grassland",
+    "forest"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "mudskipper",
+   "name": "Atlantic mudskipper",
+   "latin": "Periophthalmus barbarus",
+   "gbif_key": 2376966,
+   "start_from": "perch",
+   "habitats": [
+    "mangrove"
+   ],
+   "can_make": true
+  },
+  {
+   "id": "proboscis_monkey",
+   "name": "Proboscis monkey",
+   "latin": "Nasalis larvatus",
+   "gbif_key": 2436525,
+   "start_from": null,
+   "habitats": [
+    "mangrove",
+    "rainforest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "fiddler_crab",
+   "name": "Fiddler crab",
+   "latin": "Uca pugnax",
+   "gbif_key": 9444500,
+   "start_from": null,
+   "habitats": [
+    "mangrove"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "bat",
+   "name": "Common pipistrelle",
+   "latin": "Pipistrellus pipistrellus",
+   "gbif_key": 5218465,
+   "start_from": null,
+   "habitats": [
+    "forest"
+   ],
+   "can_make": false,
+   "not_yet": "bats"
+  },
+  {
+   "id": "fruit_bat",
+   "name": "Indian flying fox",
+   "latin": "Pteropus medius",
+   "gbif_key": 5787518,
+   "start_from": null,
+   "habitats": [
+    "forest",
+    "rainforest"
+   ],
+   "can_make": false,
+   "not_yet": "bats"
+  },
+  {
+   "id": "dragonfly",
+   "name": "Emperor dragonfly",
+   "latin": "Anax imperator",
+   "gbif_key": 5051775,
+   "start_from": null,
+   "habitats": [
+    "lake",
+    "wetland"
+   ],
+   "can_make": false,
+   "not_yet": "dragonflies"
+  },
+  {
+   "id": "tortoise",
+   "name": "Galápagos giant tortoise",
+   "latin": "Chelonoidis niger",
+   "gbif_key": 9527499,
+   "start_from": null,
+   "habitats": [
+    "grassland"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "platypus",
+   "name": "Platypus",
+   "latin": "Ornithorhynchus anatinus",
+   "gbif_key": 2433376,
+   "start_from": null,
+   "habitats": [
+    "river"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "ladybird",
+   "name": "Seven-spot ladybird",
+   "latin": "Coccinella septempunctata",
+   "gbif_key": 4990191,
+   "start_from": null,
+   "habitats": [
+    "grassland",
+    "forest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "ant",
+   "name": "Red wood ant",
+   "latin": "Formica rufa",
+   "gbif_key": 1315132,
+   "start_from": null,
+   "habitats": [
+    "forest"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "spider",
+   "name": "European garden spider",
+   "latin": "Araneus diadematus",
+   "gbif_key": 2160133,
+   "start_from": null,
+   "habitats": [
+    "forest",
+    "grassland"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
+  },
+  {
+   "id": "snail",
+   "name": "Roman snail",
+   "latin": "Helix pomatia",
+   "gbif_key": 2294287,
+   "start_from": null,
+   "habitats": [
+    "forest",
+    "grassland"
+   ],
+   "can_make": false,
+   "not_yet": "body_plan"
   }
-]
+ ]
+}

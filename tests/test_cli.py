@@ -94,7 +94,7 @@ def test_build_unknown_area_fails(tmp_path: Path, monkeypatch, capsys) -> None:
 def test_build_needs_area_or_name(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     assert main(["build", "--world", str(tmp_path)]) == 1
-    assert "--area or --name" in capsys.readouterr().err
+    assert "--area, --name or a species key" in capsys.readouterr().err
 
 
 def test_build_needs_world(tmp_path: Path, monkeypatch, capsys) -> None:

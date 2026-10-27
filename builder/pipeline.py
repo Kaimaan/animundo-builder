@@ -52,6 +52,9 @@ IMPROVE_STAGES = {
 }
 IMPROVE_ALWAYS = ["safety", "pack"]
 
+#: A home reuses its whole cast: no survey, plan, animals or models.
+HOME_STAGES = ["intake", "home", "words", "safety", "pack"]
+
 
 def stages_for_kind(
     stages: list[Stage], kind: str, choices: Collection[str] = ()
@@ -62,7 +65,12 @@ def stages_for_kind(
     the caller can say so instead of running half a job.
     """
     if kind == "new_place":
-        return list(stages), []
+        return [stage for stage in stages if stage.name != "home"], []
+    if kind == "animal_home":
+        by_name = {stage.name: stage for stage in stages}
+        run = [by_name[name] for name in HOME_STAGES if name in by_name]
+        missing = [name for name in HOME_STAGES if name not in by_name]
+        return run, missing
     if kind == "submit":
         return [], ["pull_request"]
     if kind != "improve":

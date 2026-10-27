@@ -105,5 +105,6 @@
   "home.exists": "You're already making this home — see your drafts below.",
   "home.check_failed": "Couldn't check that spot. Try again.",
   "home.draft_title": "{animal} home",
-  "home.untitled": "Animal home"
+  "home.untitled": "Animal home",
+  "home.no_home": "We haven't built its home yet. Try another animal."
 }

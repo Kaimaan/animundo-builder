@@ -272,6 +272,25 @@ def test_shape_retry_then_stop(tmp_path: Path) -> None:
     assert "never wrote valid verdicts" in state["failed"]["error"]
 
 
+def test_home_without_survey_reviews_region_name(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    regions = tmp_path / "regions"
+    regions.mkdir(parents=True)
+    (regions / "home_601_249_fox.json").write_text(
+        json.dumps(
+            {
+                "id": "home_601_249_fox",
+                "name": "Fox copse",
+                "sources": ["https://example.org/template"],
+            }
+        )
+    )
+    chat = ScriptChat([_pass_all(["region.home_601_249_fox.name"])])
+    result = SafetyStage().run(_ctx(tmp_path, chat, world))
+    assert result == {"reviewed": 1, "rewritten": [], "failed": []}
+    assert "(no sensitive species" in chat.prompts[0]
+
+
 def test_no_texts_passes_empty(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (tmp_path / "survey.json").write_text(

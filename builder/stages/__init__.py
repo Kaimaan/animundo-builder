@@ -2,6 +2,7 @@
 
 from .animals import AnimalsStage
 from .capability import CapabilityStage
+from .home import HomeStage
 from .intake import IntakeStage
 from .models import ModelsStage
 from .pack import PackStage
@@ -16,6 +17,7 @@ from .words import WordsStage
 __all__ = [
     "AnimalsStage",
     "CapabilityStage",
+    "HomeStage",
     "IntakeStage",
     "ModelsStage",
     "PackStage",

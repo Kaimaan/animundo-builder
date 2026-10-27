@@ -24,9 +24,7 @@ def test_all_web_json_parses() -> None:
 
 
 def test_english_only() -> None:
-    assert [path.name for path in sorted((WEB / "i18n").glob("*.json"))] == [
-        "en.json"
-    ]
+    assert [path.name for path in sorted((WEB / "i18n").glob("*.json"))] == ["en.json"]
     en = _json(WEB / "i18n" / "en.json")
     assert all(isinstance(text, str) and text for text in en.values())
     html = (WEB / "index.html").read_text(encoding="utf-8")
@@ -65,7 +63,9 @@ def test_natural_earth_shapes_are_vendored() -> None:
         data = _json(WEB / "vendor" / "natural-earth" / name)
         assert data["type"] == "FeatureCollection"
         assert len(data["features"]) > 100
-    admin = _json(WEB / "vendor" / "natural-earth" / "ne_110m_admin_0_countries.geojson")
+    admin = _json(
+        WEB / "vendor" / "natural-earth" / "ne_110m_admin_0_countries.geojson"
+    )
     assert admin["type"] == "FeatureCollection"
     assert len(admin["features"]) > 100
     for feature in admin["features"]:
@@ -120,19 +120,28 @@ def test_fetched_files_are_shipped() -> None:
 
 
 def test_animal_list_shape() -> None:
-    animals = _json(WEB / "animal-list.json")
-    assert len(animals) >= 2
+    data = _json(WEB / "animal-list.json")
+    assert set(data) == {"about", "habitats", "homes", "not_yet", "animals"}
+    assert set(data["homes"]) <= set(data["habitats"])
+    animals = data["animals"]
+    assert len(animals) >= 200
     for animal in animals:
-        assert set(animal) == {
+        assert set(animal) >= {
+            "id",
             "name",
             "latin",
             "gbif_key",
-            "body_plan",
+            "start_from",
+            "habitats",
             "can_make",
-            "habitat",
         }, animal
         assert isinstance(animal["gbif_key"], int) and animal["gbif_key"] > 0
         assert isinstance(animal["can_make"], bool)
-        assert animal["name"] and animal["latin"] and animal["habitat"]
+        assert animal["name"] and animal["latin"]
+        assert animal["habitats"] and set(animal["habitats"]) <= set(data["habitats"])
+        if not animal["can_make"]:
+            assert animal["not_yet"] in data["not_yet"], animal["id"]
     keys = [animal["gbif_key"] for animal in animals]
     assert len(set(keys)) == len(keys)
+    ids = [animal["id"] for animal in animals]
+    assert len(set(ids)) == len(ids)

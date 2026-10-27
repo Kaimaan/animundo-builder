@@ -9,7 +9,12 @@ Job folders live under `jobs/` (local only, never committed).
   frame by frame; a clean review after blocking issues is verified
   by a second look before it counts. New birds start from
   `great_tit.json`, scaled. The loop reads its models verdict from
-  the world's draft checker, this species' problems only.
+  the world's draft checker, this species' problems only. A build
+  that fails with no output stops at once instead of burning
+  rounds.
+- Attempt 1 (`jobs/eagle-r2/`, $0.22) died in the sandbox: Blender
+  5.2.3 crashes in Metal detection under it, so all 6 rounds failed
+  before review. Re-running outside the sandbox.
 - Evidence: `jobs/eagle-r2/` (re-run with the fixed reviewer).
 
 ## 2026-10-27: inbox #1, #2, draft checker

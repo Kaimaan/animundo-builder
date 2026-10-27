@@ -140,6 +140,11 @@ class ModelsStage:
             preview = sandbox / "models" / "previews" / f"{species_id}.png"
             preview.unlink(missing_ok=True)
             built = self._build(sandbox, species_id)
+            if not built["ok"] and not built["log"].strip():
+                raise _Stopped(
+                    "the build failed with no output: Blender itself "
+                    "did not run here, not the spec. A person looks."
+                )
             problems = list(self._check(ctx, sandbox, species_id, round_no))
             if not built["ok"]:
                 problems = [built["log"]] + problems

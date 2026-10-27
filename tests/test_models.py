@@ -446,6 +446,24 @@ def test_empty_review_content_fails_the_stage(tmp_path: Path) -> None:
     assert "never wrote a valid review" in state["failed"]["error"]
 
 
+def test_silent_build_stops_at_once(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    chat = ScriptChat([json.dumps(SPEC)])
+
+    def silent(sandbox: Path, species_id: str) -> dict[str, Any]:
+        return {"ok": False, "summary": "no build", "log": ""}
+
+    with pytest.raises(StageFailedError, match="stage models failed"):
+        Pipeline(
+            [ModelsStage(chat=chat, build=silent, check=lambda c, s, i, n: [])],
+            tmp_path / "state.json",
+        ).run(_ctx(tmp_path, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "with no output" in state["failed"]["error"]
+    assert len(chat.prompts) == 1, "no fix rounds on an environment failure"
+
+
 def test_unfence() -> None:
     assert _unfence('{"a": 1}') == '{"a": 1}'
     assert _unfence('```json\n{"a": 1}\n```') == '{"a": 1}'

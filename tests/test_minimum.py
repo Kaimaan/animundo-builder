@@ -118,7 +118,7 @@ def test_new_animal_waits_for_maker(tmp_path: Path) -> None:
     )
     research = _research(main_food={"name": "capybara", "kind": "prey", "size_cm": 110})
     world = _files(tmp_path, [ANACONDA, CAPYBARA], brief, research)
-    with pytest.raises(NotPossibleError, match="one-shot"):
+    with pytest.raises(NotPossibleError, match="home is made next"):
         MinimumStage().run(_ctx(tmp_path, world))
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["make_animal"] is True
@@ -152,7 +152,7 @@ def test_prey_is_smallest_makeable(tmp_path: Path) -> None:
         {**ANACONDA, "id": "agouti", "name": "Agouti", "can_make": False},
     ]
     world = _files(tmp_path, entries, brief, research)
-    with pytest.raises(NotPossibleError, match="one-shot"):
+    with pytest.raises(NotPossibleError, match="home is made next"):
         MinimumStage().run(_ctx(tmp_path, world))
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["prey"]["name"] == "capybara"
@@ -168,8 +168,8 @@ def test_no_makeable_prey_proceeds(tmp_path: Path) -> None:
     )
     research = _research(main_food={"name": "dragon", "kind": "prey", "size_cm": 300})
     world = _files(tmp_path, [FOX, ANACONDA], brief, research)
-    with pytest.raises(NotPossibleError, match="one-shot"):
-        MinimumStage().run(_ctx(tmp_path, world))
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == ["animal"]
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["make_animal"] is True
     assert minset["prey"] is None
@@ -183,8 +183,8 @@ def test_kind_food_needs_no_prey(tmp_path: Path) -> None:
         other_foods=[],
     )
     world = _files(tmp_path, [FOX, ANACONDA], brief, research)
-    with pytest.raises(NotPossibleError, match="one-shot"):
-        MinimumStage().run(_ctx(tmp_path, world))
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == ["animal"]
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["prey"] is None
     assert "does not hunt" in minset["prey_reason"]

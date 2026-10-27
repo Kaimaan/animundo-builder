@@ -52,10 +52,10 @@ IMPROVE_STAGES = {
 }
 IMPROVE_ALWAYS = ["safety", "pack"]
 
-#: A home run: research, the minimum set, then the home itself.
+#: A home run: research, the minimum set, the home, then its makers.
 #: Safety stays out during the event (#48); `--safety` adds it back.
-HOME_STAGES = ["intake", "research", "minimum", "home", "words", "pack"]
-HOME_ONLY = {"research", "minimum", "home"}
+HOME_STAGES = ["intake", "research", "minimum", "home", "oneshot", "words", "pack"]
+HOME_ONLY = {"research", "minimum", "home", "oneshot"}
 
 
 def stages_for_kind(

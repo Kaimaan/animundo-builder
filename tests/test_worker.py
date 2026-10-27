@@ -353,7 +353,15 @@ def test_create_home_runs_home_subset(tmp_path: Path) -> None:
     assert draft["status"] == "ready"
     assert draft["place_name"] == "Fox copse"
     assert draft["place_id"] == "fi_home_601_249_fox"
-    assert runner.ran == ["intake", "research", "minimum", "home", "words", "pack"]
+    assert runner.ran == [
+        "intake",
+        "research",
+        "minimum",
+        "home",
+        "oneshot",
+        "words",
+        "pack",
+    ]
     assert store.jobs["d1-r1"]["kind"] == "animal_home"
     assert ("pack", "d1", "1", str(job_dir / "pack")) in store.uploads
     assert ("report", "d1", "1", str(job_dir / "report.html")) in store.uploads

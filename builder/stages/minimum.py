@@ -49,20 +49,10 @@ class MinimumStage:
             json.dumps(minset, indent=2), encoding="utf-8"
         )
         result = {"minset_file": "minset.json", "make": _making(minset)}
-        if make_animal:
-            raise NotPossibleError(
-                f"{brief['latin']} is made one-shot next; "
-                "the maker lands after this review"
-            )
         if make_home:
             raise NotPossibleError(
                 f"the {brief['home']} home is made next; "
-                "the maker lands after this review"
-            )
-        if prey is not None:
-            raise NotPossibleError(
-                f"{prey['name']} is made one-shot next, as "
-                f"{brief['latin']}'s prey; the maker lands after this review"
+                "the home maker lands after this review"
             )
         return result
 

@@ -15,6 +15,7 @@ from .meta import CostLogger, MetaAuthError, MetaClient
 from .pipeline import BudgetTracker, JobContext
 from .prices import UnknownModelError
 from .stages import (
+    AnimalMakerStage,
     AnimalsStage,
     CapabilityStage,
     HomeStage,
@@ -47,6 +48,7 @@ def pipeline_stages(
         ResearchStage(),
         MinimumStage(),
         HomeStage(),
+        AnimalMakerStage(),
         SurveyStage(),
         CapabilityStage(),
         RegionStage(author=author),

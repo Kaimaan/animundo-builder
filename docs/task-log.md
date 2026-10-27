@@ -3,6 +3,30 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #50, #48.4: the one-shot animal maker, welcome's food
+
+- #48.4: the welcome names the research's `main_food`
+  (a prey animal only when it is seated in the place), never
+  carrion; otherwise the first diet kind that isn't carrion.
+  Seated-prey test included.
+- #50: the `oneshot` stage makes the minimum set's animals,
+  prey first then the animal, one model call per thing (the
+  `animal_write` + `model_spec` prompts, `start_from` as the
+  only example, no sheet). At most one fix round with the
+  checks' errors; still failing stops naming a person.
+  Done when the world's `animals`, `models`, `taxa` and
+  `region` verdicts pass on a scratch-world build. Cost on
+  `checks/oneshot.json`, the report's animal/prey lines.
+- #50: `minimum` no longer stops on the animal or the prey;
+  only a missing home still waits (home maker next). Home
+  pipeline order is now intake, research, minimum, home,
+  oneshot, words, pack.
+- #50 evidence: 9 maker tests (recorded pass + fail answers,
+  replayed keyless); probe vs the real checkout (fox files
+  adapted to lynx, stub build, real `check_draft.py`): made
+  first try, all four verdicts pass. Live lynx run is the
+  reviewer's, after the #51 research rerun.
+
 ## 2026-10-27: inbox #42 core, #45.1, #48: research, minimum set, writers carry the rules
 
 - #45.1: the research is one short call (5 searches): main
@@ -80,6 +104,9 @@ noted; `<job>` holds the previous stages' outputs):
   `builder stage intake --job <job>`
 - `home` (free unless the template lacks a food kind): needs
   `home.json`. `builder stage home --job <job> [--record|--replay]`
+- `oneshot` (1 model call per thing, at most 2): needs
+  `home.json`, `research.json`, `minset.json`, `regions/`.
+  `builder stage oneshot --job <job> [--record|--replay]`
 - `words` (model calls): needs `regions/` and
   `species-plan.json`.
   `builder stage words --job <job> [--record|--replay]`

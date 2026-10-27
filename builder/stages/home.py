@@ -429,9 +429,7 @@ def _cast_files(region: dict[str, Any]) -> set[str]:
     return files - {""}
 
 
-def _prey_seated(
-    entries: list[dict[str, Any]], cast: set[str], name: str
-) -> bool:
+def _prey_seated(entries: list[dict[str, Any]], cast: set[str], name: str) -> bool:
     """Whether the named prey sits in this cast, via the list."""
     match = match_by_name(entries, name)
     if match is None:

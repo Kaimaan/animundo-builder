@@ -178,5 +178,12 @@ def test_live_sam_segments_a_photo(tmp_path) -> None:
     print(f"\nSAM events: {len(events)}, kinds: {kinds[:6]}")
 
 
+def test_live_images_generate(tmp_path) -> None:
+    client = make_live_client(tmp_path, model="muse-image-1.0")
+    data = client.images_generate("a small red deer silhouette, flat icon")
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", f"expected PNG, got {data[:16]!r}"
+    print(f"\nimage bytes: {len(data)}")
+
+
 def test_live_baseten_open_weights() -> None:
     pytest.skip("Baseten call lands with T33 (needs key and endpoint URL)")

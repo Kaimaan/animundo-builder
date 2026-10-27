@@ -1,0 +1,58 @@
+# Write the model spec
+
+## Job
+
+Write the model spec for $TITLE ($LATIN), spec id `$SPECIES`. A builder
+turns it into the animated low-poly game model, so sculpt with
+overlapping lumps of clay: every number below is in metres.
+
+## Input
+
+The measurements, from the survey. Sourced sizes rule; the sheet only
+guides shape and colours:
+
+```
+$MEASUREMENTS
+```
+
+What the adult looks like:
+
+$DESCRIPTION
+
+The closest existing spec, $CLOSEST_NAME. Adapt its bones and layout to
+this species; do not copy its sizes:
+
+```
+$CLOSEST_SPEC
+```
+
+The rules (the art guide and the model guide, read from the checkout):
+
+```
+$RULES
+```
+
+## Output
+
+Strict JSON only: the whole spec, no fences, no commentary.
+
+## Tools
+
+None. Write from the input only.
+
+## Hard rules
+
+- Real size in metres. Lengths in the measurements are centimetres;
+  divide by 100. The build prints the size; it must match the sourced
+  body length.
+- Colours from the measured colours, named after what they are. No pure
+  black or white. Three to six colours.
+- Bones where the joints are; at most 16 bones. Parts overlap
+  generously; legs reach `y = 0`; eyes and beak sink a third in.
+- Triangle budget 1000 (up to 1500 for a large, complex animal).
+- A seasonal coat only if the real animal changes colour.
+- `id` is `$SPECIES`, `author` is `$AUTHOR`.
+
+## Stop
+
+Write the spec once. If it comes back with errors, fix exactly those.

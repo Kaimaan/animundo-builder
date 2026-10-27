@@ -15,9 +15,11 @@ No key, no secret and no personal data is ever written to a log.
 
 from __future__ import annotations
 
+import base64
 import json
 import random
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,6 +58,7 @@ class Usage:
     cached_input_tokens: int = 0
     searches: int = 0
     images: int = 0
+    generated: int = 0
 
     def cost_usd(self, prices: Prices) -> float:
         return (
@@ -64,6 +67,7 @@ class Usage:
             + self.cached_input_tokens * prices.cached_input_per_million / 1_000_000
             + self.searches * prices.search_per_thousand_queries / 1_000
             + self.images * prices.sam_image_per_thousand / 1_000
+            + self.generated * prices.image_per_thousand / 1_000
         )
 
 
@@ -273,6 +277,120 @@ class MetaClient:
         self._settle(receipt, usage.cost_usd(self.prices))
         self._log("responses", usage, time.monotonic() - start)
         return response
+
+    def for_sam(self) -> MetaClient:
+        """A sibling client for sam-3.1, sharing key, ledger, and log."""
+        clone = MetaClient.__new__(MetaClient)
+        clone.model = "sam-3.1"
+        clone.prices = prices_for("sam-3.1")
+        clone.logger = self.logger
+        clone.ledger = self.ledger
+        clone.job_id = self.job_id
+        clone.caps = self.caps
+        clone.default_max_tokens = self.default_max_tokens
+        clone._sleeper = self._sleeper
+        clone._client = self._client
+        return clone
+
+    def for_image(self) -> MetaClient:
+        """A sibling client for muse-image-1.0, sharing key, ledger, log."""
+        clone = MetaClient.__new__(MetaClient)
+        clone.model = "muse-image-1.0"
+        clone.prices = prices_for("muse-image-1.0")
+        clone.logger = self.logger
+        clone.ledger = self.ledger
+        clone.job_id = self.job_id
+        clone.caps = self.caps
+        clone.default_max_tokens = self.default_max_tokens
+        clone._sleeper = self._sleeper
+        clone._client = self._client
+        return clone
+
+    def images_generate(
+        self,
+        prompt: str,
+        size: str = "1024x1024",
+        output_format: str = "png",
+        timeout: float = TIMEOUT_LONG,
+    ) -> bytes:
+        """Draw one image: a flat $0.01, reserved and settled like any call."""
+        usage = Usage(model=self.model, generated=1)
+        receipt = None
+        if self.ledger is not None and self.caps is not None:
+            receipt = self.ledger.reserve(
+                self.job_id, usage.cost_usd(self.prices), self.caps
+            )
+
+        def call() -> Any:
+            return self._client.images.generate(
+                model=self.model,
+                prompt=prompt,
+                size=size,  # type: ignore[arg-type]
+                response_format="b64_json",
+                output_format=output_format,  # type: ignore[arg-type]
+                timeout=timeout,
+            )
+
+        start = time.monotonic()
+        try:
+            response = self._with_retries("images", call)
+        except Exception:
+            self._settle(receipt, 0.0)
+            raise
+        self._settle(receipt, usage.cost_usd(self.prices))
+        self._log("images", usage, time.monotonic() - start)
+        return base64.b64decode(response.data[0].b64_json)
+
+    def responses_stream(
+        self,
+        model_input: Any,
+        tools: list[dict[str, Any]] | None = None,
+        include: list[str] | None = None,
+        images: int = 0,
+        timeout: float = TIMEOUT_LONG,
+        metadata: dict[str, str] | None = None,
+    ) -> Iterator[Any]:
+        """Yield a Responses stream's events (SAM 3.1), billed per image.
+
+        SAM has no token cap, so no output limit is sent; the images
+        bound the cost instead. A finished stream settles the image
+        price; a failed one releases its reservation.
+        """
+        if images > MAX_IMAGES_PER_CALL:
+            raise CapExceeded(
+                f"at most {MAX_IMAGES_PER_CALL} images per call, got {images}"
+            )
+        receipt = self._reserve(model_input, 0, searches=0, images=images)
+        price = Usage(model=self.model, images=images).cost_usd(self.prices)
+        completed = False
+        failed = False
+        start = time.monotonic()
+        try:
+            with self._client.responses.stream(
+                model=self.model,
+                input=model_input,
+                tools=tools or [],
+                include=include or [],
+                timeout=timeout,
+                metadata=metadata,
+            ) as stream:
+                yield from stream
+            completed = True
+        except Exception:
+            failed = True
+            raise
+        finally:
+            if failed:
+                self._settle(receipt, 0.0)
+            else:
+                # Finished, or abandoned mid-stream: the call went out.
+                self._settle(receipt, price)
+                if completed:
+                    self._log(
+                        "responses",
+                        Usage(model=self.model, images=images),
+                        time.monotonic() - start,
+                    )
 
     def _reserve(
         self, payload: Any, max_tokens: int, searches: int, images: int

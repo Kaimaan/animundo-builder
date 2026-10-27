@@ -28,6 +28,7 @@ class Config:
     open_model_host: str = "meta"
     open_model: str | None = None
     open_base_url: str | None = None
+    reference: str = "sheet"
     world_path: str | None = None
     daily_budget_usd: float = 20.0
     job_budget_usd: float = 8.0
@@ -66,6 +67,7 @@ def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
         "OPEN_MODEL_HOST",
         "OPEN_MODEL",
         "OPEN_BASE_URL",
+        "REFERENCE",
         "WORLD_PATH",
         "DAILY_BUDGET_USD",
         "JOB_BUDGET_USD",

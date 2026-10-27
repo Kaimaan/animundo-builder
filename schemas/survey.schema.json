@@ -26,7 +26,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["species", "role", "evidence", "sources"],
+        "required": ["species", "role", "evidence", "sources", "description", "measurements"],
         "properties": {
           "species": {"type": "string", "minLength": 1},
           "latin": {"type": "string"},
@@ -34,7 +34,62 @@
           "evidence": {"type": "string", "minLength": 1},
           "sources": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "conservation": {"type": "string"},
-          "sensitive": {"type": "boolean"}
+          "sensitive": {"type": "boolean"},
+          "description": {"type": "string", "minLength": 1},
+          "measurements": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["body_cm", "tail_cm", "weight_kg"],
+            "anyOf": [{"required": ["shoulder_cm"]}, {"required": ["wingspan_cm"]}],
+            "not": {"required": ["shoulder_cm", "wingspan_cm"]},
+            "properties": {
+              "body_cm": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value", "source"],
+                "properties": {
+                  "value": {"type": "number", "exclusiveMinimum": 0},
+                  "source": {"type": "string", "minLength": 1}
+                }
+              },
+              "tail_cm": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value", "source"],
+                "properties": {
+                  "value": {"type": "number", "exclusiveMinimum": 0},
+                  "source": {"type": "string", "minLength": 1}
+                }
+              },
+              "shoulder_cm": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value", "source"],
+                "properties": {
+                  "value": {"type": "number", "exclusiveMinimum": 0},
+                  "source": {"type": "string", "minLength": 1}
+                }
+              },
+              "wingspan_cm": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value", "source"],
+                "properties": {
+                  "value": {"type": "number", "exclusiveMinimum": 0},
+                  "source": {"type": "string", "minLength": 1}
+                }
+              },
+              "weight_kg": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value", "source"],
+                "properties": {
+                  "value": {"type": "number", "exclusiveMinimum": 0},
+                  "source": {"type": "string", "minLength": 1}
+                }
+              }
+            }
+          }
         }
       }
     }

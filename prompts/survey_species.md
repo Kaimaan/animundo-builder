@@ -5,8 +5,12 @@
 Find which species really live in the place below: mammals, birds, fish,
 amphibians, reptiles, and insects a game could show. For each one: its
 common and Latin names, its role (playable animal, predator, or prey),
-what shows it lives here, its conservation status, and whether the
-sources call it wild, herded or domestic.
+what shows it lives here, its conservation status, whether the
+sources call it wild, herded or domestic, what an adult looks like
+(shape, colours, markings, seasonal coat), and its measured size:
+body length, tail length, wingspan (birds) or shoulder height
+(mammals; body depth for fish), and weight, each number with the
+source that states it.
 
 Cover every group the sources name, common species first: aim for at
 least 12 species total, including small mammals and common predators,
@@ -31,6 +35,8 @@ EVIDENCE: <one line saying how we know it lives here>
 STATUS: <IUCN category or national red list status, or unknown>
 SENSITIVE: <yes if Vulnerable or worse, or nationally protected; else no>
 LIVING: <wild, herded or domestic, if the sources say; else unknown>
+LOOKS: <two sentences on the adult's shape, colours, markings and seasonal coat>
+SIZE: body <cm>, tail <cm>, wingspan <cm> or shoulder <cm>, weight <kg>, each followed by its source URL
 SOURCE: <one URL per line>
 ```
 

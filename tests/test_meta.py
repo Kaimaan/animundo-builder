@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx2
 import pytest
@@ -107,7 +108,7 @@ def make_client(
     logger = CostLogger(tmp_path / "cost.jsonl")
     client = MetaClient(
         api_key=FAKE_KEY,
-        model=MODEL,
+        model=kwargs.pop("model", MODEL),
         logger=logger,
         http_client=httpx2.Client(transport=transport),
         sleeper=lambda seconds: None,
@@ -383,3 +384,128 @@ def test_failed_call_releases_reserve(tmp_path: Path) -> None:
         client.chat([{"role": "user", "content": "hi"}])
     assert len(ledger.reserved) == 1
     assert ledger.settled == [0.0]
+
+
+class FakeStream:
+    """A stand-in for the SDK's streaming context manager."""
+
+    def __init__(self, events: list, fail: bool = False) -> None:
+        self.events = events
+        self.fail = fail
+        self.calls = 0
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        if self.fail:
+            raise MetaError("stream broke")
+        return iter(self.events)
+
+
+def test_stream_settles_image_price(tmp_path: Path) -> None:
+    script = Script([])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(
+        script, tmp_path, model="sam-3.1", ledger=ledger, caps=ledger.caps
+    )
+    events = [SimpleNamespace(type="mask", id=1), SimpleNamespace(type="done")]
+    client._client.responses.stream = FakeStream(events)
+    assert list(client.responses_stream("see", images=1)) == events
+    (reserved,) = ledger.reserved
+    (actual,) = ledger.settled
+    assert reserved == pytest.approx(0.0025)
+    assert actual == pytest.approx(0.0025)
+    (line,) = read_log(logger)
+    assert line["call"] == "responses"
+    assert line["images"] == 1
+
+
+def test_stream_failure_releases_reserve(tmp_path: Path) -> None:
+    script = Script([])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, _ = make_client(
+        script, tmp_path, model="sam-3.1", ledger=ledger, caps=ledger.caps
+    )
+    client._client.responses.stream = FakeStream([], fail=True)
+    with pytest.raises(MetaError, match="stream broke"):
+        list(client.responses_stream("see", images=1))
+    assert len(ledger.reserved) == 1
+    assert ledger.settled == [0.0]
+
+
+def test_stream_images_refused_before_send(tmp_path: Path) -> None:
+    script = Script([])
+    client, _ = make_client(script, tmp_path, model="sam-3.1")
+    stream = FakeStream([])
+    client._client.responses.stream = stream
+    with pytest.raises(CapExceeded, match="at most 4 images"):
+        list(client.responses_stream("see", images=5))
+    assert stream.calls == 0
+
+
+def test_for_sam_shares_key_ledger_and_log(tmp_path: Path) -> None:
+    script = Script([])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(script, tmp_path, ledger=ledger, caps=ledger.caps)
+    sam = client.for_sam()
+    assert sam.model == "sam-3.1"
+    assert sam._client is client._client
+    assert sam.logger is logger
+    assert sam.ledger is ledger
+
+
+def _images_body(data: str) -> dict:
+    return {"created": 1, "data": [{"b64_json": data}], "output_format": "png"}
+
+
+def test_images_generate_round_trip(tmp_path: Path) -> None:
+    import base64 as b64lib
+
+    raw = b64lib.b64encode(b"fake-png-bytes").decode()
+    script = Script([(200, _images_body(raw))])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(
+        script, tmp_path, model="muse-image-1.0", ledger=ledger, caps=ledger.caps
+    )
+    assert client.images_generate("a red deer") == b"fake-png-bytes"
+    (reserved,) = ledger.reserved
+    (actual,) = ledger.settled
+    assert reserved == pytest.approx(0.01)
+    assert actual == pytest.approx(0.01)
+    (line,) = read_log(logger)
+    assert line["call"] == "images"
+    assert line["generated"] == 1
+    assert line["cost_usd"] == pytest.approx(0.01)
+    body = json.loads(script.requests[0].content)
+    assert body["model"] == "muse-image-1.0"
+    assert body["response_format"] == "b64_json"
+
+
+def test_images_failure_releases_reserve(tmp_path: Path) -> None:
+    script = Script([(500, error_body("boom"))] * 5)
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, _ = make_client(
+        script, tmp_path, model="muse-image-1.0", ledger=ledger, caps=ledger.caps
+    )
+    with pytest.raises(MetaError, match="failed after 5 tries"):
+        client.images_generate("a red deer")
+    assert ledger.settled == [0.0]
+
+
+def test_for_image_shares_key_ledger_and_log(tmp_path: Path) -> None:
+    script = Script([])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(script, tmp_path, ledger=ledger, caps=ledger.caps)
+    image = client.for_image()
+    assert image.model == "muse-image-1.0"
+    assert image._client is client._client
+    assert image.logger is logger
+    assert image.ledger is ledger

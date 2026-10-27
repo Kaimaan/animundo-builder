@@ -22,10 +22,25 @@ class Prices:
     search_per_thousand_queries: float = 2.50
     sam_image_per_thousand: float = 2.50
     sam_frame_per_thousand: float = 0.20
+    image_per_thousand: float = 10.0
 
 
 PRICES: dict[str, Prices] = {
     "muse-spark-1.3": Prices(),
+    # SAM bills per image and frame, with no token cap; token prices are
+    # unlisted and treated as zero until the pricing page says otherwise.
+    "sam-3.1": Prices(
+        input_per_million=0.0,
+        output_per_million=0.0,
+        cached_input_per_million=0.0,
+    ),
+    # Muse Image bills a flat $0.01 per generated image, prompt or tools
+    # not changing it.
+    "muse-image-1.0": Prices(
+        input_per_million=0.0,
+        output_per_million=0.0,
+        cached_input_per_million=0.0,
+    ),
 }
 
 

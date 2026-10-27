@@ -173,6 +173,9 @@ class SurveyStage:
             urls.extend(fact.get("sources", []))
         for species in draft.get("species", []):
             urls.extend(species.get("sources", []))
+            for measured in (species.get("measurements") or {}).values():
+                if isinstance(measured, dict) and measured.get("source"):
+                    urls.append(measured["source"])
         return urls
 
     @classmethod

@@ -28,16 +28,20 @@ from .stages import (
     AnimalsStage,
     CapabilityStage,
     IntakeStage,
+    ModelsStage,
+    ReferencesStage,
     RegionStage,
     SpeciesPlanStage,
     SurveyStage,
 )
 
 NOT_BUILT_YET = 3
-NEXT_STAGE = "models"
+NEXT_STAGE = "words"
 
 
-def _pipeline_stages(intake: IntakeStage, author: str, max_new_species: int) -> list:
+def _pipeline_stages(
+    intake: IntakeStage, author: str, max_new_species: int, reference: str
+) -> list:
     return [
         intake,
         SurveyStage(),
@@ -45,6 +49,8 @@ def _pipeline_stages(intake: IntakeStage, author: str, max_new_species: int) -> 
         RegionStage(author=author),
         SpeciesPlanStage(max_new_species=max_new_species),
         AnimalsStage(),
+        ReferencesStage(reference=reference),
+        ModelsStage(reference=reference, author=author),
     ]
 
 
@@ -218,13 +224,18 @@ def cmd_build(args: argparse.Namespace) -> int:
     )
     try:
         Pipeline(
-            _pipeline_stages(stage, args.author, config.max_new_species),
+            _pipeline_stages(
+                stage, args.author, config.max_new_species, config.reference
+            ),
             job_dir / "state.json",
         ).run(ctx)
     except (StageFailedError, CapExceeded, MetaAuthError) as error:
         return _explain_stop(job_id, error)
     print(
-        f"job {job_id}: intake, survey, capability, region, species plan, animals done"
+        "job "
+        + job_id
+        + ": intake, survey, capability, region, species plan, animals, "
+        + "references, models done"
     )
     print(f"next stage: {NEXT_STAGE} (not built yet)")
     return NOT_BUILT_YET
@@ -281,6 +292,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
         stage,
         params.get("author", "Animundo Builder"),
         config.max_new_species,
+        config.reference,
     )
     run, missing = stages_for_kind(stages, kind, choices)
     if missing:

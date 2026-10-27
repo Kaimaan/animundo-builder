@@ -15,7 +15,14 @@
       "evidence": "Resident herds on the plateau.",
       "sources": ["https://example.org/red-deer"],
       "conservation": "LC",
-      "sensitive": false
+      "sensitive": false,
+      "description": "Large deer; summer coat reddish-brown, winter grey-brown. Stag carries branched antlers.",
+      "measurements": {
+        "body_cm": {"value": 200, "source": "https://example.org/red-deer-size"},
+        "tail_cm": {"value": 15, "source": "https://example.org/red-deer-size"},
+        "shoulder_cm": {"value": 120, "source": "https://example.org/red-deer-size"},
+        "weight_kg": {"value": 150, "source": "https://example.org/red-deer-size"}
+      }
     }
   ]
 }

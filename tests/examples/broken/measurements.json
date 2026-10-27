@@ -1,11 +1,12 @@
 {
   "species": "red_deer",
-  "proportions": {
-    "body_length": 1.9,
-    "body_height": 1.2,
-    "leg_length": 0.8,
-    "head_size": 0.45,
-    "tail_length": 0.15
+  "reference": "sheet",
+  "sourced": {
+    "body_cm": 200,
+    "tail_cm": 15,
+    "weight_kg": 150
   },
-  "colours": [{"hex": "brown", "fraction": 0.9}]
+  "measured": null,
+  "comparison": [],
+  "redrawn": false
 }

@@ -136,6 +136,13 @@ class JobContext:
         self.tracker.add(usage_from_response(response, client.model, images))
         return response
 
+    def draw(self, prompt: str) -> bytes:
+        self.tracker.check()
+        client = self._client().for_image()
+        data = client.images_generate(prompt)
+        self.tracker.add(Usage(model=client.model, generated=1))
+        return data
+
 
 @dataclass
 class Pipeline:

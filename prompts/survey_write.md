@@ -31,8 +31,11 @@ $GAPS_TEXT
 
 The survey file, as strict JSON matching its schema: `area_id`, `facts`
 (each with `topic`, `text` and at least one `source` URL), and `species`
-(each with `species`, `role`, `evidence`, at least one `source` URL, and
-`conservation` and `sensitive` where known).
+(each with `species`, `role`, `evidence`, at least one `source` URL,
+`conservation` and `sensitive` where known, a `description` of what an
+adult looks like, and `measurements`: `body_cm`, `tail_cm`, `weight_kg`,
+each a `value` with its `source` URL, plus `wingspan_cm` for birds or
+`shoulder_cm` for mammals and fish, also with its source).
 
 ## Tools
 
@@ -46,6 +49,10 @@ None. Write from the research only.
 - Species ids are short lower-case codes (`red_deer`); keep the Latin name
   in `latin`.
 - Mark `sensitive: true` for every species the research calls sensitive.
+- Every measurement number comes from the research, with the URL of the
+  source that states it. Never guess a size.
+- Lengths in centimetres, weight in kilograms. For fish, `shoulder_cm`
+  means body depth.
 
 ## Stop
 

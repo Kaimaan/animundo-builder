@@ -90,6 +90,25 @@ def _good_survey() -> dict:
                 "sources": ["https://gbif.example.net/deer"],
                 "conservation": "LC",
                 "sensitive": False,
+                "description": "Large deer with a reddish summer coat.",
+                "measurements": {
+                    "body_cm": {
+                        "value": 200,
+                        "source": "https://nature.example.com/deer",
+                    },
+                    "tail_cm": {
+                        "value": 15,
+                        "source": "https://nature.example.com/deer",
+                    },
+                    "shoulder_cm": {
+                        "value": 120,
+                        "source": "https://nature.example.com/deer",
+                    },
+                    "weight_kg": {
+                        "value": 150,
+                        "source": "https://nature.example.com/deer",
+                    },
+                },
             }
         ],
     }
@@ -152,6 +171,8 @@ def test_gaps_call_when_too_few_sites(tmp_path: Path) -> None:
     # The writer may only cite researched URLs; park/gbif/iucn are all cited.
     survey["facts"][1]["sources"] = ["https://gbif.example.net/x"]
     survey["species"][0]["sources"] = ["https://iucn.example.edu/y"]
+    for measured in survey["species"][0]["measurements"].values():
+        measured["source"] = "https://gbif.example.net/x"
     client.answers[-1] = _chat_response(json.dumps(survey))
     result = SurveyStage().run(_ctx(tmp_path, client))
     assert result["sources"] == 3

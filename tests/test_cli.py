@@ -186,3 +186,21 @@ def test_resume_improve_validates_choices(tmp_path: Path, monkeypatch, capsys) -
         main(["resume", job_dir.name, "--kind", "improve", "--choices", "dragons"]) == 1
     )
     assert "unknown improve choice" in capsys.readouterr().err
+
+
+def test_report_missing_job(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["report", "no-such-job"]) == 1
+    assert "no such job" in capsys.readouterr().err
+
+
+def test_report_writes_html(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    job_dir = tmp_path / "jobs" / "job-1"
+    job_dir.mkdir(parents=True)
+    (job_dir / "state.json").write_text(
+        json.dumps({"params": {}, "completed": [], "failed": None})
+    )
+    assert main(["report", "job-1"]) == 0
+    assert "report.html" in capsys.readouterr().out
+    assert (job_dir / "report.html").is_file()

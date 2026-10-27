@@ -1,7 +1,8 @@
 """Command line for Animundo Builder.
 
 `build` runs the pipeline as far as implemented stages go; `resume`
-carries a job on; `check` runs every checker. Unbuilt commands say so.
+carries a job on; `check` runs every checker; `report` writes a round's
+`report.html`. Unbuilt commands say so.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from .pipeline import (
     StageFailedError,
     stages_for_kind,
 )
+from .report import build_report
 from .stages import (
     AnimalsStage,
     CapabilityStage,
@@ -135,6 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="Run every checker, nothing else.")
     check.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
+    )
+
+    report = sub.add_parser("report", help="Write a round's report.html.")
+    report.add_argument("job_id")
+    report.add_argument(
+        "--jobs-dir", default="jobs", help="Where job folders live (default: jobs)."
     )
 
     sub.add_parser("worker", help="Run the hosted worker.")
@@ -320,6 +328,16 @@ def cmd_check(world: str) -> int:
     return 0
 
 
+def cmd_report(job_id: str, jobs_dir: str) -> int:
+    job_dir = Path(jobs_dir) / job_id
+    if not (job_dir / "state.json").is_file():
+        print(f"error: no such job: {job_id}", file=sys.stderr)
+        return 1
+    out = build_report(job_dir)
+    print(f"job {job_id}: wrote {out}")
+    return 0
+
+
 def cmd_not_built_yet(command: str) -> int:
     print(f"error: `{command}` is not built yet", file=sys.stderr)
     return NOT_BUILT_YET
@@ -333,6 +351,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_build(args)
     if args.command == "resume":
         return cmd_resume(args)
+    if args.command == "report":
+        return cmd_report(args.job_id, args.jobs_dir)
     return cmd_not_built_yet(args.command)
 
 

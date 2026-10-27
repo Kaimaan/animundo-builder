@@ -330,3 +330,24 @@ Job folders live under `jobs/` (local only, never committed).
   file for intake; the web app reads it for the map.
 - Svalbard is filed under Norway (`no_svalbard`, country NO)
   as in spec/09, not SJ. Ningaloo has no ecoregion (marine).
+
+## 2026-10-27: T26 builder web app (inbox #29)
+
+- `web/build/` is the grown-ups' app (published at
+  animundo.app/build): email-link sign-in, a Leaflet map of the
+  12 areas with looks (yours, being built, buildable, in the
+  game, not possible yet), counts, biome/state filters and
+  wishes, an area card with Build this place, and Your drafts
+  with Watch the agents (live feed, preview sheets), Improve
+  (round < 4, else Ask a person), Submit (after playing),
+  Not right and Report a problem, all in English and Finnish.
+  `?explorer=<species>` from the game becomes the draft's
+  first explorer. Static files only; Leaflet 1.9.4 vendored,
+  OSM tiles with attribution, RESOLVE credited for
+  ecoregions; Firebase is the game's `animundo-dev` project.
+- Verified here: `node --check`, JSON validity, EN/FI key
+  parity, every `data-i18n` and worker feed key present, every
+  local file referenced exists. The browser run waits for
+  Kai's terminal (`cd web/build && python3 -m http.server`
+  per the README); `animundo.app` must be an authorized
+  domain in the Firebase console or sign-in fails there.

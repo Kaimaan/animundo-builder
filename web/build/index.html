@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Animundo Builder</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+</head>
+<body>
+<header>
+  <h1 data-i18n="app.title">Animundo Builder</h1>
+  <div class="header-right">
+    <div class="lang" role="group" aria-label="Language">
+      <button id="lang-en" type="button">EN</button>
+      <button id="lang-fi" type="button">FI</button>
+    </div>
+    <div id="auth-signed-out">
+      <input id="auth-email" type="email" data-i18n-ph="auth.email_ph" placeholder="grown-up@example.org" autocomplete="email">
+      <button id="auth-send" type="button" data-i18n="auth.send">Send sign-in link</button>
+      <p id="auth-note" class="muted" data-i18n="auth.note">Grown-ups only: sign in with an email link.</p>
+    </div>
+    <div id="auth-signed-in" hidden>
+      <span id="auth-who"></span>
+      <button id="auth-out" type="button" data-i18n="auth.out">Sign out</button>
+    </div>
+  </div>
+</header>
+<p id="app-error" class="error" hidden></p>
+
+<main id="app" hidden>
+  <section class="map-pane">
+    <div id="map" aria-label="Map"></div>
+    <div id="counts" class="counts"></div>
+    <div class="filters">
+      <label><span data-i18n="map.biome">Biome</span>
+        <select id="filter-biome"></select>
+      </label>
+      <label><span data-i18n="map.state">Show</span>
+        <select id="filter-state"></select>
+      </label>
+    </div>
+  </section>
+
+  <section class="side-pane">
+    <article id="area-card" hidden>
+      <h2 id="area-name"></h2>
+      <p id="area-facts" class="muted"></p>
+      <p id="area-state"></p>
+      <button id="area-build" type="button" data-i18n="area.build">Build this place</button>
+      <button id="area-wish" type="button" data-i18n="area.wish">I want this place!</button>
+      <p id="area-msg" class="muted"></p>
+    </article>
+
+    <article id="drafts">
+      <h2 data-i18n="drafts.title">Your drafts</h2>
+      <div id="draft-list"></div>
+    </article>
+  </section>
+</main>
+
+<footer>
+  <span data-i18n="app.credit">Map: OpenStreetMap contributors. Ecoregions: RESOLVE 2017. Tiles: OpenStreetMap.</span>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

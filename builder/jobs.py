@@ -19,11 +19,13 @@ from .stages import (
     CapabilityStage,
     HomeStage,
     IntakeStage,
+    MinimumStage,
     ModelsStage,
     PackStage,
     PlantsStage,
     ReferencesStage,
     RegionStage,
+    ResearchStage,
     SafetyStage,
     SpeciesPlanStage,
     SurveyStage,
@@ -42,6 +44,8 @@ def pipeline_stages(
     """Every stage in run order, with the pack stamped for its round."""
     return [
         intake,
+        ResearchStage(),
+        MinimumStage(),
         HomeStage(),
         SurveyStage(),
         CapabilityStage(),

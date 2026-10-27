@@ -26,7 +26,7 @@ from typing import Any
 import jsonschema
 from referencing import Registry, Resource
 
-from ..prompts import PROMPTS_DIR, load_prompt
+from ..prompts import PROMPTS_DIR, for_children, load_prompt
 from ..schemas import load_schema, validate
 from ..world import check_draft, mentions, problems_by_file
 from .models import build_in_sandbox
@@ -205,6 +205,7 @@ class PlantsStage:
                 "EXAMPLES": examples.replace("$", "$$"),
                 "RULES": _plant_rules(world),
                 "AUTHOR": self.author,
+                "FOR_CHILDREN": for_children(),
             }
         )
         if spec is not None:

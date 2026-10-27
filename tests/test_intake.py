@@ -211,10 +211,14 @@ def test_home_unmakable_refused(tmp_path: Path) -> None:
         _home_stage(tmp_path, entry=entry).run(_home_ctx(tmp_path))
 
 
-def test_home_without_home_refused(tmp_path: Path) -> None:
+def test_home_without_home_is_flagged(tmp_path: Path) -> None:
     entry = {**FOX_ENTRY, "habitats": ["grassland"]}
-    with pytest.raises(ValueError, match="no built home"):
-        _home_stage(tmp_path, entry=entry).run(_home_ctx(tmp_path))
+    result = _home_stage(tmp_path, entry=entry).run(_home_ctx(tmp_path))
+    assert result["home"] == "grassland"
+    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
+    assert brief["needs_home"] is True
+    assert brief["habitats"] == ["grassland"]
+    assert brief["place_name"] == "Fox grassland, Testland"
 
 
 def test_home_unrecorded_refused(tmp_path: Path) -> None:

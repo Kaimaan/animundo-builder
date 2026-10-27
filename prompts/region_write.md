@@ -99,6 +99,8 @@ None. Write from the inputs only.
   here. Never invent one.
 - Colours are `#rrggbb` strings. Numbers stay inside the rules' ranges.
 
+$FOR_CHILDREN
+
 ## Stop
 
 Write the file once. If it comes back with errors, fix exactly those.

@@ -20,6 +20,34 @@ from typing import Any
 from .config import Config
 
 
+def _new_things(job_dir: Path) -> str:
+    """A line per thing this home build made, and its cost (#42)."""
+    minset = _read_json(job_dir / "minset.json")
+    if not minset:
+        return ""
+    brief = _read_json(job_dir / "home.json")
+    lines = []
+    research_cost = _read_json(job_dir / "checks" / "research.json").get("cost_usd")
+    lines.append(_thing_line("research", brief.get("latin", ""), research_cost))
+    if minset.get("make_animal"):
+        cost = _read_json(job_dir / "checks" / "oneshot.json").get("cost_usd")
+        lines.append(_thing_line("animal", brief.get("latin", ""), cost))
+    if minset.get("make_home"):
+        cost = _read_json(job_dir / "checks" / "newhome.json").get("cost_usd")
+        lines.append(_thing_line("home", minset.get("home_habitat", ""), cost))
+    prey = minset.get("prey") or {}
+    if prey:
+        cost = _read_json(job_dir / "checks" / "oneshot.json").get("cost_usd")
+        lines.append(_thing_line("prey", prey.get("name", ""), cost))
+    rows = "".join(f"<li>{line}</li>" for line in lines)
+    return f"<h2>New in this build</h2>\n<ul>{rows}</ul>"
+
+
+def _thing_line(kind: str, name: str, cost: Any) -> str:
+    amount = f"${float(cost):.3f}" if isinstance(cost, (int, float)) else "—"
+    return f"{html.escape(kind)}: {html.escape(str(name))} — {amount}"
+
+
 def build_report(job_dir: Path) -> Path:
     """Write `report.html` into the job folder and return its path."""
     state = _read_json(job_dir / "state.json")
@@ -33,6 +61,7 @@ def build_report(job_dir: Path) -> Path:
     species_ids = _new_species(plan, job_dir)
     parts = [
         _head(params, job_dir.name),
+        _new_things(job_dir),
         _stages(state),
         _cost(calls),
         _sources(survey),

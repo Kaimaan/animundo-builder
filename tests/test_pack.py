@@ -125,6 +125,15 @@ def test_pack_gate_stops_without_safety(tmp_path: Path) -> None:
         PackStage().run(_ctx(job, world))
 
 
+def test_pack_gate_skips_missing_safety_for_homes(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    (job / "safety.json").unlink()
+    (job / "home.json").write_text(json.dumps({"latin": "Vulpes vulpes"}))
+    result = PackStage(version=1).run(_ctx(job, world))
+    assert result["manifest"] == "pack/manifest.json"
+
+
 def test_pack_gate_stops_on_failed_verdict(tmp_path: Path) -> None:
     world = _world(tmp_path)
     job = _job(tmp_path)

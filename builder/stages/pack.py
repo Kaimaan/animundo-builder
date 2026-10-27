@@ -115,15 +115,17 @@ class PackStage:
     def _gate(self, world: Path, ctx: Any) -> None:
         """The whole draft checker once more, on the finished round."""
         safety = ctx.job_dir / "safety.json"
-        if not safety.is_file():
+        if not safety.is_file() and not (ctx.job_dir / "home.json").is_file():
             raise _Stopped("no safety verdict; the safety stage must pass first")
-        record = json.loads(safety.read_text(encoding="utf-8"))
-        validate("safety", record)
-        failed = [item for item in record["items"] if item["verdict"] != "pass"]
-        if failed:
-            raise _Stopped(
-                f"safety failed {len(failed)} items; the safety stage must pass first"
-            )
+        if safety.is_file():
+            record = json.loads(safety.read_text(encoding="utf-8"))
+            validate("safety", record)
+            failed = [item for item in record["items"] if item["verdict"] != "pass"]
+            if failed:
+                raise _Stopped(
+                    f"safety failed {len(failed)} items; "
+                    "the safety stage must pass first"
+                )
         result = check_draft(world, ctx.job_dir, "pack")
         by_check = {entry.get("check"): entry for entry in result.get("results", [])}
         for name in ("locale", "schema", "taxa", "region", "animals"):

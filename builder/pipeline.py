@@ -52,12 +52,17 @@ IMPROVE_STAGES = {
 }
 IMPROVE_ALWAYS = ["safety", "pack"]
 
-#: A home reuses its whole cast: no survey, plan, animals or models.
-HOME_STAGES = ["intake", "home", "words", "safety", "pack"]
+#: A home run: research, the minimum set, then the home itself.
+#: Safety stays out during the event (#48); `--safety` adds it back.
+HOME_STAGES = ["intake", "research", "minimum", "home", "words", "pack"]
+HOME_ONLY = {"research", "minimum", "home"}
 
 
 def stages_for_kind(
-    stages: list[Stage], kind: str, choices: Collection[str] = ()
+    stages: list[Stage],
+    kind: str,
+    choices: Collection[str] = (),
+    safety: bool = False,
 ) -> tuple[list[Stage], list[str]]:
     """Filter built stages to one job kind. Returns (run, missing).
 
@@ -65,11 +70,14 @@ def stages_for_kind(
     the caller can say so instead of running half a job.
     """
     if kind == "new_place":
-        return [stage for stage in stages if stage.name != "home"], []
+        return [stage for stage in stages if stage.name not in HOME_ONLY], []
     if kind == "animal_home":
+        names = list(HOME_STAGES)
+        if safety:
+            names.insert(names.index("pack"), "safety")
         by_name = {stage.name: stage for stage in stages}
-        run = [by_name[name] for name in HOME_STAGES if name in by_name]
-        missing = [name for name in HOME_STAGES if name not in by_name]
+        run = [by_name[name] for name in names if name in by_name]
+        missing = [name for name in names if name not in by_name]
         return run, missing
     if kind == "submit":
         return [], ["pull_request"]

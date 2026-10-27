@@ -23,7 +23,7 @@ from typing import Any
 
 import jsonschema
 
-from ..prompts import PROMPTS_DIR
+from ..prompts import PROMPTS_DIR, for_children
 from ..world import DraftError, check_draft, problems_by_file
 
 HOSTED_AUTHOR = "Animundo Builder"
@@ -65,6 +65,7 @@ class RegionStage:
                 "REGION_RULES": _region_rules(world),
                 "EXISTING_ANIMALS": ", ".join(sorted(_known_animals(world))),
                 "BUILT_PLANTS": ", ".join(sorted(_built_plants(world))),
+                "FOR_CHILDREN": for_children(),
             }
         )
         problems = ""

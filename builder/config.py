@@ -31,6 +31,7 @@ class Config:
     open_model: str | None = None
     open_base_url: str | None = None
     reference: str = "sheet"
+    safety: bool = False
     world_path: str | None = None
     daily_budget_usd: float = 20.0
     job_budget_usd: float = 8.0
@@ -77,6 +78,7 @@ def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
         "OPEN_MODEL",
         "OPEN_BASE_URL",
         "REFERENCE",
+        "SAFETY",
         "WORLD_PATH",
         "DAILY_BUDGET_USD",
         "JOB_BUDGET_USD",
@@ -122,6 +124,8 @@ def load(path: str | Path | None = None) -> Config:
         values["max_new_species"] = int(values["max_new_species"])
     if "max_new_plants" in values:
         values["max_new_plants"] = int(values["max_new_plants"])
+    if "safety" in values:
+        values["safety"] = str(values["safety"]).lower() in ("1", "true", "yes")
     if "open_model_host" in values and values["open_model_host"] not in OPEN_HOSTS:
         raise ValueError(f"open_model_host must be one of {', '.join(OPEN_HOSTS)}")
     if "prices" in values and isinstance(values["prices"], dict):

@@ -1,0 +1,13 @@
+{
+  "main_food": {"name": "mountain hare"},
+  "other_foods": [],
+  "surroundings": [],
+  "size": {"length_cm": 70},
+  "year": {
+    "winter": "sleeps",
+    "shelter": "x",
+    "young": "y",
+    "food": "z"
+  },
+  "sources": []
+}

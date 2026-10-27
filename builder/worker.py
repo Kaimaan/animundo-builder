@@ -49,6 +49,8 @@ DELETE = object()
 #: Pipeline stage -> the feed's five building phases.
 PHASES = {
     "intake": "land",
+    "research": "animals",
+    "minimum": "animals",
     "home": "animals",
     "survey": "land",
     "capability": "land",
@@ -453,7 +455,7 @@ class Worker:
             self.config.max_new_plants,
             pack_version=round_no,
         )
-        run, missing = stages_for_kind(stages, kind, choices)
+        run, missing = stages_for_kind(stages, kind, choices, self.config.safety)
         if missing:
             raise RoundFailed(
                 "choice_unbuilt", f"needs {', '.join(missing)}, not built yet"

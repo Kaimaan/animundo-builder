@@ -19,7 +19,7 @@ from typing import Any
 
 import jsonschema
 
-from ..prompts import PROMPTS_DIR
+from ..prompts import PROMPTS_DIR, for_children
 from ..world import check_draft, mentions, problems_by_file
 from .region import MAX_NEW_PLANTS, new_plant_ids
 
@@ -140,6 +140,7 @@ class AnimalsStage:
                 "ARCHETYPES": ", ".join(sorted(_archetypes(world))),
                 "MODEL_PATH": f"res://assets/animals/{species['species']}.glb",
                 "ANIMAL_RULES": _animal_rules(world),
+                "FOR_CHILDREN": for_children(),
             }
         )
         if errors:

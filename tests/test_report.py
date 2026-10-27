@@ -173,6 +173,32 @@ def test_report_tells_the_whole_story(tmp_path: Path) -> None:
     assert "the bar: the game&#x27;s own moose" in text
 
 
+def test_report_lists_new_things(tmp_path: Path) -> None:
+    (tmp_path / "state.json").write_text(
+        json.dumps({"params": {"kind": "animal_home"}, "completed": []})
+    )
+    (tmp_path / "home.json").write_text(json.dumps({"latin": "Eunectes murinus"}))
+    (tmp_path / "minset.json").write_text(
+        json.dumps(
+            {
+                "make_animal": True,
+                "make_home": True,
+                "home_habitat": "rainforest",
+                "prey": {"name": "capybara", "size_cm": 110},
+            }
+        )
+    )
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    (checks / "research.json").write_text(json.dumps({"cost_usd": 0.03}))
+    text = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "New in this build" in text
+    assert "research: Eunectes murinus — $0.030" in text
+    assert "animal: Eunectes murinus — —" in text
+    assert "home: rainforest — —" in text
+    assert "prey: capybara — —" in text
+
+
 def test_report_is_offline_safe(tmp_path: Path) -> None:
     _job(tmp_path)
     text = build_report(tmp_path).read_text(encoding="utf-8")

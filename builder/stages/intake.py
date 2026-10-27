@@ -19,6 +19,7 @@ from ..animal_list import (
     habitat_word,
     home_for,
     load_list,
+    needs_home,
     short_name,
 )
 from ..countries import country_at, find_shapes
@@ -112,11 +113,14 @@ class IntakeStage:
             )
         brief = {
             "species_key": self.species_key,
+            "id": entry.get("id", ""),
             "latin": entry.get("latin", ""),
             "name": entry.get("name", ""),
             "in_library": entry.get("in_library"),
             "start_from": entry.get("start_from", ""),
+            "habitats": entry.get("habitats", []),
             "home": home,
+            "needs_home": needs_home(entry, data["homes"]),
             "cell": self.cell,
             "center": center,
             "country": country,

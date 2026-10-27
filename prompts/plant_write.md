@@ -59,6 +59,8 @@ None. Write from the input only.
   it is poisonous to people, say so in one sentence in
   `year.notes` (an expert reads these later).
 
+$FOR_CHILDREN
+
 ## Stop
 
 Write the spec once. If it comes back with errors, fix exactly those.

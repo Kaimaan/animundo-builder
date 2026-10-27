@@ -31,6 +31,13 @@ def test_max_new_plants_from_env(monkeypatch) -> None:
     assert load().max_new_plants == 1
 
 
+def test_safety_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("BUILDER_SAFETY", "true")
+    assert load().safety is True
+    monkeypatch.setenv("BUILDER_SAFETY", "0")
+    assert load().safety is False
+
+
 def test_load_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("BUILDER_MODEL", "muse-spark-1.2")
     monkeypatch.setenv("BUILDER_JOB_BUDGET_USD", "5")

@@ -373,8 +373,10 @@ function pickAnimal(animal) {
     return;
   }
   // The worker resolves the same home the same way: the animal's
-  // first habitat with a built home.
-  const home = (animal.habitats || []).find((h) => state.animalHomes.includes(h));
+  // first habitat with a built home, else its first habitat, made
+  // to order (#42).
+  const habitats = animal.habitats || [];
+  const home = habitats.find((h) => state.animalHomes.includes(h)) || habitats[0];
   if (!home) {
     $("animal-msg").textContent = t("home.no_home");
     return;
@@ -385,7 +387,10 @@ function pickAnimal(animal) {
     animal.name.split(" ").pop().replace(/^./, (c) => c.toUpperCase());
   state.pickedHabitat = home.split("_").pop();
   setGbifLayer(animal.gbif_key);
-  $("animal-msg").textContent = t("home.picked", { name: animal.name });
+  const built = state.animalHomes.includes(home);
+  $("animal-msg").textContent = built
+    ? t("home.picked", { name: animal.name })
+    : t("home.make_home_too");
 }
 
 /* -- the spot ------------------------------------------------ */

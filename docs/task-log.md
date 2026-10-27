@@ -3,6 +3,37 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #42 core, #45.1, #48: research, minimum set, writers carry the rules
+
+- #45.1: the research is one short call (5 searches): main
+  food plus up to 3 others, about 5 surroundings, size and
+  year, each with a source (`research` stage, prompt, schema).
+  Nothing else is researched; food-kind names come from it.
+- #42: the `minimum` stage decides the set in code, free: make
+  the animal (not in library), make the home (no template),
+  one prey (hunts, no library prey in the habitat, smallest
+  named prey that can be made). The one-shot and new-home
+  makers land next; until then the minimum stops cleanly as
+  not possible yet, naming what comes.
+- #42: home runs on research and the job's own files (made
+  template, made animals join without asking GBIF); new
+  species are marked `new` in the plan. Web: no-home animals
+  can be picked ("We'll make its home too..."). Report: a
+  line per new thing and its cost.
+- #48: safety is out of the home pipeline (stage and tests
+  stay; `--safety` / `BUILDER_SAFETY=1` restores it; the pack
+  gate skips the verdict for safety-less home jobs). The
+  shared `prompts/for_children.md` block (verbatim) goes into
+  every child-facing writer: animal_write, plant_write,
+  region_write, words_translate, words_plant_about and the
+  new research (which replaces home_research).
+- Feed: new stages report `stage_done`; specific "Making a
+  ..." lines need game-side strings (blocked).
+- Evidence: 467 tests pass; fox probe (research, minimum
+  makes nothing, home, words skipped, pack) passes the gate;
+  scripted record + keyless CLI replay green. No live model
+  runs from here.
+
 ## 2026-10-27: inbox #46, #47: short names, the welcome, English-only words
 
 - #46.1: homes are named "Fox forest, Finland": the last word

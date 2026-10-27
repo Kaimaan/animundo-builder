@@ -1,0 +1,35 @@
+# Animal research
+
+## Job
+
+One short call about $NAME ($LATIN), living near $LAT, $LON.
+Five searches at most. Answer with JSON only, no prose.
+
+## Wanted
+
+- `main_food`: what it eats most. An object with `name` (the
+  plain English name, like "mountain hare"), `kind`, and
+  `size_cm` (body length) when it is an animal. `kind` is one
+  of: prey, bark, berries, bottom_bugs, browse, carrion,
+  carrot, clover, cones, grass, insects, mushrooms, nectar,
+  nest, seeds, water_bugs, water_plants. Use `prey` for an
+  animal it hunts, a food kind otherwise.
+- `other_foods`: up to 3 more foods it eats, same shape as
+  `main_food`, each with `size_cm` when it is an animal.
+- `surroundings`: about 5 things around it where it lives:
+  trees, plants, the ground and water. Each has `name`, `kind`
+  (tree, plant, ground or water), and `food_kind` when animals
+  eat it (one of the food kinds above, not prey).
+- `size`: its own body, `length_cm` (required) and
+  `weight_kg` when known.
+- `year`: how it lives through the seasons: `winter` (active,
+  hibernates or migrates), `shelter` (one or two sentences),
+  `young` (one or two sentences) and `food` (one sentence
+  about what it eats through the year).
+- `sources`: the pages the facts came from, most important
+  first.
+
+Nothing else is researched. Every fact comes from a search;
+never invent a name or a size.
+
+$FOR_CHILDREN

@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..prompts import load_prompt
+from ..prompts import for_children, load_prompt
 from ..world import check_draft
 
 TRIES = 2
@@ -118,6 +118,7 @@ class WordsStage:
                     indent=2,
                 ),
                 "EXAMPLES": _plant_examples(world),
+                "FOR_CHILDREN": for_children(),
             },
         )
         problems = ""
@@ -173,6 +174,7 @@ class WordsStage:
                 "TARGET_LANG": f"{language_name} ({language})",
                 "STRINGS_JSON": json.dumps(strings, indent=2, ensure_ascii=False),
                 "EXAMPLES": examples,
+                "FOR_CHILDREN": for_children(),
             },
         )
         problems = ""

@@ -579,6 +579,7 @@ class SpeciesPlanStage:
         world: Path,
         region: dict[str, Any],
         fixed: dict[str, dict[str, Any]],
+        overlay: Path | None = None,
     ) -> None:
         """Seat backfilled reuse in the cast, in place.
 
@@ -591,7 +592,7 @@ class SpeciesPlanStage:
             if not record.get("backfilled"):
                 continue
             stem = record["file"]
-            data = animal_file(world, stem)
+            data = animal_file(world, stem, overlay)
             if data.get("archetype") == "fish":
                 fish = region.setdefault("fish", [])
                 if stem not in {entry.get("kind") for entry in fish}:
@@ -611,7 +612,9 @@ class SpeciesPlanStage:
                 if stem not in group:
                     group.append(stem)
 
-    def heal_cast(self, world: Path, region: dict[str, Any]) -> set[str]:
+    def heal_cast(
+        self, world: Path, region: dict[str, Any], overlay: Path | None = None
+    ) -> set[str]:
         """Feed the reuse cast: missing food kinds and young prey forms.
 
         Every diet kind of a reused cast animal must be food the region
@@ -631,7 +634,7 @@ class SpeciesPlanStage:
         for _ in range(3):
             cast = _cast_files(region)
             known = cast | added
-            files = {stem: animal_file(world, stem) for stem in known}
+            files = {stem: animal_file(world, stem, overlay) for stem in known}
             kinds = _available_food(region)
             changed = False
             for stem, data in files.items():
@@ -651,11 +654,11 @@ class SpeciesPlanStage:
             tags = {tag for data in files.values() for tag in data.get("tags", [])}
             hunts = {tag for data in files.values() for tag in data.get("hunts", [])}
             for tag in sorted(hunts - tags):
-                young = _young_carrying(world, known, tag)
+                young = _young_carrying(world, known, tag, overlay)
                 if young is None:
                     continue
                 added.add(young)
-                parent = animal_file(world, young).get("stage_of", "")
+                parent = animal_file(world, young, overlay).get("stage_of", "")
                 placed = False
                 for fish in region.get("fish", []):
                     if fish.get("kind") == parent:
@@ -743,7 +746,12 @@ def _cast_files(region: dict[str, Any]) -> set[str]:
     return cast - {""}
 
 
-def animal_file(world: Path, stem: str) -> dict[str, Any]:
+def animal_file(world: Path, stem: str, overlay: Path | None = None) -> dict[str, Any]:
+    """One animal file: the job's own first, then the library's."""
+    if overlay is not None:
+        made = overlay / "animals" / f"{stem}.json"
+        if made.is_file():
+            return json.loads(made.read_text(encoding="utf-8"))
     path = world / "animals" / f"{stem}.json"
     if not path.is_file():
         return {}
@@ -793,26 +801,36 @@ def _region_food_kinds(world: Path) -> set[str] | None:
     return set(kinds) if kinds else None
 
 
-def _young_carrying(world: Path, cast: set[str], tag: str) -> str | None:
+def _young_carrying(
+    world: Path, cast: set[str], tag: str, overlay: Path | None = None
+) -> str | None:
     """A young form of a cast animal that carries `tag`, if one exists."""
-    for path in sorted((world / "animals").glob("*.json")):
-        if path.stem == "archetypes" or path.stem in cast:
-            continue
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if data.get("stage_of") in cast and tag in data.get("tags", []):
-            return path.stem
+    dirs = [world / "animals"]
+    if overlay is not None:
+        dirs.append(overlay / "animals")
+    for directory in dirs:
+        for path in sorted(directory.glob("*.json")):
+            if path.stem == "archetypes" or path.stem in cast:
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("stage_of") in cast and tag in data.get("tags", []):
+                return path.stem
     return None
 
 
-def file_taxa(world: Path) -> dict[str, dict[str, Any]]:
+def file_taxa(world: Path, overlay: Path | None = None) -> dict[str, dict[str, Any]]:
     """GBIF taxon block per animal file stem (skipping the index)."""
     taxa = {}
-    for path in (world / "animals").glob("*.json"):
-        if path.stem == "archetypes":
-            continue
-        taxon = json.loads(path.read_text(encoding="utf-8")).get("taxon")
-        if taxon:
-            taxa[path.stem] = taxon
+    dirs = [world / "animals"]
+    if overlay is not None:
+        dirs.append(overlay / "animals")
+    for directory in dirs:
+        for path in directory.glob("*.json"):
+            if path.stem == "archetypes":
+                continue
+            taxon = json.loads(path.read_text(encoding="utf-8")).get("taxon")
+            if taxon:
+                taxa[path.stem] = taxon
     return taxa
 
 

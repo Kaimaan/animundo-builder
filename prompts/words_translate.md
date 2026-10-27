@@ -41,6 +41,8 @@ None. Translate from the input only.
 - A name or title alone (one or two words) gets its usual
   $TARGET_LANG name, never a description.
 
+$FOR_CHILDREN
+
 ## Stop
 
 Translate once. If it comes back with errors, fix exactly those.

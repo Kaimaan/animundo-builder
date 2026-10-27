@@ -126,6 +126,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("new_place", "animal_home", "submit", "improve"),
         help="The job kind (default: new_place).",
     )
+    build.add_argument(
+        "--safety",
+        action="store_true",
+        help="Run the child-safety review (off during the event).",
+    )
 
     stage = sub.add_parser("stage", help="Run one stage of a job on its own.")
     stage.add_argument("name", help="The stage to run.")
@@ -154,6 +159,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=("new_place", "animal_home", "submit", "improve"),
         help="Run a different kind on this job (default: the job's kind).",
+    )
+    resume.add_argument(
+        "--safety",
+        action="store_true",
+        help="Run the child-safety review (off during the event).",
     )
     resume.add_argument(
         "--choices",
@@ -340,7 +350,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         config.reference,
         config.max_new_plants,
     )
-    run, missing = stages_for_kind(stages, args.kind, [])
+    run, missing = stages_for_kind(stages, args.kind, [], args.safety)
     if missing:
         print(
             f"error: {args.kind} needs {', '.join(missing)}, not built yet",
@@ -403,7 +413,7 @@ def cmd_build_home(args: argparse.Namespace, world: Path) -> int:
         config.reference,
         config.max_new_plants,
     )
-    run, missing = stages_for_kind(stages, "animal_home", [])
+    run, missing = stages_for_kind(stages, "animal_home", [], args.safety)
     if missing:
         print(
             f"error: animal_home needs {', '.join(missing)}, not built yet",
@@ -456,7 +466,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
         config.reference,
         config.max_new_plants,
     )
-    run, missing = stages_for_kind(stages, kind, [])
+    run, missing = stages_for_kind(stages, kind, [], args.safety)
     if missing:
         print(
             f"error: {kind} needs {', '.join(missing)}, not built yet",
@@ -568,7 +578,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
         config.reference,
         config.max_new_plants,
     )
-    run, missing = stages_for_kind(stages, kind, choices)
+    run, missing = stages_for_kind(stages, kind, choices, args.safety)
     if missing:
         print(
             f"job {args.job_id}: needs {', '.join(missing)}, not built yet",

@@ -1,7 +1,0 @@
-{
-  "foods": {
-    "bark": ["birch bark", "aspen bark", "rowan bark"],
-    "mushrooms": ["chanterelle", "porcini"]
-  },
-  "sources": ["https://example.org/forest-foods"]
-}

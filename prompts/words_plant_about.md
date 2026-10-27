@@ -36,6 +36,8 @@ None. Write from the input only.
 - True to the spec: its real shape, colours, seasons and year.
 - Never invent a use, a danger, or a place it grows.
 
+$FOR_CHILDREN
+
 ## Stop
 
 Write once. If it comes back with errors, fix exactly those.

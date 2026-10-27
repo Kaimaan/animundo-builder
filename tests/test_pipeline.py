@@ -185,8 +185,11 @@ def test_new_place_runs_everything() -> None:
     assert missing == []
 
 
-def test_new_place_skips_home() -> None:
-    stages = [NamedStage(n) for n in ("intake", "home", "survey", "pack")]
+def test_new_place_skips_home_only() -> None:
+    stages = [
+        NamedStage(n)
+        for n in ("intake", "research", "minimum", "home", "survey", "pack")
+    ]
     run, missing = stages_for_kind(stages, "new_place")
     assert [s.name for s in run] == ["intake", "survey", "pack"]
     assert missing == []
@@ -196,7 +199,13 @@ def test_animal_home_runs_home_subset() -> None:
     stages = [NamedStage(n) for n in ("intake", "home", "survey", "words")]
     run, missing = stages_for_kind(stages, "animal_home")
     assert [s.name for s in run] == ["intake", "home", "words"]
-    assert missing == ["safety", "pack"]
+    assert missing == ["research", "minimum", "pack"]
+
+
+def test_animal_home_safety_flag_restores_review() -> None:
+    stages = [NamedStage(n) for n in ("intake", "home", "words", "safety", "pack")]
+    run, _ = stages_for_kind(stages, "animal_home", safety=True)
+    assert [s.name for s in run] == ["intake", "home", "words", "safety", "pack"]
 
 
 def test_submit_needs_pull_request() -> None:

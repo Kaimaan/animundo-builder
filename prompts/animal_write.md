@@ -101,6 +101,8 @@ None. Write from the inputs only.
   resting site for a sensitive species.
 - Numbers stay inside the rules' ranges.
 
+$FOR_CHILDREN
+
 ## Stop
 
 Write the file once. If it comes back with errors, fix exactly those.

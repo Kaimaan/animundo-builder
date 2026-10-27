@@ -53,11 +53,32 @@ def find_by_id(entries: list[dict[str, Any]], animal_id: str) -> dict[str, Any]:
 
 
 def home_for(entry: dict[str, Any], homes: list[str]) -> str:
-    """The animal's first habitat with a built home, or a ValueError."""
-    for habitat in entry.get("habitats", []):
+    """The first habitat with a built home, else the first habitat.
+
+    A habitat with no home yet is made by the new-home stage (#42);
+    `needs_home` says which case this is.
+    """
+    habitats = entry.get("habitats", [])
+    for habitat in habitats:
         if habitat in homes:
             return habitat
-    raise ValueError(f"no built home for {entry.get('latin', 'this animal')} yet")
+    if not habitats:
+        raise ValueError(f"no habitat for {entry.get('latin', 'this animal')}")
+    return habitats[0]
+
+
+def needs_home(entry: dict[str, Any], homes: list[str]) -> bool:
+    """Whether the animal's home must be made first."""
+    return home_for(entry, homes) not in homes
+
+
+def match_by_name(entries: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
+    """The list entry with this English name, if any."""
+    want = name.strip().lower()
+    for entry in entries:
+        if str(entry.get("name", "")).strip().lower() == want:
+            return entry
+    return None
 
 
 def short_name(name: str) -> str:

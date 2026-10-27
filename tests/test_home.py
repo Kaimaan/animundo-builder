@@ -15,9 +15,10 @@ from builder.records import ReplayClient
 from builder.schemas import validate
 from builder.stages.capability import NotPossibleError
 from builder.stages.home import HomeStage
+from builder.stages.research import ResearchStage
 
 FOX = {"gbif_key": 5219243, "rank": "SPECIES", "name": "Vulpes vulpes"}
-LYNX = {"gbif_key": 2435239, "rank": "SPECIES", "name": "Lynx lynx"}
+LYNX = {"gbif_key": 2435240, "rank": "SPECIES", "name": "Lynx lynx"}
 HARE = {"gbif_key": 2436756, "rank": "SPECIES", "name": "Lepus timidus"}
 
 STUB_TOOL = """\
@@ -40,7 +41,7 @@ region = {
     "fish": [],
     "food": [
         {"kind": kind, "amount": 10, "names": [kind]}
-        for kind in (args.food or ["berries", "meat", "grass"])
+        for kind in (args.food or ["berries", "carrion", "grass"])
     ],
     "places": [],
     "sources": ["https://example.org/template"],
@@ -68,7 +69,7 @@ def _world(tmp_path: Path, *, tool: bool = True) -> Path:
         json.dumps(
             {
                 "taxon": LYNX,
-                "diet": ["meat"],
+                "diet": ["carrion"],
                 "tags": ["predator", "mammal"],
                 "hunts": ["mammal"],
             }
@@ -87,6 +88,7 @@ def _world(tmp_path: Path, *, tool: bool = True) -> Path:
 
 def _brief(**overrides: Any) -> dict[str, Any]:
     brief: dict[str, Any] = {
+        "id": "fox",
         "latin": "Vulpes vulpes",
         "name": "Red fox",
         "species_key": 5219243,
@@ -114,19 +116,6 @@ class ScriptClient:
         return self.answers.pop(0)
 
 
-def _response(text: str, searches: int = 1) -> SimpleNamespace:
-    parts = [SimpleNamespace(type="output_text", text=text, annotations=[])]
-    output = [SimpleNamespace(type="message", content=parts)]
-    output += [SimpleNamespace(type="web_search_call") for _ in range(searches)]
-    return SimpleNamespace(
-        model="fake-test-model",
-        output=output,
-        usage=SimpleNamespace(
-            prompt_tokens=100, completion_tokens=50, prompt_tokens_details=None
-        ),
-    )
-
-
 def _ctx(tmp_path: Path, client: ScriptClient, world: Path) -> JobContext:
     return JobContext(
         job_id="job-1",
@@ -137,9 +126,36 @@ def _ctx(tmp_path: Path, client: ScriptClient, world: Path) -> JobContext:
     )
 
 
+def _research(**overrides: Any) -> dict[str, Any]:
+    research: dict[str, Any] = {
+        "main_food": {"name": "mountain hare", "kind": "prey", "size_cm": 55},
+        "other_foods": [{"name": "bilberries", "kind": "berries"}],
+        "surroundings": [
+            {"name": "timothy grass", "kind": "plant", "food_kind": "grass"},
+            {"name": "mossy rocks", "kind": "ground"},
+            {"name": "forest pond", "kind": "water"},
+        ],
+        "size": {"length_cm": 70},
+        "year": {
+            "winter": "active",
+            "shelter": "x",
+            "young": "y",
+            "food": "z",
+        },
+        "sources": ["https://example.org/fox"],
+    }
+    research.update(overrides)
+    return research
+
+
+def _write_inputs(tmp_path: Path, **brief_over: Any) -> None:
+    (tmp_path / "home.json").write_text(json.dumps(_brief(**brief_over)))
+    (tmp_path / "research.json").write_text(json.dumps(_research()))
+
+
 def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    (tmp_path / "home.json").write_text(json.dumps(_brief()))
+    _write_inputs(tmp_path)
     client = ScriptClient([])
     result = HomeStage(recorded=lambda lat, lon, key: True).run(
         _ctx(tmp_path, client, world)
@@ -159,7 +175,7 @@ def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
         "Go and find some berries to eat!"
     )
     assert len(region["welcome"]) <= 300
-    assert region["sources"] == ["GBIF.org"]
+    assert region["sources"] == ["https://example.org/fox", "GBIF.org"]
     plan = json.loads((tmp_path / "species-plan.json").read_text(encoding="utf-8"))
     assert [entry["species"] for entry in plan["species"]] == [
         "fox",
@@ -174,9 +190,7 @@ def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
 
 def test_home_new_animal_waits_for_one_shot(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    (tmp_path / "home.json").write_text(
-        json.dumps(_brief(in_library=None, latin="Vulpes zerda"))
-    )
+    _write_inputs(tmp_path, in_library=None, latin="Vulpes zerda")
     with pytest.raises(NotPossibleError, match="one-shot"):
         HomeStage(recorded=lambda lat, lon, key: True).run(
             _ctx(tmp_path, ScriptClient([]), world)
@@ -185,52 +199,54 @@ def test_home_new_animal_waits_for_one_shot(tmp_path: Path) -> None:
 
 def test_home_missing_tool_stops(tmp_path: Path) -> None:
     world = _world(tmp_path, tool=False)
-    (tmp_path / "home.json").write_text(json.dumps(_brief()))
+    _write_inputs(tmp_path)
     with pytest.raises(Exception, match="no home templates"):
         HomeStage(recorded=lambda lat, lon, key: True).run(
             _ctx(tmp_path, ScriptClient([]), world)
         )
 
 
-def test_home_researches_missing_food_names(tmp_path: Path) -> None:
+def test_home_names_missing_foods_from_research(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (world / "tools" / "homes.py").write_text(
-        STUB_TOOL.replace('["berries", "meat", "grass"]', '["berries"]')
+        STUB_TOOL.replace('["berries", "carrion", "grass"]', '["berries"]')
     )
-    (tmp_path / "home.json").write_text(json.dumps(_brief()))
-    answer = _response(
+    _write_inputs(tmp_path)
+    (tmp_path / "research.json").write_text(
         json.dumps(
-            {
-                "foods": {"meat": ["mountain hare"], "grass": ["timothy grass"]},
-                "sources": ["https://example.org/foods"],
-            }
+            _research(
+                other_foods=[
+                    {"name": "bilberries", "kind": "berries"},
+                    {"name": "roe deer remains", "kind": "carrion"},
+                ]
+            )
         )
     )
     result = HomeStage(recorded=lambda lat, lon, key: True).run(
-        _ctx(tmp_path, ScriptClient([answer]), world)
+        _ctx(tmp_path, ScriptClient([]), world)
     )
-    assert result["foods_added"] == ["grass", "meat"]
+    assert result["foods_added"] == ["carrion", "grass"]
     region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
     by_kind = {food["kind"]: food for food in region["food"]}
-    assert by_kind["meat"]["names"] == ["mountain hare"]
-    assert region["sources"] == ["https://example.org/foods", "GBIF.org"]
+    assert by_kind["carrion"]["names"] == ["roe deer remains"]
+    assert by_kind["grass"]["names"] == ["timothy grass"]
 
 
-def test_home_bad_research_stops(tmp_path: Path) -> None:
+def test_home_unnamed_kind_stops(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (world / "tools" / "homes.py").write_text(
-        STUB_TOOL.replace('["berries", "meat", "grass"]', '["berries"]')
+        STUB_TOOL.replace('["berries", "carrion", "grass"]', '["berries"]')
     )
-    (tmp_path / "home.json").write_text(json.dumps(_brief()))
-    with pytest.raises(Exception, match="unparsable"):
+    _write_inputs(tmp_path)
+    with pytest.raises(Exception, match="named no food for carrion"):
         HomeStage(recorded=lambda lat, lon, key: True).run(
-            _ctx(tmp_path, ScriptClient([_response("not json")]), world)
+            _ctx(tmp_path, ScriptClient([]), world)
         )
 
 
 def test_home_unchecked_neighbours_stay_visible(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    (tmp_path / "home.json").write_text(json.dumps(_brief()))
+    _write_inputs(tmp_path)
 
     def recorded(lat: float, lon: float, key: int) -> bool:
         if key == LYNX["gbif_key"]:
@@ -242,33 +258,79 @@ def test_home_unchecked_neighbours_stay_visible(tmp_path: Path) -> None:
     assert result["backfill_unchecked"] == ["lynx"]
 
 
-def test_home_research_past_its_round_stops(tmp_path: Path) -> None:
-    world = _world(tmp_path)
-    (world / "tools" / "homes.py").write_text(
-        STUB_TOOL.replace('["berries", "meat", "grass"]', '["berries"]')
-    )
-    (tmp_path / "home.json").write_text(json.dumps(_brief()))
-    answer = _response(
-        json.dumps({"foods": {"meat": ["hare"]}, "sources": []}), searches=11
-    )
-    with pytest.raises(Exception, match="past its round"):
-        HomeStage(recorded=lambda lat, lon, key: True).run(
-            _ctx(tmp_path, ScriptClient([answer]), world)
+def test_home_uses_made_template(tmp_path: Path) -> None:
+    world = _world(tmp_path, tool=False)
+    _write_inputs(tmp_path)
+    homes = tmp_path / "homes"
+    homes.mkdir()
+    (homes / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "animals": {"playable": [], "predators": [], "prey": []},
+                "fish": [],
+                "food": [
+                    {"kind": "berries", "amount": 10, "names": ["bilberry"]},
+                    {"kind": "carrion", "amount": 10, "names": ["remains"]},
+                    {"kind": "grass", "amount": 10, "names": ["grass"]},
+                ],
+                "places": [],
+                "sources": [],
+            }
         )
+    )
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(
+        _ctx(tmp_path, ScriptClient([]), world)
+    )
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    assert region["id"] == result["place_id"]
+    assert region["name"] == "Fox copse"
+    assert region["animals"]["playable"] == ["fox"]
+
+
+def test_home_seats_made_animals_unasked(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _write_inputs(tmp_path)
+    made = tmp_path / "animals"
+    made.mkdir()
+    (made / "vole.json").write_text(
+        json.dumps(
+            {
+                "taxon": {
+                    "gbif_key": 999001,
+                    "rank": "SPECIES",
+                    "name": "Made vole",
+                },
+                "diet": ["grass"],
+                "tags": ["rodent"],
+            }
+        )
+    )
+    seen: list[int] = []
+
+    def recorded(lat: float, lon: float, key: int) -> bool:
+        seen.append(key)
+        return True
+
+    result = HomeStage(recorded=recorded).run(_ctx(tmp_path, ScriptClient([]), world))
+    assert "vole" in result["neighbours"]
+    assert 999001 not in seen
+    plan = json.loads((tmp_path / "species-plan.json").read_text(encoding="utf-8"))
+    vole = next(e for e in plan["species"] if e["species"] == "vole")
+    assert vole["decision"] == "new"
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 REPLAY_CASES = [
-    ("fox", "Vulpes vulpes", 5219243, "61.5_26.0", ["rodent"], "mountain hare"),
-    ("lynx", "Lynx lynx", 2435239, "61.5_26.0", ["mammal"], "mountain hare"),
+    ("fox", "Red fox", "Vulpes vulpes", 5219243, "61.5_26.0", ["rodent"]),
+    ("lynx", "Eurasian lynx", "Lynx lynx", 2435240, "61.5_26.0", ["mammal"]),
     (
         "anaconda",
+        "Green anaconda",
         "Eunectes murinus",
         5225712,
         "-3.1_-60.1",
         ["mammal"],
-        "capybara",
     ),
 ]
 
@@ -281,7 +343,7 @@ def _replay_world(tmp_path: Path, stem: str, key: int, tags: list[str]) -> Path:
         json.dumps(
             {
                 "taxon": {"gbif_key": key, "rank": "SPECIES", "name": "X"},
-                "diet": ["meat"],
+                "diet": ["berries"],
                 "playable": True,
                 "tags": ["mammal"],
                 "hunts": tags,
@@ -304,29 +366,36 @@ def _replay_world(tmp_path: Path, stem: str, key: int, tags: list[str]) -> Path:
     (animals / "archetypes.json").write_text("{}")
     tools = world / "tools"
     tools.mkdir(parents=True)
-    (tools / "homes.py").write_text(
-        STUB_TOOL.replace('["berries", "meat", "grass"]', '["berries"]')
-    )
+    (tools / "homes.py").write_text(STUB_TOOL)
     return world
 
 
-@pytest.mark.parametrize("stem,latin,key,cell,tags,first_meat", REPLAY_CASES)
+def _empty_template(world: Path) -> None:
+    (world / "tools" / "homes.py").write_text(
+        STUB_TOOL.replace('["berries", "carrion", "grass"]', "[]")
+    )
+
+
+@pytest.mark.parametrize("stem,name,latin,key,cell,tags", REPLAY_CASES)
 def test_home_replays_saved_research(
     tmp_path: Path,
     capsys: pytest.CaptureFixture,
     stem: str,
+    name: str,
     latin: str,
     key: int,
     cell: str,
     tags: list[str],
-    first_meat: str,
 ) -> None:
-    """The free home run: no model client at all, only the fixture."""
+    """Research replays the fixture, home feeds from it: no model calls."""
     world = _replay_world(tmp_path, stem, key, tags)
+    _empty_template(world)
     south, west = (round(float(part) + 0.05, 3) for part in cell.split("_"))
     (tmp_path / "home.json").write_text(
         json.dumps(
             {
+                "id": stem,
+                "name": name,
                 "latin": latin,
                 "species_key": key,
                 "home": "boreal_forest",
@@ -341,21 +410,24 @@ def test_home_replays_saved_research(
     )
     records = tmp_path / "records"
     records.mkdir()
-    shutil.copy(FIXTURES / f"research-{stem}.jsonl", records / "home.jsonl")
+    shutil.copy(FIXTURES / f"research-{stem}.jsonl", records / "research.jsonl")
     ctx = JobContext(
         job_id="job-1",
         job_dir=tmp_path,
-        client=ReplayClient(records, "home"),
+        client=ReplayClient(records, "research"),
         tracker=BudgetTracker(budget_usd=8.0),
         world_path=world,
     )
-    result = HomeStage(recorded=lambda lat, lon, key: True).run(ctx)
-    assert result["foods_added"] == ["grass", "meat"]
-    assert ctx.tracker.spent_usd == 0
+    ResearchStage().run(ctx)
     assert capsys.readouterr().err == ""
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(ctx)
+    assert result["foods_added"] == ["berries", "grass"]
+    assert ctx.tracker.spent_usd == 0
     region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
     by_kind = {food["kind"]: food for food in region["food"]}
-    assert by_kind["meat"]["names"][0] == first_meat
+    assert by_kind["berries"]["names"]
+    assert by_kind["grass"]["names"]
+    assert "Play as the" in region["welcome"]
     assert (tmp_path / "species-plan.json").is_file()
 
 
@@ -365,4 +437,4 @@ def test_research_fixtures_validate(stem: str) -> None:
     entry = json.loads(line)
     assert entry["method"] == "responses_create"
     text = entry["response"]["output"][0]["content"][0]["text"]
-    validate("home-research", json.loads(text))
+    validate("research", json.loads(text))

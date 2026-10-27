@@ -340,6 +340,22 @@ def test_welcome_reviewed_and_written_back(tmp_path: Path) -> None:
     assert fi["region.home_1_fox.welcome"] == "Tervetuloa metsään!"
 
 
+def test_writers_carry_children_rules() -> None:
+    from builder.prompts import PROMPTS_DIR, for_children
+
+    assert "Writing for children" in for_children()
+    for name in (
+        "animal_write",
+        "words_plant_about",
+        "plant_write",
+        "research",
+        "region_write",
+        "words_translate",
+    ):
+        text = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+        assert "$FOR_CHILDREN" in text, name
+
+
 def test_no_texts_passes_empty(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (tmp_path / "survey.json").write_text(

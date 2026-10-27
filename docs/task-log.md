@@ -3,6 +3,22 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #66 (anaconda live set: two bugs, tag v0.2.0)
+
+- #66.1: `oneshot` failed the prey because the region already named
+  the unmade hunter. While making the minimum set, the checks now
+  excuse exactly the target animals not yet made (`_excused_missing`
+  matches the world's `has no file animals/<id>.json` wording);
+  anything else about them still fails. No more wasted fix round.
+- #66.2: the `home` stage drops the home-only fields (`based_on`,
+  `about`) when turning a made home into a region, as the world's
+  `homes.py make` does with `HOME_ONLY`. Calling `make` itself
+  would need the made home inside the world's `homes/`, so the
+  two-key drop stays a copy with a pointer at the tool.
+- Tagged `v0.2.0` (D7, D8, strict research, looks stage) on green
+  replays, for Kai's production fox test.
+- Suite: 574 passed, 12 skipped; ruff check + format clean.
+
 ## 2026-10-27: inbox #65 (decision D8: homes work like animals)
 
 - #65.1: the free-form `home_write` call is out; the AI fills a strict

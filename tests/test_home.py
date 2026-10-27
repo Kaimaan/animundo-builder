@@ -298,6 +298,38 @@ def test_home_uses_made_template(tmp_path: Path) -> None:
     assert region["animals"]["playable"] == ["fox"]
 
 
+def test_home_drops_the_builders_fields_from_a_made_template(
+    tmp_path: Path,
+) -> None:
+    world = _world(tmp_path, tool=False)
+    _write_inputs(tmp_path)
+    homes = tmp_path / "homes"
+    homes.mkdir()
+    (homes / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "about": "Home template.",
+                "based_on": "boreal_forest",
+                "animals": {"playable": [], "predators": [], "prey": []},
+                "fish": [],
+                "food": [
+                    {"kind": "berries", "amount": 10, "names": ["bilberry"]},
+                    {"kind": "carrion", "amount": 10, "names": ["remains"]},
+                    {"kind": "grass", "amount": 10, "names": ["grass"]},
+                ],
+                "places": [],
+                "sources": [],
+            }
+        )
+    )
+    result = HomeStage(recorded=lambda lat, lon, key: True).run(
+        _ctx(tmp_path, ScriptClient([]), world)
+    )
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    assert "about" not in region
+    assert "based_on" not in region
+
+
 def test_home_welcome_names_seated_prey(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _write_inputs(tmp_path)

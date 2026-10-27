@@ -167,6 +167,10 @@ class HomeStage:
             region = json.loads(made.read_text(encoding="utf-8"))
         except ValueError as error:
             raise _Stopped(f"the made template is no region: {error}")
+        # A region is not a home: drop the builders' fields, as
+        # the world's `homes.py make` does with HOME_ONLY (#66.2).
+        for key in ("based_on", "about"):
+            region.pop(key, None)
         region["id"] = place_id
         region["name"] = _region_name(brief)
         region["country"] = brief["country_name"] or brief["country"]

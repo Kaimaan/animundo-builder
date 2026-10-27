@@ -137,7 +137,17 @@ class AnimalMakerStage:
         made = []
         unmakable: dict[str, list[str]] = {}
         for target in targets:
-            animal_id, marks = self._make(ctx, world, brief, research, region, target)
+            # The checks run on the whole region, which already
+            # names the other targets; excuse the ones still to
+            # be made, the way home seats them (#54.2, #66.1).
+            excused = {
+                other["id"]
+                for other in targets
+                if other["id"] != target["id"] and not _made(ctx.job_dir, other["id"])
+            }
+            animal_id, marks = self._make(
+                ctx, world, brief, research, region, target, excused
+            )
             made.append(animal_id)
             if marks:
                 unmakable[animal_id] = marks
@@ -164,6 +174,7 @@ class AnimalMakerStage:
         research: dict[str, Any],
         region: dict[str, Any],
         target: dict[str, Any],
+        excused: set[str],
     ) -> tuple[str, list[str]]:
         """One animal: its file, then its model from edits (#60).
 
@@ -173,7 +184,7 @@ class AnimalMakerStage:
         make yet.
         """
         animal_id = target["id"]
-        self._make_animal(ctx, world, brief, research, region, target)
+        self._make_animal(ctx, world, brief, research, region, target, excused)
         marks = self._make_model(ctx, world, brief, research, target)
         self._save_final(ctx, world, animal_id)
         return animal_id, marks
@@ -186,6 +197,7 @@ class AnimalMakerStage:
         research: dict[str, Any],
         region: dict[str, Any],
         target: dict[str, Any],
+        excused: set[str],
     ) -> None:
         """The animal file, one try plus one fix round."""
         animal_id = target["id"]
@@ -199,7 +211,9 @@ class AnimalMakerStage:
             files, file_errors = self._animal_files(world, answer)
             if files is not None:
                 self._place_animal(ctx, animal_id, files)
-                file_errors = self._check_animal(world, ctx, animal_id, attempt)
+                file_errors = self._check_animal(
+                    world, ctx, animal_id, attempt, excused
+                )
             self._save_try(
                 ctx, animal_id, "animal", attempt, answer, files, file_errors
             )
@@ -373,20 +387,26 @@ class AnimalMakerStage:
         )
 
     def _check_animal(
-        self, world: Path, ctx: Any, animal_id: str, attempt: int
+        self, world: Path, ctx: Any, animal_id: str, attempt: int, excused: set[str]
     ) -> list[str]:
         """The file's verdicts: animals, taxa, region.
 
         The build hasn't run yet, so "model file not found" is
-        noise the model phase resolves; everything else is the
-        file's own fault.
+        noise the model phase resolves; a missing file for an
+        animal still to be made is noise the later target
+        resolves (#66.1). Everything else is the file's fault.
         """
         errors = _verdict_errors(
             _verdicts(world, ctx, animal_id, "animal", attempt),
             ("animals", "taxa", "region"),
             animal_id,
         )
-        return [error for error in errors if "model file not found" not in error]
+        return [
+            error
+            for error in errors
+            if "model file not found" not in error
+            and not _excused_missing(error, excused)
+        ]
 
     def _adapt_build_place(
         self,
@@ -687,6 +707,17 @@ def _made(job_dir: Path, animal_id: str) -> bool:
     return (job_dir / "animals" / f"{animal_id}.json").is_file() and (
         job_dir / "models" / f"{animal_id}.json"
     ).is_file()
+
+
+def _excused_missing(error: str, excused: set[str]) -> bool:
+    """A missing file for an animal still to be made (#66.1).
+
+    The world's wording: `playable animal "<id>" has no file
+    animals/<id>.json`. Anything else about the animal still fails.
+    """
+    return any(
+        f"has no file animals/{animal_id}.json" in error for animal_id in excused
+    )
 
 
 def _taxon(entry: dict[str, Any]) -> dict[str, Any]:

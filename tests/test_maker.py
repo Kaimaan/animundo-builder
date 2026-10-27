@@ -22,6 +22,7 @@ from builder.stages.maker import (
     _edits_files,
     _edits_schema,
     _edits_sizes,
+    _excused_missing,
     _foods_text,
     _guide,
     _home_choices_schema,
@@ -510,6 +511,81 @@ def test_still_failing_stops_for_a_person(tmp_path: Path) -> None:
         _stage().run(_ctx(tmp_path, world, client))
     assert len(client.prompts) == 2
     assert not (tmp_path / "checks" / "oneshot.json").is_file()
+
+
+REGION_STUB = """\
+import glob
+import json
+import os
+import sys
+
+draft = sys.argv[1]
+region_problems = []
+for path in glob.glob(os.path.join(draft, "regions", "*.json")):
+    region = json.load(open(path))
+    for seated in region.get("animals", {}).get("playable", []):
+        if not os.path.isfile(os.path.join(draft, "animals", seated + ".json")):
+            region_problems.append(
+                f'ERROR: region {region.get("id")}: playable animal "{seated}"'
+                f" has no file animals/{seated}.json"
+            )
+report = {
+    "ok": not region_problems,
+    "draft_files": [],
+    "existing": [],
+    "results": [
+        {"check": "animals", "status": "pass", "problems": []},
+        {"check": "taxa", "status": "pass", "problems": []},
+        {
+            "check": "region",
+            "status": "fail" if region_problems else "pass",
+            "problems": region_problems,
+        },
+        {"check": "models", "status": "pass", "problems": []},
+    ],
+}
+print(json.dumps(report))
+"""
+
+
+def test_prey_made_before_its_hunter_passes(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(REGION_STUB)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    client = ScriptClient(
+        [
+            _animal_answer("capybara"),
+            _edits_answer(),
+            _animal_answer("lynx"),
+            _edits_answer(),
+        ]
+    )
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
+    assert len(client.prompts) == 4
+
+
+def test_unmade_stranger_still_fails_the_checks(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(REGION_STUB)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    region_path = tmp_path / "regions" / "fi_test.json"
+    region = json.loads(region_path.read_text())
+    region["animals"]["playable"] = ["lynx", "wolverine"]
+    region_path.write_text(json.dumps(region))
+    client = ScriptClient([_animal_answer("capybara"), _animal_answer("capybara")])
+    with pytest.raises(_Stopped, match="still failing"):
+        _stage().run(_ctx(tmp_path, world, client))
+
+
+def test_excused_missing_only_excuses_missing_files() -> None:
+    missing = 'region fi_test: playable animal "lynx" has no file animals/lynx.json'
+    assert _excused_missing(missing, {"lynx"}) is True
+    assert _excused_missing(missing, {"capybara"}) is False
+    assert _excused_missing(missing, set()) is False
+    assert (
+        _excused_missing('lynx: diet kind "fish" not in region food', {"lynx"}) is False
+    )
 
 
 def test_prey_comes_before_the_animal(tmp_path: Path) -> None:

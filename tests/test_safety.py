@@ -291,6 +291,55 @@ def test_home_without_survey_reviews_region_name(tmp_path: Path) -> None:
     assert "(no sensitive species" in chat.prompts[0]
 
 
+def test_welcome_reviewed_and_written_back(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    regions = tmp_path / "regions"
+    regions.mkdir(parents=True)
+    (regions / "home_1_fox.json").write_text(
+        json.dumps(
+            {
+                "id": "home_1_fox",
+                "name": "Fox forest",
+                "welcome": "Welcome to the forest",
+                "sources": ["GBIF.org"],
+            }
+        )
+    )
+    keys = ["region.home_1_fox.name", "region.home_1_fox.welcome"]
+    first = {
+        "verdicts": [
+            {
+                "key": key,
+                "verdict": "rewrite" if key.endswith("welcome") else "pass",
+                "reasons": ["too stiff"] if key.endswith("welcome") else [],
+                "rule": "tone" if key.endswith("welcome") else "",
+            }
+            for key in keys
+        ]
+    }
+    chat = ScriptChat(
+        [
+            json.dumps(first),
+            json.dumps(
+                {
+                    "region.home_1_fox.welcome": {
+                        "en": "Welcome to the forest!",
+                        "fi": "Tervetuloa metsään!",
+                    }
+                }
+            ),
+            _pass_all(["region.home_1_fox.welcome"]),
+        ]
+    )
+    result = SafetyStage().run(_ctx(tmp_path, chat, world))
+    assert result["reviewed"] == 2
+    assert result["rewritten"] == ["region.home_1_fox.welcome"]
+    region = json.loads((regions / "home_1_fox.json").read_text())
+    assert region["welcome"] == "Welcome to the forest!"
+    fi = json.loads((tmp_path / "locale" / "fi" / "regions.json").read_text())
+    assert fi["region.home_1_fox.welcome"] == "Tervetuloa metsään!"
+
+
 def test_no_texts_passes_empty(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (tmp_path / "survey.json").write_text(

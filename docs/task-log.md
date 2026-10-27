@@ -3,6 +3,27 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-27: inbox #46, #47: short names, the welcome, English-only words
+
+- #46.1: homes are named "Fox forest, Finland": the last word
+  of the English name plus the habitat's last segment, in code
+  (`short_name`, `habitat_word`), the same in the worker and on
+  the web card.
+- #46.2/#45.2: the home stage writes the region's `welcome`
+  ("Play as the fox ... Go and find some bilberries to eat!"),
+  from the animal and the first named food in its diet order;
+  words translates it with the region name, and safety reviews
+  it and writes fixes back.
+- #47.1: words writes nothing for an `animal_home` job and
+  makes no model call (a home's words are English already).
+- #47.2: a home's sources are the research's sources plus
+  "GBIF.org"; the template's own pages stay behind.
+- #47.3: nothing to rebuild here (no committed fixture carries
+  template text); the probe confirms the plain description.
+- Evidence: 450 tests pass; the fox probe writes "Fox forest,
+  Finland" with a 137-character welcome and `["GBIF.org"]`
+  sources, and the pack gate passes on it.
+
 ## 2026-10-27: inbox #43.1, #44, T39: stages run alone, recorded, replayed
 
 `builder stage <name> --job <dir>` runs one stage on a saved job

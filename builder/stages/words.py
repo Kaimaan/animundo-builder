@@ -29,6 +29,9 @@ class WordsStage:
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
             raise ValueError("words needs --world")
+        if (ctx.job_dir / "home.json").is_file():
+            # A home's words are English already; nothing to translate (#47).
+            return {"locale_files": [], "languages": []}
         world = Path(ctx.world_path)
         plan = json.loads((ctx.job_dir / "species-plan.json").read_text())
         new_ids = [
@@ -47,11 +50,7 @@ class WordsStage:
             }
             if animals:
                 files.append(self._write_locale(ctx, language, "animals", animals))
-            regions = {
-                f"region.{region['id']}.name": self._translate_region(
-                    ctx, world, language, region
-                )
-            }
+            regions = self._translate_region(ctx, world, language, region)
             files.append(self._write_locale(ctx, language, "regions", regions))
         files.extend(self._plant_texts(ctx, world, languages))
         self._check(world, ctx)
@@ -148,11 +147,16 @@ class WordsStage:
 
     def _translate_region(
         self, ctx: Any, world: Path, language: str, region: dict[str, Any]
-    ) -> str:
+    ) -> dict[str, str]:
         name = region.get("name")
         if not name:
             raise _Stopped("the region stage left no name to translate")
-        return self._translate(ctx, world, language, {"name": name})["name"]
+        want = {"name": name}
+        if region.get("welcome"):
+            want["welcome"] = region["welcome"]
+        got = self._translate(ctx, world, language, want)
+        rid = region["id"]
+        return {f"region.{rid}.{key}": text for key, text in got.items()}
 
     def _translate(
         self,

@@ -266,6 +266,15 @@ def collect_texts(job_dir: Path, world: Path) -> list[dict[str, Any]]:
             "sources": region.get("sources", []),
         }
     )
+    if region.get("welcome"):
+        items.append(
+            {
+                "key": f"region.{rid}.welcome",
+                "en": region["welcome"],
+                "fi": fi_regions.get(f"region.{rid}.welcome"),
+                "sources": region.get("sources", []),
+            }
+        )
     items.append(
         {
             "key": f"region.{rid}.description",
@@ -378,6 +387,12 @@ def _write_region(
         region["name"] = texts["en"]
         if texts.get("fi"):
             _merge_locale(job_dir, "fi", "regions", {f"region.{rid}.name": texts["fi"]})
+    elif rest == ["welcome"]:
+        region["welcome"] = texts["en"]
+        if texts.get("fi"):
+            _merge_locale(
+                job_dir, "fi", "regions", {f"region.{rid}.welcome": texts["fi"]}
+            )
     elif rest == ["description"]:
         region["description"] = texts["en"]
     elif rest[0] == "place":

@@ -88,6 +88,7 @@ def _world(tmp_path: Path, *, tool: bool = True) -> Path:
 def _brief(**overrides: Any) -> dict[str, Any]:
     brief: dict[str, Any] = {
         "latin": "Vulpes vulpes",
+        "name": "Red fox",
         "species_key": 5219243,
         "home": "boreal_forest",
         "place_name": "Fox copse",
@@ -152,6 +153,13 @@ def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
     assert region["animals"]["playable"] == ["fox"]
     assert region["animals"]["predators"] == ["lynx"]
     assert region["animals"]["prey"] == ["hare"]
+    assert region["welcome"] == (
+        "This is a new world, and not many animals live here yet. "
+        "Play as the fox, and add more animals later. "
+        "Go and find some berries to eat!"
+    )
+    assert len(region["welcome"]) <= 300
+    assert region["sources"] == ["GBIF.org"]
     plan = json.loads((tmp_path / "species-plan.json").read_text(encoding="utf-8"))
     assert [entry["species"] for entry in plan["species"]] == [
         "fox",
@@ -205,7 +213,7 @@ def test_home_researches_missing_food_names(tmp_path: Path) -> None:
     region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
     by_kind = {food["kind"]: food for food in region["food"]}
     assert by_kind["meat"]["names"] == ["mountain hare"]
-    assert "https://example.org/foods" in region["sources"]
+    assert region["sources"] == ["https://example.org/foods", "GBIF.org"]
 
 
 def test_home_bad_research_stops(tmp_path: Path) -> None:

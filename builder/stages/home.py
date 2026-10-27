@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ..animal_list import short_name
 from ..meta import count_search_calls, is_cut_off
 from ..prompts import load_prompt
 from ..schemas import validate
@@ -66,9 +67,12 @@ class HomeStage:
         place_id = _place_id(brief["cell"], stem, brief.get("country", ""))
         region = self._make_region(world, ctx, brief, place_id)
         neighbours, unchecked = self._seat_cast(world, region, brief, taxa, stem)
+        template_sources = list(region.get("sources", []))
         added_kinds, added_young = self._feed_cast(
             world, ctx, region, brief, stem, neighbours
         )
+        region["sources"] = _home_sources(region, template_sources)
+        region["welcome"] = _welcome(world, region, brief, stem)
         region_path = ctx.job_dir / "regions" / f"{place_id}.json"
         region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
         brief["place_id"] = place_id
@@ -293,6 +297,56 @@ class HomeStage:
             json.dumps(plan, indent=2), encoding="utf-8"
         )
         return plan
+
+
+def _home_sources(region: dict[str, Any], template_sources: list[str]) -> list[str]:
+    """The research's sources plus GBIF.org for the neighbours.
+
+    The template's own pages (its survey ground) do not travel
+    with the home (#47).
+    """
+    research = [url for url in region.get("sources", []) if url not in template_sources]
+    seen = set()
+    ordered = []
+    for url in [*research, "GBIF.org"]:
+        if url not in seen:
+            seen.add(url)
+            ordered.append(url)
+    return ordered
+
+
+def _welcome(
+    world: Path, region: dict[str, Any], brief: dict[str, Any], stem: str
+) -> str:
+    """The first-session hello, from the animal and its main food."""
+    animal = short_name(brief.get("name", "")).lower() or stem.replace("_", " ")
+    food = _main_food(world, region, stem)
+    if food.endswith("s"):
+        article = "some"
+    elif food[:1].lower() in "aeiou":
+        article = "an"
+    else:
+        article = "a"
+    return (
+        "This is a new world, and not many animals live here yet. "
+        f"Play as the {animal}, and add more animals later. "
+        f"Go and find {article} {food} to eat!"
+    )
+
+
+def _main_food(world: Path, region: dict[str, Any], stem: str) -> str:
+    """The first named food in the animal's diet order."""
+    data = animal_file(world, stem)
+    by_kind: dict[str, list[str]] = {}
+    for item in region.get("food", []):
+        by_kind.setdefault(item.get("kind", ""), item.get("names", []) or [])
+    for kind in data.get("diet") or []:
+        if by_kind.get(kind):
+            return by_kind[kind][0]
+    for item in region.get("food", []):
+        if item.get("names"):
+            return item["names"][0]
+    return "food"
 
 
 def _place_id(cell: str, stem: str, country: str) -> str:

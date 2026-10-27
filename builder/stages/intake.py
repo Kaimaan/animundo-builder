@@ -13,7 +13,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ..animal_list import find_entry, find_list, home_for, load_list
+from ..animal_list import (
+    find_entry,
+    find_list,
+    habitat_word,
+    home_for,
+    load_list,
+    short_name,
+)
 from ..countries import country_at, find_shapes
 from ..schemas import ROOT, validate
 from .species_plan import RecordedFn, recorded_near
@@ -115,7 +122,8 @@ class IntakeStage:
             "country": country,
             "country_name": country_name,
             "place_name": (
-                f"{entry.get('name', '')} {home.replace('_', ' ')}, {country_name}"
+                f"{short_name(entry.get('name', ''))} "
+                f"{habitat_word(home)}, {country_name}"
             ),
         }
         out = ctx.job_dir / "home.json"

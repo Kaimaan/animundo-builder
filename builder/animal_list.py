@@ -58,3 +58,14 @@ def home_for(entry: dict[str, Any], homes: list[str]) -> str:
         if habitat in homes:
             return habitat
     raise ValueError(f"no built home for {entry.get('latin', 'this animal')} yet")
+
+
+def short_name(name: str) -> str:
+    """The plain animal word: the last word, capitalized."""
+    word = name.split()[-1] if name.split() else name
+    return word[:1].upper() + word[1:]
+
+
+def habitat_word(home: str) -> str:
+    """The plain habitat word: the last segment (`boreal_forest` → `forest`)."""
+    return home.split("_")[-1] if home else home

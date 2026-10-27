@@ -142,6 +142,37 @@ def test_writes_new_keys_only(tmp_path: Path) -> None:
     assert saved["results"][0] == {"check": "locale", "status": "pass", "problems": []}
 
 
+def test_home_job_writes_nothing(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (tmp_path / "home.json").write_text("{}")
+    chat = ScriptChat([])
+    result = WordsStage().run(_ctx(tmp_path, chat, world))
+    assert result == {"locale_files": [], "languages": []}
+    assert chat.prompts == []
+    assert not (tmp_path / "locale").exists()
+
+
+def test_welcome_translated_with_name(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (tmp_path / "regions" / "xx_test.json").write_text(
+        json.dumps({"id": "xx_test", "name": "Test meadow", "welcome": "Hello there"})
+    )
+    chat = ScriptChat(
+        [
+            {"title": "Hirvi!", "hungry": "Sinulla on nälkä!"},
+            {"name": "Testiniitty", "welcome": "Hei vain"},
+        ]
+    )
+    WordsStage().run(_ctx(tmp_path, chat, world))
+    regions = json.loads((tmp_path / "locale" / "fi" / "regions.json").read_text())
+    assert regions == {
+        "region.xx_test.name": "Testiniitty",
+        "region.xx_test.welcome": "Hei vain",
+    }
+
+
 def test_prompt_carries_tone_and_placeholders(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

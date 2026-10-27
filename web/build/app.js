@@ -49,6 +49,8 @@ const state = {
   notYet: {},
   picked: null,
   pickedHome: null,
+  pickedShort: null,
+  pickedHabitat: null,
   gbifLayer: null,
   adminShapes: null,
   urbanShapes: null,
@@ -207,6 +209,8 @@ function onUser(user) {
     state.feeds = {};
     state.picked = null;
     state.pickedHome = null;
+    state.pickedShort = null;
+    state.pickedHabitat = null;
     state.selectedCell = null;
     setGbifLayer(null);
     return;
@@ -357,6 +361,8 @@ function renderSuggestions() {
 function pickAnimal(animal) {
   state.picked = null;
   state.pickedHome = null;
+  state.pickedShort = null;
+  state.pickedHabitat = null;
   state.selectedCell = null;
   $("cell-card").hidden = true;
   $("animal-suggest").innerHTML = "";
@@ -375,6 +381,9 @@ function pickAnimal(animal) {
   }
   state.picked = animal;
   state.pickedHome = home;
+  state.pickedShort =
+    animal.name.split(" ").pop().replace(/^./, (c) => c.toUpperCase());
+  state.pickedHabitat = home.split("_").pop();
   setGbifLayer(animal.gbif_key);
   $("animal-msg").textContent = t("home.picked", { name: animal.name });
 }
@@ -450,7 +459,6 @@ async function onMapTap(latlng) {
     return;
   }
   const animal = state.picked;
-  const homeWords = state.pickedHome.replace(/_/g, " ");
   const cell = snapCell(latlng.lat, latlng.lng);
   const check = ++state.cellCheck;
   const card = $("cell-card");
@@ -467,7 +475,8 @@ async function onMapTap(latlng) {
     state.selectedCell = null;
     return;
   }
-  const title = `${animal.name} ${homeWords}, ${country.name}`;
+  const title =
+    `${state.pickedShort} ${state.pickedHabitat}, ${country.name}`;
   $("cell-name").textContent = title;
   $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
   $("cell-state").textContent = t("home.checking");

@@ -237,6 +237,10 @@
     "country_name": {
       "type": "string",
       "maxLength": 60
+    },
+    "cost_usd": {
+      "type": "number",
+      "minimum": 0
     }
   }
 }

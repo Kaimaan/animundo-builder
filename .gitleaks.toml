@@ -4,6 +4,6 @@
 # exactly that key, only in the web app. The pattern holds a prefix
 # on purpose: the full key here would flag this file itself.
 [allowlist]
-description = "Firebase public web key in the builder web app"
-paths = ['''web/build/app\.js''']
+description = "Firebase public web key in the builder web app and admin panel"
+paths = ['''web/build/app\.js''', '''web/admin/app\.js''']
 regexes = ['''AIzaSyAXX6Gz5aN5QQ2txF''']

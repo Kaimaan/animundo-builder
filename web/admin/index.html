@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · Animundo Builder</title>
+<meta name="theme-color" content="#1d2a22">
+<link rel="stylesheet" href="styles.css">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+</head>
+<body>
+<header>
+  <div class="top">
+    <a class="brand" href="/">ANIMUNDO · BUILDER ADMIN</a>
+    <div class="header-right">
+      <div id="auth-signed-out">
+        <input id="auth-email" type="email" placeholder="admin@example.org" autocomplete="email">
+        <button id="auth-send" type="button">Send sign-in link</button>
+        <button id="auth-test" type="button" hidden>Use the test admin</button>
+        <p id="auth-note" class="muted">Admins only: sign in with an email link.</p>
+      </div>
+      <div id="auth-signed-in" hidden>
+        <span id="auth-who"></span>
+        <button id="auth-out" type="button">Sign out</button>
+      </div>
+    </div>
+  </div>
+</header>
+<p id="app-error" class="error" hidden></p>
+<p id="not-admin" class="error" hidden>This account is not an admin.</p>
+
+<main id="app" hidden>
+  <section>
+    <article id="problems">
+      <h2>Reported problems</h2>
+      <div id="problem-list"><p class="muted">Loading…</p></div>
+    </article>
+
+    <article id="submitted">
+      <h2>Submitted</h2>
+      <div id="submitted-list"><p class="muted">Loading…</p></div>
+    </article>
+  </section>
+
+  <section>
+    <article id="drafts">
+      <h2>Places being built</h2>
+      <label class="filter">Status
+        <select id="draft-filter">
+          <option value="">All</option>
+        </select>
+      </label>
+      <div id="draft-list"><p class="muted">Loading…</p></div>
+    </article>
+  </section>
+</main>
+
+<footer>
+  <span>Animundo Builder admin panel.</span>
+  <a href="/">Play Animundo</a>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

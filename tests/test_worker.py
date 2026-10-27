@@ -290,6 +290,7 @@ def test_create_builds_ready_with_feed_and_cost(tmp_path: Path) -> None:
         "images": 2,
         "cost_usd": 0.5,
     }
+    assert draft["cost_usd"] == 0.5
     assert ("pack", "d1", "1", str(job_dir / "pack")) in store.uploads
     assert ("report", "d1", "1", str(job_dir / "report.html")) in store.uploads
     assert store.inbox == []

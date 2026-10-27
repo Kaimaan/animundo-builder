@@ -559,7 +559,7 @@ class Worker:
             self._job_stage(job_id, stage.name, "ok")
             self._stage_feed(draft_id, round_no, stage.name, result)
         manifest = self._finish_round(draft_id, job_id, job_dir, round_no)
-        self._summarize_cost(job_id, job_dir)
+        self._summarize_cost(draft_id, job_id, job_dir)
         return manifest
 
     def _finish_round(
@@ -787,7 +787,7 @@ class Worker:
                 {"stage": name},
             )
 
-    def _summarize_cost(self, job_id: str, job_dir: Path) -> None:
+    def _summarize_cost(self, draft_id: str, job_id: str, job_dir: Path) -> None:
         totals: dict[str, dict[str, Any]] = {}
         log = job_dir / "log.jsonl"
         if log.is_file():
@@ -816,6 +816,8 @@ class Worker:
                     model["cost_usd"] + float(call.get("cost_usd", 0.0)), 6
                 )
         self.store.update_job(job_id, {"cost": totals})
+        total = round(sum(model["cost_usd"] for model in totals.values()), 6)
+        self._update(draft_id, {"cost_usd": total})
 
 
 def _pipeline_runner(stage: Any, ctx: Any, state_file: Path) -> dict[str, Any]:

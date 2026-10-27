@@ -1,0 +1,181 @@
+[
+  {
+    "area_id": "fi_repovesi",
+    "name": "Repovesi",
+    "country": "FI",
+    "centroid": {"lat": 61.18, "lon": 26.88},
+    "ecoregion": "Scandinavian and Russian taiga",
+    "biome": "boreal forest",
+    "buildable": true,
+    "outline": [
+      [26.72, 61.08],
+      [27.02, 61.08],
+      [27.02, 61.27],
+      [26.72, 61.27]
+    ]
+  },
+  {
+    "area_id": "fi_urho_kekkonen",
+    "name": "Urho Kekkonen",
+    "country": "FI",
+    "centroid": {"lat": 68.25, "lon": 28.3},
+    "ecoregion": "Scandinavian montane birch forest and grasslands",
+    "biome": "tundra",
+    "buildable": true,
+    "outline": [
+      [27.6, 67.9],
+      [29.0, 67.9],
+      [29.0, 68.6],
+      [27.6, 68.6]
+    ]
+  },
+  {
+    "area_id": "gb_cairngorms",
+    "name": "Cairngorms",
+    "country": "GB",
+    "centroid": {"lat": 57.07, "lon": -3.67},
+    "ecoregion": "Caledon conifer forests",
+    "biome": "temperate coniferous forest",
+    "buildable": true,
+    "outline": [
+      [-3.9, 57.0],
+      [-3.4, 57.0],
+      [-3.4, 57.2],
+      [-3.9, 57.2]
+    ]
+  },
+  {
+    "area_id": "no_hardangervidda",
+    "name": "Hardangervidda",
+    "country": "NO",
+    "centroid": {"lat": 60.17, "lon": 7.42},
+    "ecoregion": "Scandinavian montane birch forest and grasslands",
+    "biome": "montane grassland",
+    "buildable": true,
+    "outline": [
+      [6.9, 59.85],
+      [8.0, 59.85],
+      [8.0, 60.55],
+      [6.9, 60.55]
+    ]
+  },
+  {
+    "area_id": "pl_bialowieza",
+    "name": "Białowieża",
+    "country": "PL",
+    "centroid": {"lat": 52.72, "lon": 23.86},
+    "ecoregion": "Central European mixed forests",
+    "biome": "temperate broadleaf forest",
+    "buildable": true,
+    "outline": [
+      [23.6, 52.5],
+      [24.1, 52.5],
+      [24.1, 52.9],
+      [23.6, 52.9]
+    ]
+  },
+  {
+    "area_id": "ch_swiss_np",
+    "name": "Swiss National Park",
+    "country": "CH",
+    "centroid": {"lat": 46.66, "lon": 10.17},
+    "ecoregion": "Alps conifer and mixed forests",
+    "biome": "montane coniferous forest",
+    "buildable": true,
+    "outline": [
+      [10.0, 46.58],
+      [10.35, 46.58],
+      [10.35, 46.72],
+      [10.0, 46.72]
+    ]
+  },
+  {
+    "area_id": "no_naeroyfjord",
+    "name": "Nærøyfjord",
+    "country": "NO",
+    "centroid": {"lat": 60.94, "lon": 7.03},
+    "ecoregion": "Scandinavian coastal conifer forests",
+    "biome": "fjord",
+    "buildable": true,
+    "outline": [
+      [6.8, 60.82],
+      [7.4, 60.82],
+      [7.4, 61.05],
+      [6.8, 61.05]
+    ]
+  },
+  {
+    "area_id": "es_donana",
+    "name": "Doñana",
+    "country": "ES",
+    "centroid": {"lat": 37.02, "lon": -6.38},
+    "ecoregion": "Iberian sclerophyllous and semi-deciduous forests",
+    "biome": "mediterranean",
+    "buildable": true,
+    "outline": [
+      [-6.65, 36.8],
+      [-6.15, 36.8],
+      [-6.15, 37.2],
+      [-6.65, 37.2]
+    ]
+  },
+  {
+    "area_id": "tz_serengeti",
+    "name": "Serengeti",
+    "country": "TZ",
+    "centroid": {"lat": -2.33, "lon": 34.83},
+    "ecoregion": "Serengeti volcanic grasslands",
+    "biome": "savanna",
+    "buildable": true,
+    "outline": [
+      [34.2, -2.9],
+      [35.4, -2.9],
+      [35.4, -1.6],
+      [34.2, -1.6]
+    ]
+  },
+  {
+    "area_id": "no_svalbard",
+    "name": "Svalbard",
+    "country": "NO",
+    "centroid": {"lat": 77.95, "lon": 15.7},
+    "ecoregion": "High Arctic tundra",
+    "biome": "arctic tundra",
+    "buildable": true,
+    "outline": [
+      [14.2, 77.65],
+      [17.0, 77.65],
+      [17.0, 78.35],
+      [14.2, 78.35]
+    ]
+  },
+  {
+    "area_id": "au_ningaloo",
+    "name": "Ningaloo",
+    "country": "AU",
+    "centroid": {"lat": -22.55, "lon": 113.62},
+    "biome": "coral reef",
+    "buildable": true,
+    "outline": [
+      [113.25, -23.55],
+      [113.95, -23.55],
+      [113.95, -21.65],
+      [113.25, -21.65]
+    ]
+  },
+  {
+    "area_id": "bd_sundarbans",
+    "name": "Sundarbans",
+    "country": "BD",
+    "centroid": {"lat": 21.95, "lon": 89.55},
+    "ecoregion": "Sundarbans freshwater swamp forests",
+    "biome": "mangrove",
+    "buildable": true,
+    "outline": [
+      [88.95, 21.65],
+      [90.0, 21.65],
+      [90.0, 22.3],
+      [88.95, 22.3]
+    ]
+  }
+]

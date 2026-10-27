@@ -320,3 +320,13 @@ Job folders live under `jobs/` (local only, never committed).
   the Firebase connect and the first live draft wait for Kai's
   terminal (ADC + the areas file from T26). The Storage
   `reports/` addition needs one more reviewer emulator run.
+
+## 2026-10-27: short T20 area list (inbox #28)
+
+- `web/build/areas.json`: spec/09's milestone-1 list in build
+  order (Repovesi first, Sundarbans last), each with a real
+  centroid and bounding outline, its biome, ecoregion where it
+  has a land one, and `buildable: true`. The worker reads this
+  file for intake; the web app reads it for the map.
+- Svalbard is filed under Norway (`no_svalbard`, country NO)
+  as in spec/09, not SJ. Ningaloo has no ecoregion (marine).

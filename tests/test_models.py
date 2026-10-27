@@ -12,7 +12,7 @@ import pytest
 from PIL import Image
 
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
-from builder.prompts import PROMPTS_DIR
+from builder.prompts import PROMPTS_DIR, load_prompt
 from builder.stages.models import (
     ModelsStage,
     _review_prompt_name,
@@ -36,10 +36,17 @@ def _world(tmp_path: Path) -> Path:
     world.mkdir(parents=True)
     (world / "ART.md").write_text("# Art\n\nReal first.\n")
     (world / "models").mkdir(parents=True)
-    (world / "models" / "README.md").write_text("# Models\n\nOverlap.\n")
-    (world / "models" / "great_tit.json").write_text(json.dumps(SPEC))
+    (world / "models" / "README.md").write_text(
+        "# Models\n\nOverlap.\n\n"
+        "## Reference models: where to start\n\n"
+        "| New animal | Start from | Change |\n"
+        "|---|---|---|\n"
+        "| Birds of prey, owls | `kestrel` | Size, beak |\n"
+        "| Bats | none | Wings from the arms |\n"
+    )
+    (world / "models" / "kestrel.json").write_text(json.dumps(SPEC))
     (world / "models" / "previews").mkdir(parents=True)
-    (world / "models" / "previews" / "great_tit.png").write_bytes(b"png-bytes")
+    (world / "models" / "previews" / "kestrel.png").write_bytes(b"png-bytes")
     (world / "schemas").mkdir()
     (world / "schemas" / "model.schema.json").write_text(
         json.dumps({"type": "object", "required": ["id", "parts"]})
@@ -51,7 +58,22 @@ def _world(tmp_path: Path) -> Path:
 
 def _inputs(tmp_path: Path) -> None:
     (tmp_path / "species-plan.json").write_text(
-        json.dumps({"species": [{"species": "golden_eagle", "decision": "new"}]})
+        json.dumps(
+            {
+                "species": [
+                    {
+                        "species": "golden_eagle",
+                        "decision": "new",
+                        "reference": {
+                            "row": "Birds of prey, owls",
+                            "start": "kestrel",
+                            "change": "Size, beak.",
+                            "kind": "bird",
+                        },
+                    }
+                ]
+            }
+        )
     )
     (tmp_path / "survey.json").write_text(
         json.dumps(
@@ -155,15 +177,15 @@ def test_fix_round_then_pass(tmp_path: Path) -> None:
     assert result == {"model_files": ["models/golden_eagle.json"]}
     assert len(chat.prompts) == 5, "spec, review, fix, review, verify"
     assert "A very large eagle" in chat.prompts[0]
-    assert "great_tit" in chat.prompts[0]
+    assert "kestrel" in chat.prompts[0]
     assert "900 triangles" in chat.prompts[1], "review sees the build stats"
     assert "Floats." in chat.prompts[2], "fix sees the issue"
     assert "previous build" in chat.prompts[2], "fix looks at its work"
     assert "Floats." not in chat.prompts[3], "review judges blind"
     assert "Floats." in chat.prompts[4], "verify names the old issue"
-    assert "Great Tit" in chat.prompts[3], "review names the bar"
+    assert "Kestrel" in chat.prompts[3], "review names the bar"
     assert chat.images == [1, 3, 2, 3, 3], "bar joins the review images"
-    bar = tmp_path / "references" / "golden_eagle" / "closest-great_tit.png"
+    bar = tmp_path / "references" / "golden_eagle" / "closest-kestrel.png"
     assert bar.is_file()
     assert (tmp_path / "rounds" / "golden_eagle" / "1" / "preview.png").is_file()
     assert (tmp_path / "rounds" / "golden_eagle" / "2" / "build.log").is_file()
@@ -250,7 +272,7 @@ def test_review_prompt_names() -> None:
 def test_missing_bar_preview_stops(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    (world / "models" / "previews" / "great_tit.png").unlink()
+    (world / "models" / "previews" / "kestrel.png").unlink()
     chat = ScriptChat([json.dumps(SPEC)])
     with pytest.raises(StageFailedError, match="stage models failed"):
         Pipeline(
@@ -410,7 +432,7 @@ def test_unknown_species_stops(tmp_path: Path) -> None:
     _inputs(tmp_path)
     with pytest.raises(StageFailedError, match="stage models failed"):
         Pipeline(
-            [ModelsStage(closest={}, chat=ScriptChat([]))], tmp_path / "state.json"
+            [ModelsStage(refs={}, chat=ScriptChat([]))], tmp_path / "state.json"
         ).run(_ctx(tmp_path, world))
 
 
@@ -509,7 +531,103 @@ def test_silent_build_stops_at_once(tmp_path: Path) -> None:
     assert len(chat.prompts) == 1, "no fix rounds on an environment failure"
 
 
+def test_plan_without_reference_picks_live(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (tmp_path / "species-plan.json").write_text(
+        json.dumps({"species": [{"species": "golden_eagle", "decision": "new"}]})
+    )
+    chat = ScriptChat(
+        [
+            json.dumps({"row": 1, "kind": "bird"}),
+            json.dumps(SPEC),
+            json.dumps(REVIEW_CLEAN),
+            json.dumps(REVIEW_CLEAN),
+        ]
+    )
+    result = ModelsStage(chat=chat, build=_build_ok, check=lambda c, s, i, n: []).run(
+        _ctx(tmp_path, world)
+    )
+    assert result == {"model_files": ["models/golden_eagle.json"]}
+    assert "reference-table row" in chat.prompts[0]
+    assert "kestrel" in chat.prompts[1], "spec starts from the picked row"
+
+
+def test_examples_bar(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "models" / "examples").mkdir(parents=True)
+    (world / "models" / "examples" / "grass_snake.json").write_text(json.dumps(SPEC))
+    (world / "models" / "examples" / "previews").mkdir()
+    (world / "models" / "examples" / "previews" / "grass_snake.png").write_bytes(
+        b"png-bytes"
+    )
+    refs = {
+        "golden_eagle": {
+            "row": "Snakes",
+            "start": "examples/grass_snake",
+            "change": "Size.",
+            "kind": "mammal",
+        }
+    }
+    chat = ScriptChat(
+        [json.dumps(SPEC), json.dumps(REVIEW_CLEAN), json.dumps(REVIEW_CLEAN)]
+    )
+    ModelsStage(refs=refs, chat=chat, build=_build_ok, check=lambda c, s, i, n: []).run(
+        _ctx(tmp_path, world)
+    )
+    bar = tmp_path / "references" / "golden_eagle" / "closest-grass_snake.png"
+    assert bar.is_file()
+
+
+def test_impossible_kind_stops(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    refs = {
+        "golden_eagle": {"row": "Bats", "start": "", "change": "", "kind": "mammal"}
+    }
+    pipeline = Pipeline(
+        [ModelsStage(refs=refs, chat=ScriptChat([]))], tmp_path / "state.json"
+    )
+    with pytest.raises(StageFailedError, match="stage models failed"):
+        pipeline.run(_ctx(tmp_path, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "not possible yet" in state["failed"]["error"]
+
+
 def test_unfence() -> None:
     assert _unfence('{"a": 1}') == '{"a": 1}'
     assert _unfence('```json\n{"a": 1}\n```') == '{"a": 1}'
     assert _unfence('```\n{"a": 1}\n```') == '{"a": 1}'
+
+
+REVIEW_PROMPTS = (
+    "model_review_bird",
+    "model_review_bird_none",
+    "model_review_mammal",
+    "model_review_mammal_none",
+)
+
+
+@pytest.mark.parametrize("name", REVIEW_PROMPTS)
+def test_review_prompts_loosened_bar(name: str) -> None:
+    prompt = load_prompt(
+        name,
+        {
+            "TITLE": "T",
+            "SPECIES": "s",
+            "ROUND": "1",
+            "BUILT": "b",
+            "CLOSEST_TITLE": "C",
+        },
+    )
+    assert "Simple, not realistic" in prompt
+    assert "never `blocking`" in prompt
+    assert "roughly the right shape" in prompt
+
+
+def test_reverify_drops_detail_complaints() -> None:
+    prompt = load_prompt(
+        "model_reverify", {"ISSUES": "[]", "SPECIES": "s", "ROUND": "1"}
+    )
+    assert "stays dropped" in prompt

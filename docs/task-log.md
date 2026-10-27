@@ -94,3 +94,27 @@ Job folders live under `jobs/` (local only, never committed).
   `tests/test_animals.py::test_new_species_missing_model_is_ignored`.
 - English text reads naturally; final `reads well` verdict is Kai's:
   `jobs/t14-deer/animals/red_deer.json`.
+
+## 2026-10-27: inbox #9-#13 (approved deer, loosened reviewer, table)
+
+- #13: Kai approved the deer's round 5 as the first demo model.
+  The loop stopped there although the reviewer still blocked r5
+  on antler detail; `jobs/deer-demo/models/` (gitignored) is
+  finalised from `rounds/red_deer/5/spec.json` (1400 tris,
+  12 bones, all clips) with `builder report` written.
+- #12/#13: the reviewer judges only child-recognition and fit
+  next to the game's own animal; small parts roughly right is
+  fine, detail is never blocking. All four review prompts, the
+  re-verify, and the spec/fix prompts carry "Simple, not
+  realistic". Live check: the loosened reviewer passes the
+  approved r5 with zero issues (was 1 blocking).
+  `tests/test_meta_live.py::test_live_reviewer_passes_approved_deer`.
+- #9/#11: no more per-species hard-coding. `builder/reference.py`
+  parses the world's reference table every run; the species plan
+  attaches each new species' match (start spec, change notes,
+  kind) and marks "not possible yet" kinds `needs_code` (word
+  match, picker backstop); the models stage starts and bars from
+  it. Live probe: eagle -> kestrel/bird, deer -> moose/mammal.
+- #10 comes free: snakes, porpoises/dolphins, butterflies have
+  table rows with starts, so they are never `needs_code`.
+- World rebuilt after the pull (40 models, 0 problems).

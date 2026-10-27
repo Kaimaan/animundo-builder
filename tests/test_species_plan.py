@@ -54,6 +54,10 @@ MATCH = {
         {"gbif_key": 2468095, "rank": "SPECIES", "name": "Anguis fragilis"},
         [],
     ),
+    "Eptesicus serotinus": (
+        {"gbif_key": 2433599, "rank": "SPECIES", "name": "Eptesicus serotinus"},
+        [],
+    ),
 }
 
 
@@ -67,6 +71,16 @@ def _world(tmp_path: Path) -> Path:
         json.dumps({"taxon": PERCH, "stage_of": "perch"})
     )
     (animals / "archetypes.json").write_text("{}")
+    (world / "models").mkdir(parents=True)
+    (world / "models" / "README.md").write_text(
+        "# Models\n\n"
+        "## Reference models: where to start\n\n"
+        "| New animal | Start from | Change |\n"
+        "|---|---|---|\n"
+        "| Deer: red deer, roe deer | `moose` | Lighter body |\n"
+        "| Birds of prey, owls | `kestrel` | Size, beak |\n"
+        "| Bats | none | Wings from the arms |\n"
+    )
     return world
 
 
@@ -139,6 +153,7 @@ PHYLA = {
     1340298: "Arthropoda",
     2480506: "Chordata",
     2468095: "Chordata",
+    2433599: "Chordata",
 }
 
 
@@ -149,15 +164,19 @@ def _fake_classify(gbif_key: int) -> str:
 class ScriptClient:
     model = "fake-test-model"
 
-    def __init__(self, plans: list[dict]) -> None:
+    def __init__(self, plans: list[dict], auto_pick: bool = True) -> None:
         self.plans = list(plans)
+        self.auto_pick = auto_pick
         self.calls = 0
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         self.calls += 1
-        message = SimpleNamespace(
-            content=json.dumps(self.plans.pop(0)), tool_calls=None
-        )
+        content = messages[0]["content"]
+        if self.auto_pick and "reference-table row" in content:
+            answer: dict[str, Any] = {"row": 1, "kind": "mammal"}
+        else:
+            answer = self.plans.pop(0)
+        message = SimpleNamespace(content=json.dumps(answer), tool_calls=None)
         return SimpleNamespace(
             model="fake-test-model",
             choices=[SimpleNamespace(message=message)],
@@ -237,6 +256,7 @@ def test_match_rewrite_and_plan(tmp_path: Path, monkeypatch: Any) -> None:
         "new": 1,
         "food": 1,
         "candidate": 0,
+        "needs_code": 0,
         "added_young": [],
     }
     written = json.loads((tmp_path / "species-plan.json").read_text())
@@ -267,7 +287,7 @@ def test_over_cap_demotes_in_order(tmp_path: Path, monkeypatch: Any) -> None:
     _no_revalidate(monkeypatch)
     client = ScriptClient([_plan([("red_deer", "new"), ("brown_bear", "new")])])
     result = _stage(max_new_species=1).run(_ctx(tmp_path, client, world))
-    assert client.calls == 1
+    assert client.calls == 2, "plan, then one reference pick"
     assert result["new"] == 1
     assert result["candidate"] == 1
     written = json.loads((tmp_path / "species-plan.json").read_text())
@@ -342,7 +362,7 @@ def test_model_must_keep_the_match(tmp_path: Path, monkeypatch: Any) -> None:
     )
     client = ScriptClient([wrong, right])
     _stage().run(_ctx(tmp_path, client, world))
-    assert client.calls == 2
+    assert client.calls == 3, "two plan tries, then one reference pick"
 
 
 def test_food_web_failure_stops_with_plan_written(
@@ -697,3 +717,63 @@ def test_taxon_stable_failure_is_short(
 
     with pytest.raises(_Stopped, match="URLError: timed out"):
         taxon_same(tmp_path, "Vulpes vulpes")
+
+
+def test_impossible_kind_is_needs_code(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(
+        tmp_path,
+        [_species("serotine_bat", "Eptesicus serotinus", "playable")],
+        region={
+            "id": "xx_test",
+            "animals": {"playable": ["serotine_bat"], "predators": [], "prey": []},
+            "fish": [],
+            "food": [],
+            "places": [],
+        },
+    )
+    _no_revalidate(monkeypatch)
+    client = ScriptClient([_plan([("serotine_bat", "needs_code")])])
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["needs_code"] == 1
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    entry = written["species"][0]
+    assert entry["decision"] == "needs_code"
+    assert entry["reason"] == "Because.", "the model writes reasons, as for food"
+    region = json.loads((tmp_path / "regions" / "xx_test.json").read_text())
+    assert region["animals"]["playable"] == []
+
+
+def test_new_species_gets_reference(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, [_species("red_deer", "Cervus elaphus", "playable")])
+    _no_revalidate(monkeypatch)
+    client = ScriptClient(
+        [_plan([("red_deer", "new")]), {"row": 1, "kind": "mammal"}],
+        auto_pick=False,
+    )
+    _stage().run(_ctx(tmp_path, client, world))
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    assert written["species"][0]["reference"] == {
+        "row": "Deer: red deer, roe deer",
+        "start": "moose",
+        "change": "Lighter body",
+        "kind": "mammal",
+    }
+
+
+def test_picker_backstop_saves_impossible(tmp_path: Path, monkeypatch: Any) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, [_species("red_deer", "Cervus elaphus", "playable")])
+    _no_revalidate(monkeypatch)
+    client = ScriptClient(
+        [_plan([("red_deer", "new")]), {"row": 3, "kind": "mammal"}],
+        auto_pick=False,
+    )
+    result = _stage().run(_ctx(tmp_path, client, world))
+    assert result["needs_code"] == 1
+    written = json.loads((tmp_path / "species-plan.json").read_text())
+    entry = written["species"][0]
+    assert entry["decision"] == "needs_code"
+    assert "Saved" in entry["reason"]
+    assert "reference" not in entry

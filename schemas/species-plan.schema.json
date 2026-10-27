@@ -15,7 +15,7 @@
         "required": ["species", "decision", "reason", "wild", "taxon"],
         "properties": {
           "species": {"type": "string", "minLength": 1},
-          "decision": {"enum": ["reuse", "new", "food", "candidate"]},
+          "decision": {"enum": ["reuse", "new", "food", "candidate", "needs_code"]},
           "reason": {"type": "string", "minLength": 1},
           "wild": {"type": "boolean"},
           "taxon": {
@@ -28,7 +28,18 @@
               "name": {"type": "string", "minLength": 1}
             }
           },
-          "food_kind": {"type": "string", "minLength": 1}
+          "food_kind": {"type": "string", "minLength": 1},
+          "reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["row", "start", "change", "kind"],
+            "properties": {
+              "row": {"type": "string", "minLength": 1},
+              "start": {"type": "string", "minLength": 1},
+              "change": {"type": "string"},
+              "kind": {"enum": ["bird", "mammal"]}
+            }
+          }
         }
       }
     },

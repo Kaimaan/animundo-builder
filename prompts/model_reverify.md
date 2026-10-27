@@ -7,7 +7,9 @@ builder says it fixed them. Judge the new preview on its own
 first (the last image; the game's own animal and the reference
 sheet, when there is one, come before it), part by part and frame
 by frame as the review prompt says; then confirm each earlier
-issue is gone, and re-raise only what still visibly stands.
+issue is gone, and re-raise only what still visibly stands AND
+still breaks the bar — a detail complaint that never broke
+a child's recognition stays dropped, even if literally true.
 
 ## Input
 

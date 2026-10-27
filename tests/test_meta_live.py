@@ -11,6 +11,7 @@ import json
 import os
 import struct
 import zlib
+from pathlib import Path
 
 import httpx2
 import pytest
@@ -18,6 +19,8 @@ import pytest
 from builder.config import Config
 from builder.config import load as load_config
 from builder.meta import CostLogger, MetaClient
+from builder.prompts import load_prompt
+from builder.schemas import load_schema
 
 LIVE = os.environ.get("BUILDER_LIVE_TEST") == "1" and bool(
     os.environ.get("MODEL_API_KEY")
@@ -187,6 +190,52 @@ def test_live_images_generate(tmp_path) -> None:
     data = client.images_generate("a small red deer silhouette, flat icon")
     assert data[:8] == b"\x89PNG\r\n\x1a\n", f"expected PNG, got {data[:16]!r}"
     print(f"\nimage bytes: {len(data)}")
+
+
+def test_live_reviewer_passes_approved_deer(tmp_path) -> None:
+    """Inbox #13: the loosened reviewer must pass the approved deer.
+
+    Needs the deer run's round 5 (kept locally, never committed)
+    and a world checkout next to this repo for the moose bar.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    sheet = repo / "jobs" / "deer-demo" / "references" / "red_deer" / "sheet-1.png"
+    bar = repo.parent / "animundo-world" / "models" / "previews" / "moose.png"
+    preview = repo / "jobs" / "deer-demo" / "rounds" / "red_deer" / "5" / "preview.png"
+    for path in (sheet, bar, preview):
+        if not path.is_file():
+            pytest.skip(f"needs {path}")
+    prompt = load_prompt(
+        "model_review_mammal",
+        {
+            "TITLE": "Red deer",
+            "SPECIES": "red_deer",
+            "ROUND": "5",
+            "BUILT": "red_deer: 1400 triangles, 12 bones; size 2.2 m long",
+            "CLOSEST_TITLE": "Moose",
+        },
+    )
+    content: list = [{"type": "text", "text": prompt}]
+    for path in (sheet, bar, preview):
+        encoded = base64.b64encode(path.read_bytes()).decode()
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{encoded}"},
+            }
+        )
+    client = make_live_client(tmp_path)
+    response = client.chat(
+        [{"role": "user", "content": content}],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "Review", "schema": load_schema("review")},
+        },
+    )
+    review = json.loads(response.choices[0].message.content or "{}")
+    blocking = [i for i in review.get("issues", []) if i.get("severity") == "blocking"]
+    assert not blocking, f"approved deer still blocked: {blocking!r}"
+    print(f"\nissues: {len(review.get('issues', []))}, blocking: 0")
 
 
 def make_baseten_client(tmp_path) -> MetaClient:

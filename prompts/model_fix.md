@@ -4,7 +4,8 @@
 
 Apply every issue and every build error below to the spec, and return
 the whole revised spec. Keep what already works; change only what the
-issues and errors name.
+issues and errors name. Simple, not realistic: fix to the game's own
+style, never toward realism.
 
 ## Input
 

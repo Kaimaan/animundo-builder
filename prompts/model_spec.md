@@ -4,7 +4,9 @@
 
 Write the model spec for $TITLE ($LATIN), spec id `$SPECIES`. A builder
 turns it into the animated low-poly game model, so sculpt with
-overlapping lumps of clay: every number below is in metres.
+overlapping lumps of clay: every number below is in metres. Simple,
+not realistic: the right body plan, rough proportions, main colours
+and the one or two telling marks are enough.
 
 ## Input
 
@@ -20,7 +22,9 @@ What the adult looks like:
 $DESCRIPTION
 
 The closest existing spec, $CLOSEST_NAME. Adapt its bones and layout to
-this species; do not copy its sizes:
+this species; do not copy its sizes. What to change from it:
+
+$CHANGE
 
 ```
 $CLOSEST_SPEC

@@ -28,6 +28,7 @@ from typing import Any
 import jsonschema
 
 from ..prompts import load_prompt
+from ..reference import PICK_SCHEMA, impossible_match, pick_row, read_table
 from ..schemas import load_schema
 from ..world import check_draft
 from .region import draft_region_errors, sensitive_place_errors
@@ -126,8 +127,11 @@ class SpeciesPlanStage:
         world = Path(ctx.world_path)
         survey = json.loads((ctx.job_dir / "survey.json").read_text(encoding="utf-8"))
         region_path = self._region_path(ctx)
-        fixed, rank = self._match_all(world, survey)
+        table = read_table(world)
+        fixed, rank = self._match_all(world, survey, table)
         plan = self._write_with_model(ctx, survey, region_path, fixed, rank)
+        self._attach_references(ctx, table, survey, plan)
+        jsonschema.validate(plan, load_schema("species-plan"))
         self._rewrite_region(world, ctx.job_dir, region_path, survey, fixed, plan)
         out = ctx.job_dir / "species-plan.json"
         out.write_text(json.dumps(plan, indent=2), encoding="utf-8")
@@ -142,6 +146,7 @@ class SpeciesPlanStage:
             "new": sum(1 for d in decisions if d == "new"),
             "food": sum(1 for d in decisions if d == "food"),
             "candidate": sum(1 for d in decisions if d == "candidate"),
+            "needs_code": sum(1 for d in decisions if d == "needs_code"),
             "added_young": plan.get("added_young", []),
         }
 
@@ -152,12 +157,13 @@ class SpeciesPlanStage:
         return regions[0]
 
     def _match_all(
-        self, world: Path, survey: dict[str, Any]
+        self, world: Path, survey: dict[str, Any], table: list[dict[str, str]]
     ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
         """Split surveyed species into fixed decisions and ones to rank.
 
-        Returns (`fixed`, `rank`): fixed maps an id to its reuse or food
-        record, rank maps an id to its GBIF taxon for the model to order.
+        Returns (`fixed`, `rank`): fixed maps an id to its reuse, food
+        or needs_code record, rank maps an id to its GBIF taxon for the
+        model to order.
         """
         taxa = _file_taxa(world)
         fixed: dict[str, dict[str, Any]] = {}
@@ -185,8 +191,19 @@ class SpeciesPlanStage:
                     "kind": _food_kind(survey_id),
                     "taxon": taxon,
                 }
-            else:
-                rank[survey_id] = taxon
+                continue
+            blocked = impossible_match(table, species)
+            if blocked is not None:
+                fixed[survey_id] = {
+                    "decision": "needs_code",
+                    "reason": (
+                        f"the reference table lists {blocked['animal']} "
+                        f"as not possible yet: {blocked['change']}"
+                    ),
+                    "taxon": taxon,
+                }
+                continue
+            rank[survey_id] = taxon
         return fixed, rank
 
     def _is_food(self, taxon: dict[str, Any]) -> bool:
@@ -217,9 +234,16 @@ class SpeciesPlanStage:
                         f"(GBIF {taxon['gbif_key']} {taxon['rank']} "
                         f"{taxon['name']})."
                     )
-                else:
+                elif record["decision"] == "food":
                     lines.append(
                         f"- {survey_id}: food ({record['kind']}), never a file. "
+                        f"(GBIF {record['taxon']['gbif_key']} "
+                        f"{record['taxon']['rank']} {record['taxon']['name']})."
+                    )
+                else:
+                    lines.append(
+                        f"- {survey_id}: needs game code first "
+                        f"({record['reason']}), never a file. "
                         f"(GBIF {record['taxon']['gbif_key']} "
                         f"{record['taxon']['rank']} {record['taxon']['name']})."
                     )
@@ -255,6 +279,47 @@ class SpeciesPlanStage:
             if not problems:
                 return plan
         raise _Stopped("species plan did not settle: " + problems)
+
+    def _attach_references(
+        self,
+        ctx: Any,
+        table: list[dict[str, str]],
+        survey: dict[str, Any],
+        plan: dict[str, Any],
+    ) -> None:
+        """Match every new species to its reference-table row, in place.
+
+        The match is the backstop too: a species the word match missed
+        but the table lists as not possible yet is saved as needs_code
+        (its cap slot is not refilled).
+        """
+        by_id = {entry["species"]: entry for entry in survey.get("species", [])}
+
+        def ask(text: str) -> str:
+            ctx.check_budget()
+            response = ctx.chat(
+                [{"role": "user", "content": text}],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "ReferencePick", "schema": PICK_SCHEMA},
+                },
+            )
+            return (response.choices[0].message.content or "").strip()
+
+        for entry in plan["species"]:
+            if entry["decision"] != "new":
+                continue
+            species = by_id.get(entry["species"], {"species": entry["species"]})
+            ref = pick_row(table, species, ask)
+            if not ref["start"]:
+                entry["decision"] = "needs_code"
+                entry["reason"] = (
+                    entry.get("reason", "")
+                    + f" Saved: the reference table lists {ref['row']} "
+                    "as not possible yet."
+                ).strip()
+                continue
+            entry["reference"] = ref
 
     def _settle(
         self,
@@ -457,7 +522,7 @@ class SpeciesPlanStage:
         drop = {
             entry["species"]
             for entry in plan["species"]
-            if entry["decision"] in ("food", "candidate")
+            if entry["decision"] in ("food", "candidate", "needs_code")
         }
         for group in region.get("animals", {}).values():
             kept = []

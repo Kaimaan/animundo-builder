@@ -5,16 +5,19 @@
 Judge whether the new render is as good as the game's own
 $CLOSEST_TITLE, and whether a child would recognise $TITLE. The
 images, in order: the reference sheet, the game's own animal, and
-the new render last.
+the new render last. Simple, not realistic: the game is simple
+and blocky. The model needs only the right body plan, rough size
+and proportions, main colours, and the one or two marks that tell
+the species apart — never realism or fine detail.
 
 The build reports: $BUILT.
 
 ## Input
 
 Three images. First: the reference sheet (side and front views,
-drawn for this species) — use it only for proportions, colours and
-markings, never for detail the builder can't make (feather texture,
-an exact beak curve). Second: the game's own $CLOSEST_TITLE, the
+drawn for this species) — use it for colours and rough
+proportions only, never for detail the builder can't make (feather
+texture, an exact beak curve). Second: the game's own $CLOSEST_TITLE, the
 bar to meet. Last: the new render of $TITLE (front, side, back and
 top views, four walk frames, and run, eat, sleep and fly poses).
 
@@ -66,10 +69,13 @@ None. Judge from the images only.
 
 ## Hard rules
 
-- `blocking` means the model must change: a part that falls short
-  of the game's own animal, a broken frame in any clip, floating or
-  detached parts, gaps, wrong colours, over budget. `minor` means
-  polish worth doing.
+- `blocking` means only what breaks a child's recognition or the
+  fit next to the game's own animal: a missing or wrong-sized body
+  part, a wrong main colour, a broken pose (floating parts a child
+  would notice, limbs through the body). Small parts — beaks,
+  ears, tails, toes — are fine when roughly the right shape and
+  place. Detail short of realism is never `blocking`: at most
+  `minor`, and usually nothing at all.
 - Examine every part and every frame above; skipping a listed check
   is a miss, not a pass.
 - Name the exact part and the exact fix for every issue.

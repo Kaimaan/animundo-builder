@@ -28,13 +28,12 @@ from typing import Any
 import jsonschema
 
 from ..prompts import load_prompt
+from ..reference import PICK_SCHEMA, pick_row, read_table
 from ..schemas import load_schema, validate
 from ..world import check_draft, problems_by_file
 
 MAX_ROUNDS = 6
 SPEC_RETRIES = 3
-CLOSEST = {"golden_eagle": "great_tit", "red_deer": "moose"}
-KIND = {"golden_eagle": "bird", "red_deer": "mammal"}
 
 ChatFn = Callable[..., Any]
 BuildFn = Callable[[Path, str], dict[str, Any]]
@@ -49,8 +48,7 @@ class ModelsStage:
     def __init__(
         self,
         reference: str = "sheet",
-        closest: dict[str, str] | None = None,
-        kind: dict[str, str] | None = None,
+        refs: dict[str, dict[str, str]] | None = None,
         author: str = "Animundo Builder",
         max_rounds: int = MAX_ROUNDS,
         chat: ChatFn | None = None,
@@ -60,8 +58,7 @@ class ModelsStage:
         if reference not in ("sheet", "none"):
             raise ValueError("reference must be 'sheet' or 'none'")
         self.reference = reference
-        self.closest = CLOSEST if closest is None else closest
-        self.kind = KIND if kind is None else kind
+        self.refs = refs
         self.author = author
         self.max_rounds = max_rounds
         self._chat = chat
@@ -73,6 +70,7 @@ class ModelsStage:
             raise _Stopped("the job has no world checkout to build in")
         world = Path(ctx.world_path)
         plan = json.loads((ctx.job_dir / "species-plan.json").read_text())
+        planned = {entry["species"]: entry for entry in plan["species"]}
         new_ids = [
             entry["species"] for entry in plan["species"] if entry["decision"] == "new"
         ]
@@ -81,7 +79,11 @@ class ModelsStage:
         sandbox = _ensure_sandbox(ctx.job_dir, world)
         files = []
         for species_id in new_ids:
-            files.append(self._model_species(ctx, sandbox, world, species_id, surveyed))
+            files.append(
+                self._model_species(
+                    ctx, sandbox, world, species_id, surveyed, planned[species_id]
+                )
+            )
         return {"model_files": sorted(files)}
 
     def _model_species(
@@ -91,9 +93,14 @@ class ModelsStage:
         world: Path,
         species_id: str,
         surveyed: dict[str, Any],
+        planned: dict[str, Any],
     ) -> str:
-        if species_id not in self.closest or species_id not in self.kind:
-            raise _Stopped(f"{species_id}: no starting spec known; add one")
+        ref = self._reference(ctx, world, species_id, surveyed, planned)
+        if not ref["start"]:
+            raise _Stopped(
+                f"{species_id}: the reference table lists this kind as not "
+                "possible yet; game code first, not a model"
+            )
         entry = surveyed.get(species_id, {})
         measurements = json.loads(
             (ctx.job_dir / "measurements" / f"{species_id}.json").read_text()
@@ -103,7 +110,7 @@ class ModelsStage:
             + "\n\n"
             + (world / "models" / "README.md").read_text(encoding="utf-8")
         )
-        closest_id = self.closest[species_id]
+        closest_id = ref["start"]
         closest_spec = (world / "models" / f"{closest_id}.json").read_text()
         animal = _animal_title(ctx.job_dir, species_id)
         sheet = _latest_sheet(ctx.job_dir, species_id, self.reference)
@@ -123,6 +130,7 @@ class ModelsStage:
                         "MEASUREMENTS": json.dumps(measurements, indent=2),
                         "CLOSEST_NAME": closest_id,
                         "CLOSEST_SPEC": closest_spec,
+                        "CHANGE": ref.get("change", ""),
                         "RULES": rules,
                     },
                 )
@@ -157,7 +165,9 @@ class ModelsStage:
                 problems = [built["log"]] + problems
             self._save_round(ctx, species_id, round_no, spec, sandbox, built)
             if preview.is_file():
-                review = self._review(ctx, species_id, round_no, sheet, sandbox, built)
+                review = self._review(
+                    ctx, species_id, round_no, sheet, sandbox, built, ref
+                )
                 issues = review["issues"]
             else:
                 issues = []
@@ -197,6 +207,44 @@ class ModelsStage:
             return spec
         raise _Stopped(f"the spec writer never wrote valid JSON: {problems}")
 
+    def _reference(
+        self,
+        ctx: Any,
+        world: Path,
+        species_id: str,
+        surveyed: dict[str, Any],
+        planned: dict[str, Any],
+    ) -> dict[str, str]:
+        """This species' reference-table match: start spec, bar, kind.
+
+        The species plan attaches it; a plan written before that (or by
+        hand) is matched live. A fixed override replaces both in tests.
+        """
+        if self.refs is not None:
+            if species_id not in self.refs:
+                raise _Stopped(f"{species_id}: no starting spec known; add one")
+            return self.refs[species_id]
+        ref = planned.get("reference")
+        if ref is not None:
+            return ref
+        species = surveyed.get(species_id, {"species": species_id})
+        table = read_table(world)
+        return pick_row(
+            table,
+            species,
+            lambda text: _content(
+                self._ask(
+                    ctx,
+                    text,
+                    None,
+                    {
+                        "type": "json_schema",
+                        "json_schema": {"name": "ReferencePick", "schema": PICK_SCHEMA},
+                    },
+                )
+            ),
+        )
+
     def _review(
         self,
         ctx: Any,
@@ -205,9 +253,10 @@ class ModelsStage:
         sheet: Path | None,
         sandbox: Path,
         built: dict[str, Any],
+        ref: dict[str, str],
     ) -> dict[str, Any]:
-        kind = self.kind[species_id]
-        closest_id = self.closest[species_id]
+        kind = ref["kind"]
+        closest_id = ref["start"]
         bar = _bar_preview(ctx, species_id, closest_id)
         prompt = load_prompt(
             _review_prompt_name(kind, sheet is not None),
@@ -427,10 +476,20 @@ def _review_prompt_name(kind: str, sheet: bool) -> str:
 
 def _bar_preview(ctx: Any, species_id: str, closest_id: str) -> Path:
     """The game's own closest preview, copied into the job as the bar."""
-    src = Path(ctx.world_path) / "models" / "previews" / f"{closest_id}.png"
+    parts = closest_id.split("/")
+    if len(parts) == 1:
+        src = Path(ctx.world_path) / "models" / "previews" / f"{closest_id}.png"
+    else:
+        src = (
+            Path(ctx.world_path)
+            / "models"
+            / "/".join(parts[:-1])
+            / "previews"
+            / f"{parts[-1]}.png"
+        )
     if not src.is_file():
         raise _Stopped(f"no bar preview for {closest_id}: {src} is missing")
-    dest = ctx.job_dir / "references" / species_id / f"closest-{closest_id}.png"
+    dest = ctx.job_dir / "references" / species_id / f"closest-{parts[-1]}.png"
     if not dest.is_file():
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
@@ -440,7 +499,8 @@ def _bar_preview(ctx: Any, species_id: str, closest_id: str) -> Path:
 def _closest_title(world: Path, closest_id: str) -> str:
     """The closest animal's name for the review prompt."""
     data = json.loads((world / "models" / f"{closest_id}.json").read_text())
-    return str(data.get("name") or closest_id.replace("_", " ").title())
+    base = closest_id.rsplit("/", 1)[-1]
+    return str(data.get("name") or base.replace("_", " ").title())
 
 
 def _blocking(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:

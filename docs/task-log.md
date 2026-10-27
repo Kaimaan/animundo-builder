@@ -62,3 +62,22 @@ Job folders live under `jobs/` (local only, never committed).
 - Evidence: `jobs/eagle-demo/`: `references/` (2 sheets, 4 masks),
   `rounds/` (spec, build log, preview each), `reviews/`,
   `models/` (final spec, `.glb`, preview), `log.jsonl`.
+
+## 2026-10-27: inbox #5, #7, #8 (game-animals bar, deer next)
+
+- #5 done: models verdict feeds back ALL world `problems`
+  (existing models too — they are known to work, and the world
+  may rebuild them first). `builder/stages/models.py`,
+  `tests/test_models.py::test_models_final_verdict_problems`.
+- #7 done: fly rule judges attitude in frame and height vs the
+  rendered backdrop ("never by height alone"); fly pose keys
+  pinned. `prompts/model_review_bird*.md`, `model_reverify.md`.
+- #8 in code: kind-aware review prompts — game animals'
+  previews (`moose.png`, `great_tit.png`) are the bar figure;
+  bird prompts keep the fly rule, mammal prompts ground-more.
+  Mammals anchor to the moose with the reviewed eagle as
+  second anchor (`CLOSEST` order moose, eagle). Evidence:
+  `tests/test_models.py` (anchors, per-kind fly rule, silent
+  runs), `jobs/deer-demo/` seeded but not run.
+- `builder report` now shows the final preview next to the
+  game's closest animal (`tests/test_report.py`).

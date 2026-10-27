@@ -4,10 +4,10 @@
 
 Last round's review flagged blocking issues in this model. The
 builder says it fixed them. Judge the new preview on its own
-first (the last image; if there are two, the first is the reference
-sheet), part by part and frame by frame as the review prompt says;
-then confirm each earlier issue is gone, and re-raise only what
-still visibly stands.
+first (the last image; the game's own animal and the reference
+sheet, when there is one, come before it), part by part and frame
+by frame as the review prompt says; then confirm each earlier
+issue is gone, and re-raise only what still visibly stands.
 
 ## Input
 

@@ -29,11 +29,12 @@ import jsonschema
 
 from ..prompts import load_prompt
 from ..schemas import load_schema, validate
-from ..world import check_draft, mentions, problems_by_file
+from ..world import check_draft, problems_by_file
 
 MAX_ROUNDS = 6
 SPEC_RETRIES = 3
-CLOSEST = {"golden_eagle": "great_tit"}
+CLOSEST = {"golden_eagle": "great_tit", "red_deer": "moose"}
+KIND = {"golden_eagle": "bird", "red_deer": "mammal"}
 
 ChatFn = Callable[..., Any]
 BuildFn = Callable[[Path, str], dict[str, Any]]
@@ -49,6 +50,7 @@ class ModelsStage:
         self,
         reference: str = "sheet",
         closest: dict[str, str] | None = None,
+        kind: dict[str, str] | None = None,
         author: str = "Animundo Builder",
         max_rounds: int = MAX_ROUNDS,
         chat: ChatFn | None = None,
@@ -59,6 +61,7 @@ class ModelsStage:
             raise ValueError("reference must be 'sheet' or 'none'")
         self.reference = reference
         self.closest = CLOSEST if closest is None else closest
+        self.kind = KIND if kind is None else kind
         self.author = author
         self.max_rounds = max_rounds
         self._chat = chat
@@ -89,7 +92,7 @@ class ModelsStage:
         species_id: str,
         surveyed: dict[str, Any],
     ) -> str:
-        if species_id not in self.closest:
+        if species_id not in self.closest or species_id not in self.kind:
             raise _Stopped(f"{species_id}: no starting spec known; add one")
         entry = surveyed.get(species_id, {})
         measurements = json.loads(
@@ -203,19 +206,22 @@ class ModelsStage:
         sandbox: Path,
         built: dict[str, Any],
     ) -> dict[str, Any]:
-        name = "model_review" if sheet else "model_review_none"
+        kind = self.kind[species_id]
+        closest_id = self.closest[species_id]
+        bar = _bar_preview(ctx, species_id, closest_id)
         prompt = load_prompt(
-            name,
+            _review_prompt_name(kind, sheet is not None),
             {
                 "TITLE": _animal_title(ctx.job_dir, species_id),
                 "SPECIES": species_id,
                 "ROUND": str(round_no),
                 "BUILT": built["summary"],
+                "CLOSEST_TITLE": _closest_title(Path(ctx.world_path), closest_id),
             },
         )
         previous = _previous_blocking(ctx.job_dir, species_id, round_no)
         preview = sandbox / "models" / "previews" / f"{species_id}.png"
-        images = [path for path in (sheet, preview) if path is not None]
+        images = [path for path in (sheet, bar, preview) if path is not None]
         review = self._read_review(ctx, species_id, round_no, prompt, images)
         if not _blocking(review["issues"]) and previous:
             kept = ctx.job_dir / "reviews" / f"{species_id}-{round_no}-unverified.json"
@@ -360,12 +366,11 @@ def build_in_sandbox(sandbox: Path, species_id: str) -> dict[str, Any]:
 def check_in_sandbox(
     ctx: Any, sandbox: Path, species_id: str, round_no: int
 ) -> list[str]:
-    """This species' own models-verdict problems, via the draft checker.
+    """The models verdict, via the draft checker.
 
-    The models verdict is the one the world CI runs, but it covers the
-    whole world and the world's own models are unbuilt: only problems
-    naming this species' spec count. Everything else is reported in
-    the saved JSON, never fed back.
+    The models verdict is the one the world CI runs. World-owned
+    problems arrive split out as `existing`, so everything left in
+    `problems` is the draft's and feeds back.
     """
     extra = {f"models/{species_id}.json": sandbox / "models" / f"{species_id}.json"}
     built = sandbox / "assets" / "animals" / f"{species_id}.glb"
@@ -390,10 +395,8 @@ def check_in_sandbox(
     errors = []
     for file, lines in problems_by_file(models.get("problems", [])).items():
         for line in lines:
-            if file == f"models/{species_id}.json" or mentions(line, species_id):
-                errors.append(
-                    line[2:].strip() if line.startswith("- ") else line.strip()
-                )
+            text = line[2:].strip() if line.startswith("- ") else line.strip()
+            errors.append(f"{file}: {text}" if file else text)
     return errors
 
 
@@ -414,6 +417,30 @@ def _latest_sheet(job_dir: Path, species_id: str, reference: str) -> Path | None
     if not sheets:
         raise _Stopped(f"{species_id}: no reference sheet; run references first")
     return sheets[-1]
+
+
+def _review_prompt_name(kind: str, sheet: bool) -> str:
+    """The review prompt for this kind, with or without a sheet."""
+    base = f"model_review_{kind}"
+    return base if sheet else f"{base}_none"
+
+
+def _bar_preview(ctx: Any, species_id: str, closest_id: str) -> Path:
+    """The game's own closest preview, copied into the job as the bar."""
+    src = Path(ctx.world_path) / "models" / "previews" / f"{closest_id}.png"
+    if not src.is_file():
+        raise _Stopped(f"no bar preview for {closest_id}: {src} is missing")
+    dest = ctx.job_dir / "references" / species_id / f"closest-{closest_id}.png"
+    if not dest.is_file():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+    return dest
+
+
+def _closest_title(world: Path, closest_id: str) -> str:
+    """The closest animal's name for the review prompt."""
+    data = json.loads((world / "models" / f"{closest_id}.json").read_text())
+    return str(data.get("name") or closest_id.replace("_", " ").title())
 
 
 def _blocking(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:

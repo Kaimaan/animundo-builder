@@ -13,7 +13,12 @@ from PIL import Image
 
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
 from builder.prompts import PROMPTS_DIR
-from builder.stages.models import ModelsStage, _unfence, check_in_sandbox
+from builder.stages.models import (
+    ModelsStage,
+    _review_prompt_name,
+    _unfence,
+    check_in_sandbox,
+)
 
 SPEC = {"id": "golden_eagle", "parts": [{"name": "body"}]}
 REVIEW_CLEAN = {"species": "golden_eagle", "round": 1, "issues": []}
@@ -33,6 +38,8 @@ def _world(tmp_path: Path) -> Path:
     (world / "models").mkdir(parents=True)
     (world / "models" / "README.md").write_text("# Models\n\nOverlap.\n")
     (world / "models" / "great_tit.json").write_text(json.dumps(SPEC))
+    (world / "models" / "previews").mkdir(parents=True)
+    (world / "models" / "previews" / "great_tit.png").write_bytes(b"png-bytes")
     (world / "schemas").mkdir()
     (world / "schemas" / "model.schema.json").write_text(
         json.dumps({"type": "object", "required": ["id", "parts"]})
@@ -154,7 +161,10 @@ def test_fix_round_then_pass(tmp_path: Path) -> None:
     assert "previous build" in chat.prompts[2], "fix looks at its work"
     assert "Floats." not in chat.prompts[3], "review judges blind"
     assert "Floats." in chat.prompts[4], "verify names the old issue"
-    assert chat.images == [1, 2, 2, 2, 2], "sheet+preview where each needs them"
+    assert "Great Tit" in chat.prompts[3], "review names the bar"
+    assert chat.images == [1, 3, 2, 3, 3], "bar joins the review images"
+    bar = tmp_path / "references" / "golden_eagle" / "closest-great_tit.png"
+    assert bar.is_file()
     assert (tmp_path / "rounds" / "golden_eagle" / "1" / "preview.png").is_file()
     assert (tmp_path / "rounds" / "golden_eagle" / "2" / "build.log").is_file()
     assert (tmp_path / "reviews" / "golden_eagle-1.json").is_file()
@@ -203,7 +213,7 @@ def test_reverify_reraises_unfixed_issue(tmp_path: Path) -> None:
 
 
 def test_review_prompts_check_parts_and_frames() -> None:
-    for name in ("model_review", "model_review_none"):
+    for name in ("model_review_bird", "model_review_bird_none"):
         text = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
         for anchor in (
             "Silhouette",
@@ -212,10 +222,43 @@ def test_review_prompts_check_parts_and_frames() -> None:
             "Legs",
             "Colours",
             "Fly",
-            "Low over the ground",
+            "never by height",
             "Walk frames",
+            "game's own",
         ):
             assert anchor in text, name
+    for name in ("model_review_mammal", "model_review_mammal_none"):
+        text = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+        for anchor in (
+            "Silhouette",
+            "Legs and feet",
+            "antlers or horns",
+            "Coat colours",
+            "no wings and no fly clip",
+            "game's own",
+        ):
+            assert anchor in text, name
+
+
+def test_review_prompt_names() -> None:
+    assert _review_prompt_name("bird", True) == "model_review_bird"
+    assert _review_prompt_name("bird", False) == "model_review_bird_none"
+    assert _review_prompt_name("mammal", True) == "model_review_mammal"
+    assert _review_prompt_name("mammal", False) == "model_review_mammal_none"
+
+
+def test_missing_bar_preview_stops(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "models" / "previews" / "great_tit.png").unlink()
+    chat = ScriptChat([json.dumps(SPEC)])
+    with pytest.raises(StageFailedError, match="stage models failed"):
+        Pipeline(
+            [ModelsStage(chat=chat, build=_build_ok, check=lambda c, s, i, n: [])],
+            tmp_path / "state.json",
+        ).run(_ctx(tmp_path, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "no bar preview" in state["failed"]["error"]
 
 
 def _draft_world(tmp_path: Path, verdict: dict) -> Path:
@@ -257,7 +300,8 @@ def test_check_uses_species_models_problems(tmp_path: Path) -> None:
     (sandbox / "assets" / "animals" / "golden_eagle.glb").write_bytes(b"glb")
     ctx = SimpleNamespace(job_dir=job, world_path=world)
     assert check_in_sandbox(ctx, sandbox, "golden_eagle", 1) == [
-        "triangles over budget"
+        "models/golden_eagle.json: triangles over budget",
+        "ERROR: bee: res://assets/animals/bee.glb is missing",
     ]
     saved = json.loads((job / "checks" / "models-golden_eagle-1.json").read_text())
     assert "models/golden_eagle.json" in saved["draft_files"]
@@ -337,7 +381,7 @@ def test_none_mode_attaches_no_sheet(tmp_path: Path) -> None:
     ModelsStage(
         reference="none", chat=chat, build=_build_ok, check=lambda c, s, i, n: []
     ).run(_ctx(tmp_path, world))
-    assert chat.images == [0, 1], "spec from text, review of the preview alone"
+    assert chat.images == [0, 2], "spec from text, review of bar plus preview"
 
 
 def test_check_errors_reach_the_fix(tmp_path: Path) -> None:

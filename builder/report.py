@@ -328,8 +328,17 @@ def _final(job_dir: Path, species_id: str) -> str:
         for path in files
     )
     preview = job_dir / "models" / f"{species_id}.png"
+    bar = ""
+    bars = sorted((job_dir / "references" / species_id).glob("closest-*.png"))
+    if bars:
+        bar = _figure(
+            bars[0],
+            "the bar: the game's own "
+            + bars[0].stem.removeprefix("closest-").replace("_", " "),
+        )
     return (
         "<h3>Final model</h3>\n"
+        + bar
         + _figure(preview, f"{species_id} final preview")
         + f"<ul>{items}</ul>"
     )

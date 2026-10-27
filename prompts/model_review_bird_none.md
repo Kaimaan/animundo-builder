@@ -2,18 +2,25 @@
 
 ## Job
 
-Judge the built model from knowledge, with no reference sheet. The
-image is the preview sheet of the built model: front, side, back and
-top views, four walk frames, and run, eat, sleep and fly poses. Ask:
-does this look like $TITLE in the game's low-poly style?
+Judge whether the new render is as good as the game's own
+$CLOSEST_TITLE, and whether a child would recognise $TITLE, from
+knowledge, with no reference sheet. The images, in order: the
+game's own animal, and the new render last.
 
 The build reports: $BUILT.
 
 ## Input
 
-The image, the build line above, and these examinations, in this
-order. Judge each one from what the real species looks like; a part
-that is wrong is an issue naming that part:
+Two images. First: the game's own $CLOSEST_TITLE, the bar to meet.
+Last: the new render of $TITLE (front, side, back and top views,
+four walk frames, and run, eat, sleep and fly poses).
+
+The question: is the new render as good as the game's own animal?
+Pass the first round that meets that bar; don't polish further.
+
+Check each part against the game's animal and what the real
+species looks like, in this order; a part that falls short is an
+issue naming that part:
 
 - Silhouette: the right body plan and proportions for the species.
 - Wings: present, folded plausibly at rest, the right size and place.
@@ -26,11 +33,12 @@ that is wrong is an issue naming that part:
 
 Then check every animation frame on its own:
 
-- Fly: the body tips forward about 45 degrees as it flies, wings
-  unfolded mid-beat (one frame of the cycle), tail trailing, feet
-  tucked. Low over the ground is correct: the game's birds fly low,
-  they do not soar. Blocking only if the body lies past level,
-  rolls onto its side, or a wing stays folded.
+- Fly: judge it by the wings and the body angle, never by height:
+  the preview draws every clip standing on the ground, fly too (in
+  the game the bird flies at height). Expect the body tipped
+  forward about 45 degrees, wings unfolded mid-beat (one frame of
+  the cycle), tail trailing, feet tucked. Blocking only if the body
+  lies past level, rolls onto its side, or a wing stays folded.
 - Run, eat, sleep: the pose reads clearly; nothing floats, detaches
   or clips through another part.
 - Walk frames: the four frames cohere; legs reach the ground.
@@ -51,17 +59,18 @@ Strict JSON matching its schema: `species` (`$SPECIES`), `round`
 
 ## Tools
 
-None. Judge from the image only.
+None. Judge from the images only.
 
 ## Hard rules
 
-- `blocking` means the model must change: a wrong part, a broken
-  frame in any clip, floating or detached parts, gaps, wrong
-  colours, over budget. `minor` means polish worth doing.
+- `blocking` means the model must change: a part that falls short
+  of the game's own animal, a broken frame in any clip, floating or
+  detached parts, gaps, wrong colours, over budget. `minor` means
+  polish worth doing.
 - Examine every part and every frame above; skipping a listed check
   is a miss, not a pass.
 - Name the exact part and the exact fix for every issue.
-- No `blocking` issue when the preview matches the species and the list.
+- No `blocking` issue once the render meets the bar and the list.
 
 ## Stop
 

@@ -90,6 +90,7 @@ def _job(job_dir: Path) -> None:
     refs.mkdir(parents=True)
     (refs / "sheet-1.png").write_bytes(_png())
     (refs / "mask-side-1.png").write_bytes(_png())
+    (refs / "closest-moose.png").write_bytes(_png())
     first = job_dir / "rounds" / "eagle" / "1"
     first.mkdir(parents=True)
     (first / "spec.json").write_text(json.dumps({"id": "eagle", "parts": [1, 2]}))
@@ -169,6 +170,7 @@ def test_report_tells_the_whole_story(tmp_path: Path) -> None:
     assert "Too thin." in text and "No issues" in text
     assert "data:image/png;base64," in text
     assert "eagle.json" in text, "final files listed"
+    assert "the bar: the game&#x27;s own moose" in text
 
 
 def test_report_is_offline_safe(tmp_path: Path) -> None:

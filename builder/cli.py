@@ -32,6 +32,7 @@ from .stages import (
     CapabilityStage,
     IntakeStage,
     ModelsStage,
+    PlantsStage,
     ReferencesStage,
     RegionStage,
     SpeciesPlanStage,
@@ -40,11 +41,15 @@ from .stages import (
 )
 
 NOT_BUILT_YET = 3
-NEXT_STAGE = "plants"
+NEXT_STAGE = "safety"
 
 
 def _pipeline_stages(
-    intake: IntakeStage, author: str, max_new_species: int, reference: str
+    intake: IntakeStage,
+    author: str,
+    max_new_species: int,
+    reference: str,
+    max_new_plants: int = 3,
 ) -> list:
     return [
         intake,
@@ -53,9 +58,10 @@ def _pipeline_stages(
         RegionStage(author=author),
         SpeciesPlanStage(max_new_species=max_new_species),
         AnimalsStage(),
-        WordsStage(),
         ReferencesStage(reference=reference),
         ModelsStage(reference=reference, author=author),
+        PlantsStage(max_new_plants=max_new_plants, author=author),
+        WordsStage(),
     ]
 
 
@@ -261,7 +267,11 @@ def cmd_build(args: argparse.Namespace) -> int:
     try:
         Pipeline(
             _pipeline_stages(
-                stage, args.author, config.max_new_species, config.reference
+                stage,
+                args.author,
+                config.max_new_species,
+                config.reference,
+                config.max_new_plants,
             ),
             job_dir / "state.json",
         ).run(ctx)
@@ -330,6 +340,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
         params.get("author", "Animundo Builder"),
         config.max_new_species,
         config.reference,
+        config.max_new_plants,
     )
     run, missing = stages_for_kind(stages, kind, choices)
     if missing:

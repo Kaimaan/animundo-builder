@@ -152,3 +152,35 @@ Job folders live under `jobs/` (local only, never committed).
   $0.01; locale passes; Finnish reads naturally ("Saksanhirvi",
   "Sinulla on nälkä", "Lepäät kuusen alla tuulensuojassa").
   A Finnish speaker's verdict is still Kai's.
+
+## 2026-10-27: T46 plants
+
+- New `PlantsStage` after models: the region's new ground-cover
+  models (at most 3, enforced in the region prompt and both
+  stages) loop draft -> GBIF verify (`taxon.py --plant --same`,
+  reusing a known spec under another name) -> Blender build in
+  the shared sandbox -> models verdict -> preview review, 6
+  rounds. Finals in the job's `models/plants/`; food-marked or
+  poisonous plants (world list or `year.notes`) are flagged for
+  an expert in the result.
+- Draft follows the bilberry (bush) and wood anemone (ground);
+  the review bars the same-kind game plant. No reference sheets
+  for plants in v1: the examples carry the shape, and sheets
+  would need plant measurements the survey has no source for.
+- Live check (`jobs/t46-sorrel/`, gitignored): wood sorrel
+  converged in 4 rounds ($0.27), GBIF 8211958, schema/taxa pass;
+  the models verdict's only line is the world's own gap (below).
+  Looks right: basal clover leaves, June flower, bare winter.
+  Kai's eyeball pending: `models/plants/wood_sorrel.png`.
+- Found live: `check_draft.py` never overlays previews, so the
+  plant rules always miss the draft's preview sheet and the loop
+  could never exit (reviews were clean at r4-r6 first). The
+  stage skips that one line for its own plant (the build just
+  wrote it); the world side should overlay previews or excuse
+  drafts. Also found: the plant schema forbids `warning` /
+  `about_safety`, so edibility notes go in `year.notes`.
+- Words now runs last and writes plant about texts (English
+  composed from the spec, Finnish translated, Latin copied).
+  Rainforest `needs_code` was already covered by the capability
+  mangrove test. Report/pack integration for plants waits for
+  T21.

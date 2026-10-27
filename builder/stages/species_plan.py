@@ -47,17 +47,21 @@ ClassifyFn = Callable[[int], str]
 TAXON_TRIES = 3
 
 
-def taxon_same(world: Path, latin: str) -> dict[str, Any]:
+def taxon_same(world: Path, latin: str, plant: bool = False) -> dict[str, Any]:
     """Resolve one Latin name with the world's `tools/taxon.py`.
 
     GBIF is a network call away, so transient failures are retried;
     only a stable failure stops the job for a person.
     """
+    args = [sys.executable, "tools/taxon.py"]
+    if plant:
+        args.append("--plant")
+    args += ["--same", latin]
     last_error = ""
     for attempt in range(1, TAXON_TRIES + 1):
         try:
             proc = subprocess.run(
-                [sys.executable, "tools/taxon.py", "--same", latin],
+                args,
                 cwd=world,
                 capture_output=True,
                 text=True,

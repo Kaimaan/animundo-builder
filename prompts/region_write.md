@@ -67,14 +67,20 @@ yet is expected. Listing one is correct, never an error. Omitting one
 is: the validator's "unknown animal" complaints about surveyed ids are
 forgiven by the pipeline, not by you.
 
-`ground_cover.plants[].model` is different: it may use ONLY these already
-built plant models, because this pipeline cannot build new ones:
+`ground_cover.plants[].model` prefers these already built plant
+models:
 
 ```
 $BUILT_PLANTS
 ```
 
-Never name another plant model.
+At most 3 models may be new ids not in that list: real ground
+plants or shrubs that grow wild in this place, named by their
+English common name in lowercase with `_` (like `wood_anemone`).
+The plants stage builds their specs later; list each new one's
+common names in the entry's `names` so it knows what to build.
+Never name an unbuilt model that is already in the list's
+checkout but has no `.glb`, and never a tree: trees are code.
 
 The `author`, `status`, `seed` and `center` are set by the pipeline, not
 by you: write your best values and they are corrected afterwards.

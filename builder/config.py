@@ -36,6 +36,7 @@ class Config:
     ledger_path: str = "spend-ledger.json"
     baseten_total_usd: float = 100.0
     max_new_species: int = 3
+    max_new_plants: int = 3
     model_api_key: str | None = None
     baseten_api_key: str | None = None
     fireworks_api_key: str | None = None
@@ -80,6 +81,7 @@ def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
         "TOTAL_BUDGET_USD",
         "LEDGER_PATH",
         "MAX_NEW_SPECIES",
+        "MAX_NEW_PLANTS",
     )
     found = {}
     for name in names:
@@ -109,6 +111,8 @@ def load(path: str | Path | None = None) -> Config:
             values[money] = float(values[money])
     if "max_new_species" in values:
         values["max_new_species"] = int(values["max_new_species"])
+    if "max_new_plants" in values:
+        values["max_new_plants"] = int(values["max_new_plants"])
     if "open_model_host" in values and values["open_model_host"] not in OPEN_HOSTS:
         raise ValueError(f"open_model_host must be one of {', '.join(OPEN_HOSTS)}")
     if "prices" in values and isinstance(values["prices"], dict):

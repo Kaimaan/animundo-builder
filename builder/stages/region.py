@@ -7,6 +7,8 @@ world's own `check_draft.py`, and sends failures back, up to 8 rounds.
 
 New species don't exist as files until a later stage, so "unknown animal"
 complaints about surveyed species are recorded as planned, not failures.
+New plant models are the same: the plants stage builds at most 3 per
+place, so unknown-plant complaints are excused up to that cap.
 Everything else must pass.
 """
 
@@ -100,6 +102,7 @@ class RegionStage:
                     "even if its animal file does not exist yet; new files "
                     "are built by a later stage."
                 )
+            errors.extend(_plant_errors(draft, world))
             if not errors:
                 return {
                     "region_file": f"regions/{region_id}.json",
@@ -168,6 +171,11 @@ def draft_region_errors(
     for file, lines in problems_by_file(region.get("problems", [])).items():
         for line in lines:
             if "has unknown animal" in line or "must be an animal" in line:
+                continue
+            if "ground_cover.plants[" in line and (
+                "must be a plant in models/plants/" in line
+                or "build it first with tools/build_model.sh" in line
+            ):
                 continue
             errors.append(f"{file}: {_short(line)}" if file else _short(line))
     bad = sorted(used - known - planned)
@@ -271,6 +279,35 @@ def _built_plants(world: Path) -> set[str]:
 
 def _unknown_animals(world: Path, region_path: Path) -> set[str]:
     return _used_species(region_path) - _known_animals(world)
+
+
+def _plant_errors(draft: dict[str, Any], world: Path) -> list[str]:
+    """New plant models beyond the 3 the plants stage builds, if any.
+
+    Unknown-plant checker lines are excused (their specs come later),
+    but an id the checkout already has must be built, and at most 3
+    ids may be new.
+    """
+    used = {
+        plant.get("model", "")
+        for plant in draft.get("ground_cover", {}).get("plants", [])
+    } - {""}
+    checkout = {path.stem for path in (world / "models" / "plants").glob("*.json")}
+    errors = []
+    stale = sorted((used & checkout) - _built_plants(world))
+    if stale:
+        errors.append(
+            "these plant models exist but are not built: "
+            + ", ".join(stale)
+            + "; rebuild the world, then run again"
+        )
+    new = sorted(used - checkout)
+    if len(new) > 3:
+        errors.append(
+            f"names {len(new)} new plant models ({', '.join(new)}), at most 3; "
+            "use built ones for the rest"
+        )
+    return errors
 
 
 class _Stopped(Exception):

@@ -390,10 +390,15 @@ def _ensure_sandbox(job_dir: Path, world: Path) -> Path:
     return sandbox
 
 
-def build_in_sandbox(sandbox: Path, species_id: str) -> dict[str, Any]:
-    """Run the world's build script; parse the BUILT line or keep the log."""
+def build_in_sandbox(sandbox: Path, spec: str) -> dict[str, Any]:
+    """Run the world's build script; parse the BUILT line or keep the log.
+
+    `spec` is the spec path inside the sandbox (`models/plants/<id>.json`
+    for plants); a bare id builds the animal spec of that name.
+    """
+    target = spec if "/" in spec else f"models/{spec}.json"
     done = subprocess.run(
-        ["sh", "tools/build_model.sh", f"models/{species_id}.json"],
+        ["sh", "tools/build_model.sh", target],
         cwd=sandbox,
         capture_output=True,
         text=True,

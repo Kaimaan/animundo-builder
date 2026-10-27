@@ -4,6 +4,7 @@ from .animals import AnimalsStage
 from .capability import CapabilityStage
 from .intake import IntakeStage
 from .models import ModelsStage
+from .plants import PlantsStage
 from .references import ReferencesStage
 from .region import RegionStage
 from .species_plan import SpeciesPlanStage
@@ -15,6 +16,7 @@ __all__ = [
     "CapabilityStage",
     "IntakeStage",
     "ModelsStage",
+    "PlantsStage",
     "ReferencesStage",
     "RegionStage",
     "SpeciesPlanStage",

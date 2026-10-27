@@ -17,12 +17,18 @@ def test_defaults() -> None:
     assert config.total_budget_usd == 80.0
     assert config.ledger_path == "spend-ledger.json"
     assert config.max_new_species == 3
+    assert config.max_new_plants == 3
     assert config.prices.input_per_million == 1.25
 
 
 def test_max_new_species_from_env(monkeypatch) -> None:
     monkeypatch.setenv("BUILDER_MAX_NEW_SPECIES", "5")
     assert load().max_new_species == 5
+
+
+def test_max_new_plants_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("BUILDER_MAX_NEW_PLANTS", "1")
+    assert load().max_new_plants == 1
 
 
 def test_load_reads_environment(monkeypatch) -> None:

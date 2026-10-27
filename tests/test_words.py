@@ -24,8 +24,19 @@ print(json.dumps({
 def _world(tmp_path: Path) -> Path:
     world = tmp_path / "world"
     (world / "locale" / "fi").mkdir(parents=True)
+    (world / "locale" / "en").mkdir(parents=True)
     (world / "locale" / "languages.json").write_text(
         json.dumps({"en": "English", "fi": "Suomi"})
+    )
+    (world / "locale" / "en" / "plants.json").write_text(
+        json.dumps(
+            {
+                "plant.bilberry.about_looks": "Low bushes with green stems.",
+                "plant.bilberry.about_grows": "In forests and bogs.",
+                "plant.bilberry.about_fact": "Bears love the berries.",
+                "plant.bilberry.about_year": "Red in autumn, bare in winter.",
+            }
+        )
     )
     (world / "locale" / "fi" / "animals.json").write_text(
         json.dumps(
@@ -208,3 +219,93 @@ def test_english_only_writes_nothing(tmp_path: Path) -> None:
     result = WordsStage().run(_ctx(tmp_path, chat, world))
     assert result == {"locale_files": [], "languages": []}
     assert not (tmp_path / "locale").exists()
+
+
+def test_plant_abouts_in_english_and_finnish(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    plants = tmp_path / "models" / "plants"
+    plants.mkdir(parents=True)
+    (plants / "wood_sorrel.json").write_text(
+        json.dumps(
+            {
+                "id": "wood_sorrel",
+                "name": "Wood sorrel",
+                "latin": "Oxalis acetosella",
+                "kind": "ground",
+                "year": {"leaves": "deciduous"},
+                "colors": {"leaf": "#3f7a34"},
+            }
+        )
+    )
+    about_en = {
+        "about_looks": "Clover-like leaves.",
+        "about_grows": "In forests.",
+        "about_fact": "Folds at night.",
+        "about_year": "Gone in winter.",
+    }
+    about_fi = {key: f"FI {text}" for key, text in about_en.items()}
+    chat = ScriptChat(
+        [
+            {"title": "Hirvi!", "hungry": "Sinulla on nälkä!"},
+            {"name": "Testiniitty"},
+            about_en,
+            {
+                "plant.wood_sorrel.title": "Käenkaali",
+                **{f"plant.wood_sorrel.{k}": v for k, v in about_fi.items()},
+            },
+        ]
+    )
+    result = WordsStage().run(_ctx(tmp_path, chat, world))
+    assert "locale/en/plants.json" in result["locale_files"]
+    assert "locale/fi/plants.json" in result["locale_files"]
+    en = json.loads((tmp_path / "locale" / "en" / "plants.json").read_text())
+    assert en["plant.wood_sorrel.title"] == "Wood sorrel"
+    assert en["plant.wood_sorrel.latin"] == "Oxalis acetosella"
+    assert en["plant.wood_sorrel.about_fact"] == "Folds at night."
+    fi = json.loads((tmp_path / "locale" / "fi" / "plants.json").read_text())
+    assert fi["plant.wood_sorrel.title"] == "Käenkaali"
+    assert fi["plant.wood_sorrel.latin"] == "Oxalis acetosella"
+    assert fi["plant.wood_sorrel.about_fact"] == "FI Folds at night."
+    assert "Low bushes" in chat.prompts[2], "bilberry tone in the compose"
+
+
+def test_plants_without_animals(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (tmp_path / "species-plan.json").write_text(json.dumps({"species": []}))
+    plants = tmp_path / "models" / "plants"
+    plants.mkdir(parents=True)
+    (plants / "wood_sorrel.json").write_text(
+        json.dumps(
+            {
+                "id": "wood_sorrel",
+                "name": "Wood sorrel",
+                "latin": "Oxalis acetosella",
+                "kind": "ground",
+                "year": {"leaves": "deciduous"},
+                "colors": {"leaf": "#3f7a34"},
+            }
+        )
+    )
+    about_en = {
+        "about_looks": "Clover-like leaves.",
+        "about_grows": "In forests.",
+        "about_fact": "Folds at night.",
+        "about_year": "Gone in winter.",
+    }
+    chat = ScriptChat(
+        [
+            {"name": "Testiniitty"},
+            about_en,
+            {
+                "plant.wood_sorrel.title": "Käenkaali",
+                **{f"plant.wood_sorrel.{k}": f"FI {v}" for k, v in about_en.items()},
+            },
+        ]
+    )
+    result = WordsStage().run(_ctx(tmp_path, chat, world))
+    assert "locale/fi/regions.json" in result["locale_files"]
+    assert "locale/en/plants.json" in result["locale_files"]
+    assert "locale/fi/plants.json" in result["locale_files"]
+    assert "locale/fi/animals.json" not in result["locale_files"]

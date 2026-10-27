@@ -323,3 +323,47 @@ def test_sensitive_place_errors() -> None:
     )
     assert len(errors) == 1
     assert "wolverine" in errors[0]
+
+
+def test_unknown_plant_lines_excused(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(
+        "import json;print(json.dumps({'ok': False, 'results': ["
+        "{'check': 'locale', 'status': 'pass', 'problems': []},"
+        "{'check': 'schema', 'status': 'pass', 'problems': []},"
+        "{'check': 'taxa', 'status': 'pass', 'problems': []},"
+        "{'check': 'region', 'status': 'fail', 'problems': ["
+        "'FAIL regions/gb_test.json',"
+        '\'- "ground_cover.plants[0].model" must be a plant '
+        'in models/plants/ (known: ["moss"])\']},'
+        "{'check': 'animals', 'status': 'skip', 'problems': []},"
+        "{'check': 'models', 'status': 'skip', 'problems': []}]}))"
+    )
+    draft = _draft(ground_cover={"plants": [{"model": "sorrel", "density": 0.2}]})
+    client = ScriptClient([draft])
+    result = RegionStage().run(_ctx(tmp_path, client, world))
+    assert result["rounds"] == 1
+
+
+def test_fourth_new_plant_sent_back(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    draft = _draft(
+        ground_cover={
+            "plants": [{"model": f"weed_{n}", "density": 0.1} for n in range(4)]
+        }
+    )
+    client = ScriptClient([draft, _draft()])
+    RegionStage().run(_ctx(tmp_path, client, world))
+    assert len(client.calls) == 2
+    assert "at most 3" in client.prompts[1]
+
+
+def test_unbuilt_checkout_plant_sent_back(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    draft = _draft(ground_cover={"plants": [{"model": "fern", "density": 0.2}]})
+    client = ScriptClient([draft, _draft()])
+    RegionStage().run(_ctx(tmp_path, client, world))
+    assert "not built" in client.prompts[1]

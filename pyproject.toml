@@ -10,6 +10,7 @@ dependencies = [
     "openai>=1.50",
     "httpx2>=2",
     "jsonschema>=4.20",
+    "referencing>=0.30",
     "pillow>=13.0.0",
     "numpy>=2.5.4",
 ]

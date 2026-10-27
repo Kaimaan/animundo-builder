@@ -4,13 +4,38 @@
   "title": "A family's draft of one place",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "owner_uid", "family_uids", "status"],
+  "required": [
+    "kind",
+    "owner_uid",
+    "family_uids",
+    "status"
+  ],
   "properties": {
-    "kind": {"enum": ["new_place"]},
-    "area_id": {"type": "string", "minLength": 1},
-    "owner_uid": {"type": "string", "minLength": 1},
-    "family_uids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-    "first_explorer_species": {"type": "string", "minLength": 1},
+    "kind": {
+      "enum": [
+        "new_place",
+        "animal_home"
+      ]
+    },
+    "area_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "owner_uid": {
+      "type": "string",
+      "minLength": 1
+    },
+    "family_uids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "first_explorer_species": {
+      "type": "string",
+      "minLength": 1
+    },
     "status": {
       "enum": [
         "requested",
@@ -26,37 +51,91 @@
         "failed"
       ]
     },
-    "stage": {"enum": ["land", "animals", "models", "checking", "packing"]},
-    "stage_detail": {"type": "string"},
-    "place_name": {"type": "string"},
-    "country": {"type": "string", "pattern": "^[A-Z]{2}$"},
+    "stage": {
+      "enum": [
+        "land",
+        "animals",
+        "models",
+        "checking",
+        "packing"
+      ]
+    },
+    "stage_detail": {
+      "type": "string"
+    },
+    "place_name": {
+      "type": "string"
+    },
+    "country": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
     "center": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["lat", "lon"],
-      "properties": {"lat": {"type": "number"}, "lon": {"type": "number"}}
+      "required": [
+        "lat",
+        "lon"
+      ],
+      "properties": {
+        "lat": {
+          "type": "number"
+        },
+        "lon": {
+          "type": "number"
+        }
+      }
     },
-    "draft_place_id": {"type": "string", "pattern": "^draft_"},
-    "place_id": {"type": "string", "minLength": 1},
+    "draft_place_id": {
+      "type": "string",
+      "pattern": "^draft_"
+    },
+    "place_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "candidates": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["species", "role", "source"],
+        "required": [
+          "species",
+          "role",
+          "source"
+        ],
         "properties": {
-          "species": {"type": "string"},
-          "role": {"enum": ["playable", "predator", "prey"]},
-          "source": {"type": "string"}
+          "species": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "playable",
+              "predator",
+              "prey"
+            ]
+          },
+          "source": {
+            "type": "string"
+          }
         }
       }
     },
-    "round": {"type": "integer", "minimum": 1},
-    "pack_version": {"type": "integer", "minimum": 0},
+    "round": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "pack_version": {
+      "type": "integer",
+      "minimum": 0
+    },
     "improve": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["choices", "at"],
+      "required": [
+        "choices",
+        "at"
+      ],
       "properties": {
         "choices": {
           "type": "array",
@@ -64,7 +143,9 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["choice"],
+            "required": [
+              "choice"
+            ],
             "properties": {
               "choice": {
                 "enum": [
@@ -74,36 +155,84 @@
                   "other"
                 ]
               },
-              "species": {"type": "string"}
+              "species": {
+                "type": "string"
+              }
             }
           }
         },
-        "note": {"type": "string", "maxLength": 200},
-        "at": {"type": "string"}
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "at": {
+          "type": "string"
+        }
       }
     },
     "submit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["at"],
-      "properties": {"at": {"type": "string"}}
+      "required": [
+        "at"
+      ],
+      "properties": {
+        "at": {
+          "type": "string"
+        }
+      }
     },
-    "last_played_at": {"type": "string"},
-    "expires_at": {"type": "string"},
-    "pr_url": {"type": "string"},
+    "last_played_at": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "pr_url": {
+      "type": "string"
+    },
     "review_result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["result", "reason"],
+      "required": [
+        "result",
+        "reason"
+      ],
       "properties": {
-        "result": {"enum": ["accepted", "not_accepted"]},
-        "reason": {"type": "string"}
+        "result": {
+          "enum": [
+            "accepted",
+            "not_accepted"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
       }
     },
-    "pack_superseded_at": {"type": "string"},
-    "admin_answer": {"type": "string", "maxLength": 300},
-    "created_at": {"type": "string"},
-    "updated_at": {"type": "string"},
-    "error": {"type": "string"}
+    "pack_superseded_at": {
+      "type": "string"
+    },
+    "admin_answer": {
+      "type": "string",
+      "maxLength": 300
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "species_key": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cell": {
+      "type": "string",
+      "pattern": "^-?[0-9]+\\.[0-9]_-?[0-9]+\\.[0-9]$"
+    }
   }
 }

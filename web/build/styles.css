@@ -271,6 +271,23 @@ a {
   padding: 8px 12px;
 }
 
+#animal-q {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+#animal-suggest button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 4px 0;
+}
+
+#animal-suggest small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .improve label {
   display: block;
   margin: 4px 0;

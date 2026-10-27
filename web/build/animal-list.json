@@ -1,0 +1,66 @@
+[
+  {
+    "name": "Red fox",
+    "latin": "Vulpes vulpes",
+    "gbif_key": 5219243,
+    "body_plan": "land_mammal",
+    "can_make": true,
+    "habitat": "forest"
+  },
+  {
+    "name": "Moose",
+    "latin": "Alces alces",
+    "gbif_key": 2440940,
+    "body_plan": "land_mammal",
+    "can_make": true,
+    "habitat": "forest"
+  },
+  {
+    "name": "Mountain hare",
+    "latin": "Lepus timidus",
+    "gbif_key": 2436756,
+    "body_plan": "land_mammal",
+    "can_make": true,
+    "habitat": "forest"
+  },
+  {
+    "name": "Eurasian lynx",
+    "latin": "Lynx lynx",
+    "gbif_key": 2435240,
+    "body_plan": "land_mammal",
+    "can_make": true,
+    "habitat": "forest"
+  },
+  {
+    "name": "Common frog",
+    "latin": "Rana temporaria",
+    "gbif_key": 2426805,
+    "body_plan": "amphibian",
+    "can_make": true,
+    "habitat": "lake"
+  },
+  {
+    "name": "Common kestrel",
+    "latin": "Falco tinnunculus",
+    "gbif_key": 9616058,
+    "body_plan": "bird",
+    "can_make": true,
+    "habitat": "forest"
+  },
+  {
+    "name": "Mallard",
+    "latin": "Anas platyrhynchos",
+    "gbif_key": 9761484,
+    "body_plan": "bird",
+    "can_make": true,
+    "habitat": "lake"
+  },
+  {
+    "name": "Serotine bat",
+    "latin": "Eptesicus serotinus",
+    "gbif_key": 2433599,
+    "body_plan": "bat",
+    "can_make": false,
+    "habitat": "forest"
+  }
+]

@@ -2,10 +2,15 @@
 /* Animundo Builder: the grown-ups' web app.
  *
  * Static files only (the game's copy publishes this folder at
- * animundo.app/build). Talks to Firestore and Storage with the
- * signed-in grown-up's own account, so the security rules are
- * what lets each button work: the app never does what the
- * rules forbid, and it never sees another family's drafts.
+ * animundo.app/build). Animal first: the grown-up picks an animal
+ * from a static list, taps its home on GBIF's occurrence map, and
+ * the worker builds the home. Talks to Firestore and Storage with
+ * the signed-in grown-up's own account, so the security rules are
+ * what lets each button work: the app never does what the rules
+ * forbid, and it never sees another family's drafts.
+ *
+ * English only during the event. The park flow (areas, area cards,
+ * wishes) is parked, not deleted: areas.json stays vendored.
  */
 
 const FIREBASE_CONFIG = {
@@ -20,8 +25,6 @@ const FIREBASE_CONFIG = {
   appId: "1:330774612272:web:89a96bec0b1258775ea0f5",
 };
 
-const BUILDING = ["requested", "queued", "building", "improving"];
-
 // Local emulators, from firebase/firebase.json. Only used with ?emulator=1.
 const EMULATORS = {
   auth: "http://127.0.0.1:9099",
@@ -29,27 +32,30 @@ const EMULATORS = {
   storage: ["127.0.0.1", 9199],
 };
 const TEST_GROWN_UP = { email: "test@example.org", password: "grown-up-1" };
-const LOOK_COLORS = {
-  yours: "#6fbf4a",
-  building: "#e0873a",
-  buildable: "#f2b84b",
-  lit: "#fff3d6",
-  notpossible: "#8a8a72",
-};
+
+// GBIF's free occurrence tiles for the picked animal (the style name
+// is from GBIF's maps API docs), over the Natural Earth map.
+const GBIF_TILES =
+  "https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png" +
+  "?taxonKey={key}&style=orange.marker";
+const GBIF_OCCURRENCES = "https://api.gbif.org/v1/occurrence/search";
 
 const state = {
   lang: "en",
   strings: {},
   user: null,
-  areas: [],
-  publicPlaces: {},
+  animalList: [],
+  picked: null,
+  gbifLayer: null,
+  adminShapes: null,
+  urbanShapes: null,
+  selectedCell: null,
+  cellCheck: 0,
   drafts: {},
   feedUnsubs: {},
   feedRetry: {},
   feedTries: {},
   map: null,
-  layers: {},
-  selectedArea: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -82,13 +88,12 @@ function clearError() {
   $("app-error").hidden = true;
 }
 
-/* -- language ------------------------------------------------ */
+/* -- language: English only during the event ------------------- */
 
-async function loadStrings(lang) {
-  const response = await fetch(`i18n/${lang}.json`);
+async function loadStrings() {
+  const response = await fetch("i18n/en.json");
   state.strings = await response.json();
-  state.lang = lang;
-  document.documentElement.lang = lang;
+  document.documentElement.lang = "en";
 }
 
 function applyStaticStrings() {
@@ -98,23 +103,6 @@ function applyStaticStrings() {
   for (const el of document.querySelectorAll("[data-i18n-ph]")) {
     el.placeholder = t(el.getAttribute("data-i18n-ph"));
   }
-  $("lang-en").setAttribute("aria-pressed", String(state.lang === "en"));
-  $("lang-fi").setAttribute("aria-pressed", String(state.lang === "fi"));
-}
-
-async function setLang(lang) {
-  await loadStrings(lang);
-  try {
-    localStorage.setItem("animundoBuildLang", lang);
-  } catch (_) {
-    /* private mode: the choice just does not stick */
-  }
-  applyStaticStrings();
-  renderFilters();
-  renderCounts();
-  renderMarkers();
-  renderAreaCard();
-  renderDrafts();
 }
 
 /* -- auth ---------------------------------------------------- */
@@ -142,9 +130,8 @@ async function signInTestGrownUp() {
 
 function returnUrl() {
   const url = new URL(window.location.href);
-  const explorer = url.searchParams.get("explorer");
   const clean = `${url.origin}${url.pathname}`;
-  return explorer ? `${clean}?explorer=${encodeURIComponent(explorer)}` : clean;
+  return url.searchParams.has("emulator") ? `${clean}?emulator=1` : clean;
 }
 
 async function sendLink() {
@@ -213,14 +200,10 @@ function onUser(user) {
       state.draftsUnsub();
       state.draftsUnsub = null;
     }
-    if (state.publicUnsub) {
-      state.publicUnsub();
-      state.publicUnsub = null;
-    }
     state.drafts = {};
     state.feeds = {};
-    state.publicPlaces = {};
-    state.selectedArea = null;
+    state.picked = null;
+    state.selectedCell = null;
     return;
   }
   $("auth-who").textContent = t("auth.signed_in", { email: user.email || "" });
@@ -238,35 +221,22 @@ function storage() {
 }
 
 async function boot() {
-  if (!state.areasLoaded) {
-    const response = await fetch("areas.json");
-    state.areas = await response.json();
-    state.areasLoaded = true;
+  if (!state.dataLoaded) {
+    const [animals, admin, urban] = await Promise.all([
+      fetch("animal-list.json").then((r) => r.json()),
+      fetch("vendor/natural-earth/ne_110m_admin_0_countries.geojson").then((r) => r.json()),
+      fetch("vendor/natural-earth/ne_50m_urban_areas.geojson").then((r) => r.json()),
+    ]);
+    state.animalList = animals;
+    state.adminShapes = admin.features || [];
+    state.urbanShapes = urban.features || [];
+    state.dataLoaded = true;
     initMap();
-    renderFilters();
   }
   if (state.draftsUnsub) {
-    renderCounts();
-    renderMarkers();
-    renderAreaCard();
     renderDrafts();
     return;
   }
-  state.publicUnsub = db().collection("places_public").onSnapshot(
-    (snap) => {
-      state.publicPlaces = {};
-      snap.forEach((doc) => {
-        state.publicPlaces[doc.id] = doc.data();
-      });
-      renderCounts();
-      renderMarkers();
-      renderAreaCard();
-    },
-    (error) => {
-      console.error(error);
-      showError();
-    },
-  );
   state.draftsUnsub = db().collection("drafts")
     .where("family_uids", "array-contains", state.user.uid)
     .onSnapshot(
@@ -294,9 +264,6 @@ async function boot() {
             delete state.feedTries[id];
           }
         }
-        renderCounts();
-        renderMarkers();
-        renderAreaCard();
         renderDrafts();
       },
       (error) => {
@@ -304,31 +271,6 @@ async function boot() {
         showError();
       },
     );
-}
-
-function draftForArea(areaId) {
-  return Object.values(state.drafts).find((d) => d.area_id === areaId) || null;
-}
-
-function lookForArea(area) {
-  const draft = draftForArea(area.area_id);
-  if (draft) {
-    if (draft.status === "failed") {
-      return "building";
-    }
-    return BUILDING.includes(draft.status) ? "building" : "yours";
-  }
-  const pub = state.publicPlaces[area.area_id];
-  if (pub && pub.status === "public") {
-    return "lit";
-  }
-  if (pub && pub.status === "not_possible_yet") {
-    return "notpossible";
-  }
-  if (area.buildable === false) {
-    return "notpossible";
-  }
-  return "buildable";
 }
 
 /* -- map ----------------------------------------------------- */
@@ -356,163 +298,218 @@ function initMap() {
       }).addTo(state.map);
     })
     .catch((error) => console.error(error));
+  state.map.on("click", (event) => onMapTap(event.latlng));
 }
 
-function filteredAreas() {
-  const biome = $("filter-biome").value;
-  const look = $("filter-state").value;
-  return state.areas.filter((area) => {
-    if (biome && area.biome !== biome) {
-      return false;
-    }
-    if (look && lookForArea(area) !== look) {
-      return false;
-    }
-    return true;
-  });
-}
-
-function renderMarkers() {
-  if (!state.map) {
+function setGbifLayer(gbifKey) {
+  if (state.gbifLayer) {
+    state.map.removeLayer(state.gbifLayer);
+    state.gbifLayer = null;
+  }
+  if (!gbifKey) {
     return;
   }
-  for (const layer of Object.values(state.layers)) {
-    state.map.removeLayer(layer);
-  }
-  state.layers = {};
-  for (const area of filteredAreas()) {
-    const look = lookForArea(area);
-    const points = (area.outline || []).map(([lon, lat]) => [lat, lon]);
-    if (!points.length) {
-      continue;
-    }
-    const selected = state.selectedArea === area.area_id;
-    const layer = L.polygon(points, {
-      color: LOOK_COLORS[look],
-      weight: selected ? 4 : 2,
-      fillOpacity: selected ? 0.35 : 0.18,
-    }).addTo(state.map);
-    layer.bindTooltip(escapeHtml(area.name));
-    layer.on("click", () => {
-      state.selectedArea = area.area_id;
-      renderMarkers();
-      renderAreaCard();
-    });
-    state.layers[area.area_id] = layer;
-  }
+  state.gbifLayer = L.tileLayer(GBIF_TILES.replace("{key}", gbifKey), {
+    attribution: "GBIF.org",
+  }).addTo(state.map);
 }
 
-function renderCounts() {
-  const counts = { buildable: 0, yours: 0, building: 0, lit: 0 };
-  for (const area of state.areas) {
-    const look = lookForArea(area);
-    if (look === "notpossible") {
-      continue;
-    }
-    counts[look] += 1;
-  }
-  $("counts").textContent = t("map.counts", counts);
+/* -- the animal ---------------------------------------------- */
+
+function animalName(key) {
+  const found = state.animalList.find((a) => a.gbif_key === key);
+  return found ? found.name : "";
 }
 
-function renderFilters() {
-  const biomeSelect = $("filter-biome");
-  const keepBiome = biomeSelect.value;
-  const biomes = [...new Set(state.areas.map((a) => a.biome).filter(Boolean))].sort();
-  biomeSelect.innerHTML = `<option value="">${escapeHtml(t("map.all"))}</option>` +
-    biomes.map((b) => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join("");
-  biomeSelect.value = keepBiome;
-  const stateSelect = $("filter-state");
-  const keepState = stateSelect.value;
-  const looks = ["", "yours", "building", "buildable", "lit", "notpossible"];
-  stateSelect.innerHTML = looks.map((look) =>
-    `<option value="${look}">${escapeHtml(look ? t(`look.${look}`) : t("map.all"))}</option>`
-  ).join("");
-  stateSelect.value = keepState;
-}
-
-/* -- area card ------------------------------------------------ */
-
-function renderAreaCard() {
-  const card = $("area-card");
-  const area = state.areas.find((a) => a.area_id === state.selectedArea);
-  if (!area) {
-    card.hidden = true;
+function renderSuggestions() {
+  const box = $("animal-suggest");
+  const query = $("animal-q").value.trim().toLowerCase();
+  box.innerHTML = "";
+  $("animal-msg").textContent = "";
+  if (!query) {
     return;
   }
-  card.hidden = false;
-  $("area-name").textContent = area.name;
-  $("area-facts").textContent = `${area.country} · ${area.biome || ""}`.trim();
-  const look = lookForArea(area);
-  const msg = $("area-msg");
-  msg.textContent = "";
-  $("area-about").textContent = "";
-  const buildButton = $("area-build");
-  const wishButton = $("area-wish");
-  buildButton.hidden = true;
-  wishButton.hidden = true;
-  if (look === "notpossible") {
-    $("area-state").textContent = t("area.notpossible");
-    wishButton.hidden = false;
-  } else if (look === "lit") {
-    $("area-state").textContent = t("area.is_public");
-  } else if (look === "building") {
-    $("area-state").textContent = t("area.building");
-  } else if (look === "yours") {
-    $("area-state").textContent = t("area.has_draft");
-  } else {
-    $("area-state").textContent = t(`look.${look}`);
-    $("area-about").textContent = t("area.about");
-    buildButton.hidden = false;
+  const matches = state.animalList.filter((animal) =>
+    animal.name.toLowerCase().includes(query) ||
+    animal.latin.toLowerCase().includes(query)
+  ).slice(0, 6);
+  if (!matches.length) {
+    $("animal-msg").textContent = t("home.no_match");
+    return;
+  }
+  for (const animal of matches) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost";
+    button.innerHTML = `${escapeHtml(animal.name)} <small>${escapeHtml(animal.latin)}</small>`;
+    button.addEventListener("click", () => pickAnimal(animal));
+    box.appendChild(button);
   }
 }
 
-function explorerSpecies() {
-  try {
-    return sessionStorage.getItem("animundoExplorer") || "";
-  } catch (_) {
-    return "";
+function pickAnimal(animal) {
+  state.picked = animal;
+  state.selectedCell = null;
+  $("cell-card").hidden = true;
+  $("animal-suggest").innerHTML = "";
+  if (!animal.can_make) {
+    setGbifLayer(null);
+    $("animal-msg").textContent = t("home.cannot", { name: animal.name });
+    return;
   }
+  setGbifLayer(animal.gbif_key);
+  $("animal-msg").textContent = t("home.picked", { name: animal.name });
 }
 
-async function buildThisPlace() {
+/* -- the spot ------------------------------------------------ */
+
+function snapCell(lat, lng) {
+  const south = Math.floor(lat * 10) / 10;
+  const west = Math.floor(lng * 10) / 10;
+  return {
+    id: `${south.toFixed(1)}_${west.toFixed(1)}`,
+    south,
+    west,
+  };
+}
+
+function ringHas(ring, lon, lat) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function shapeHas(geometry, lon, lat) {
+  if (!geometry) {
+    return false;
+  }
+  if (geometry.type === "Polygon") {
+    return ringHas(geometry.coordinates[0], lon, lat);
+  }
+  if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates.some((poly) => ringHas(poly[0], lon, lat));
+  }
+  return false;
+}
+
+function countryAt(lat, lon) {
+  for (const feature of state.adminShapes) {
+    if (shapeHas(feature.geometry, lon, lat)) {
+      return {
+        name: feature.properties.NAME || "",
+        iso: feature.properties.ISO_A2 || "",
+      };
+    }
+  }
+  return null;
+}
+
+function urbanAt(lat, lon) {
+  return state.urbanShapes.some((feature) => shapeHas(feature.geometry, lon, lat));
+}
+
+async function occurrencesInCell(gbifKey, cell) {
+  const box = `POLYGON((${cell.west} ${cell.south}, ${cell.west + 0.1} ${cell.south}, ` +
+    `${cell.west + 0.1} ${cell.south + 0.1}, ${cell.west} ${cell.south + 0.1}, ` +
+    `${cell.west} ${cell.south}))`;
+  const url = `${GBIF_OCCURRENCES}?taxon_key=${gbifKey}` +
+    `&geometry=${encodeURIComponent(box)}&limit=0`;
+  const response = await fetch(url);
+  const data = await response.json();
+  return (data.count || 0) > 0;
+}
+
+async function onMapTap(latlng) {
   clearError();
-  const area = state.areas.find((a) => a.area_id === state.selectedArea);
-  if (!area || lookForArea(area) !== "buildable") {
+  if (!state.picked) {
+    $("animal-msg").textContent = t("home.pick_first");
+    return;
+  }
+  const animal = state.picked;
+  const cell = snapCell(latlng.lat, latlng.lng);
+  const check = ++state.cellCheck;
+  const card = $("cell-card");
+  card.hidden = false;
+  $("cell-make").hidden = true;
+  $("cell-msg").textContent = "";
+  const country = countryAt(latlng.lat, latlng.lng);
+  if (!country || urbanAt(latlng.lat, latlng.lng)) {
+    $("cell-name").textContent = "";
+    $("cell-facts").textContent = "";
+    $("cell-state").textContent = t(country ? "home.in_city" : "home.outside", {
+      name: animal.name,
+    });
+    state.selectedCell = null;
+    return;
+  }
+  const title = `${animal.name} ${animal.habitat}, ${country.name}`;
+  $("cell-name").textContent = title;
+  $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
+  $("cell-state").textContent = t("home.checking");
+  let recorded = false;
+  try {
+    recorded = await occurrencesInCell(animal.gbif_key, cell);
+  } catch (error) {
+    console.error(error);
+    if (check !== state.cellCheck) {
+      return;
+    }
+    $("cell-state").textContent = t("home.check_failed");
+    state.selectedCell = null;
+    return;
+  }
+  if (check !== state.cellCheck) {
+    return;
+  }
+  if (!recorded) {
+    $("cell-state").textContent = t("home.outside", { name: animal.name });
+    state.selectedCell = null;
+    return;
+  }
+  state.selectedCell = { ...cell, title, country, animal };
+  $("cell-state").textContent = t("home.about");
+  $("cell-make").hidden = false;
+}
+
+function homeForCell(speciesKey, cellId) {
+  return Object.values(state.drafts).find((d) =>
+    d.kind === "animal_home" && d.species_key === speciesKey && d.cell === cellId
+  ) || null;
+}
+
+async function makeHome() {
+  clearError();
+  const selected = state.selectedCell;
+  if (!selected || !state.picked) {
+    return;
+  }
+  if (homeForCell(state.picked.gbif_key, selected.id)) {
+    $("cell-msg").textContent = t("home.exists");
     return;
   }
   const fields = {
-    kind: "new_place",
-    area_id: area.area_id,
+    kind: "animal_home",
+    species_key: state.picked.gbif_key,
+    cell: selected.id,
+    place_name: selected.title,
     owner_uid: state.user.uid,
     family_uids: [state.user.uid],
     status: "requested",
     created_at: firebase.firestore.FieldValue.serverTimestamp(),
   };
-  const explorer = explorerSpecies();
-  if (explorer) {
-    fields.first_explorer_species = explorer;
+  if (selected.country.iso) {
+    fields.country = selected.country.iso;
   }
   try {
     await db().collection("drafts").add(fields);
-    $("area-msg").textContent = t("area.started");
-  } catch (error) {
-    console.error(error);
-    showError();
-  }
-}
-
-async function wishForPlace() {
-  clearError();
-  const area = state.areas.find((a) => a.area_id === state.selectedArea);
-  if (!area) {
-    return;
-  }
-  try {
-    await db().collection("wishes").doc(area.area_id)
-      .collection("votes").doc(state.user.uid)
-      .set({ at: firebase.firestore.FieldValue.serverTimestamp() });
-    $("area-msg").textContent = t("area.wished");
-    $("area-wish").hidden = true;
+    $("cell-msg").textContent = t("home.started");
+    $("cell-make").hidden = true;
   } catch (error) {
     console.error(error);
     showError();
@@ -520,14 +517,6 @@ async function wishForPlace() {
 }
 
 /* -- drafts --------------------------------------------------- */
-
-function fmtTime(value) {
-  if (!value) {
-    return "";
-  }
-  const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
-  return date.toLocaleString(state.lang === "fi" ? "fi-FI" : "en-US");
-}
 
 function feedText(entry) {
   return t(entry.text_key || "", entry.args || {});
@@ -566,19 +555,24 @@ function renderDrafts() {
   }
 }
 
-function areaName(areaId) {
-  const area = state.areas.find((a) => a.area_id === areaId);
-  return area ? area.name : areaId;
+function draftTitle(draft) {
+  if (draft.place_name) {
+    return draft.place_name;
+  }
+  if (draft.kind === "animal_home") {
+    const name = animalName(draft.species_key);
+    return name ? t("home.draft_title", { animal: name }) : t("home.untitled");
+  }
+  return draft.area_id || draft.id;
 }
 
 function renderDraft(draft) {
   const card = document.createElement("article");
   card.className = "draft";
   card.dataset.id = draft.id;
-  const title = draft.place_name || areaName(draft.area_id);
   const statusKey = `draft.status.${draft.status}`;
   const status = state.strings[statusKey] || t("draft.status.failed");
-  let html = `<h3>${escapeHtml(title)}</h3>`;
+  let html = `<h3>${escapeHtml(draftTitle(draft))}</h3>`;
   html += `<p class="muted">${escapeHtml(status)} · ${
     escapeHtml(t("draft.round", { round: draft.round || 1 }))
   }</p>`;
@@ -850,32 +844,13 @@ async function start() {
     storage().useEmulator(...EMULATORS.storage);
     $("auth-test").hidden = false;
   }
-  const explorer = params.get("explorer");
-  if (explorer) {
-    try {
-      sessionStorage.setItem("animundoExplorer", explorer);
-    } catch (_) {
-      /* private mode */
-    }
-  }
-  let lang = "en";
-  try {
-    lang = localStorage.getItem("animundoBuildLang") ||
-      ((navigator.language || "").startsWith("fi") ? "fi" : "en");
-  } catch (_) {
-    lang = (navigator.language || "").startsWith("fi") ? "fi" : "en";
-  }
-  await loadStrings(lang);
+  await loadStrings();
   applyStaticStrings();
-  $("lang-en").addEventListener("click", () => setLang("en"));
-  $("lang-fi").addEventListener("click", () => setLang("fi"));
   $("auth-send").addEventListener("click", sendLink);
   $("auth-test").addEventListener("click", signInTestGrownUp);
   $("auth-out").addEventListener("click", () => firebaseAuth().signOut());
-  $("area-build").addEventListener("click", buildThisPlace);
-  $("area-wish").addEventListener("click", wishForPlace);
-  $("filter-biome").addEventListener("change", renderMarkers);
-  $("filter-state").addEventListener("change", renderMarkers);
+  $("animal-q").addEventListener("input", renderSuggestions);
+  $("cell-make").addEventListener("click", makeHome);
   await finishLink();
   firebaseAuth().onAuthStateChanged(onUser);
 }

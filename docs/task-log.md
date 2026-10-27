@@ -454,3 +454,25 @@ Job folders live under `jobs/` (local only, never committed).
 - #36.7: `load()` reads `.env` from the working directory
   upward (never overriding real env, never printing: keys
   left the Config repr too). python-dotenv added.
+
+## 2026-10-27: animal first, web screen and draft rules (#40 A, first half)
+
+- The web app is animal first, English only: the grown-up
+  types an animal (static `animal-list.json`, 8-entry stub
+  until the reviewer's ~200 lands), the map shows GBIF's
+  occurrence density (`orange.marker`, style name checked
+  against GBIF's maps docs), a tap snaps to a 0.1-degree
+  cell, cities refuse (vendored NE 50m urban areas) and
+  empty squares refuse (one GBIF count query), and the
+  card offers Make this home ("Lynx forest, Finland":
+  habitat from the list, country from vendored NE admin
+  shapes). Drafts carry kind animal_home, species_key,
+  cell, place_name and country.
+- Rules take animal_home creates (species key a positive
+  int, cell snapped, name required, ISO country optional)
+  with emulator tests; the draft contract too. The park
+  flow (areas, cards, wishes) stays in the repo, off the
+  main path; Finnish strings are dropped from the web
+  app only. Point-in-shape and snapping probed in Node
+  against the real shapes (Repovesi Finnish and wild,
+  Helsinki urban, ocean empty).

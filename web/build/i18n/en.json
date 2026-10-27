@@ -1,5 +1,5 @@
 {
-  "app.credit": "Map: Natural Earth. Areas: OpenStreetMap contributors, RESOLVE 2017.",
+  "app.credit": "Map: Natural Earth, GBIF.org.",
   "app.play": "Play Animundo",
   "auth.email_ph": "grown-up@example.org",
   "auth.send": "Send sign-in link",
@@ -89,5 +89,21 @@
   "draft.try_again": "Try again",
   "draft.try_again_sent": "Trying again. Watch the feed below.",
   "draft.remove": "Remove",
-  "draft.remove_confirm": "Remove this draft? The builders will stop working on it."
+  "draft.remove_confirm": "Remove this draft? The builders will stop working on it.",
+  "home.ask": "Which animal would you like to be?",
+  "home.ask_ph": "Type an animal…",
+  "home.no_match": "No animal on the list matches that. Try another.",
+  "home.cannot": "We can't make {name} yet.",
+  "home.picked": "{name} picked. Tap where it lives.",
+  "home.pick_first": "Pick an animal above first.",
+  "home.checking": "Checking that spot…",
+  "home.in_city": "That's in a city. Tap somewhere wild.",
+  "home.outside": "No {name} recorded there. Tap inside the coloured area.",
+  "home.about": "The builders will make this home from its own template.",
+  "home.make": "Make this home",
+  "home.started": "Making this home. Watch your drafts below.",
+  "home.exists": "You're already making this home — see your drafts below.",
+  "home.check_failed": "Couldn't check that spot. Try again.",
+  "home.draft_title": "{animal} home",
+  "home.untitled": "Animal home"
 }

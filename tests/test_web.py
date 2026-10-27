@@ -1,4 +1,4 @@
-"""The web app's static contract: valid JSON, matching languages,
+"""The web app's static contract: valid JSON, English only,
 and every referenced string present."""
 
 from __future__ import annotations
@@ -23,11 +23,16 @@ def test_all_web_json_parses() -> None:
         assert _json(path) is not None, path
 
 
-def test_languages_match() -> None:
+def test_english_only() -> None:
+    assert [path.name for path in sorted((WEB / "i18n").glob("*.json"))] == [
+        "en.json"
+    ]
     en = _json(WEB / "i18n" / "en.json")
-    fi = _json(WEB / "i18n" / "fi.json")
-    assert set(en) == set(fi)
     assert all(isinstance(text, str) and text for text in en.values())
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert "lang-fi" not in html and "animundoBuildLang" not in (
+        WEB / "app.js"
+    ).read_text(encoding="utf-8")
 
 
 def test_html_strings_exist() -> None:
@@ -60,12 +65,21 @@ def test_natural_earth_shapes_are_vendored() -> None:
         data = _json(WEB / "vendor" / "natural-earth" / name)
         assert data["type"] == "FeatureCollection"
         assert len(data["features"]) > 100
+    admin = _json(WEB / "vendor" / "natural-earth" / "ne_110m_admin_0_countries.geojson")
+    assert admin["type"] == "FeatureCollection"
+    assert len(admin["features"]) > 100
+    for feature in admin["features"]:
+        assert set(feature["properties"]) == {"NAME", "ISO_A2"}, feature
+    urban = _json(WEB / "vendor" / "natural-earth" / "ne_50m_urban_areas.geojson")
+    assert urban["type"] == "FeatureCollection"
+    assert len(urban["features"]) > 1000
 
 
-def test_app_uses_no_tile_service() -> None:
+def test_app_uses_only_gbif_tiles() -> None:
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    for banned in ("basemaps", "cartocdn", "tile.openstreetmap", "tileLayer"):
+    for banned in ("basemaps", "cartocdn", "tile.openstreetmap"):
         assert banned not in app, banned
+    assert "api.gbif.org/v2/map/occurrence/density" in app
     assert "ne_110m_land.geojson" in app
 
 
@@ -94,3 +108,31 @@ def test_js_strings_exist() -> None:
     assert keys
     en = _json(WEB / "i18n" / "en.json")
     assert keys <= set(en), keys - set(en)
+
+
+def test_fetched_files_are_shipped() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    refs = set(re.findall(r'fetch\("([^"]+)"\)', app))
+    refs = {ref for ref in refs if not ref.startswith("http")}
+    assert refs
+    for ref in refs:
+        assert (WEB / ref).is_file(), ref
+
+
+def test_animal_list_shape() -> None:
+    animals = _json(WEB / "animal-list.json")
+    assert len(animals) >= 2
+    for animal in animals:
+        assert set(animal) == {
+            "name",
+            "latin",
+            "gbif_key",
+            "body_plan",
+            "can_make",
+            "habitat",
+        }, animal
+        assert isinstance(animal["gbif_key"], int) and animal["gbif_key"] > 0
+        assert isinstance(animal["can_make"], bool)
+        assert animal["name"] and animal["latin"] and animal["habitat"]
+    keys = [animal["gbif_key"] for animal in animals]
+    assert len(set(keys)) == len(keys)

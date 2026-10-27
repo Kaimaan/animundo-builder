@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Build the world · Animundo</title>
+<title>Build a home · Animundo</title>
 <meta name="theme-color" content="#1d2a22">
 <link rel="icon" href="icon_192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
@@ -19,10 +19,6 @@
   <div class="top">
     <a class="brand" href="/"><img src="icon_192.png" alt="" width="44" height="44" onerror="this.remove()">ANIMUNDO</a>
     <div class="header-right">
-      <div class="langs" role="group" aria-label="Language">
-        <button id="lang-en" type="button" aria-pressed="true">English</button>
-        <button id="lang-fi" type="button" aria-pressed="false">Suomi</button>
-      </div>
       <div id="auth-signed-out">
         <input id="auth-email" type="email" data-i18n-ph="auth.email_ph" placeholder="grown-up@example.org" autocomplete="email">
         <button id="auth-send" type="button" data-i18n="auth.send">Send sign-in link</button>
@@ -41,26 +37,22 @@
 <main id="app" hidden>
   <section class="map-pane">
     <div id="map" aria-label="Map"></div>
-    <div id="counts" class="counts"></div>
-    <div class="filters">
-      <label><span data-i18n="map.biome">Biome</span>
-        <select id="filter-biome"></select>
-      </label>
-      <label><span data-i18n="map.state">Show</span>
-        <select id="filter-state"></select>
-      </label>
-    </div>
   </section>
 
   <section class="side-pane">
-    <article id="area-card" hidden>
-      <h2 id="area-name"></h2>
-      <p id="area-facts" class="muted"></p>
-      <p id="area-state"></p>
-      <p id="area-about"></p>
-      <button id="area-build" type="button" data-i18n="area.build">Build this place</button>
-      <button id="area-wish" type="button" data-i18n="area.wish">I want this place!</button>
-      <p id="area-msg" class="muted"></p>
+    <article id="animal-picker">
+      <h2 data-i18n="home.ask">Which animal would you like to be?</h2>
+      <input id="animal-q" type="text" data-i18n-ph="home.ask_ph" placeholder="Type an animal…" autocomplete="off">
+      <div id="animal-suggest"></div>
+      <p id="animal-msg" class="muted"></p>
+    </article>
+
+    <article id="cell-card" hidden>
+      <h2 id="cell-name"></h2>
+      <p id="cell-facts" class="muted"></p>
+      <p id="cell-state"></p>
+      <button id="cell-make" type="button" data-i18n="home.make">Make this home</button>
+      <p id="cell-msg" class="muted"></p>
     </article>
 
     <article id="drafts">
@@ -71,7 +63,7 @@
 </main>
 
 <footer>
-  <span data-i18n="app.credit">Map: Natural Earth. Areas: OpenStreetMap contributors, RESOLVE 2017.</span>
+  <span data-i18n="app.credit">Map: Natural Earth, GBIF.org.</span>
   <a href="/" data-i18n="app.play">Play Animundo</a>
 </footer>
 <script src="app.js"></script>

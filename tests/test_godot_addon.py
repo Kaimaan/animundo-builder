@@ -118,15 +118,15 @@ def test_addon_locales_match():
 
 
 def test_addon_reasons_match_the_web_app_word_for_word():
-    for lang in ("en", "fi"):
-        addon = _load_json(ADDON / "locale" / f"{lang}.json")
-        web = _load_json(ROOT / "web" / "build" / "i18n" / f"{lang}.json")
-        web_reasons = {k[7:]: v for k, v in web.items() if k.startswith("reason.")}
-        addon_reasons = {
-            k[15:]: v for k, v in addon.items() if k.startswith("explore.reason.")
-        }
-        assert addon_reasons, f"{lang} has no reasons"
-        assert addon_reasons == web_reasons, f"{lang} reasons differ from the web app"
+    # The web app is English only during the event; the game keeps both.
+    addon = _load_json(ADDON / "locale" / "en.json")
+    web = _load_json(ROOT / "web" / "build" / "i18n" / "en.json")
+    web_reasons = {k[7:]: v for k, v in web.items() if k.startswith("reason.")}
+    addon_reasons = {
+        k[15:]: v for k, v in addon.items() if k.startswith("explore.reason.")
+    }
+    assert addon_reasons
+    assert addon_reasons == web_reasons
 
 
 def test_game_interface_documents_every_plugin_call():

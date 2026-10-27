@@ -171,11 +171,7 @@ class Worker:
             self._update(draft_id, {"error": DELETE})
         kind = doc.get("kind", "new_place")
         if kind == "animal_home":
-            missing = [
-                field
-                for field in ("species_key", "cell", "place_name", "country_name")
-                if not doc.get(field)
-            ]
+            missing = [field for field in ("species_key", "cell") if not doc.get(field)]
             if missing:
                 self._fail(draft_id, "bad_draft", None)
                 return
@@ -416,9 +412,6 @@ class Worker:
                 params = {
                     "species_key": draft.get("species_key"),
                     "cell": draft.get("cell"),
-                    "place_name": draft.get("place_name"),
-                    "country_name": draft.get("country_name"),
-                    "country": draft.get("country", ""),
                     "world": str(self.world),
                     "author": self.author,
                     "kind": kind,
@@ -443,9 +436,6 @@ class Worker:
             intake = IntakeStage(
                 species_key=params.get("species_key"),
                 cell=params.get("cell"),
-                place_name=params.get("place_name"),
-                country_name=params.get("country_name"),
-                country=params.get("country") or None,
                 areas_path=self.areas_path,
             )
         else:

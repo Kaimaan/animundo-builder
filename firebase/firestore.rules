@@ -28,25 +28,18 @@ service cloud.firestore {
             && (!('first_explorer_species' in request.resource.data)
               || request.resource.data.first_explorer_species is string)
           )
-          // Animal first: one animal in its home, no area.
+          // Animal first: one animal in its home, no area. The
+          // worker writes the name and the country from the cell.
           || (
             request.resource.data.kind == 'animal_home'
             && request.resource.data.keys().hasOnly(
-              ['kind', 'species_key', 'cell', 'place_name', 'country',
-               'country_name', 'owner_uid', 'family_uids', 'status',
-               'created_at'])
+              ['kind', 'species_key', 'cell',
+               'owner_uid', 'family_uids', 'status', 'created_at'])
             && request.resource.data.keys().hasAll(
-              ['kind', 'species_key', 'cell', 'place_name', 'country_name',
+              ['kind', 'species_key', 'cell',
                'owner_uid', 'family_uids', 'status'])
             && request.resource.data.species_key is int
             && request.resource.data.species_key > 0
-            && request.resource.data.place_name is string
-            && request.resource.data.place_name.size() <= 120
-            && request.resource.data.country_name is string
-            && request.resource.data.country_name.size() <= 60
-            && (!('country' in request.resource.data)
-              || (request.resource.data.country is string
-                && request.resource.data.country.size() == 2))
             && request.resource.data.cell is string
             && request.resource.data.cell.matches('^-?[0-9]+\\.[0-9]_-?[0-9]+\\.[0-9]$')
           )

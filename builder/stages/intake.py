@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..animal_list import find_entry, find_list, home_for, load_list
+from ..countries import country_at, find_shapes
 from ..schemas import ROOT, validate
 from .species_plan import RecordedFn, recorded_near
 
@@ -35,9 +36,8 @@ class IntakeStage:
         exclusions_path: str | Path | None = None,
         species_key: int | None = None,
         cell: str | None = None,
-        place_name: str | None = None,
-        country_name: str | None = None,
         animal_list_path: str | Path | None = None,
+        shapes_path: str | Path | None = None,
         recorded: RecordedFn = None,
     ) -> None:
         if species_key is None and area_id is None and area_name is None:
@@ -52,11 +52,10 @@ class IntakeStage:
             self.exclusions_path = ROOT / "exclusions.json"
         self.species_key = species_key
         self.cell = cell
-        self.place_name = place_name
-        self.country_name = country_name
         self.animal_list_path = (
             Path(animal_list_path) if animal_list_path is not None else None
         )
+        self.shapes_path = Path(shapes_path) if shapes_path is not None else None
         self._recorded = recorded or recorded_near
 
     def resolve(self) -> dict[str, Any]:
@@ -76,25 +75,30 @@ class IntakeStage:
         return {"area_id": area["area_id"], "area_file": "area.json"}
 
     def _run_home(self, ctx: Any) -> dict[str, Any]:
-        """Check the animal and cell; write `home.json` for later stages."""
+        """Check the animal and cell; write `home.json` for later stages.
+
+        The name and the country come from the list and the shapes,
+        never from the client (#41).
+        """
         if ctx.world_path is None:
             raise ValueError("intake needs --world")
         world = Path(ctx.world_path)
         if self.cell is None or not CELL_PATTERN.match(self.cell):
             raise ValueError(f"bad cell, want like 61.2_26.9: {self.cell}")
-        if self.place_name is None or not self.place_name.strip():
-            raise ValueError("intake needs the card's place name")
-        if self.country_name is None or not self.country_name.strip():
-            raise ValueError("intake needs the card's country name")
         data = load_list(self.animal_list_path or find_list(world))
         entry = find_entry(data["animals"], self.species_key)
         if not entry.get("can_make", False):
             raise ValueError(f"{entry.get('latin')} cannot be made yet")
         home = home_for(entry, data["homes"])
-        if self.country:
-            self._check_excluded_country(self.country)
         south, west = (float(part) for part in self.cell.split("_"))
         center = {"lat": round(south + 0.05, 3), "lon": round(west + 0.05, 3)}
+        found = country_at(
+            self.shapes_path or find_shapes(), center["lat"], center["lon"]
+        )
+        if found is None:
+            raise ValueError(f"cell {self.cell} is outside any country")
+        country_name, country = found
+        self._check_excluded_country(country)
         if not self._recorded(center["lat"], center["lon"], self.species_key):
             raise ValueError(
                 f"no {entry.get('latin')} recorded near {self.cell} anymore"
@@ -108,9 +112,11 @@ class IntakeStage:
             "home": home,
             "cell": self.cell,
             "center": center,
-            "country": self.country or "",
-            "country_name": self.country_name,
-            "place_name": self.place_name,
+            "country": country,
+            "country_name": country_name,
+            "place_name": (
+                f"{entry.get('name', '')} {home.replace('_', ' ')}, {country_name}"
+            ),
         }
         out = ctx.job_dir / "home.json"
         out.write_text(json.dumps(brief, indent=2), encoding="utf-8")

@@ -331,8 +331,6 @@ def _home_draft(owner: str = "grown", **over: Any) -> dict[str, Any]:
         "kind": "animal_home",
         "species_key": 5219243,
         "cell": "60.1_24.9",
-        "place_name": "Fox copse",
-        "country_name": "Finland",
         "owner_uid": owner,
         "family_uids": [owner],
         "status": "requested",

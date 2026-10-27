@@ -49,9 +49,6 @@ describe("drafts create", () => {
       kind: "animal_home",
       species_key: 2435240,
       cell: "61.2_26.9",
-      place_name: "Eurasian lynx boreal forest, Finland",
-      country: "FI",
-      country_name: "Finland",
       owner_uid: "grown",
       family_uids: ["grown"],
       status: "requested",
@@ -60,21 +57,23 @@ describe("drafts create", () => {
     await assertSucceeds(
       setDoc(doc(db, "drafts/h2"), { ...home, created_at: AT() }),
     );
-    const { country, ...noCountry } = home;
-    await assertSucceeds(setDoc(doc(db, "drafts/h3"), noCountry));
-    await assertFails(setDoc(doc(db, "drafts/h4"), { ...home, species_key: 0 }));
+    await assertFails(setDoc(doc(db, "drafts/h3"), { ...home, species_key: 0 }));
     await assertFails(
-      setDoc(doc(db, "drafts/h5"), { ...home, species_key: "2435240" }),
+      setDoc(doc(db, "drafts/h4"), { ...home, species_key: "2435240" }),
     );
-    await assertFails(setDoc(doc(db, "drafts/h6"), { ...home, cell: "here" }));
+    await assertFails(setDoc(doc(db, "drafts/h5"), { ...home, cell: "here" }));
     await assertFails(
-      setDoc(doc(db, "drafts/h7"), { ...home, area_id: "fi_repovesi" }),
+      setDoc(doc(db, "drafts/h6"), { ...home, area_id: "fi_repovesi" }),
     );
     await assertFails(
-      setDoc(doc(db, "drafts/h8"), { ...home, country: "Finland" }),
+      setDoc(doc(db, "drafts/h7"), { ...home, place_name: "Lynx den" }),
     );
-    const { place_name, ...noName } = home;
-    await assertFails(setDoc(doc(db, "drafts/h9"), noName));
+    await assertFails(
+      setDoc(doc(db, "drafts/h8"), { ...home, country: "FI" }),
+    );
+    await assertFails(
+      setDoc(doc(db, "drafts/h9"), { ...home, country_name: "Finland" }),
+    );
   });
 
   it("an anonymous player cannot start one", async () => {

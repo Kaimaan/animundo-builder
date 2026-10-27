@@ -512,20 +512,16 @@ async function makeHome() {
     $("cell-msg").textContent = t("home.exists");
     return;
   }
+  // The worker writes the name and the country from the cell (#41).
   const fields = {
     kind: "animal_home",
     species_key: state.picked.gbif_key,
     cell: selected.id,
-    place_name: selected.title,
     owner_uid: state.user.uid,
     family_uids: [state.user.uid],
     status: "requested",
     created_at: firebase.firestore.FieldValue.serverTimestamp(),
   };
-  if (selected.country.iso) {
-    fields.country = selected.country.iso;
-  }
-  fields.country_name = selected.country.name;
   try {
     await db().collection("drafts").add(fields);
     $("cell-msg").textContent = t("home.started");

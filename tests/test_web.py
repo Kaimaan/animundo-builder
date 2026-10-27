@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from builder.schemas import ROOT
 
 WEB = ROOT / "web" / "build"
@@ -145,3 +147,10 @@ def test_animal_list_shape() -> None:
     assert len(set(keys)) == len(keys)
     ids = [animal["id"] for animal in animals]
     assert len(set(ids)) == len(ids)
+
+
+def test_animal_list_matches_world() -> None:
+    world = ROOT.parent / "animundo-world" / "animal-list.json"
+    if not world.is_file():
+        pytest.skip(f"needs {world}")
+    assert _json(WEB / "animal-list.json") == _json(world)

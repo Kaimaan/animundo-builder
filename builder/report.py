@@ -27,6 +27,9 @@ def build_report(job_dir: Path) -> Path:
     plan = _read_json(job_dir / "species-plan.json")
     calls = _read_calls(job_dir / "log.jsonl")
     params = state.get("params", {})
+    home = _read_json(job_dir / "home.json")
+    if home.get("place_name"):
+        params = {**params, "place_name": home["place_name"]}
     species_ids = _new_species(plan, job_dir)
     parts = [
         _head(params, job_dir.name),

@@ -1,5 +1,5 @@
 {
-  "app.credit": "Map © OpenStreetMap contributors. Tiles © CARTO. Ecoregions: RESOLVE 2017.",
+  "app.credit": "Map: Natural Earth. Areas: OpenStreetMap contributors, RESOLVE 2017.",
   "app.play": "Play Animundo",
   "auth.email_ph": "grown-up@example.org",
   "auth.send": "Send sign-in link",
@@ -19,6 +19,7 @@
   "look.buildable": "Buildable",
   "look.lit": "In the game",
   "look.notpossible": "Not possible yet",
+  "area.about": "Animundo's builder will research this real place and build it, usually in 10 to 30 minutes. You'll find it in the game's places menu when it's ready. Only your family can play it. Ask for changes, then send it to us: if our nature checkers like it, everyone can play it.",
   "area.build": "Build this place",
   "area.wish": "I want this place!",
   "area.wished": "Wished for. Thank you!",

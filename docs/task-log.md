@@ -373,3 +373,21 @@ Job folders live under `jobs/` (local only, never committed).
   ANIMUNDO brand row, English/Suomi toggle and a matching
   footer, with CARTO's dark basemap under OSM attribution and
   area colors retuned for it (no more purple).
+
+## 2026-10-27: emulator auth, Natural Earth, card text (#34, #35)
+
+- Emulator mode runs under `demo-animundo` (a `demo-` project
+  can never reach production); the README starts and the seed
+  script targets the same id. The seed sets the verified flag
+  through the emulator's admin access, since a user token
+  cannot. The app's feed query path was already right; the
+  null-draft error came from the project mismatch, and the
+  feed rule now guards with `exists()` anyway.
+- No more tile service: Natural Earth 1:110m land and
+  coastline (public domain) are vendored and drawn as GeoJSON
+  in the game's dark colours, areas on top. The footer credits
+  Natural Earth for the map and OSM + RESOLVE for the areas.
+- The game icon is vendored (`icon_192.png`, relative links:
+  no 404 locally or published), and the area card shows spec
+  06's plain words above Build this place (EN exact, FI mine).
+- T39 replay moves up per Kai: right after T25 + short T24.

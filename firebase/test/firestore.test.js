@@ -422,6 +422,11 @@ describe("feed, public places, jobs, config", () => {
     await assertFails(deleteDoc(doc(db, "drafts/d1/feed/1")));
   });
 
+  it("a feed without its draft is a clean deny", async () => {
+    const db = grownUp(env, "grown").firestore();
+    await assertFails(getDoc(doc(db, "drafts/gone/feed/1")));
+  });
+
   it("anyone signed in reads public places, nobody writes them", async () => {
     await assertSucceeds(
       getDoc(doc(player(env, "anon").firestore(), "places_public/fi_repovesi")),

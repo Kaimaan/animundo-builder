@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Build the world · Animundo</title>
 <meta name="theme-color" content="#1d2a22">
-<link rel="icon" href="/icon_192.png">
+<link rel="icon" href="icon_192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="styles.css">
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -17,7 +17,7 @@
 <body>
 <header>
   <div class="top">
-    <a class="brand" href="/"><img src="/icon_192.png" alt="" width="44" height="44" onerror="this.remove()">ANIMUNDO</a>
+    <a class="brand" href="/"><img src="icon_192.png" alt="" width="44" height="44" onerror="this.remove()">ANIMUNDO</a>
     <div class="header-right">
       <div class="langs" role="group" aria-label="Language">
         <button id="lang-en" type="button" aria-pressed="true">English</button>
@@ -57,6 +57,7 @@
       <h2 id="area-name"></h2>
       <p id="area-facts" class="muted"></p>
       <p id="area-state"></p>
+      <p id="area-about"></p>
       <button id="area-build" type="button" data-i18n="area.build">Build this place</button>
       <button id="area-wish" type="button" data-i18n="area.wish">I want this place!</button>
       <p id="area-msg" class="muted"></p>
@@ -70,7 +71,7 @@
 </main>
 
 <footer>
-  <span data-i18n="app.credit">Map © OpenStreetMap contributors. Tiles © CARTO. Ecoregions: RESOLVE 2017.</span>
+  <span data-i18n="app.credit">Map: Natural Earth. Areas: OpenStreetMap contributors, RESOLVE 2017.</span>
   <a href="/" data-i18n="app.play">Play Animundo</a>
 </footer>
 <script src="app.js"></script>

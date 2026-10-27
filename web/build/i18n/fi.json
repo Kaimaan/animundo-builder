@@ -1,5 +1,5 @@
 {
-  "app.credit": "Kartta © OpenStreetMapin tekijät. Karttapalat © CARTO. Ekoalueet: RESOLVE 2017.",
+  "app.credit": "Kartta: Natural Earth. Alueet: OpenStreetMapin tekijät, RESOLVE 2017.",
   "app.play": "Pelaa Animundoa",
   "auth.email_ph": "aikuinen@example.org",
   "auth.send": "Lähetä kirjautumislinkki",
@@ -19,6 +19,7 @@
   "look.buildable": "Rakennettava",
   "look.lit": "Pelissä",
   "look.notpossible": "Ei vielä mahdollinen",
+  "area.about": "Animundon rakentaja tutkii tämän oikean paikan ja rakentaa sen, yleensä 10–30 minuutissa. Löydät sen pelin paikkavalikosta, kun se on valmis. Vain oma perheesi voi pelata sitä. Pyydä muutoksia ja lähetä se sitten meille: jos luontotarkistajamme pitävät siitä, kaikki voivat pelata sitä.",
   "area.build": "Rakenna tämä paikka",
   "area.wish": "Haluan tämän paikan!",
   "area.wished": "Toivottu. Kiitos!",

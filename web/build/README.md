@@ -12,11 +12,13 @@ the game's copy publishes this folder as it is.
 - `vendor/leaflet/`: Leaflet 1.9.4 (BSD-2-Clause), vendored so
   the app needs no JavaScript CDN besides Firebase itself.
 
-Map data: © OpenStreetMap contributors (ODbL) with CARTO's free
-dark basemap on top, both attributed on the map and in the
-footer. Ecoregion names come from RESOLVE 2017 (Dinerstein et
-al.), also credited in the footer. The stylesheet follows the
-game site's own look (dark forest, cream, sun yellow).
+Map data: Natural Earth land and coastline (public domain,
+1:110m), vendored under `vendor/natural-earth/` and drawn as
+GeoJSON in the game's dark colours: no tile service, no terms,
+no traffic limits. The areas' shapes credit OpenStreetMap
+contributors and their ecoregions RESOLVE 2017 (Dinerstein et
+al.), both in the footer. The stylesheet follows the game
+site's own look (dark forest, cream, sun yellow).
 
 Firebase: the app signs grown-ups in with email links and reads
 and writes Firestore and Storage with their own account on the
@@ -41,7 +43,8 @@ Run it against the emulators instead (no real account, no real
 data): in one terminal,
 
 ```sh
-cd firebase && firebase emulators:start --only auth,firestore,storage
+cd firebase && firebase emulators:start --project demo-animundo \
+    --only auth,firestore,storage
 ```
 
 in another, from the repository root,

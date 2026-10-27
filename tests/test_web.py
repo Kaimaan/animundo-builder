@@ -55,6 +55,20 @@ def test_emulator_ports_match_firebase_json() -> None:
         assert entry["host"] in app, service
 
 
+def test_natural_earth_shapes_are_vendored() -> None:
+    for name in ("ne_110m_land.geojson", "ne_110m_coastline.geojson"):
+        data = _json(WEB / "vendor" / "natural-earth" / name)
+        assert data["type"] == "FeatureCollection"
+        assert len(data["features"]) > 100
+
+
+def test_app_uses_no_tile_service() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    for banned in ("basemaps", "cartocdn", "tile.openstreetmap", "tileLayer"):
+        assert banned not in app, banned
+    assert "ne_110m_land.geojson" in app
+
+
 def test_app_references_only_shipped_files() -> None:
     html = (WEB / "index.html").read_text(encoding="utf-8")
     local = set(

@@ -319,11 +319,24 @@ function initMap() {
     return;
   }
   state.map = L.map("map", { worldCopyJump: true }).setView([30, 10], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19,
-    subdomains: "abcd",
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-  }).addTo(state.map);
+  // Natural Earth land, vendored: no tile service, no terms, no limits.
+  fetch("vendor/natural-earth/ne_110m_land.geojson")
+    .then((response) => response.json())
+    .then((land) => {
+      L.geoJSON(land, {
+        style: { color: "#3b5544", weight: 1, fillColor: "#2c3a32", fillOpacity: 1 },
+        attribution: "Natural Earth",
+      }).addTo(state.map);
+    })
+    .catch((error) => console.error(error));
+  fetch("vendor/natural-earth/ne_110m_coastline.geojson")
+    .then((response) => response.json())
+    .then((coast) => {
+      L.geoJSON(coast, {
+        style: { color: "#c9c2ad", weight: 1, opacity: 0.4 },
+      }).addTo(state.map);
+    })
+    .catch((error) => console.error(error));
 }
 
 function filteredAreas() {
@@ -413,6 +426,7 @@ function renderAreaCard() {
   const look = lookForArea(area);
   const msg = $("area-msg");
   msg.textContent = "";
+  $("area-about").textContent = "";
   const buildButton = $("area-build");
   const wishButton = $("area-wish");
   buildButton.hidden = true;
@@ -428,6 +442,7 @@ function renderAreaCard() {
     $("area-state").textContent = t("area.has_draft");
   } else {
     $("area-state").textContent = t(`look.${look}`);
+    $("area-about").textContent = t("area.about");
     buildButton.hidden = false;
   }
 }
@@ -763,14 +778,19 @@ function renderFeed(draftId) {
 /* -- boot ------------------------------------------------------ */
 
 async function start() {
-  firebase.initializeApp(FIREBASE_CONFIG);
+  const params = new URLSearchParams(window.location.search);
+  // Emulator mode runs under a demo- project, which can never
+  // reach production; start and seed the emulators with the same id.
+  const config = params.has("emulator")
+    ? { ...FIREBASE_CONFIG, projectId: "demo-animundo" }
+    : FIREBASE_CONFIG;
+  firebase.initializeApp(config);
   if (emulatorMode()) {
     firebaseAuth().useEmulator(EMULATORS.auth, { disableWarnings: true });
     db().useEmulator(...EMULATORS.firestore);
     storage().useEmulator(...EMULATORS.storage);
     $("auth-test").hidden = false;
   }
-  const params = new URLSearchParams(window.location.search);
   const explorer = params.get("explorer");
   if (explorer) {
     try {

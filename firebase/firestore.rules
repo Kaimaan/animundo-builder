@@ -208,11 +208,14 @@ service cloud.firestore {
     match /drafts/{draftId}/feed/{n} {
       allow read: if request.auth != null
         && (
-          request.auth.uid in get(
-            /databases/$(database)/documents/drafts/$(draftId))
-            .data.family_uids
-          || exists(
+          exists(
             /databases/$(database)/documents/admins/$(request.auth.uid))
+          || (
+            exists(/databases/$(database)/documents/drafts/$(draftId))
+            && request.auth.uid in get(
+              /databases/$(database)/documents/drafts/$(draftId))
+              .data.family_uids
+          )
         );
       allow write: if false;
     }

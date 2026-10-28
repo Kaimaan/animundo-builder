@@ -433,6 +433,9 @@ class FakeLedger:
     def total_spent(self) -> float:
         return self.spent
 
+    def job_spent(self, job_id: str) -> float:
+        return self.spent if job_id == self.job_id else 0.0
+
 
 def test_unknown_model_has_no_price() -> None:
     with pytest.raises(UnknownModelError, match="no price"):

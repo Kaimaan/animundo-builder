@@ -59,6 +59,25 @@ class FirebaseStore:
             }
         )
 
+    def claim_draft(self, draft_id: str, worker_id: str) -> bool:
+        """Move `requested` to `queued` atomically; the loser gets False."""
+        from .worker import now_iso
+
+        ref = self._db.collection("drafts").document(draft_id)
+        return _claim_requested(self._db.transaction(), ref, worker_id, now_iso())
+
+
+@firestore.transactional
+def _claim_requested(transaction: Any, ref: Any, worker_id: str, at: str) -> bool:
+    """One transaction: still requested, it is ours (#81.1)."""
+    snap = ref.get(transaction=transaction)
+    if not snap.exists or (snap.to_dict() or {}).get("status") != "requested":
+        return False
+    transaction.update(
+        ref, {"status": "queued", "worker_id": worker_id, "updated_at": at}
+    )
+    return True
+
     def drafts_by_owner(self, owner_uid: str) -> list[tuple[str, dict[str, Any]]]:
         return [
             (snap.id, snap.to_dict() or {})

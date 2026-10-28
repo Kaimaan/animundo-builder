@@ -55,16 +55,32 @@ class LooksStage:
             (ctx.job_dir / "research.json").read_text(encoding="utf-8")
         )
         minset = json.loads((ctx.job_dir / "minset.json").read_text(encoding="utf-8"))
+        if (
+            not minset.get("make_animal")
+            and not minset.get("make_home")
+            and minset.get("prey") is None
+        ):
+            # Nothing is made, so nobody reads looks: the empty
+            # result at $0, no call (#81.2).
+            return self._finish(ctx.job_dir, None, {}, 0.0)
         before = ctx.tracker.spent_usd
         data = load_list(find_list(world))
         prey = self._prey_looks(ctx, data["animals"], brief, minset)
         plants = self._plant_looks(ctx, world, brief, research)
-        (ctx.job_dir / "looks.json").write_text(
+        return self._finish(
+            ctx.job_dir, prey, plants, round(ctx.tracker.spent_usd - before, 6)
+        )
+
+    @staticmethod
+    def _finish(
+        job_dir: Path, prey: dict[str, Any] | None, plants: dict[str, Any], cost: float
+    ) -> dict[str, Any]:
+        """The looks file and its checks entry, at the given cost."""
+        (job_dir / "looks.json").write_text(
             json.dumps({"prey": prey, "plants": plants}, indent=2),
             encoding="utf-8",
         )
-        cost = round(ctx.tracker.spent_usd - before, 6)
-        checks = ctx.job_dir / "checks"
+        checks = job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
         (checks / "looks.json").write_text(
             json.dumps({"cost_usd": cost}, indent=2), encoding="utf-8"

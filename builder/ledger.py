@@ -49,6 +49,7 @@ class Ledger(Protocol):
     def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt: ...
     def settle(self, receipt: Receipt, actual_usd: float) -> None: ...
     def total_spent(self) -> float: ...
+    def job_spent(self, job_id: str) -> float: ...
 
 
 def today_iso() -> str:
@@ -111,6 +112,11 @@ class FileLedger:
         """The whole pool's spend, for the low-credit warning."""
         with _LockedFile(self.path) as locked:
             return float(locked.data.get("total", 0.0))
+
+    def job_spent(self, job_id: str) -> float:
+        """One job's spend, every worker's calls included (#81.3)."""
+        with _LockedFile(self.path) as locked:
+            return float(locked.data.get("jobs", {}).get(job_id, {}).get("spent", 0.0))
 
     def day_spent(self, day: str | None = None) -> float:
         """Today's (or one day's) spend, for the worker's daily limit."""
@@ -255,10 +261,17 @@ class FirestoreLedger:
 
     def total_spent(self) -> float:
         """The whole pool's spend, read in one transaction."""
+        return self._read_doc("total")
+
+    def job_spent(self, job_id: str) -> float:
+        """One job's spend, every worker's calls included (#81.3)."""
+        return self._read_doc(f"job-{job_id}")
+
+    def _read_doc(self, doc_id: str) -> float:
         spent: dict[str, float] = {}
 
         def txn(transaction: Any) -> None:
-            ref = self._db.collection("spend").document("total")
+            ref = self._db.collection("spend").document(doc_id)
             spent["total"] = _doc_spent(transaction.get(ref))
 
         try:

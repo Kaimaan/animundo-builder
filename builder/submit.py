@@ -39,8 +39,13 @@ def run_submit(
     place_id: str | None = None,
     base: str = "main",
     gh: str = "gh",
+    cost_usd: float | None = None,
 ) -> dict[str, Any]:
-    """Submit one draft. Returns the submit record (with `pr_url`)."""
+    """Submit one draft. Returns the submit record (with `pr_url`).
+
+    `cost_usd` is the job's ledger total for the report; without
+    it the report falls back to the calls the folder logged.
+    """
     job_dir = jobs_dir / draft_id
     manifest = _read_manifest(job_dir)
     if manifest["draft_id"] != draft_id:
@@ -59,8 +64,8 @@ def run_submit(
     region = _read_region(job_dir)
     files = _layout(world, job_dir, manifest, region, place, branch)
     gate = _gate(world, job_dir, manifest, region, place, files, branch)
-    build_report(job_dir)
-    pr_body = _pr_body(job_dir, manifest, region, place, gate)
+    build_report(job_dir, cost_usd=cost_usd)
+    pr_body = _pr_body(job_dir, manifest, region, place, gate, cost_usd)
     pr_path = job_dir / "pr.md"
     pr_path.write_text(pr_body, encoding="utf-8")
     _commit(world, branch, region, place, files)
@@ -407,6 +412,7 @@ def _pr_body(
     region: dict[str, Any],
     place: str,
     gate: dict[str, Any],
+    cost_usd: float | None = None,
 ) -> str:
     name = region.get("name", place)
     country = region.get("country", "")
@@ -476,7 +482,7 @@ def _pr_body(
         "",
         "## Build report",
         "",
-        *report_text(job_dir).splitlines(),
+        *report_text(job_dir, cost_usd=cost_usd).splitlines(),
         "",
         "## Reviewer's notes",
         "",

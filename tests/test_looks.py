@@ -195,6 +195,26 @@ def test_looks_skips_library_prey(tmp_path: Path) -> None:
     assert looks == {"prey": None, "plants": {}}
 
 
+def test_looks_makes_no_call_when_nothing_is_made(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (tmp_path / "minset.json").write_text(
+        json.dumps({"make_animal": False, "make_home": False, "prey": None})
+    )
+    client = ScriptClient([])
+    result = LooksStage().run(_ctx(tmp_path, world, client))
+    assert result == {"looks_file": "looks.json", "cost_usd": 0.0}
+    assert client.prompts == []
+    assert json.loads((tmp_path / "looks.json").read_text(encoding="utf-8")) == {
+        "prey": None,
+        "plants": {},
+    }
+    checks = json.loads(
+        (tmp_path / "checks" / "looks.json").read_text(encoding="utf-8")
+    )
+    assert checks == {"cost_usd": 0.0}
+
+
 def test_looks_skips_a_ground_job(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

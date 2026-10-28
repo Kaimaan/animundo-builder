@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,7 @@ import pytest
 
 from builder import worker as worker_module
 from builder.config import Config
-from builder.ledger import CapExceeded
+from builder.ledger import CapExceeded, Caps, FileLedger
 from builder.pipeline import StageFailedError
 from builder.stages.capability import NotPossibleError
 from builder.worker import DELETE, RoundFailed, Worker
@@ -37,9 +38,19 @@ class FakeStore:
         self.actions: dict[str, dict[str, Any]] = {}
         self.uploads: list[tuple[str, ...]] = []
         self.deleted: list[str] = []
+        self._lock = threading.Lock()
 
     def get_draft(self, draft_id: str) -> dict[str, Any] | None:
         return self.drafts.get(draft_id)
+
+    def claim_draft(self, draft_id: str, worker_id: str) -> bool:
+        with self._lock:
+            doc = self.drafts.get(draft_id)
+            if doc is None or doc.get("status") != "requested":
+                return False
+            doc["status"] = "queued"
+            doc["worker_id"] = worker_id
+            return True
 
     def update_draft(self, draft_id: str, fields: dict[str, Any]) -> None:
         doc = self.drafts[draft_id]
@@ -254,6 +265,8 @@ def test_create_builds_ready_with_feed_and_cost(tmp_path: Path) -> None:
         '"searches": 2, "images": 1, "generated": 1, "cost_usd": 0.5}\n'
         "not json\n"
     )
+    ledger = FileLedger(tmp_path / "ledger.json")
+    ledger.settle(ledger.reserve("d1-r1", 0.75, Caps(8.0, 20.0, 120.0)), 0.75)
     worker.handle_create("d1")
     draft = store.drafts["d1"]
     assert draft["status"] == "ready"
@@ -290,10 +303,60 @@ def test_create_builds_ready_with_feed_and_cost(tmp_path: Path) -> None:
         "images": 2,
         "cost_usd": 0.5,
     }
-    assert draft["cost_usd"] == 0.5
+    assert draft["cost_usd"] == 0.75
     assert ("pack", "d1", "1", str(job_dir / "pack")) in store.uploads
     assert ("report", "d1", "1", str(job_dir / "report.html")) in store.uploads
     assert store.inbox == []
+
+
+def test_claim_draft_leaves_one_winner() -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _draft()
+    assert store.claim_draft("d1", "mac:111") is True
+    assert store.claim_draft("d1", "mac:222") is False
+    assert store.claim_draft("missing", "mac:222") is False
+    assert store.drafts["d1"]["status"] == "queued"
+    assert store.drafts["d1"]["worker_id"] == "mac:111"
+
+
+def test_two_workers_on_one_draft_only_one_builds(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _draft()
+    runners = []
+    workers = []
+    for name in ("w1", "w2"):
+        base = tmp_path / name
+        base.mkdir()
+        worker = _worker(base, store)
+        worker.worker_id = name
+        worker.runner = ScriptRunner(
+            {
+                "survey": {"sources": 4, "species": 9},
+                "models": {"model_files": ["red_deer.json"]},
+            }
+        )
+        runners.append(worker.runner)
+        workers.append(worker)
+        _seed_pack(base / "jobs" / "d1")
+    errors: list[str] = []
+
+    def build(worker: Worker) -> None:
+        try:
+            worker.handle_create("d1")
+        except Exception as error:  # noqa: BLE001 - threads must report
+            errors.append(f"{worker.worker_id}: {error!r}")
+
+    threads = [threading.Thread(target=build, args=(w,)) for w in workers]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    built = [runner for runner in runners if runner.ran]
+    assert len(built) == 1
+    assert store.drafts["d1"]["status"] == "ready"
+    winner = workers[runners.index(built[0])]
+    assert store.drafts["d1"]["worker_id"] == winner.worker_id
 
 
 def _seed_home(job_dir: Path) -> None:

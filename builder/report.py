@@ -72,8 +72,12 @@ def _new_things(job_dir: Path) -> str:
     return f"<h2>New in this build</h2>\n<ul>{rows}</ul>"
 
 
-def report_text(job_dir: Path) -> str:
-    """The build report in plain text, for the pull request (#52.2)."""
+def report_text(job_dir: Path, cost_usd: float | None = None) -> str:
+    """The build report in plain text, for the pull request (#52.2).
+
+    The total is the job's ledger total when the caller passes it
+    (every worker's calls); otherwise the calls this folder logged.
+    """
     lines = [
         f"- {kind}: {name} — {_amount(cost)}"
         for kind, name, cost in _new_things_data(job_dir)
@@ -81,7 +85,9 @@ def report_text(job_dir: Path) -> str:
     lines.extend(_unmakable_lines(job_dir))
     lines.extend(_later_plants_lines(job_dir))
     calls = _read_calls(job_dir / "log.jsonl")
-    total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
+    total = cost_usd
+    if total is None:
+        total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
     lines.append(f"- Total: {_amount(total)} over {len(calls)} calls.")
     return "\n".join(lines)
 
@@ -144,8 +150,12 @@ def _thing_line(kind: str, name: str, cost: Any) -> str:
     return f"{html.escape(kind)}: {html.escape(str(name))} — {amount}"
 
 
-def build_report(job_dir: Path) -> Path:
-    """Write `report.html` into the job folder and return its path."""
+def build_report(job_dir: Path, cost_usd: float | None = None) -> Path:
+    """Write `report.html` into the job folder and return its path.
+
+    The total is the job's ledger total when the caller passes it
+    (every worker's calls); otherwise the calls this folder logged.
+    """
     state = _read_json(job_dir / "state.json")
     survey = _read_json(job_dir / "survey.json")
     plan = _read_json(job_dir / "species-plan.json")
@@ -161,7 +171,7 @@ def build_report(job_dir: Path) -> Path:
         _unmakable(job_dir),
         _later_plants(job_dir),
         _stages(state),
-        _cost(calls),
+        _cost(calls, cost_usd),
         _sources(survey),
         _checks(job_dir),
         *(_species(job_dir, species_id) for species_id in species_ids),
@@ -223,8 +233,9 @@ def _stages(state: dict[str, Any]) -> str:
     return text
 
 
-def _cost(calls: list[dict[str, Any]]) -> str:
-    total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
+def _cost(calls: list[dict[str, Any]], total: float | None = None) -> str:
+    if total is None:
+        total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
     duration = sum(call.get("duration_s", 0.0) or 0.0 for call in calls)
     by_model: dict[tuple[str, str], dict[str, float]] = {}
     for call in calls:

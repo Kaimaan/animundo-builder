@@ -18,7 +18,9 @@ and ask-person notes are cleared so they never fire twice.
 from __future__ import annotations
 
 import json
+import os
 import queue
+import socket
 import sys
 import threading
 from collections.abc import Callable
@@ -82,6 +84,7 @@ class Store(Protocol):
 
     def get_draft(self, draft_id: str) -> dict[str, Any] | None: ...
     def update_draft(self, draft_id: str, fields: dict[str, Any]) -> None: ...
+    def claim_draft(self, draft_id: str, worker_id: str) -> bool: ...
     def drafts_by_owner(self, owner_uid: str) -> list[tuple[str, dict[str, Any]]]: ...
     def requested_drafts(self) -> list[tuple[str, dict[str, Any]]]: ...
     def drafts_in_statuses(
@@ -102,6 +105,11 @@ class Store(Protocol):
     def delete_pack(self, draft_id: str) -> None: ...
 
 
+def default_worker_id() -> str:
+    """This worker, for the draft it claims: host and pid (#81.1)."""
+    return f"{socket.gethostname()}:{os.getpid()}"
+
+
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -115,6 +123,7 @@ class Worker:
     world: Path | None
     areas_path: Path
     config: Config
+    worker_id: str = field(default_factory=default_worker_id)
     author: str = "Animundo Builder"
     seen: dict[str, dict[str, Any]] = field(default_factory=dict)
     in_flight: set[tuple[str, str]] = field(default_factory=set)
@@ -190,7 +199,10 @@ class Worker:
         if limited is not None:
             self._fail(draft_id, limited, None)
             return
-        self._update(draft_id, {"status": "queued"})
+        if not self.store.claim_draft(draft_id, self.worker_id):
+            print(f"draft {draft_id}: claimed by another worker, left alone")
+            return
+        print(f"draft {draft_id}: claimed by {self.worker_id}")
         try:
             manifest = self.run_round(draft_id, kind, 1, [])
         except NotPossibleError as error:
@@ -577,7 +589,7 @@ class Worker:
         except Exception as error:
             raise RoundFailed("build_failed", f"no shippable pack: {error}")
         try:
-            report = build_report(job_dir)
+            report = build_report(job_dir, cost_usd=self._ledger_total(job_id, job_dir))
             self.store.upload_report(draft_id, round_no, report)
         except TRANSIENT:
             raise
@@ -671,11 +683,13 @@ class Worker:
         if self.world is None:
             return self._finish_action(action_id, "no_world")
         try:
+            job_id = f"{draft_id}-r{draft.get('round', 1)}"
             run_submit(
                 draft_id,
                 self.jobs_dir,
                 self.world,
                 place_id=draft.get("place_id"),
+                cost_usd=self._ledger_total(job_id, self.jobs_dir / draft_id),
             )
         except SubmitFailed:
             self.inbox(
@@ -789,6 +803,26 @@ class Worker:
                 {"stage": name},
             )
 
+    def _ledger_total(self, job_id: str, job_dir: Path) -> float:
+        """The job's true cost: the ledger's total for it (#81.3).
+
+        The ledger sees every worker's calls; the job folder only
+        sees this one's. When the ledger can't be read, the folder's
+        own log is the fallback: a summary must never fail a round.
+        """
+        try:
+            return round(FileLedger(self.config.ledger_path).job_spent(job_id), 6)
+        except (LedgerError, OSError, ValueError):
+            total = 0.0
+            log = job_dir / "log.jsonl"
+            if log.is_file():
+                for line in log.read_text(encoding="utf-8").splitlines():
+                    try:
+                        total += float(json.loads(line).get("cost_usd", 0.0))
+                    except (ValueError, AttributeError):
+                        continue
+            return round(total, 6)
+
     def _summarize_cost(self, draft_id: str, job_id: str, job_dir: Path) -> None:
         totals: dict[str, dict[str, Any]] = {}
         log = job_dir / "log.jsonl"
@@ -818,8 +852,7 @@ class Worker:
                     model["cost_usd"] + float(call.get("cost_usd", 0.0)), 6
                 )
         self.store.update_job(job_id, {"cost": totals})
-        total = round(sum(model["cost_usd"] for model in totals.values()), 6)
-        self._update(draft_id, {"cost_usd": total})
+        self._update(draft_id, {"cost_usd": self._ledger_total(job_id, job_dir)})
 
 
 def _pipeline_runner(stage: Any, ctx: Any, state_file: Path) -> dict[str, Any]:

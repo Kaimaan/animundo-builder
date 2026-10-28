@@ -215,6 +215,20 @@ def test_report_text_is_the_plain_build_report(tmp_path: Path) -> None:
     assert "- Total: $0.140 over 1 calls." in text
 
 
+def test_report_total_prefers_the_ledger(tmp_path: Path) -> None:
+    (tmp_path / "home.json").write_text(json.dumps({"latin": "Vulpes vulpes"}))
+    (tmp_path / "minset.json").write_text(
+        json.dumps({"make_animal": False, "make_home": False, "prey": None})
+    )
+    (tmp_path / "log.jsonl").write_text(
+        json.dumps({"call": "responses", "model": "m", "cost_usd": 0.14}) + "\n"
+    )
+    text = report_text(tmp_path, cost_usd=0.184)
+    assert "- Total: $0.184 over 1 calls." in text
+    html = build_report(tmp_path, cost_usd=0.184).read_text(encoding="utf-8")
+    assert "Total <strong>$0.1840</strong>" in html
+
+
 def test_report_logs_unmakable_marks(tmp_path: Path) -> None:
     (tmp_path / "state.json").write_text(
         json.dumps({"params": {"kind": "animal_home"}, "completed": []})

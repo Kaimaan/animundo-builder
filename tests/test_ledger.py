@@ -81,6 +81,17 @@ def test_total_spent_refuses_a_broken_ledger(tmp_path: Path) -> None:
         FileLedger(path).total_spent()
 
 
+def test_job_spent_reads_one_job(tmp_path: Path) -> None:
+    ledger = FileLedger(tmp_path / "spend.json")
+    assert ledger.job_spent("job-1") == 0.0
+    receipt = ledger.reserve("job-1", 1.00, CAPS)
+    ledger.settle(receipt, 0.25)
+    ledger.settle(ledger.reserve("job-2", 2.00, CAPS), 2.00)
+    assert ledger.job_spent("job-1") == pytest.approx(0.25)
+    assert ledger.job_spent("job-2") == pytest.approx(2.00)
+    assert ledger.job_spent("job-3") == 0.0
+
+
 def test_day_spent_reads_one_day(tmp_path: Path) -> None:
     ledger = FileLedger(tmp_path / "spend.json")
     assert ledger.day_spent("2026-10-27") == 0.0
@@ -184,3 +195,12 @@ def test_firestore_total_spent() -> None:
     receipt = ledger.reserve("job-1", 1.00, CAPS)
     ledger.settle(receipt, 0.25)
     assert ledger.total_spent() == pytest.approx(0.25)
+
+
+def test_firestore_job_spent() -> None:
+    ledger = FirestoreLedger(_FakeDb())
+    assert ledger.job_spent("job-1") == 0.0
+    receipt = ledger.reserve("job-1", 1.00, CAPS)
+    ledger.settle(receipt, 0.25)
+    assert ledger.job_spent("job-1") == pytest.approx(0.25)
+    assert ledger.job_spent("job-2") == 0.0

@@ -3,6 +3,28 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #80-#81, `v0.3.0` is #72-#81
+
+- #80: the game's draft opener is live (bf3b016, in this
+  checkout's history). The #79 opener matches it exactly
+  (signature, awaits, folder then place id, `""` on failure),
+  so no code changed.
+- #81.1: two workers can't build one draft. `handle_create`
+  claims `requested` → `queued` in one Firestore transaction
+  (the loser returns at once); the draft and the log carry the
+  winner's host:pid. Raced twice in tests: two threads, one
+  build (stable over repeats).
+- #81.2: `looks` writes the empty result at $0 with no call
+  when the minset makes nothing (no animal, home or prey).
+- #81.3: the build report's total and the draft's `cost_usd`
+  come from the job's ledger total (the only lock-guarded
+  record; the folder's log is the fallback). New `job_spent`
+  on both ledger backends; the per-model breakdowns stay
+  log-based.
+- Suite: 597 passed, 12 skipped; ruff check + format clean.
+- Moved `v0.3.0` to this commit: the tag was minutes old and
+  uncopied, and #82 scopes it as #72-#81.
+
 ## 2026-10-28: inbox #72-#79, tagged `v0.3.0`
 
 - #76: the GBIF records draw in their own `records` pane (z450,

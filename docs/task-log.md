@@ -3,6 +3,30 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #67 (#66.1's second wording, tag v0.2.1)
+
+- #67.1: the hunter shows up in two checks with two wordings, so no
+  more string matching. `_check_animal` runs the checks on a copy of
+  the region with the still-unmade targets taken out of `animals.*`
+  and `fish` (`_pruned_regions`, overlaid through `check_draft`'s
+  `extra`, so the job itself never changes and nothing needs
+  putting back). `_excused_missing` is gone.
+- Verified on the live data first: the reviewer's
+  `jobs/anaconda-v020` region plus its capybara file, cloned to
+  /tmp — unpruned reproduces both live wordings, pruned with
+  {"anaconda"} yields zero errors.
+- #67.2: the test runs the real world checks, not a stub. A fixture
+  world carries the real `check_draft.py`, `check_animals.py`,
+  `validate_region.py`, `check_taxa.py` and `check_models.py` (plus
+  the real archetypes, the shipped Nuuksio recast to seat hunter,
+  prey and a hunter-kind fish, and a shipped .glb's bytes for the
+  built-models gate); it skips without the sibling checkout. The
+  full prey-then-hunter run passes with zero fix rounds, the
+  unpruned region fails all three wordings, and the job region
+  keeps its full cast.
+- Tagged `v0.2.1` on green replays.
+- Suite: 574 passed, 12 skipped; ruff check + format clean.
+
 ## 2026-10-27: inbox #66 (anaconda live set: two bugs, tag v0.2.0)
 
 - #66.1: `oneshot` failed the prey because the region already named

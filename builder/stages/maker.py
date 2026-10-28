@@ -22,6 +22,7 @@ import math
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -392,21 +393,27 @@ class AnimalMakerStage:
         """The file's verdicts: animals, taxa, region.
 
         The build hasn't run yet, so "model file not found" is
-        noise the model phase resolves; a missing file for an
-        animal still to be made is noise the later target
-        resolves (#66.1). Everything else is the file's fault.
+        noise the model phase resolves. The region already names
+        the whole cast, so the check runs on a copy with the
+        still-unmade targets taken out of the cast and the fish:
+        no wording, now or later, can fault their missing files,
+        and everything else is still checked (#67.1).
         """
-        errors = _verdict_errors(
-            _verdicts(world, ctx, animal_id, "animal", attempt),
-            ("animals", "taxa", "region"),
-            animal_id,
-        )
-        return [
-            error
-            for error in errors
-            if "model file not found" not in error
-            and not _excused_missing(error, excused)
-        ]
+        if excused:
+            with tempfile.TemporaryDirectory(prefix="oneshot-pruned-") as tmp:
+                extra = _pruned_regions(ctx.job_dir, excused, Path(tmp))
+                errors = _verdict_errors(
+                    _verdicts(world, ctx, animal_id, "animal", attempt, extra=extra),
+                    ("animals", "taxa", "region"),
+                    animal_id,
+                )
+        else:
+            errors = _verdict_errors(
+                _verdicts(world, ctx, animal_id, "animal", attempt),
+                ("animals", "taxa", "region"),
+                animal_id,
+            )
+        return [error for error in errors if "model file not found" not in error]
 
     def _adapt_build_place(
         self,
@@ -709,15 +716,41 @@ def _made(job_dir: Path, animal_id: str) -> bool:
     ).is_file()
 
 
-def _excused_missing(error: str, excused: set[str]) -> bool:
-    """A missing file for an animal still to be made (#66.1).
+def _pruned_regions(job_dir: Path, excused: set[str], dest: Path) -> dict[str, Path]:
+    """Copies of the job's regions without the still-unmade targets (#67.1).
 
-    The world's wording: `playable animal "<id>" has no file
-    animals/<id>.json`. Anything else about the animal still fails.
+    The cast (`animals.*`) and the `fish` lose every excused id;
+    regions naming none keep their own bytes. The paths overlay
+    the draft the checks run on, so the job itself never changes.
     """
-    return any(
-        f"has no file animals/{animal_id}.json" in error for animal_id in excused
-    )
+    overlaid = {}
+    for path in sorted((job_dir / "regions").glob("*.json")):
+        region = json.loads(path.read_text(encoding="utf-8"))
+        cast = region.get("animals")
+        changed = False
+        if isinstance(cast, dict):
+            for group in ("playable", "predators", "prey"):
+                seated = cast.get(group)
+                if isinstance(seated, list):
+                    kept = [animal for animal in seated if animal not in excused]
+                    if kept != seated:
+                        cast[group] = kept
+                        changed = True
+        fish = region.get("fish")
+        if isinstance(fish, list):
+            kept = []
+            for entry in fish:
+                kind = entry.get("kind") if isinstance(entry, dict) else entry
+                if kind not in excused:
+                    kept.append(entry)
+            if kept != fish:
+                region["fish"] = kept
+                changed = True
+        if changed:
+            out = dest / path.name
+            out.write_text(json.dumps(region, indent=2), encoding="utf-8")
+            overlaid[f"regions/{path.name}"] = out
+    return overlaid
 
 
 def _taxon(entry: dict[str, Any]) -> dict[str, Any]:
@@ -1348,9 +1381,16 @@ def _ratio_errors(
 
 
 def _verdicts(
-    world: Path, ctx: Any, animal_id: str, phase: str, attempt: int
+    world: Path,
+    ctx: Any,
+    animal_id: str,
+    phase: str,
+    attempt: int,
+    extra: dict[str, Path] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    result = check_draft(world, ctx.job_dir, f"oneshot-{animal_id}-{phase}-{attempt}")
+    result = check_draft(
+        world, ctx.job_dir, f"oneshot-{animal_id}-{phase}-{attempt}", extra=extra
+    )
     return {entry.get("check", ""): entry for entry in result.get("results", [])}
 
 

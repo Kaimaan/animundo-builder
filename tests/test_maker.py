@@ -11,6 +11,7 @@ import pytest
 
 from builder.pipeline import BudgetTracker, JobContext
 from builder.prompts import PROMPTS_DIR
+from builder.schemas import ROOT
 from builder.stages.maker import (
     EDITS_FACTORS,
     AnimalMakerStage,
@@ -22,7 +23,6 @@ from builder.stages.maker import (
     _edits_files,
     _edits_schema,
     _edits_sizes,
-    _excused_missing,
     _foods_text,
     _guide,
     _home_choices_schema,
@@ -30,6 +30,7 @@ from builder.stages.maker import (
     _measure_spec,
     _measurements,
     _part_list,
+    _pruned_regions,
     _reference_line,
     _reference_looks,
     _reference_row,
@@ -513,79 +514,169 @@ def test_still_failing_stops_for_a_person(tmp_path: Path) -> None:
     assert not (tmp_path / "checks" / "oneshot.json").is_file()
 
 
-REGION_STUB = """\
-import glob
-import json
-import os
-import sys
-
-draft = sys.argv[1]
-region_problems = []
-for path in glob.glob(os.path.join(draft, "regions", "*.json")):
-    region = json.load(open(path))
-    for seated in region.get("animals", {}).get("playable", []):
-        if not os.path.isfile(os.path.join(draft, "animals", seated + ".json")):
-            region_problems.append(
-                f'ERROR: region {region.get("id")}: playable animal "{seated}"'
-                f" has no file animals/{seated}.json"
-            )
-report = {
-    "ok": not region_problems,
-    "draft_files": [],
-    "existing": [],
-    "results": [
-        {"check": "animals", "status": "pass", "problems": []},
-        {"check": "taxa", "status": "pass", "problems": []},
-        {
-            "check": "region",
-            "status": "fail" if region_problems else "pass",
-            "problems": region_problems,
-        },
-        {"check": "models", "status": "pass", "problems": []},
-    ],
-}
-print(json.dumps(report))
-"""
+_REAL_TOOLS = (
+    "check_draft.py",
+    "check_animals.py",
+    "validate_region.py",
+    "check_taxa.py",
+    "check_models.py",
+)
 
 
-def test_prey_made_before_its_hunter_passes(tmp_path: Path) -> None:
+def _sibling_world() -> Path:
+    """The real checkout next door, or a skip without it (#67.2)."""
+    world = ROOT.parent / "animundo-world"
+    needed = [world / "tools" / name for name in _REAL_TOOLS] + [
+        world / "animals" / "archetypes.json",
+        world / "regions" / "fi_nuuksio.json",
+        world / "assets" / "animals" / "fox.glb",
+    ]
+    if not all(path.is_file() for path in needed):
+        pytest.skip(f"needs a real world checkout at {world}")
+    return world
+
+
+def _real_world(tmp_path: Path) -> Path:
+    """A fixture world that runs the real checkers."""
+    sibling = _sibling_world()
     world = _world(tmp_path)
-    (world / "tools" / "check_draft.py").write_text(REGION_STUB)
+    for name in _REAL_TOOLS:
+        (world / "tools" / name).write_bytes((sibling / "tools" / name).read_bytes())
+    (world / "animals" / "archetypes.json").write_bytes(
+        (sibling / "animals" / "archetypes.json").read_bytes()
+    )
+    (world / "models" / "plants").mkdir(parents=True, exist_ok=True)
+    (world / "regions").mkdir(parents=True, exist_ok=True)
+    (world / "poisonous-plants.json").write_text(json.dumps({"plants": []}))
+    return world
+
+
+def _real_answer(animal_id: str, latin: str, key: int) -> str:
+    """An animal file the real check_animals and check_taxa accept."""
+    return json.dumps(
+        {
+            "id": animal_id,
+            "name": animal_id.capitalize(),
+            "latin": latin,
+            "archetype": "land_mammal",
+            "taxon": {"gbif_key": key, "rank": "SPECIES", "name": latin},
+            "diet": ["grass"],
+            "text": {"dig": f"The {animal_id} digs."},
+            "year": {
+                "winter": "active",
+                "shelter": "It sleeps in a den.",
+                "young": "Young are born in spring.",
+                "food": {
+                    "spring": "Fresh grass.",
+                    "summer": "Grass and herbs.",
+                    "autumn": "Seeds.",
+                    "winter": "Dry grass.",
+                },
+            },
+        }
+    )
+
+
+def _build_real_glb(sandbox: Path, spec: str) -> dict[str, Any]:
+    """The model build, stubbed with a real shipped .glb's bytes."""
+    data = (_sibling_world() / "assets" / "animals" / "fox.glb").read_bytes()
+    animals = sandbox / "assets" / "animals"
+    animals.mkdir(parents=True, exist_ok=True)
+    (animals / f"{spec}.glb").write_bytes(data)
+    previews = sandbox / "models" / "previews"
+    previews.mkdir(parents=True, exist_ok=True)
+    (previews / f"{spec}.png").write_bytes(b"png-bytes")
+    return {"ok": True, "summary": f"{spec}: built", "log": f"BUILT {spec}: ok"}
+
+
+def _recast_region(tmp_path: Path) -> None:
+    """The shipped Nuuksio, seating only the hunter, the prey and its fish."""
+    sibling = _sibling_world()
+    region = json.loads((sibling / "regions" / "fi_nuuksio.json").read_text())
+    region["animals"] = {"playable": ["lynx"], "predators": [], "prey": ["capybara"]}
+    region["fish"] = [{"kind": "lynx", "count": 3}]
+    region["ground_cover"]["plants"] = []
+    regions = tmp_path / "regions"
+    (regions / "fi_test.json").unlink()
+    (regions / "fi_nuuksio.json").write_text(json.dumps(region))
+
+
+def test_prey_passes_the_real_checks_before_its_hunter(tmp_path: Path) -> None:
+    world = _real_world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())
+    _recast_region(tmp_path)
+    (tmp_path / "models").mkdir(exist_ok=True)
+    (tmp_path / "models" / "capybara.glb").write_bytes(
+        (_sibling_world() / "assets" / "animals" / "fox.glb").read_bytes()
+    )
     client = ScriptClient(
         [
-            _animal_answer("capybara"),
+            _real_answer("capybara", "Hydrochoerus hydrochaeris", 2437585),
             _edits_answer(),
-            _animal_answer("lynx"),
+            _real_answer("lynx", "Lynx lynx", 2435240),
             _edits_answer(),
         ]
     )
-    result = _stage().run(_ctx(tmp_path, world, client))
+    result = _stage(build=_build_real_glb).run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
     assert len(client.prompts) == 4
+    region = json.loads((tmp_path / "regions" / "fi_nuuksio.json").read_text())
+    assert region["animals"]["playable"] == ["lynx"]
+    assert region["fish"] == [{"kind": "lynx", "count": 3}]
 
 
-def test_unmade_stranger_still_fails_the_checks(tmp_path: Path) -> None:
-    world = _world(tmp_path)
-    (world / "tools" / "check_draft.py").write_text(REGION_STUB)
+def test_unpruned_region_fails_both_wordings(tmp_path: Path) -> None:
+    world = _real_world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())
-    region_path = tmp_path / "regions" / "fi_test.json"
-    region = json.loads(region_path.read_text())
-    region["animals"]["playable"] = ["lynx", "wolverine"]
-    region_path.write_text(json.dumps(region))
-    client = ScriptClient([_animal_answer("capybara"), _animal_answer("capybara")])
-    with pytest.raises(_Stopped, match="still failing"):
-        _stage().run(_ctx(tmp_path, world, client))
-
-
-def test_excused_missing_only_excuses_missing_files() -> None:
-    missing = 'region fi_test: playable animal "lynx" has no file animals/lynx.json'
-    assert _excused_missing(missing, {"lynx"}) is True
-    assert _excused_missing(missing, {"capybara"}) is False
-    assert _excused_missing(missing, set()) is False
-    assert (
-        _excused_missing('lynx: diet kind "fish" not in region food', {"lynx"}) is False
+    _recast_region(tmp_path)
+    (tmp_path / "animals").mkdir(exist_ok=True)
+    (tmp_path / "animals" / "capybara.json").write_text(
+        _real_answer("capybara", "Hydrochoerus hydrochaeris", 2437585)
     )
+    (tmp_path / "models").mkdir(exist_ok=True)
+    (tmp_path / "models" / "capybara.glb").write_bytes(
+        (_sibling_world() / "assets" / "animals" / "fox.glb").read_bytes()
+    )
+    ctx = SimpleNamespace(job_dir=tmp_path)
+    errors = AnimalMakerStage()._check_animal(world, ctx, "capybara", 1, set())
+    assert any("has no file animals/lynx.json" in e for e in errors)
+    assert any('has unknown animal "lynx"' in e for e in errors)
+    assert any("fish[0].kind" in e for e in errors)
+    assert AnimalMakerStage()._check_animal(world, ctx, "capybara", 1, {"lynx"}) == []
+
+
+def test_pruned_regions_drops_targets_from_cast_and_fish(tmp_path: Path) -> None:
+    regions = tmp_path / "regions"
+    regions.mkdir()
+    (regions / "a.json").write_text(
+        json.dumps(
+            {
+                "animals": {
+                    "playable": ["lynx"],
+                    "predators": ["fox"],
+                    "prey": ["capybara"],
+                },
+                "fish": [
+                    {"kind": "lynx", "count": 3},
+                    {"kind": "roach", "count": 5},
+                    "lynx",
+                ],
+            }
+        )
+    )
+    (regions / "b.json").write_text(json.dumps({"animals": {"playable": ["fox"]}}))
+    dest = tmp_path / "out"
+    dest.mkdir()
+    out = _pruned_regions(tmp_path, {"lynx"}, dest)
+    assert sorted(out) == ["regions/a.json"]
+    pruned = json.loads(out["regions/a.json"].read_text())
+    assert pruned["animals"] == {
+        "playable": [],
+        "predators": ["fox"],
+        "prey": ["capybara"],
+    }
+    assert pruned["fish"] == [{"kind": "roach", "count": 5}]
+    assert "lynx" in (regions / "a.json").read_text()
 
 
 def test_prey_comes_before_the_animal(tmp_path: Path) -> None:

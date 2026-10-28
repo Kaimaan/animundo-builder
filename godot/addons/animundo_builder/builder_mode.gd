@@ -16,7 +16,6 @@ extends Node
 const WEB_BUILD := "https://animundo.app/build"
 const PACKS_DIR := "user://packs"
 const STRINGS_FOLDER := "user://packs/_addon/1/"
-const LANG_FILE := "user://builder_lang.txt"
 
 const REPORTABLE := ["ready", "in_review", "not_accepted"]
 const NOT_RIGHT_REASONS: Array[String] = ["wrong_animals", "looks_wrong",
@@ -27,7 +26,6 @@ const PROBLEM_REASONS: Array[String] = ["unsuitable_text", "scary_or_upsetting",
 var _hooks ## BuilderHooks, or a stub in the checks.
 var _cloud: BuilderCloud
 var _strings := BuilderStrings.new()
-var _areas: Array = []
 var _drafts: Array = []
 var _screen: CanvasLayer
 var _explorer := ""
@@ -56,8 +54,7 @@ func booted() -> bool:
 func boot(hooks: Variant, cloud_backend: Variant) -> void:
 	_hooks = hooks
 	_cloud = BuilderCloud.new(cloud_backend)
-	_strings.load_lang(_saved_lang())
-	_areas = _read_json(BuilderStrings.ADDON_DIR + "/areas.json")
+	_strings.load_lang(BuilderStrings.player_lang())
 	_install_strings_folder()
 	_reinstall_packs()
 	_hooks.add_grownup_button("explore.builder_mode", open_builder)
@@ -92,6 +89,9 @@ func refresh_globe() -> void:
 func open_builder() -> void:
 	if not _booted or is_instance_valid(_screen):
 		return
+	# The game's language, read fresh: the player may have changed it
+	# since boot, and the game's settings are the one place to choose (#71).
+	_strings.load_lang(BuilderStrings.player_lang())
 	_build_screen()
 	_reload()
 
@@ -112,14 +112,6 @@ func set_explorer(species: String) -> void:
 
 
 # --- boot ---------------------------------------------------------------
-
-func _saved_lang() -> String:
-	if FileAccess.file_exists(LANG_FILE):
-		var saved := FileAccess.get_file_as_string(LANG_FILE).strip_edges()
-		if saved in BuilderStrings.LANGS:
-			return saved
-	return BuilderStrings.player_lang()
-
 
 ## The addon's own words as a content folder, so the game's menus can show
 ## the grown-up and places buttons in the player's language.
@@ -220,37 +212,25 @@ func _globe_key(draft_id: String, fields: Dictionary) -> String:
 		var key := str(fields["draft_place_id"])
 		_hooks.set_place_look(key, look)
 		return key
-	var area := _area(str(fields.get("area_id", "")))
-	var lat := _center(fields, area, "lat")
-	var lon := _center(fields, area, "lon")
+	var lat := _center(fields, "lat")
+	var lon := _center(fields, "lon")
 	if lat == null or lon == null:
 		return ""
 	var label := str(fields.get("place_name", ""))
-	if label == "" and not area.is_empty():
-		label = str(area.get("name", ""))
 	_hooks.set_place_look(str(fields.get("area_id", draft_id)), look, lat, lon, label)
 	return str(fields.get("area_id", draft_id))
 
 
-func _center(fields: Dictionary, area: Dictionary, axis: String) -> Variant:
+func _center(fields: Dictionary, axis: String) -> Variant:
 	if fields.get("center") is Dictionary and fields["center"].has(axis):
 		return float(fields["center"][axis])
-	return area.get(axis)
-
-
-func _area(area_id: String) -> Dictionary:
-	for area in _areas:
-		if area is Dictionary and str(area.get("area_id", "")) == area_id:
-			return area
-	return {}
+	return null
 
 
 static func _read_json(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
-		return [] if path.ends_with("areas.json") else {}
+		return {}
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-	if path.ends_with("areas.json"):
-		return parsed if parsed is Array else []
 	return parsed if parsed is Dictionary else {}
 
 
@@ -265,6 +245,10 @@ func _build_screen() -> void:
 	back.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_screen.add_child(back)
 	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.13, 0.17, 0.14)
+	style.set_corner_radius_all(12)
+	panel.add_theme_stylebox_override("panel", style)
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.custom_minimum_size = Vector2(620, 460)
 	panel.position -= panel.custom_minimum_size / 2
@@ -287,33 +271,24 @@ func _build_screen() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_child(spacer)
-	var lang := Button.new()
-	lang.text = _strings.t("explore.screen.lang")
-	lang.pressed.connect(_toggle_lang)
-	title.add_child(lang)
 	var close := Button.new()
-	close.text = _strings.t("explore.screen.close")
+	close.text = "✕"
+	close.tooltip_text = _strings.t("explore.screen.close")
 	close.pressed.connect(_screen.queue_free)
 	title.add_child(close)
-	var tabs := TabContainer.new()
-	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(tabs)
-	_screen.set_meta("tabs", tabs)
+	var make := Button.new()
+	make.text = _strings.t("explore.screen.make_home")
+	make.pressed.connect(open_web_app)
+	box.add_child(make)
+	_screen.set_meta("make", make)
+	var list := VBoxContainer.new()
+	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(list)
+	_screen.set_meta("list", list)
 	var status := Label.new()
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(status)
 	_screen.set_meta("status", status)
-
-
-func _toggle_lang() -> void:
-	var next := "fi" if _strings.lang != "fi" else "en"
-	_strings.load_lang(next)
-	var f := FileAccess.open(LANG_FILE, FileAccess.WRITE)
-	if f != null:
-		f.store_string(next)
-	_screen.queue_free()
-	_build_screen()
-	_reload()
 
 
 func _reload() -> void:
@@ -321,10 +296,10 @@ func _reload() -> void:
 		return
 	_loading = true
 	var status: Label = _screen.get_meta("status")
-	var tabs: TabContainer = _screen.get_meta("tabs")
-	for tab in tabs.get_children():
-		tabs.remove_child(tab)
-		tab.queue_free()
+	var list: VBoxContainer = _screen.get_meta("list")
+	for row in list.get_children():
+		list.remove_child(row)
+		row.queue_free()
 	if not _cloud.signed_in():
 		status.text = _strings.t("explore.screen.signed_out")
 		_loading = false
@@ -334,46 +309,12 @@ func _reload() -> void:
 	if not is_instance_valid(_screen):
 		_loading = false
 		return
-	tabs.add_child(_areas_tab())
-	tabs.add_child(_drafts_tab())
+	list.add_child(_drafts_list())
 	status.text = ""
 	_loading = false
 
 
-func _areas_tab() -> Control:
-	var scroll := ScrollContainer.new()
-	scroll.name = _strings.t("explore.screen.areas")
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var box := VBoxContainer.new()
-	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 8)
-	scroll.add_child(box)
-	for area in _areas:
-		if not area is Dictionary:
-			continue
-		var row := VBoxContainer.new()
-		box.add_child(row)
-		var head := HBoxContainer.new()
-		row.add_child(head)
-		var name := Label.new()
-		name.text = "%s (%s)" % [area.get("name", "?"), area.get("country", "?")]
-		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		head.add_child(name)
-		var draft := _draft_for_area(str(area.get("area_id", "")))
-		if draft.is_empty():
-			var build := Button.new()
-			build.text = _strings.t("explore.screen.build_web")
-			build.pressed.connect(open_web_app)
-			head.add_child(build)
-		else:
-			var words := Label.new()
-			words.text = ExploreStates.words_for(str(draft.get("status", "")), _strings)
-			words.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			row.add_child(words)
-	return scroll
-
-
-func _drafts_tab() -> Control:
+func _drafts_list() -> Control:
 	var scroll := ScrollContainer.new()
 	scroll.name = _strings.t("explore.screen.drafts")
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -427,17 +368,7 @@ func _draft_row(row: Dictionary) -> Control:
 func _draft_name(draft_id: String, fields: Dictionary) -> String:
 	if str(fields.get("place_name", "")) != "":
 		return str(fields["place_name"])
-	var area := _area(str(fields.get("area_id", "")))
-	if not area.is_empty():
-		return str(area.get("name", draft_id))
 	return draft_id
-
-
-func _draft_for_area(area_id: String) -> Dictionary:
-	for row in _drafts:
-		if row is Dictionary and str(row.get("fields", {}).get("area_id", "")) == area_id:
-			return row["fields"]
-	return {}
 
 
 func _reportable(draft_id: String, fields: Dictionary) -> bool:

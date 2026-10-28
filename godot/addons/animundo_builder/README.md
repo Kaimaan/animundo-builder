@@ -10,7 +10,6 @@ happens in the web app and the worker.
 - `pack_rules.gd` — what a pack must look like before the game touches it.
 - `explore_states.gd` — each draft status's globe look and plain sentence.
 - `builder_strings.gd` — the addon's own words (`locale/en.json`, `fi.json`).
-- `areas.json` — the 12 test areas (mirrors `web/build/areas.json`).
 - `tests/` — the headless checks, run here and in the game after each copy.
 
 The game copies this folder in from a tagged release (`tools/sync_builder.sh`

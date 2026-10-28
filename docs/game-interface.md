@@ -38,11 +38,12 @@ screen explains). A load that fails clears the draft looks
 and leaves the screen empty: the Cloud answers success or nothing, so an
 empty list and a broken load look the same.
 
-The Builder screen lists the 12 test areas and the family's drafts. Play
-downloads the draft's pack, checks every file against the manifest, installs
-it, and records playing; the family then opens the place from the places
-menu. Report sends `feedback` in the shape the security rules accept, once,
-owner only. The web app opens at `animundo.app/build`.
+The Builder screen lists the family's drafts, with one button at the top,
+Make a new home, to the web app. Play downloads the draft's pack, checks
+every file against the manifest, installs it, and records playing; the
+family then opens the place from the places menu. Report sends `feedback`
+in the shape the security rules accept, once, owner only. The web app
+opens at `animundo.app/build`.
 
 ## Where reality differs from the spec
 
@@ -57,8 +58,8 @@ owner only. The web app opens at `animundo.app/build`.
 5. The game can't lend its `I18n` through the plug-in points, so the addon
    carries its own words (`locale/en.json`, `fi.json`); the reason labels
    mirror the web app's `reason.*` word for word (tested).
-6. The player's language comes from the engine's locale, with a button to
-   switch; the choice is kept in `user://builder_lang.txt`.
+6. The player's language comes from the engine's locale, read fresh each
+   time the screen opens; the game's settings are the one place to choose.
 7. The web link carries no `?explorer=<species>`: the game doesn't pass its
    current animal through the plug-in points. `set_explorer()` is ready
    for when it does.

@@ -3,6 +3,30 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #71 (animal-first panel) and #70 (`file_from`)
+
+- #71.1: the Builder screen opens on the drafts, with one button at
+  the top, Make a new home, to the web app. The Places to build tab
+  and the addon's `areas.json` are gone (the web app keeps its own);
+  dead code went with them (`_areas`, `_area`, `_areas_tab`,
+  `_draft_for_area`, the lang toggle and its file).
+- #71.2: the panel gets a solid dark StyleBoxFlat, like the game's
+  own screens.
+- #71.3: the screen reads the game's locale fresh each time it
+  opens; the panel's own language button and `builder_lang.txt`
+  are gone.
+- #71.4: Close is an ✕ button with the word as its tooltip (the
+  report form's cancel keeps the word).
+- #70.1: the animal file's one-shot example comes from the list's
+  `file_from` (the anaconda: the lizard); the model still starts
+  from `start_from`. Rows without `file_from` fall back, as before.
+- #70.3: `web/build/animal-list.json` already in sync (the `file_from`
+  key arrived with the #69 sync; verified again here).
+- Tagged `v0.2.2` (#69 + #70 + #71) on green replays and headless
+  checks.
+- Suite: 582 passed, 12 skipped; ruff check + format clean; the
+  three headless addon checks pass 0-errors.
+
 ## 2026-10-28: inbox #69 (homes for every habitat)
 
 - #69.1: the choices schema matches the lab's as it is now —

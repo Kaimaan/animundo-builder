@@ -591,9 +591,12 @@ class AnimalMakerStage:
         world = ctx_world
         animal_id = target["id"]
         entry = target["entry"]
-        start_from = target["start_from"]
+        # The file example comes from `file_from`: `start_from` is the
+        # model reference and may be a model-only file (#70). A row
+        # without `file_from` (an old list) falls back to `start_from`.
+        example_from = entry.get("file_from") or target["start_from"]
         template = (PROMPTS_DIR / "animal_write.md").read_text(encoding="utf-8")
-        template = _with_start_from(template, world, start_from)
+        template = _with_example(template, world, example_from)
         roles = animal_writers._roles_in_region(region)
         role = roles.get(animal_id, "prey" if target["prey"] else "playable")
         return Template(template).substitute(
@@ -983,11 +986,11 @@ def _part_list(ref: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _with_start_from(template: str, world: Path, start_from: str) -> str:
-    """The one-shot example: the `start_from` animal, and only it."""
-    content = (world / "animals" / f"{start_from}.json").read_text(encoding="utf-8")
+def _with_example(template: str, world: Path, example_id: str) -> str:
+    """The one-shot example: the `file_from` animal, and only it (#70)."""
+    content = (world / "animals" / f"{example_id}.json").read_text(encoding="utf-8")
     content = content.replace("$", "$$")
-    template = template.replace("$EXAMPLE_1_NAME", start_from)
+    template = template.replace("$EXAMPLE_1_NAME", example_id)
     template = template.replace("$EXAMPLE_1", content)
     template = template.replace("$EXAMPLE_2_NAME", "(only one example: one shot)")
     template = template.replace("$EXAMPLE_2", "")

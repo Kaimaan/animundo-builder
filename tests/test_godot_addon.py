@@ -58,7 +58,6 @@ def test_addon_files_exist():
         "explore_states.gd",
         "builder_strings.gd",
         "plugin.cfg",
-        "areas.json",
         "locale/en.json",
         "locale/fi.json",
         "tests/check_explore_states.gd",
@@ -98,10 +97,10 @@ def test_addon_names_no_game_class_directly():
     assert offenders == [], f"direct game references: {offenders}"
 
 
-def test_addon_areas_match_the_web_app():
-    addon = [a["area_id"] for a in _load_json(ADDON / "areas.json")]
-    web = [a["area_id"] for a in _load_json(ROOT / "web" / "build" / "areas.json")]
-    assert addon == web
+def test_addon_has_no_place_list():
+    # Animal first (D1, #71): the in-game panel opens on the drafts,
+    # with one button to the web app. No areas.json travels with it.
+    assert not (ADDON / "areas.json").exists()
 
 
 def test_addon_states_cover_every_draft_status():

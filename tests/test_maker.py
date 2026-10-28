@@ -679,6 +679,56 @@ def test_pruned_regions_drops_targets_from_cast_and_fish(tmp_path: Path) -> None
     assert "lynx" in (regions / "a.json").read_text()
 
 
+def _anaconda_target() -> dict[str, Any]:
+    """The anaconda: a model-only `start_from`, a game `file_from`."""
+    return {
+        "id": "anaconda",
+        "entry": {
+            "id": "anaconda",
+            "name": "Green anaconda",
+            "latin": "Eunectes murinus",
+            "gbif_key": 2462858,
+            "start_from": "grass_snake",
+            "file_from": "lizard",
+        },
+        "start_from": "grass_snake",
+        "prey": False,
+        "size_cm": None,
+    }
+
+
+def test_animal_example_comes_from_file_from(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    (world / "animals" / "lizard.json").write_text(
+        json.dumps({"id": "lizard", "note": "a scaly example"})
+    )
+    assert not (world / "animals" / "grass_snake.json").is_file()
+    _inputs(tmp_path)
+    brief = json.loads((tmp_path / "home.json").read_text())
+    research = json.loads((tmp_path / "research.json").read_text())
+    region = json.loads((tmp_path / "regions" / "fi_test.json").read_text())
+    prompt = AnimalMakerStage()._animal_prompt(
+        world, brief, research, region, _anaconda_target()
+    )
+    assert "a scaly example" in prompt
+    assert "grass_snake" not in prompt
+
+
+def test_animal_example_falls_back_to_start_from(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    brief = json.loads((tmp_path / "home.json").read_text())
+    research = json.loads((tmp_path / "research.json").read_text())
+    region = json.loads((tmp_path / "regions" / "fi_test.json").read_text())
+    target = _anaconda_target()
+    del target["entry"]["file_from"]
+    (world / "animals" / "grass_snake.json").write_text(
+        json.dumps({"id": "grass_snake", "note": "an old-list example"})
+    )
+    prompt = AnimalMakerStage()._animal_prompt(world, brief, research, region, target)
+    assert "an old-list example" in prompt
+
+
 def test_prey_comes_before_the_animal(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())

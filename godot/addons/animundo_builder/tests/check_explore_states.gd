@@ -114,9 +114,12 @@ func _check_screen(mode: Node, cloud: StubCloud) -> void:
 	if screen == null:
 		errors.append("the Builder screen didn't open")
 		return
-	var tabs := _tabs_of(screen)
-	if tabs == null or tabs.get_tab_count() != 2:
-		errors.append("the Builder screen has no areas and drafts tabs")
+	var make := screen.get_meta("make") as Button
+	if make == null or make.text != mode._strings.t("explore.screen.make_home"):
+		errors.append("the Builder screen has no Make a new home button")
+	var list := screen.get_meta("list") as VBoxContainer
+	if list == null or list.get_child_count() != 1:
+		errors.append("the Builder screen shows no drafts list")
 	cloud.uid = ""
 	screen.queue_free()
 	await process_frame
@@ -215,10 +218,6 @@ func _screen_of(mode: Node) -> CanvasLayer:
 	return null
 
 
-func _tabs_of(screen: CanvasLayer) -> TabContainer:
-	return screen.get_meta("tabs") as TabContainer
-
-
 func _status_of(screen: CanvasLayer) -> String:
 	return (screen.get_meta("status") as Label).text
 
@@ -267,8 +266,6 @@ func _cleanup(hooks: Variant) -> void:
 	hooks.remove_places_button("explore.ask_place")
 	_remove_dir("user://packs/zzrd1")
 	_remove_dir("user://packs/_addon")
-	if FileAccess.file_exists("user://builder_lang.txt"):
-		DirAccess.remove_absolute("user://builder_lang.txt")
 
 
 func _remove_dir(path: String) -> void:

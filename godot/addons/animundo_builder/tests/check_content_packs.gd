@@ -52,7 +52,7 @@ func _check_rules() -> void:
 	var bad := [
 		["not an object", [1, 2]],
 		["missing key", _without(_good_manifest(), "place_id")],
-		["bad draft_place_id", _with(_good_manifest(), "draft_place_id", "zzpk1")],
+		["capital draft_place_id", _with(_good_manifest(), "draft_place_id", "draft_ZzPk1")],
 		["version 0", _with(_good_manifest(), "version", 0)],
 		["newer format", _with(_good_manifest(), "format", 99)],
 		["no files", _with(_good_manifest(), "files", [])],

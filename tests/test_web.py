@@ -262,3 +262,11 @@ def test_animal_list_matches_world() -> None:
     if not world.is_file():
         pytest.skip(f"needs {world}")
     assert _json(WEB / "animal-list.json") == _json(world)
+
+
+def test_play_link_uses_the_firestore_draft_id() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    # The address carries the draft's Firestore id, capitals and all;
+    # the safe lower-case place id lives only in the pack (#93).
+    assert "?draft=${encodeURIComponent(draft.id)}" in app
+    assert "draft_place_id" not in app

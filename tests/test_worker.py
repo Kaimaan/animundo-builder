@@ -14,6 +14,7 @@ from builder.config import Config
 from builder.ledger import CapExceeded, Caps, FileLedger
 from builder.pipeline import StageFailedError
 from builder.stages.capability import NotPossibleError
+from builder.stages.pack import draft_place_id
 from builder.worker import DELETE, RoundFailed, Worker
 
 AREA = {
@@ -275,7 +276,7 @@ def test_create_builds_ready_with_feed_and_cost(tmp_path: Path) -> None:
     assert draft["place_name"] == "Repovesi"
     assert draft["country"] == "FI"
     assert draft["center"] == {"lat": 61.18, "lon": 26.88}
-    assert draft["draft_place_id"] == "draft_d1"
+    assert draft["draft_place_id"] == draft_place_id("d1")
     assert draft["place_id"] == "fi_repovesi"
     assert runner.ran[0] == "intake" and runner.ran[-1] == "pack"
     assert runner.versions == [1]

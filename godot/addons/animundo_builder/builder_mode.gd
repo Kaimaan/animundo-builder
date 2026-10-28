@@ -71,8 +71,8 @@ func set_explorer(species: String) -> void:
 ## Opens a draft from the address (D9): the game awaits this with the draft
 ## id and starts the returned place for this session. The pack downloads,
 ## checks and installs; playing is recorded but the opening doesn't depend
-## on it (#91). A missing draft, a failed download or a failed install
-## returns "" and leaves nothing registered.
+## on it (#91). A missing draft, a failed download, a failed install or a
+## place id the game can't use (#93) returns "" and leaves nothing started.
 func open_draft(draft_id: String) -> String:
 	if not _booted:
 		return ""
@@ -87,7 +87,11 @@ func open_draft(draft_id: String) -> String:
 	if not await _cloud.record_played(draft_id):
 		push_warning("BuilderMode: record_played failed for " + draft_id)
 	var manifest: Variant = _read_json(pack_folder(draft_id, version) + "manifest.json")
-	return str(manifest.get("draft_place_id", ""))
+	var place_id := str(manifest.get("draft_place_id", ""))
+	if not _hooks.is_id(place_id):
+		push_warning("BuilderMode: bad draft_place_id for " + draft_id)
+		return ""
+	return place_id
 
 
 ## The draft's folder: its id, made safe for the folder pattern (lowercase

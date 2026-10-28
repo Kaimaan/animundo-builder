@@ -38,6 +38,7 @@ from .report import build_report
 from .schemas import validate
 from .stages import IntakeStage
 from .stages.capability import NotPossibleError
+from .stages.pack import draft_place_id
 from .submit import SubmitFailed, run_submit
 
 MAX_ATTEMPTS = 3
@@ -229,7 +230,7 @@ class Worker:
                 "place_name": region.get("name", ""),
                 "country": region.get("country", ""),
                 "center": _rounded(region.get("center")),
-                "draft_place_id": f"draft_{draft_id}",
+                "draft_place_id": draft_place_id(draft_id),
                 "place_id": doc.get("area_id", "") or region.get("id", ""),
             },
         )

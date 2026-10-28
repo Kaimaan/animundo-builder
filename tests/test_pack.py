@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,7 @@ import pytest
 
 from builder.pipeline import BudgetTracker, JobContext
 from builder.stages import pack as pack_module
-from builder.stages.pack import PackStage
+from builder.stages.pack import PackStage, draft_place_id
 
 PASS_STUB = 'import json; print(json.dumps({"ok": True, "results": []}))\n'
 
@@ -92,18 +93,19 @@ def test_pack_lays_out_spec_layout(tmp_path: Path) -> None:
     assert result["version"] == 1
     assert result["manifest"] == "pack/manifest.json"
     pack = job / "pack"
-    region = json.loads((pack / "regions" / "draft_job-1.json").read_text())
-    assert region["id"] == "draft_job-1"
+    place = draft_place_id("job-1")
+    region = json.loads((pack / "regions" / f"{place}.json").read_text())
+    assert region["id"] == place
     assert (pack / "animals" / "red_deer.json").is_file()
     assert (pack / "models" / "red_deer.glb").read_bytes() == b"GLB" * 10
     assert (pack / "previews" / "red_deer.png").is_file()
     assert (pack / "models" / "plants" / "wood_sorrel.glb").is_file()
     assert (pack / "previews" / "wood_sorrel.png").is_file()
     locale = json.loads((pack / "locale" / "en" / "regions.json").read_text())
-    assert locale == {"region.draft_job-1.name": "Test Meadow"}
+    assert locale == {f"region.{place}.name": "Test Meadow"}
     manifest = json.loads((pack / "manifest.json").read_text())
     assert manifest["draft_id"] == "job-1"
-    assert manifest["draft_place_id"] == "draft_job-1"
+    assert manifest["draft_place_id"] == place
     assert manifest["place_id"] == "xx_test"
     assert manifest["version"] == 1
     assert manifest["format"] == 1
@@ -179,3 +181,17 @@ def test_pack_needs_world(tmp_path: Path) -> None:
     job = _job(tmp_path)
     with pytest.raises(ValueError, match="needs --world"):
         PackStage().run(_ctx(job, None))
+
+
+def test_pack_place_id_is_lower_case_and_safe(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    ctx = _ctx(job, world)
+    ctx.job_id = "K8j5PJ8oSZJix8PqYV8P"
+    PackStage().run(ctx)
+    manifest = json.loads((job / "pack" / "manifest.json").read_text())
+    place = manifest["draft_place_id"]
+    assert place == draft_place_id("K8j5PJ8oSZJix8PqYV8P")
+    assert re.fullmatch(r"[a-z0-9_]+", place), place
+    assert (job / "pack" / "regions" / f"{place}.json").is_file()
+    assert draft_place_id("a-b") != draft_place_id("a_b")

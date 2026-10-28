@@ -31,7 +31,13 @@ func content_folders() -> PackedStringArray:
 	return folders.duplicate()
 
 
+func is_id(id: String) -> bool:
+	return RegEx.create_from_string("^[a-z0-9_]+$").search(id) != null
+
+
 func find_file(sub_dir: String, id: String, ext := ".json") -> String:
+	if not is_id(id):
+		return ""
 	for folder in folders:
 		var path := folder + sub_dir + "/" + id + ext
 		if FileAccess.file_exists(path):

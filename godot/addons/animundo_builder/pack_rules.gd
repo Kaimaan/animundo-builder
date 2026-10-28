@@ -10,6 +10,9 @@ extends RefCounted
 const PACK_FORMAT := 1
 const MAX_GLB_BYTES := 2 * 1024 * 1024
 const MAX_PACK_BYTES := 8 * 1024 * 1024
+## The game's id pattern (BuilderHooks.ID_PATTERN): a region the game
+## can't find must fail here, not after installing (#93).
+const PLACE_ID_PATTERN := "^[a-z0-9_]+$"
 const DATA_DIRS: Array[String] = ["regions/", "animals/", "models/", "locale/", "previews/"]
 const DATA_EXTS: Array[String] = [".json", ".glb", ".png"]
 
@@ -24,8 +27,9 @@ static func manifest_error(manifest: Variant) -> String:
 			return "manifest misses " + key
 	if str(manifest["draft_id"]) == "" or str(manifest["place_id"]) == "":
 		return "manifest has an empty id"
-	if not str(manifest["draft_place_id"]).begins_with("draft_"):
-		return "draft_place_id doesn't start with draft_"
+	if RegEx.create_from_string(PLACE_ID_PATTERN).search(
+			str(manifest["draft_place_id"])) == null:
+		return "draft_place_id is not a game id"
 	if not _is_int(manifest["version"]) or int(manifest["version"]) < 1:
 		return "version is not a positive integer"
 	if not _is_int(manifest["format"]) or int(manifest["format"]) < 1:

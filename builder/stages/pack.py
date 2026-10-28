@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,21 @@ from ..world import check_draft
 PACK_FORMAT = 1
 MAX_GLB_BYTES = 2 * 1024 * 1024
 MAX_PACK_BYTES = 8 * 1024 * 1024
+
+
+def draft_place_id(draft_id: str) -> str:
+    """The draft's place id: lower case and safe for the game (#93).
+
+    The game's ids match `^[a-z0-9_]+$`, but Firestore ids have
+    capitals, so the raw id installs a region the game can't find.
+    Same idea as the addon's `pack_folder`: `draft_` plus the id
+    lower-cased with anything outside `[a-z0-9]` turned into `_`,
+    plus the first 8 hex of the id's sha256, so two ids that clean
+    the same ("a-b", "a_b") still differ.
+    """
+    safe = re.sub(r"[^a-z0-9]", "_", draft_id.lower())
+    tag = hashlib.sha256(draft_id.encode("utf-8")).hexdigest()[:8]
+    return f"draft_{safe}_{tag}"
 
 
 class PackStage:
@@ -50,12 +66,12 @@ class PackStage:
         )
         region_path = next((ctx.job_dir / "regions").glob("*.json"))
         region = json.loads(region_path.read_text(encoding="utf-8"))
-        draft_place_id = f"draft_{ctx.job_id}"
+        place = draft_place_id(ctx.job_id)
         pack = ctx.job_dir / "pack"
         if pack.exists():
             shutil.rmtree(pack)
-        pack_region = dict(region, id=draft_place_id)
-        _write(pack / "regions" / f"{draft_place_id}.json", pack_region)
+        pack_region = dict(region, id=place)
+        _write(pack / "regions" / f"{place}.json", pack_region)
         for species_id in new_ids:
             _copy(
                 ctx.job_dir / "animals" / f"{species_id}.json",
@@ -79,11 +95,11 @@ class PackStage:
             rel = source.relative_to(ctx.job_dir / "locale")
             _write(
                 pack / "locale" / rel,
-                _redraft_keys(keys, region["id"], draft_place_id),
+                _redraft_keys(keys, region["id"], place),
             )
         manifest = {
             "draft_id": ctx.job_id,
-            "draft_place_id": draft_place_id,
+            "draft_place_id": place,
             "place_id": region["id"],
             "version": self.version,
             "format": PACK_FORMAT,

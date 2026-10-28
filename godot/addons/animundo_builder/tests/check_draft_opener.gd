@@ -1,10 +1,10 @@
 extends SceneTree
 ## Opening a draft from the address (D9): boot registers the opener and both
 ## buttons (both open the web app); a stub draft installs and returns its
-## place id; a bad hash, an unknown draft, no pack version and a failed
-## download all return ""; a failed record_played still opens (#91);
-## utc_now matches the game's timestamp pattern; and no globe look is
-## ever set. The id is mixed
+## place id; a bad hash, an unknown draft, no pack version, a failed
+## download and a capital place id all return ""; a failed record_played
+## still opens (#91); utc_now matches the game's timestamp pattern; and
+## no globe look is ever set. The id is mixed
 ## case with a hyphen, like a real Firestore id; its folder still fits the
 ## game's lowercase-only pattern. The game half runs only in the game.
 ## Run: godot --headless --path <project> --script
@@ -109,6 +109,17 @@ func _check_opens(mode: Node, hooks: Variant, cloud: StubCloud) -> void:
 	elif DirAccess.dir_exists_absolute(folder):
 		errors.append("a pack with a wrong hash lands on disk")
 	cloud.packs[DRAFT + "/1/regions/" + PLACE + ".json"] = _region_bytes()
+	# A place id with capitals fails at the check, not after installing (#93).
+	var bad := JSON.parse_string(_manifest_bytes().get_string_from_utf8())
+	bad["draft_place_id"] = "draft_ZzPk1"
+	cloud.packs[DRAFT + "/1/manifest.json"] = JSON.stringify(bad).to_utf8_buffer()
+	if await mode.open_draft(DRAFT) != "":
+		errors.append("a capital place id opens")
+	elif folder in (hooks.content_folders() as PackedStringArray):
+		errors.append("a capital place id is registered")
+	elif DirAccess.dir_exists_absolute(folder):
+		errors.append("a capital place id lands on disk")
+	cloud.packs[DRAFT + "/1/manifest.json"] = _manifest_bytes()
 	if await mode.open_draft(DRAFT) != PLACE:
 		errors.append("the stub draft doesn't open its place")
 	elif not folder in (hooks.content_folders() as PackedStringArray):

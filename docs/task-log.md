@@ -3,6 +3,34 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #93, tagged `v0.3.2`
+
+- Every pack's `draft_place_id` had the Firestore id's capitals,
+  which the game's `^[a-z0-9_]+$` refuses, so each pack installed
+  and then its region couldn't be found. One helper
+  (`pack.draft_place_id`, like the addon's `pack_folder`) now
+  names it everywhere: `draft_` + the id lower-cased and cleaned
+  + 8 hex of its sha256, so "a-b" and "a_b" still differ. The
+  pack (region id, file, manifest) and the draft doc use it; the
+  web Play link still carries the raw Firestore id (tested).
+- The opener returns "" with a warning when the manifest's place
+  id isn't a game id (`BuilderHooks.is_id`), and
+  `PackRules.manifest_error` refuses such a manifest, so a bad
+  pack fails at the check: nothing registered, nothing on disk.
+  The stub hooks grew the same `is_id` guard on `find_file`,
+  which is why the stubs never caught this.
+- Suite: 606 passed, 12 skipped; ruff check + format clean; all
+  3 headless checks 0 errors against stubs and again against the
+  game's real hooks in a throwaway game copy (removed after).
+- #93.4, for the reviewer (Kai's Mac, no model calls): `builder
+  stage pack --job jobs/K8j5PJ8oSZJix8PqYV8P` rewrites `pack/`
+  with `draft_k8j5pj8oszjix8pqyv8p_efb9feaf`; upload every file
+  under it to `packs/K8j5PJ8oSZJix8PqYV8P/1/<rel>` as
+  `worker_store.upload_pack` does (same version, overwrites the
+  bad pack); set the draft's `draft_place_id` to the new id;
+  the old `regions/draft_K8j5...json` object can be deleted.
+- Tagged alone per #93: D10–D12 move to `v0.3.3`.
+
 ## 2026-10-28: inbox #90-#91, tagged `v0.3.1`
 
 - #90: Your drafts shows from the first paint when signed in

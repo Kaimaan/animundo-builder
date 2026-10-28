@@ -8,8 +8,11 @@ real places. Built with Muse Code for the Meta Global AI Developer Hackathon
 The grown-up builder is gone. Every grown-up-built place was a separate
 world and a separate decision; nature changes slowly, so most land is now
 made by code from content already reviewed, and agents build only where
-children reach the edge of the known world. No animundo.app/build, no
-family drafts, no grown-up requests.
+children reach the edge of the known world.
+
+The builder is a factory: it is given work, says what the work needs and
+costs, makes it, and reports back. It holds no policy and no game code;
+the game runs the world. No web pages, no game addon, no Firestore rules.
 
 **Status:** phase 0. The contracts are schemas, the grown-up builder is
 removed, and the tile maker lands next. The full README, written for the
@@ -23,9 +26,7 @@ contracts/  # the shared contracts as JSON Schemas
 schemas/    # the agents' working schemas
 tests/      # pytest suite; no paid API calls in unit tests
 docs/       # design docs, written as each part lands
-firebase/   # Firestore and Storage rules with emulator tests
-godot/      # the game-side addon for judge previews
-web/admin/  # the admin panel: the request queue and review
+firebase/   # Storage rules with emulator tests (Firestore rules are the game's)
 data/       # baked data: the habitat grid, well-known places
 ```
 

@@ -11,6 +11,8 @@
     "version",
     "center",
     "grid_north",
+    "level",
+    "height",
     "edges",
     "requires"
   ],
@@ -29,6 +31,8 @@
       }
     },
     "grid_north": {"type": "number", "minimum": -180, "maximum": 180},
+    "level": {"type": "integer", "minimum": 1},
+    "height": {"enum": [32, 64]},
     "habitat": {
       "enum": [
         "boreal_forest",
@@ -52,28 +56,16 @@
         "open_ocean"
       ]
     },
-    "home": {
-      "enum": [
-        "boreal_forest",
-        "boreal_lake",
-        "desert",
-        "forest",
-        "grassland",
-        "ice",
-        "lake",
-        "mangrove",
-        "mountain",
-        "rainforest",
-        "reef",
-        "river",
-        "savanna",
-        "sea",
-        "tundra",
-        "wetland",
-        "dry_forest",
-        "mediterranean",
-        "open_ocean"
-      ]
+    "ecoregion": {"type": "integer", "minimum": 0},
+    "home": {"type": "string", "minLength": 1},
+    "blend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["home", "share"],
+      "properties": {
+        "home": {"type": "string", "minLength": 1},
+        "share": {"type": "number", "minimum": 0.1, "maximum": 0.5}
+      }
     },
     "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
     "water": {"type": "number", "minimum": 0, "maximum": 1},
@@ -164,7 +156,8 @@
       "properties": {
         "habitat": {"type": "string", "minLength": 1},
         "water": {"type": "string", "minLength": 1},
-        "species": {"type": "string", "minLength": 1}
+        "species": {"type": "string", "minLength": 1},
+        "elevation": {"type": "string", "minLength": 1}
       }
     },
     "made": {
@@ -190,7 +183,7 @@
     {
       "if": {"properties": {"kind": {"const": "code"}}},
       "then": {
-        "required": ["habitat", "home", "seed", "water", "species", "sources", "made"],
+        "required": ["habitat", "ecoregion", "home", "seed", "water", "species", "sources", "made"],
         "properties": {"place": false, "part": false}
       }
     },
@@ -200,7 +193,9 @@
         "required": ["place", "part"],
         "properties": {
           "habitat": false,
+          "ecoregion": false,
           "home": false,
+          "blend": false,
           "seed": false,
           "water": false,
           "species": false

@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "tile": "n_413_296",
+  "kind": "build",
+  "items": [
+    "tundra-home",
+    "reindeer"
+  ],
+  "budget_usd": 1.2,
+  "visibility": "public",
+  "created_by": "admin",
+  "status": "queued",
+  "progress": [],
+  "cost_usd": 0.0,
+  "created_at": "2026-11-01T10:00:00Z",
+  "updated_at": "2026-11-01T10:00:00Z"
+}

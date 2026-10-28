@@ -1,10 +1,11 @@
-"""`builder worker --listen`: grow the world from Firestore.
+"""`builder worker --listen`: plan border requests, build jobs.
 
-Phase 0 keeps the listener and the atomic claim; the draft flows
-are gone and the border flows (intake, planning, building) land
-in phase 2. This worker watches `border_requests`,
-`judge_builds` and `admin_actions` and logs what phase 2 will
-build. Nothing is built yet.
+The builder is a factory (D17): the game runs the world, the worker
+plans every new or changed border request and builds only the build
+jobs the game creates. Phase 0 keeps the listener and the atomic
+claim; planning (T74) and building (T76) land in phase 2. This
+worker watches `border_requests` and `build_jobs` and logs what
+phase 2 will do. Nothing is built yet.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .config import Config
-from .schemas import validate
 
 #: A document update value that deletes the field.
 DELETE = object()
@@ -31,7 +31,7 @@ TRANSIENT = (ConnectionError, TimeoutError)
 
 
 class RoundFailed(Exception):
-    """One round failed with a short error code for the area."""
+    """One round failed with a short error code for the job."""
 
     def __init__(self, code: str, detail: str = "") -> None:
         super().__init__(detail or code)
@@ -42,22 +42,20 @@ class Store(Protocol):
     """The Firestore surface the worker needs."""
 
     def get_request(self, tile: str) -> dict[str, Any] | None: ...
-    def get_area(self, tile: str) -> dict[str, Any] | None: ...
-    def update_area(self, tile: str, fields: dict[str, Any]) -> None: ...
-    def claim_area(self, tile: str, worker_id: str) -> bool: ...
-    def get_judge_build(self, build_id: str) -> dict[str, Any] | None: ...
-    def update_judge_build(self, build_id: str, fields: dict[str, Any]) -> None: ...
-    def get_action(self, action_id: str) -> dict[str, Any] | None: ...
-    def update_action(self, action_id: str, fields: dict[str, Any]) -> None: ...
-    def pending_actions(self) -> list[tuple[str, dict[str, Any]]]: ...
-    def add_inbox(self, item: dict[str, Any]) -> str: ...
+    def get_plan(self, tile: str) -> dict[str, Any] | None: ...
+    def set_plan(self, tile: str, doc: dict[str, Any]) -> None: ...
+    def get_build_job(self, job_id: str) -> dict[str, Any] | None: ...
+    def update_build_job(self, job_id: str, fields: dict[str, Any]) -> None: ...
+    def claim_build_job(self, job_id: str, worker_id: str) -> bool: ...
+    def pending_build_jobs(self) -> list[tuple[str, dict[str, Any]]]: ...
+    def add_alert(self, item: dict[str, Any]) -> str: ...
     def get_job(self, job_id: str) -> dict[str, Any] | None: ...
     def set_job(self, job_id: str, doc: dict[str, Any]) -> None: ...
     def update_job(self, job_id: str, fields: dict[str, Any]) -> None: ...
 
 
 def default_worker_id() -> str:
-    """This worker, for the area it claims: host and pid."""
+    """This worker, for the job it claims: host and pid."""
     return f"{socket.gethostname()}:{os.getpid()}"
 
 
@@ -84,39 +82,25 @@ class Worker:
         """Queue a border request unless it is already queued."""
         return ("request", tile) not in self.in_flight
 
-    def note_judge_build(self, build_id: str, data: dict[str, Any]) -> bool:
-        """Queue a judge build unless it is already queued."""
-        return ("judge_build", build_id) not in self.in_flight
-
-    def note_action(self, action_id: str, data: dict[str, Any]) -> bool:
-        """Queue an admin action unless it is done or already queued."""
-        if data.get("done_at") or ("action", action_id) in self.in_flight:
+    def note_build_job(self, job_id: str, data: dict[str, Any]) -> bool:
+        """Queue a build job unless it is done or already queued."""
+        if data.get("status") in ("published", "failed"):
             return False
-        return True
+        return ("build_job", job_id) not in self.in_flight
 
     # -- top-level flows (phase 2 builds these) ---------------------
 
     def handle_request(self, tile: str) -> None:
-        print(f"request {tile}: phase 2 plans and routes this")
+        print(f"request {tile}: phase 2 plans this")
 
-    def handle_judge_build(self, build_id: str) -> None:
-        print(f"judge build {build_id}: phase 2 builds this")
-
-    def handle_action(self, action_id: str) -> None:
-        print(f"action {action_id}: phase 2 carries this out")
+    def handle_build_job(self, job_id: str) -> None:
+        print(f"build job {job_id}: phase 2 builds this")
 
     # -- helpers ------------------------------------------------------
 
-    def inbox(self, item: dict[str, Any]) -> str:
-        full = {"handled": False, "at": now_iso(), **item}
-        validate("admin-inbox-item", full)
-        return self.store.add_inbox(full)
-
-    def _finish_action(self, action_id: str, error: str | None) -> None:
-        fields: dict[str, Any] = {"done_at": now_iso()}
-        if error is not None:
-            fields["error"] = error
-        self.store.update_action(action_id, fields)
+    def alert(self, item: dict[str, Any]) -> str:
+        full = {"at": now_iso(), **item}
+        return self.store.add_alert(full)
 
 
 @dataclass
@@ -124,17 +108,16 @@ class Listener:
     """The `--listen` loop: Firestore snapshots in, one queue, FIFO out."""
 
     worker: Worker
-    store: Any  # FirebaseStore: watch_requests/watch_judge_builds/watch_actions
+    store: Any  # FirebaseStore: watch_requests/watch_build_jobs
     events: queue.Queue = field(default_factory=queue.Queue)
     stop: threading.Event = field(default_factory=threading.Event)
 
     def start(self) -> None:
-        for action_id, doc in self.store.pending_actions():
-            if self.worker.note_action(action_id, doc):
-                self.events.put(("action", action_id))
+        for job_id, doc in self.store.pending_build_jobs():
+            if self.worker.note_build_job(job_id, doc):
+                self.events.put(("build_job", job_id))
         unsub_requests = self.store.watch_requests(self._on_requests)
-        unsub_judge_builds = self.store.watch_judge_builds(self._on_judge_builds)
-        unsub_actions = self.store.watch_actions(self._on_actions)
+        unsub_jobs = self.store.watch_build_jobs(self._on_build_jobs)
         print("worker listening (Ctrl-C stops it)")
         try:
             while not self.stop.is_set():
@@ -148,8 +131,7 @@ class Listener:
             pass
         finally:
             unsub_requests()
-            unsub_judge_builds()
-            unsub_actions()
+            unsub_jobs()
 
     def _on_requests(self, snapshots: Any, changes: Any, _read_time: Any) -> None:
         for change in changes:
@@ -159,21 +141,13 @@ class Listener:
             if self.worker.note_request(change.document.id, data):
                 self.events.put(("request", change.document.id))
 
-    def _on_judge_builds(self, snapshots: Any, changes: Any, _read_time: Any) -> None:
+    def _on_build_jobs(self, snapshots: Any, changes: Any, _read_time: Any) -> None:
         for change in changes:
             if change.type.name == "REMOVED":
                 continue
             data = change.document.to_dict() or {}
-            if self.worker.note_judge_build(change.document.id, data):
-                self.events.put(("judge_build", change.document.id))
-
-    def _on_actions(self, snapshots: Any, changes: Any, _read_time: Any) -> None:
-        for change in changes:
-            if change.type.name == "REMOVED":
-                continue
-            data = change.document.to_dict() or {}
-            if self.worker.note_action(change.document.id, data):
-                self.events.put(("action", change.document.id))
+            if self.worker.note_build_job(change.document.id, data):
+                self.events.put(("build_job", change.document.id))
 
     def _dispatch(self, kind: str, doc_id: str) -> None:
         key = (kind, doc_id)
@@ -184,10 +158,8 @@ class Listener:
             print(f"worker: {kind} {doc_id}")
             if kind == "request":
                 self.worker.handle_request(doc_id)
-            elif kind == "judge_build":
-                self.worker.handle_judge_build(doc_id)
-            elif kind == "action":
-                self.worker.handle_action(doc_id)
+            elif kind == "build_job":
+                self.worker.handle_build_job(doc_id)
             else:
                 print(f"worker: unknown kind {kind}", file=sys.stderr)
         except RoundFailed as error:

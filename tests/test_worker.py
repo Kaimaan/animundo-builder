@@ -16,10 +16,9 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.requests: dict[str, dict[str, Any]] = {}
-        self.areas: dict[str, dict[str, Any]] = {}
-        self.judge_builds: dict[str, dict[str, Any]] = {}
-        self.actions: dict[str, dict[str, Any]] = {}
-        self.inbox: list[dict[str, Any]] = []
+        self.plans: dict[str, dict[str, Any]] = {}
+        self.build_jobs: dict[str, dict[str, Any]] = {}
+        self.alerts: list[dict[str, Any]] = []
         self.jobs: dict[str, dict[str, Any]] = {}
         self.watchers: list[tuple[str, Any]] = []
         self._lock = threading.Lock()
@@ -27,52 +26,41 @@ class FakeStore:
     def get_request(self, tile: str) -> dict[str, Any] | None:
         return self.requests.get(tile)
 
-    def get_area(self, tile: str) -> dict[str, Any] | None:
-        return self.areas.get(tile)
+    def get_plan(self, tile: str) -> dict[str, Any] | None:
+        return self.plans.get(tile)
 
-    def update_area(self, tile: str, fields: dict[str, Any]) -> None:
-        doc = self.areas[tile]
+    def set_plan(self, tile: str, doc: dict[str, Any]) -> None:
+        self.plans[tile] = doc
+
+    def get_build_job(self, job_id: str) -> dict[str, Any] | None:
+        return self.build_jobs.get(job_id)
+
+    def update_build_job(self, job_id: str, fields: dict[str, Any]) -> None:
+        doc = self.build_jobs[job_id]
         for key, value in fields.items():
             if value is DELETE:
                 doc.pop(key, None)
             else:
                 doc[key] = value
 
-    def claim_area(self, tile: str, worker_id: str) -> bool:
+    def claim_build_job(self, job_id: str, worker_id: str) -> bool:
         with self._lock:
-            doc = self.areas.get(tile)
-            if doc is None or doc.get("status") != "waiting" or doc.get("worker_id"):
+            doc = self.build_jobs.get(job_id)
+            if doc is None or doc.get("status") != "queued" or doc.get("worker_id"):
                 return False
             doc["worker_id"] = worker_id
             return True
 
-    def get_judge_build(self, build_id: str) -> dict[str, Any] | None:
-        return self.judge_builds.get(build_id)
-
-    def update_judge_build(self, build_id: str, fields: dict[str, Any]) -> None:
-        doc = self.judge_builds[build_id]
-        for key, value in fields.items():
-            if value is DELETE:
-                doc.pop(key, None)
-            else:
-                doc[key] = value
-
-    def get_action(self, action_id: str) -> dict[str, Any] | None:
-        return self.actions.get(action_id)
-
-    def update_action(self, action_id: str, fields: dict[str, Any]) -> None:
-        self.actions[action_id].update(fields)
-
-    def pending_actions(self) -> list[tuple[str, dict[str, Any]]]:
+    def pending_build_jobs(self) -> list[tuple[str, dict[str, Any]]]:
         return [
-            (action_id, doc)
-            for action_id, doc in self.actions.items()
-            if not doc.get("done_at")
+            (job_id, doc)
+            for job_id, doc in self.build_jobs.items()
+            if doc.get("status") not in ("published", "failed")
         ]
 
-    def add_inbox(self, item: dict[str, Any]) -> str:
-        self.inbox.append(item)
-        return f"inbox-{len(self.inbox)}"
+    def add_alert(self, item: dict[str, Any]) -> str:
+        self.alerts.append(item)
+        return f"alert-{len(self.alerts)}"
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         return self.jobs.get(job_id)
@@ -87,12 +75,8 @@ class FakeStore:
         self.watchers.append(("requests", callback))
         return lambda: None
 
-    def watch_judge_builds(self, callback: Any) -> Any:
-        self.watchers.append(("judge_builds", callback))
-        return lambda: None
-
-    def watch_actions(self, callback: Any) -> Any:
-        self.watchers.append(("actions", callback))
+    def watch_build_jobs(self, callback: Any) -> Any:
+        self.watchers.append(("build_jobs", callback))
         return lambda: None
 
 
@@ -119,61 +103,46 @@ def test_note_request_queues_once(tmp_path: Path) -> None:
     assert worker.note_request("n_413_296", {}) is False
 
 
-def test_note_judge_build_queues_once(tmp_path: Path) -> None:
+def test_note_build_job_skips_done_and_in_flight(tmp_path: Path) -> None:
     worker = _worker(tmp_path, FakeStore())
-    assert worker.note_judge_build("b1", {}) is True
-    worker.in_flight.add(("judge_build", "b1"))
-    assert worker.note_judge_build("b1", {}) is False
+    assert worker.note_build_job("j1", {"status": "queued"}) is True
+    assert worker.note_build_job("j2", {"status": "published"}) is False
+    assert worker.note_build_job("j3", {"status": "failed"}) is False
+    worker.in_flight.add(("build_job", "j1"))
+    assert worker.note_build_job("j1", {"status": "queued"}) is False
 
 
-def test_note_action_skips_done_and_in_flight(tmp_path: Path) -> None:
-    worker = _worker(tmp_path, FakeStore())
-    assert worker.note_action("a1", {}) is True
-    assert worker.note_action("a2", {"done_at": "then"}) is False
-    worker.in_flight.add(("action", "a1"))
-    assert worker.note_action("a1", {}) is False
-
-
-def test_claim_area_leaves_one_winner() -> None:
+def test_claim_build_job_leaves_one_winner() -> None:
     store = FakeStore()
-    store.areas["n_413_296"] = {"status": "waiting"}
-    assert store.claim_area("n_413_296", "w1") is True
-    assert store.claim_area("n_413_296", "w2") is False
-    assert store.areas["n_413_296"]["worker_id"] == "w1"
+    store.build_jobs["j1"] = {"status": "queued"}
+    assert store.claim_build_job("j1", "w1") is True
+    assert store.claim_build_job("j1", "w2") is False
+    assert store.build_jobs["j1"]["worker_id"] == "w1"
 
 
-def test_claim_area_needs_waiting() -> None:
+def test_claim_build_job_needs_queued() -> None:
     store = FakeStore()
-    assert store.claim_area("n_000_000", "w1") is False
-    store.areas["n_413_296"] = {"status": "ready"}
-    assert store.claim_area("n_413_296", "w1") is False
+    assert store.claim_build_job("missing", "w1") is False
+    store.build_jobs["j1"] = {"status": "building"}
+    assert store.claim_build_job("j1", "w1") is False
 
 
-def test_two_workers_on_one_area_only_one_claims(tmp_path: Path) -> None:
-    store = FakeStore()
-    store.areas["n_413_296"] = {"status": "waiting"}
-    first = _worker(tmp_path, store)
-    second = _worker(tmp_path, store)
-    assert store.claim_area("n_413_296", first.worker_id) is True
-    assert store.claim_area("n_413_296", second.worker_id) is False
-
-
-def test_handle_request_logs_and_builds_nothing(tmp_path: Path, capsys: Any) -> None:
+def test_handle_request_logs_and_plans_nothing(tmp_path: Path, capsys: Any) -> None:
     store = FakeStore()
     store.requests["n_413_296"] = {"tile": "n_413_296"}
     worker = _worker(tmp_path, store)
     worker.handle_request("n_413_296")
     assert "phase 2" in capsys.readouterr().out
-    assert "n_413_296" not in store.areas
+    assert "n_413_296" not in store.plans
 
 
-def test_handle_action_leaves_it_pending(tmp_path: Path) -> None:
+def test_handle_build_job_leaves_it_queued(tmp_path: Path) -> None:
     store = FakeStore()
-    store.actions["a1"] = {"action": "approve_request", "tile": "n_413_296"}
+    store.build_jobs["j1"] = {"status": "queued", "tile": "n_413_296"}
     worker = _worker(tmp_path, store)
-    worker.handle_action("a1")
-    assert "done_at" not in store.actions["a1"]
-    assert len(store.pending_actions()) == 1
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "queued"
+    assert len(store.pending_build_jobs()) == 1
 
 
 def test_dispatch_runs_and_releases(tmp_path: Path) -> None:
@@ -181,10 +150,8 @@ def test_dispatch_runs_and_releases(tmp_path: Path) -> None:
     listener = Listener(worker=worker, store=FakeStore())
     listener._dispatch("request", "n_413_296")
     assert ("request", "n_413_296") not in worker.in_flight
-    listener._dispatch("judge_build", "b1")
-    assert ("judge_build", "b1") not in worker.in_flight
-    listener._dispatch("action", "a1")
-    assert ("action", "a1") not in worker.in_flight
+    listener._dispatch("build_job", "j1")
+    assert ("build_job", "j1") not in worker.in_flight
 
 
 def test_dispatch_survives_unknown_kinds(tmp_path: Path, capsys: Any) -> None:

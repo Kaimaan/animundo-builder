@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/plan.schema.json",
+  "title": "One border plan: what the tile needs and what that costs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "tile",
+    "code_only",
+    "items",
+    "improve",
+    "estimate_usd",
+    "name",
+    "coming",
+    "world",
+    "planned_at"
+  ],
+  "properties": {
+    "format": {"const": 1},
+    "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "code_only": {"type": "boolean"},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "what", "from", "estimate_usd"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["home", "animal", "plant", "food"]},
+          "what": {"type": "string", "minLength": 1},
+          "from": {"type": "string", "minLength": 1},
+          "estimate_usd": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "improve": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "what", "from", "estimate_usd"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["home", "animal", "plant", "food"]},
+          "what": {"type": "string", "minLength": 1},
+          "from": {"type": "string", "minLength": 1},
+          "estimate_usd": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "estimate_usd": {"type": "number", "minimum": 0},
+    "name": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "fi"],
+      "properties": {
+        "en": {"type": "string", "minLength": 1},
+        "fi": {"type": "string", "minLength": 1}
+      }
+    },
+    "coming": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+    },
+    "world": {"type": "string", "minLength": 1},
+    "planned_at": {"type": "string", "minLength": 1}
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/build-job.schema.json",
+  "title": "One build job: approved work the builder builds within its budget",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "tile",
+    "kind",
+    "items",
+    "budget_usd",
+    "visibility",
+    "created_by",
+    "status",
+    "cost_usd",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "format": {"const": 1},
+    "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "kind": {"enum": ["code", "build"]},
+    "items": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "budget_usd": {"type": "number", "minimum": 0},
+    "visibility": {"enum": ["public", "private"]},
+    "private_to": {"type": "string", "minLength": 1},
+    "created_by": {"enum": ["policy", "admin"]},
+    "status": {
+      "enum": ["queued", "building", "checking", "published", "failed"]
+    },
+    "progress": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "cost_usd"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "status": {"enum": ["building", "checking", "failed"]},
+          "report": {"type": "string", "minLength": 1},
+          "cost_usd": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack"],
+      "properties": {
+        "pack": {"type": "string", "minLength": 1}
+      }
+    },
+    "review": {
+      "type": "object",
+      "propertyNames": {"pattern": "^.+$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["result", "at"],
+        "properties": {
+          "result": {"enum": ["shipped", "not_accepted"]},
+          "reason": {"enum": ["quality", "other"]},
+          "at": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "cost_usd": {"type": "number", "minimum": 0},
+    "error": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "updated_at": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"visibility": {"const": "private"}}},
+      "then": {"required": ["private_to"]}
+    }
+  ]
+}

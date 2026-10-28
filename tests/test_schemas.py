@@ -44,7 +44,7 @@ def _schema_names(folder: Path) -> set[str]:
 
 
 def test_every_schema_has_both_sides() -> None:
-    contracts = schema_path("area").parent
+    contracts = schema_path("tile").parent
     schemas = _schema_names(contracts) | _schema_names(contracts.parent / "schemas")
     assert set(_valid_names()) == schemas
     broken_by_schema: dict[str, int] = {}
@@ -105,27 +105,34 @@ def test_border_note_refuses_player_fields() -> None:
             validate("border-note", note)
 
 
-def test_area_refuses_player_fields() -> None:
+def test_plan_refuses_player_fields() -> None:
     for field in ("player_id", "uid", "owner_uid"):
-        area = _valid("area")
-        area[field] = "kid-1"
+        plan = _valid("plan")
+        plan[field] = "kid-1"
         with pytest.raises(jsonschema.ValidationError):
-            validate("area", area)
+            validate("plan", plan)
 
 
-def test_admin_action_needs_item_for_ship() -> None:
-    action = _valid("admin-action")
-    action["action"] = "ship_item"
+def test_build_job_needs_private_to_when_private() -> None:
+    job = _valid("build-job")
+    job["visibility"] = "private"
     with pytest.raises(jsonschema.ValidationError):
-        validate("admin-action", action)
-    action["item"] = "tundra-home"
-    validate("admin-action", action)
+        validate("build-job", job)
+    job["private_to"] = "judge1"
+    validate("build-job", job)
 
 
-def test_admin_action_needs_reason_for_turn_down() -> None:
-    action = _valid("admin-action")
-    action["action"] = "turn_down_request"
+def test_tile_height_is_32_or_64() -> None:
+    tile = _valid("tile")
+    tile["height"] = 48
     with pytest.raises(jsonschema.ValidationError):
-        validate("admin-action", action)
-    action["reason"] = "not_now"
-    validate("admin-action", action)
+        validate("tile", tile)
+    tile["height"] = 64
+    validate("tile", tile)
+
+
+def test_tile_needs_level() -> None:
+    tile = _valid("tile")
+    del tile["level"]
+    with pytest.raises(jsonschema.ValidationError):
+        validate("tile", tile)

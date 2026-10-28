@@ -1,25 +1,43 @@
 rules_version = '2';
 
-// A judge's private preview pack: only that judge and admins
-// read it, the worker writes it. The game's deploy copies the
-// marked block into its own storage.rules; only that block is
-// merged. No listing anywhere.
+// The builder's own Storage paths: published tiles, review batches
+// and private judge previews. The game merges this block into its
+// own storage.rules; only this block is merged. All Firestore rules
+// are the game's. No listing anywhere.
 service firebase.storage {
   match /b/{bucket}/o {
     // BEGIN animundo-builder
-    match /previews/{buildId}/{version}/{file=**} {
+    // Published tiles: anyone signed in reads one file. The game's
+    // daily job reads the index and groups from here.
+    match /tiles/v1/{file=**} {
       // `get`, never `read`: in Storage rules `read` includes `list`,
-      // and nobody lists a preview folder.
+      // and nobody lists the tiles.
+      allow get: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Review batches: what `builder take` downloads, and each
+    // item's build report. Admins only.
+    match /review/{job}/{item}/{file=**} {
+      allow get: if request.auth != null
+        && firestore.exists(
+          /databases/(default)/documents/admins/$(request.auth.uid));
+      allow write: if false;
+    }
+
+    // A private job's preview pack: only that job's judge and
+    // admins read it. The job names its judge in `private_to`.
+    match /previews/{job}/{version}/{file=**} {
       allow get: if request.auth != null
         && (
           firestore.exists(
             /databases/(default)/documents/admins/$(request.auth.uid))
           || (
             firestore.exists(
-              /databases/(default)/documents/judge_builds/$(buildId))
+              /databases/(default)/documents/build_jobs/$(job))
             && firestore.get(
-              /databases/(default)/documents/judge_builds/$(buildId))
-              .data.judge_uid == request.auth.uid
+              /databases/(default)/documents/build_jobs/$(job))
+              .data.private_to == request.auth.uid
           )
         );
       allow write: if false;

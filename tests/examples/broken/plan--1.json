@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "tile": "n_413_296",
+  "code_only": false,
+  "items": [
+    {
+      "id": "x",
+      "kind": "dragon",
+      "what": "x",
+      "from": "y",
+      "estimate_usd": 1
+    }
+  ],
+  "improve": [],
+  "estimate_usd": 1.2,
+  "name": {
+    "en": "Forest north of Nuuksio",
+    "fi": "Metsa Nuuksion pohjoispuolella"
+  },
+  "coming": [
+    "wolverine"
+  ],
+  "world": "c341d52",
+  "planned_at": "2026-11-01T10:00:00Z"
+}

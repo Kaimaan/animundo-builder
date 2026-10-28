@@ -46,15 +46,13 @@ working schemas live in `schemas/`. Read them before changing a format.
   request step.
 - **The game repository is private.** Readers of this repository
   (contributors, judges) can't open it, so never link to it or to its
-  files, and never name its internals. Describe what the builder needs from
-  the game in this repository's own words (`docs/game-interface.md`). Links
+  files, and never name its internals. Links
   to `animundo-world` are fine once it is public.
-- **The admin panel** is plain HTML and JavaScript in `web/admin/`,
-  published at animundo.app/admin: admins approve border requests and
-  record review results there. **Tiles** are published to Storage under
-  `tiles/v1/`. The game copies `web/admin/` and the rules blocks from a
-  tagged release. There is no builder web app for grown-ups any more, and
-  no family drafts.
+- **The builder is a factory (D17):** it plans border requests,
+  builds the jobs the game creates, and publishes tiles to Storage
+  under `tiles/v1/`. It holds no policy, no web pages and no game
+  code; the game runs the admin console, the rules and the previews.
+  The game copies the Storage rules block from a tagged release.
 - **Never copy anything from animundo-world** (code or data) into this
   repository: read it from a checkout at run time. This repository holds
   only work written during the competition.
@@ -126,9 +124,6 @@ All five must pass before a task is finished.
 ## Code style
 
 - Python 3.12, type hints everywhere, small modules, plain names.
-- GDScript (the addon): Godot 4 style, static types, every new string
-  through `I18n` with `explore.` keys in English and Finnish, a headless
-  check in the addon's `tests/` for every behaviour.
 - One responsibility per module, matching the layout in "What this
   repository is".
 - Comments say why, not what.

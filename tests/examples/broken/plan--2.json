@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "tile": "n_413_296",
+  "code_only": false,
+  "items": [
+    {
+      "id": "tundra-home",
+      "kind": "home",
+      "what": "tundra",
+      "from": "boreal_forest",
+      "estimate_usd": 0.8
+    },
+    {
+      "id": "reindeer",
+      "kind": "animal",
+      "what": "1234567",
+      "from": "moose",
+      "estimate_usd": 0.4
+    }
+  ],
+  "improve": [],
+  "estimate_usd": 1.2,
+  "name": {
+    "en": "Forest north of Nuuksio",
+    "fi": "Metsa Nuuksion pohjoispuolella"
+  },
+  "coming": [
+    "wolverine"
+  ],
+  "world": "c341d52",
+  "planned_at": "2026-11-01T10:00:00Z",
+  "player_id": "kid-1"
+}

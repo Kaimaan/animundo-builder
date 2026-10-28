@@ -1,8 +1,8 @@
 # Running the worker
 
-The worker listens on Firestore and builds what admins approve. The
-grown-up draft flows are gone (phase 0); the border flows land in
-phase 2.
+The worker plans border requests and builds the jobs the game
+creates. It holds no policy: no routes, no approval, no caps beyond
+each job's budget and the Meta caps.
 
 One-time setup:
 
@@ -19,8 +19,7 @@ uv run builder worker --listen --world ~/dev/animundo-world \
 ```
 
 What it does in phase 0: it listens and claims work atomically,
-but builds nothing yet. Phase 2 adds intake (border requests to
-areas with plans), the makers per item, and shipping.
+but builds nothing yet. Phase 2 adds the planner and the builders.
 
 Crashes and restarts are safe: every status is a guard, so only
 events still waiting are replayed.

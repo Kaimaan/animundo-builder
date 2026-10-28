@@ -94,6 +94,60 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="The Storage bucket (default: the project's default bucket).",
     )
+    habitats = sub.add_parser("habitats", help="The world habitat grid.")
+    habitats_sub = habitats.add_subparsers(dest="habitats_command", required=True)
+    bake = habitats_sub.add_parser("bake", help="Bake the habitat grid files.")
+    bake.add_argument("--resolve", required=True, help="RESOLVE shapefile path.")
+    bake.add_argument("--land", required=True, help="Natural Earth land path.")
+    bake.add_argument("--lakes", required=True, help="Natural Earth lakes path.")
+    bake.add_argument(
+        "--dem",
+        default=None,
+        help="Elevation GeoTIFF path (elevation is 0 without it).",
+    )
+    bake.add_argument(
+        "--out", required=True, help="Directory for the baked grid files."
+    )
+    presence = sub.add_parser("presence", help="Species presence from GBIF.")
+    presence_sub = presence.add_subparsers(dest="presence_command", required=True)
+    fetch = presence_sub.add_parser("fetch", help="Fetch one cell's counts.")
+    fetch.add_argument("--tile", required=True, help="The tile id.")
+    fetch.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    fetch.add_argument("--habitat", default=None, help="Only animals that live here.")
+    tiles = sub.add_parser("tiles", help="Make tiles from the grid.")
+    tiles_sub = tiles.add_subparsers(dest="tiles_command", required=True)
+    make = tiles_sub.add_parser("make", help="Make one tile.")
+    make.add_argument(
+        "--at",
+        required=True,
+        help="Latitude,longitude (south of the equator: --at=-1.00,-75.50).",
+    )
+    make.add_argument("--out", required=True, help="Directory for group files.")
+    make.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    make.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grids (default: data/habitat-grid).",
+    )
+    lab = tiles_sub.add_parser("lab", help="Run the $0 lab over sample spots.")
+    lab.add_argument("--out", required=True, help="Directory for counts and globe.")
+    lab.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    lab.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grids (default: data/habitat-grid).",
+    )
+    lab.add_argument(
+        "--land",
+        default=None,
+        help="Natural Earth land shapefile for the globe background.",
+    )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
 
@@ -222,6 +276,99 @@ def cmd_worker(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_habitats_bake(args: argparse.Namespace) -> int:
+    from .habitats import bake
+
+    dem = Path(args.dem) if args.dem else None
+    counts = bake(
+        Path(args.resolve), Path(args.land), Path(args.lakes), dem, Path(args.out)
+    )
+    for grid, count in sorted(counts.items()):
+        print(f"{grid}: {count} cells")
+    return 0
+
+
+def cmd_presence_fetch(args: argparse.Namespace) -> int:
+    from .presence import animals_for_habitat, fetch_smoothed, library_animals
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    animals = library_animals(world)
+    if args.habitat is not None:
+        animals = animals_for_habitat(animals, args.habitat)
+    try:
+        counts = fetch_smoothed(args.tile, animals)
+    except ConnectionError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    print(json.dumps({species: round(n, 2) for species, n in ranked}, indent=1))
+    return 0
+
+
+def cmd_tiles_make(args: argparse.Namespace) -> int:
+    from .grid import GridName
+    from .habitats import HabitatGrid
+    from .tiles import make_at
+
+    try:
+        lat_text, lon_text = args.at.split(",")
+        lat, lon = float(lat_text), float(lon_text)
+    except ValueError:
+        print("error: --at wants latitude,longitude", file=sys.stderr)
+        return 1
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    grid_dir = Path(args.habitat_grid)
+    name: GridName = "ease2_n25" if lat >= 0 else "ease2_s25"
+    path = grid_dir / f"{name}.json.gz"
+    if not path.is_file():
+        print(f"error: no baked grid: {path}", file=sys.stderr)
+        return 1
+    grids: dict[GridName, HabitatGrid] = {name: HabitatGrid.load(path, name)}
+    try:
+        tile, path, status = make_at(lat, lon, grids, world, Path(args.out))
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    except ConnectionError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(f"{tile}: {status} -> {path}")
+    return 0
+
+
+def cmd_tiles_lab(args: argparse.Namespace) -> int:
+    from .grid import GridName
+    from .habitats import HabitatGrid
+    from .lab import run_lab, write_lab
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    grid_dir = Path(args.habitat_grid)
+    grids: dict[GridName, HabitatGrid] = {}
+    for name in ("ease2_n25", "ease2_s25"):
+        path = grid_dir / f"{name}.json.gz"
+        if not path.is_file():
+            print(f"error: no baked grid: {path}", file=sys.stderr)
+            return 1
+        grids[name] = HabitatGrid.load(path, name)  # type: ignore[arg-type]
+    try:
+        results = run_lab(grids, world)
+    except ConnectionError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    land = Path(args.land) if args.land else None
+    counts_path, globe_path = write_lab(Path(args.out), results, land)
+    print(f"wrote {counts_path} and {globe_path}")
+    for entry in results:
+        print(f"  {entry['spot']}: {entry.get('status')} {entry.get('tile', '')}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "check":
@@ -232,6 +379,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_report(args.job_id, args.jobs_dir)
     if args.command == "worker":
         return cmd_worker(args)
+    if args.command == "habitats" and args.habitats_command == "bake":
+        return cmd_habitats_bake(args)
+    if args.command == "presence" and args.presence_command == "fetch":
+        return cmd_presence_fetch(args)
+    if args.command == "tiles" and args.tiles_command == "make":
+        return cmd_tiles_make(args)
+    if args.command == "tiles" and args.tiles_command == "lab":
+        return cmd_tiles_lab(args)
     return cmd_not_built_yet(args.command)
 
 

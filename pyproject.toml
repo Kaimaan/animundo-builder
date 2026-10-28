@@ -16,6 +16,10 @@ dependencies = [
     "firebase-admin>=7.7.0",
     "python-dotenv>=1.2.4",
     "pydantic>=2",
+    "pyproj>=3.6",
+    "fiona>=1.10",
+    "shapely>=2.0",
+    "rasterio>=1.4",
 ]
 
 [project.scripts]

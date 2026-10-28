@@ -1904,7 +1904,7 @@ def _replay_lab_home(tmp_path: Path, habitat: str, height: int) -> None:
 
 
 def test_newhome_replays_lab_ice(tmp_path: Path) -> None:
-    _replay_lab_home(tmp_path, "ice", 40)
+    _replay_lab_home(tmp_path, "ice", 32)
 
 
 def test_newhome_replays_lab_mountain(tmp_path: Path) -> None:

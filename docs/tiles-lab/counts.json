@@ -1,0 +1,167 @@
+{
+ "at": "2026-10-28T21:47:56.226596+00:00",
+ "counts": {
+  "ready": 2,
+  "blocked": {
+   "no_animal": 3,
+   "no_home": 16
+  }
+ },
+ "spots": [
+  {
+   "spot": "nuuksio",
+   "tile": "n_413_478",
+   "status": "ready",
+   "habitat": "boreal_forest",
+   "playable": [
+    "great_tit",
+    "chaffinch",
+    "kestrel"
+   ]
+  },
+  {
+   "spot": "lapland",
+   "tile": "n_398_447",
+   "status": "ready",
+   "habitat": "boreal_forest",
+   "playable": [
+    "great_tit",
+    "chaffinch",
+    "squirrel"
+   ]
+  },
+  {
+   "spot": "amazon",
+   "tile": "s_014_270",
+   "status": "blocked",
+   "reason": "no_animal",
+   "habitat": "rainforest"
+  },
+  {
+   "spot": "savanna",
+   "tile": "s_561_070",
+   "status": "blocked",
+   "reason": "no_animal",
+   "habitat": "savanna"
+  },
+  {
+   "spot": "coast",
+   "tile": "n_346_525",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "forest"
+  },
+  {
+   "spot": "wales-sea",
+   "tile": "n_345_525",
+   "status": "blocked",
+   "reason": "no_animal",
+   "habitat": "sea"
+  },
+  {
+   "spot": "great-plains",
+   "tile": "n_167_326",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "grassland"
+  },
+  {
+   "spot": "alaska",
+   "tile": "n_298_252",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "boreal_forest"
+  },
+  {
+   "spot": "sonora",
+   "tile": "n_123_264",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "desert"
+  },
+  {
+   "spot": "pampas",
+   "tile": "s_151_249",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "grassland"
+  },
+  {
+   "spot": "patagonia",
+   "tile": "s_192_308",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "forest"
+  },
+  {
+   "spot": "bavaria",
+   "tile": "n_394_539",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "forest"
+  },
+  {
+   "spot": "sahara",
+   "tile": "n_432_632",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "desert"
+  },
+  {
+   "spot": "kalahari",
+   "tile": "s_462_105",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "desert"
+  },
+  {
+   "spot": "siberia",
+   "tile": "n_481_338",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "boreal_forest"
+  },
+  {
+   "spot": "tibet",
+   "tile": "n_607_368",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "mountain"
+  },
+  {
+   "spot": "deccan",
+   "tile": "n_663_424",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "dry_forest"
+  },
+  {
+   "spot": "outback",
+   "tile": "s_560_547",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "desert"
+  },
+  {
+   "spot": "antarctica",
+   "tile": "s_360_315",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "ice"
+  },
+  {
+   "spot": "atlantic",
+   "tile": "n_195_555",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "open_ocean"
+  },
+  {
+   "spot": "pacific",
+   "tile": "s_138_487",
+   "status": "blocked",
+   "reason": "no_home",
+   "habitat": "open_ocean"
+  }
+ ]
+}

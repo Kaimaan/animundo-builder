@@ -1397,3 +1397,87 @@ reviewer runs the real step tests.
   game repo still pins builder v0.3.5 at old id
   0e0b46c in .builder-sync; update at next builder
   sync.
+
+## 2026-10-28: phase 1 tile maker on the #124-#128 contracts (#117, #124-#130)
+
+- The tile maker follows one home per ecoregion (#124,
+  #127, #128): the home matches the cell's first ecoregion
+  and its habitat from the world checkout, `blend` names a
+  second home at share 0.1-0.5, and `no_home`/`no_animal`
+  block honestly. Levels come from ETOPO 2022 elevation
+  (#125): sea 5, land `9 + round(50 * (1 - exp(-m/1500)))`,
+  monotonic and under 64 at 8,849 m; `height` 32 or 64.
+- The bake writes the new cell format (#124, #125):
+  `[eco1, share1, eco2, share2, biome, land, water,
+  elevation_m]`. ETOPO 2022 confirmed public domain at its
+  NOAA ISO metadata record on Oct 28, 2026, with the
+  citation in `data/habitat-grid/README.md`; Kai's
+  confirmation still pending before any tile is published.
+- #130's ice replay fix: `_replay_lab_home(..., "ice",
+  32)` (world T87 put every home at water level 8).
+- Suite green: 570 passed, 12 skipped; ruff check and
+  format clean; gitleaks clean; `builder check --world`
+  runs (skeleton). Full two-grid bake with the DEM
+  launched to temp space (about 5 ms a cell after the
+  shapefile load); the lab run (T80) follows it.
+- Phase-0 #129 adjustments verified before the push: plan
+  and build-job contracts in, area/admin-action/judge-build
+  out, no `web/` or `godot/`, no Firestore rules, Storage
+  rules cover tiles/review/previews with emulator tests,
+  and the worker is a listener plus atomic claim with
+  phase-2 seams. No temp ecoregion table anywhere.
+
+## 2026-10-28: food-first species and the world check as gate (#117 T59)
+
+- The first real tile (a taiga cell near Vaasa) failed the
+  world's `food` check: the picker kept hunters whose prey
+  was absent (kestrel hunts vole, absent) and missed the
+  home fish's hunts (pike hunts frog). Per spec/04, the
+  picker now keeps an animal only if the home has its food,
+  a hunter only if its prey stays too, and the home's fish
+  must find their prey in the tile; the maker then runs
+  `tools/check_tile.py` and blocks with `no_animal` on a
+  food failure (other failures raise, never mislabelled).
+- The same tile now passes every world check (tile,
+  animals, region, food, edges): kestrel out, frog in for
+  the pike, fox kept with all three prey tags covered.
+- Suite: 576 passed, 12 skipped; ruff and gitleaks clean.
+
+## 2026-10-28: five spots and the lab run (T59, T80)
+
+- Full bake with ETOPO 2022: both 720x720 grids in 29
+  minutes, committed under `data/habitat-grid/`. Nuuksio
+  and Pallas are boreal 717, Yasuni rainforest 483, the
+  Serengeti savanna 57, Wales land 651 with a sea 651 cell
+  next door, all as the inbox says.
+- T59: Nuuksio and Pallas are ready and pass every world
+  check; the Amazon, the Serengeti and Wales sea are
+  honestly `no_animal` (homes exist, no animal files yet).
+  The picker had dropped overflow playable animals from
+  every list, starving the pike; playable now overflows
+  into prey, as the world's example tile does.
+- T80: `builder tiles lab` over 21 spots (the five plus
+  sixteen), committed with the counts and `globe.png`
+  under `docs/tiles-lab/`: 2 ready, 3 `no_animal`, 16
+  `no_home`. The globe dots were verified pixel by pixel.
+- Suite: 577 passed, 12 skipped; ruff, gitleaks and
+  `builder check --world` clean.
+
+## 2026-10-28: every kept playable file plays (spec 04 roles)
+
+- Kai's fix before v0.4.1: on the Nuuksio tile the fox,
+  moose and mountain hare sat under prey and weren't
+  playable; at Pallas the fox wasn't either. Spec 04 says
+  playable is every kept animal whose file is playable,
+  with no limit, so the picker drops its 5/8/3 limits:
+  playable is every kept playable file, predators every
+  kept hunter, prey every kept animal someone hunts plus
+  every kept animal in neither other list. Hunted playable
+  animals (the hare) appear under both playable and prey.
+- `test_nuuksio_tile_keeps_hunters_playable` makes
+  n_413_478 from the committed grid and the real world
+  with canned presence and asserts the fox, moose and
+  mountain hare are playable. Both live tiles remade and
+  passing the world's check.
+- ETOPO 2022 confirmed by Kai; all three grid sources
+  confirmed before any tile is published.

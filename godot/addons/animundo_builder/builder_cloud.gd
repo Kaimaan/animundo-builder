@@ -51,7 +51,8 @@ func read_pack_file(draft_id: String, version: int, rel_path: String, max_bytes:
 
 
 static func utc_now() -> String:
-	return Time.get_datetime_string_from_system(true, true) + "Z"
+	# No space: the game's Cloud only sends `...T...Z` as a timestamp (#91).
+	return Time.get_datetime_string_from_system(true, false) + "Z"
 
 
 static func is_draft_id(draft_id: String) -> bool:

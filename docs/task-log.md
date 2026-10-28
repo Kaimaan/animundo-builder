@@ -3,6 +3,25 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #90-#91, tagged `v0.3.1`
+
+- #90: Your drafts shows from the first paint when signed in
+  (`$("drafts").hidden = !user` in the sign-in handler); only
+  the map waits for an animal. Web test: the pane unhides on
+  sign-in, every draft renders a card, a packed one gets Play.
+- #91: `utc_now()` writes a `T`, not a space, so the game's
+  Cloud sends `last_played_at` as a timestamp and the rules'
+  Playing branch accepts it. The web app already writes real
+  server timestamps; the addon had the only string clock.
+- #91: `open_draft` still returns the place id when
+  `record_played` fails (logged, not fatal). Checks: `utc_now`
+  matches `^\d{4}-\d{2}-\d{2}T...Z$` with no space, and an
+  opener whose patch stub fails still opens the place.
+- Suite: 604 passed, 12 skipped; ruff check + format clean;
+  all 3 headless addon checks 0 errors (Godot 4.7.2).
+- Tagged alone per #91: D10 (#82-#84, #86, #88) and D11 (#87,
+  #89) move to `v0.3.2`. #92 (D12 Your animals) with #87.
+
 ## 2026-10-28: inbox #84 (anaconda fixes; v0.3.1 waits for #82)
 
 - #84.1: oneshot seats and plans every made target per target

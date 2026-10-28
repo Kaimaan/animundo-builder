@@ -132,7 +132,7 @@ def test_coastline_gains_detail_with_zoom() -> None:
     assert not _on_land(land10, 20.0, 59.0)  # Åland Sea
 
 
-def test_map_and_drafts_wait_for_the_pick() -> None:
+def test_map_waits_for_the_pick() -> None:
     html = (WEB / "index.html").read_text(encoding="utf-8")
     app = (WEB / "app.js").read_text(encoding="utf-8")
     en = _json(WEB / "i18n" / "en.json")
@@ -144,6 +144,19 @@ def test_map_and_drafts_wait_for_the_pick() -> None:
     assert en["drafts.lede"] == "These are your drafts."
     assert "drafts.none" not in en
     assert "drafts.none" not in app
+
+
+def test_drafts_show_from_sign_in_not_from_the_pick() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    # Unhidden in the sign-in handler, before any animal is picked (#90).
+    head = app.split("state.picked = animal")[0]
+    assert '$("drafts").hidden = !user' in head
+    # Every draft renders a card, and a packed one gets Play in the game.
+    assert "renderDrafts()" in app
+    assert "(draft.pack_version || 0) >= 1" in app
+    assert 'data-act="play"' in app
+    en = _json(WEB / "i18n" / "en.json")
+    assert en["draft.play"] == "Play in the game"
 
 
 def test_taps_only_pick_recorded_cells() -> None:

@@ -2,7 +2,9 @@ extends SceneTree
 ## Opening a draft from the address (D9): boot registers the opener and both
 ## buttons (both open the web app); a stub draft installs and returns its
 ## place id; a bad hash, an unknown draft, no pack version and a failed
-## download all return ""; and no globe look is ever set. The id is mixed
+## download all return ""; a failed record_played still opens (#91);
+## utc_now matches the game's timestamp pattern; and no globe look is
+## ever set. The id is mixed
 ## case with a hyphen, like a real Firestore id; its folder still fits the
 ## game's lowercase-only pattern. The game half runs only in the game.
 ## Run: godot --headless --path <project> --script
@@ -44,6 +46,7 @@ func _run() -> void:
 	cloud.packs[DRAFT + "/1/regions/" + PLACE + ".json"] = _region_bytes()
 	var Mode = load(ADDON + "/builder_mode.gd")
 	_check_folders(Mode)
+	_check_utc_now()
 	var mode = Mode.new()
 	mode.boot(hooks, cloud)
 	await process_frame
@@ -66,6 +69,17 @@ func _check_folders(Mode: GDScript) -> void:
 			errors.append("the folder for %s misses the pattern: %s" % [draft_id, folder])
 	if Mode.pack_folder("a-b", 1) == Mode.pack_folder("a_b", 1):
 		errors.append("two ids share one pack folder")
+
+
+func _check_utc_now() -> void:
+	var cloud_api = load(ADDON + "/builder_cloud.gd")
+	var now: String = cloud_api.utc_now()
+	# The game's Cloud sends a string as a timestamp only on this
+	# pattern (cloud.gd `_is_timestamp`); a space made "played" fail.
+	if RegEx.create_from_string("^\\d{4}-\\d{2}-\\d{2}T.*Z$").search(now) == null:
+		errors.append("utc_now misses the game's timestamp pattern: " + now)
+	if " " in now:
+		errors.append("utc_now has a space: " + now)
 
 
 func _check_booted(mode: Node, hooks: Variant) -> void:
@@ -120,6 +134,12 @@ func _check_opens(mode: Node, hooks: Variant, cloud: StubCloud) -> void:
 	if await mode.open_draft(DRAFT) != "":
 		errors.append("a failed download opens")
 	cloud.fail.erase("storage_get")
+	# Playing doesn't depend on the bookkeeping: a failed record_played
+	# still opens the place (#91).
+	cloud.fail["firestore_patch"] = true
+	if await mode.open_draft(DRAFT) != PLACE:
+		errors.append("a failed record_played closes the draft")
+	cloud.fail.erase("firestore_patch")
 
 
 func _check_game_text() -> void:

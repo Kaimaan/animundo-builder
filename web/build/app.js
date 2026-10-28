@@ -199,6 +199,9 @@ function onUser(user) {
   $("auth-signed-out").hidden = !!user;
   $("auth-signed-in").hidden = !user;
   $("app").hidden = !user;
+  // Your drafts shows from the first paint when signed in; only the
+  // map waits for an animal (#90).
+  $("drafts").hidden = !user;
   if (!user) {
     for (const unsub of Object.values(state.feedUnsubs)) {
       unsub();

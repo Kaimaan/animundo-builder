@@ -20,6 +20,12 @@ Job folders live under `jobs/` (local only, never committed).
 - Moved `v0.2.1` onto this commit: the item defines it as #67 plus
   this fix, and nothing had consumed the tag yet (the fox test
   runs on v0.2.0; Kai copies v0.2.1 afterwards).
+- Engine evidence (Godot 4.7.2 headless, this repo's addon): the
+  three checks pass 0-errors in a bare project (CI recipe) and in
+  the game project; a one-shot driver in the game project shows
+  the gate true, `booted()` true, both buttons registered and the
+  strings folder installed, with no errors. Game checkout
+  restored clean afterwards.
 - Suite: 575 passed, 12 skipped; ruff check + format clean.
 
 ## 2026-10-28: inbox #67 (#66.1's second wording, tag v0.2.1)

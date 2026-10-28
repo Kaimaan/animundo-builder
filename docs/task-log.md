@@ -1361,3 +1361,12 @@ reviewer runs the real step tests.
   app only. Point-in-shape and snapping probed in Node
   against the real shapes (Repovesi Finnish and wild,
   Helsinki urban, ocean empty).
+
+- inbox 2026-10-28 #105/#111: email rewrite done and
+  pushed. 75/75 commits now from the noreply address,
+  the old address is gone, trees byte-identical, 10 tags
+  moved with the history. Old main 0e0b46c, new main
+  82c2009. Verified from a fresh clone. Note: the
+  game repo still pins builder v0.3.5 at old id
+  0e0b46c in .builder-sync; update at next builder
+  sync.

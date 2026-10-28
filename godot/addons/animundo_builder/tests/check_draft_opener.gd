@@ -1,34 +1,30 @@
 extends SceneTree
-## Opening a draft from the address (D9): boot registers the opener and both
-## buttons (both open the web app); a stub draft installs and returns its
-## place and animal; a bad hash, an unknown draft, no pack version, a
-## failed download and a capital place id all return ""; a failed
-## record_played still opens (#91); utc_now matches the game's timestamp
-## pattern; every step goes through the hook with its reason (#98.2);
-## last_error keeps the failed step with its HTTP status (#100); and no
-## globe look is ever set. The id is mixed
-## case with a hyphen, like a real Firestore id; its folder still fits the
-## game's lowercase-only pattern. The game half runs only in the game.
+## Opening a draft from the address: boot registers the opener and no
+## buttons; a stub draft installs and returns its place and animal; a
+## bad hash, an unknown draft, no pack version, a failed download and
+## a capital place id all return ""; a failed record_played still
+## opens (#91); utc_now matches the game's timestamp pattern; every
+## step goes through the hook with its reason (#98.2); last_error
+## keeps the failed step with its HTTP status (#100); and no globe
+## look is ever set. The id is mixed case with a hyphen, like a real
+## Firestore id; its folder still fits the game's lowercase-only
+## pattern. The game half runs only in the game.
 ## Run: godot --headless --path <project> --script
 ##      res://addons/animundo_builder/tests/check_draft_opener.gd
 
 const ADDON := "res://addons/animundo_builder"
 const DRAFT := "Zz-Rd1"
 const PLACE := "draft_zzrd1"
-const STRINGS_FOLDER := "user://packs/_addon/1/"
 
 var errors: Array[String] = []
 var game := false
-var I18nAPI = null
 var RegionAPI = null
 
 
 func _init() -> void:
 	game = ResourceLoader.exists("res://scripts/builder_hooks.gd")
 	if game:
-		I18nAPI = load("res://scripts/i18n.gd")
 		RegionAPI = load("res://scripts/region.gd")
-		I18nAPI.start("en")
 	_run.call_deferred()
 
 
@@ -56,7 +52,6 @@ func _run() -> void:
 	await process_frame
 	_check_booted(mode, hooks)
 	await _check_opens(mode, hooks, cloud)
-	_check_game_text()
 	mode.free()
 	_cleanup(hooks, Mode)
 	for e in errors:
@@ -89,15 +84,16 @@ func _check_utc_now() -> void:
 func _check_booted(mode: Node, hooks: Variant) -> void:
 	if hooks.draft_opener() != Callable(mode, "open_draft"):
 		errors.append("boot registers no draft opener")
-	var web := Callable(mode, "open_web_app")
+	if game:
+		return
 	var grownup: Array = hooks.grownup_buttons()
-	if not grownup.any(func(b): return b.label_key == "explore.builder_mode" and b.open == web):
-		errors.append("the grown-up button doesn't open the web app")
+	if not grownup.is_empty():
+		errors.append("boot adds a grown-up button")
 	var places: Array = hooks.places_buttons()
-	if not places.any(func(b): return b.label_key == "explore.ask_place" and b.open == web):
-		errors.append("the places button doesn't open the web app")
-	if not STRINGS_FOLDER in (hooks.content_folders() as PackedStringArray):
-		errors.append("the addon's words aren't a content folder")
+	if not places.is_empty():
+		errors.append("boot adds a places button")
+	if not (hooks.content_folders() as PackedStringArray).is_empty():
+		errors.append("boot installs a content folder")
 
 
 func _check_opens(mode: Node, hooks: Variant, cloud: StubCloud) -> void:
@@ -193,17 +189,6 @@ func _check_steps(hooks: Variant, names: Array, ok: bool) -> void:
 			errors.append("step %s is %s" % [name, found[name]])
 
 
-func _check_game_text() -> void:
-	if not game:
-		return
-	if I18nAPI.t("explore.builder_mode") != "Builder mode":
-		errors.append("the grown-up button has no English text in the game")
-	I18nAPI.start("fi")
-	if I18nAPI.t("explore.ask_place") != "Pyydä aikuista tekemään uusi paikka":
-		errors.append("the places button has no Finnish text in the game")
-	I18nAPI.start("en")
-
-
 func _region_bytes() -> PackedByteArray:
 	return JSON.stringify({
 		"name": "Repovesi (draft)", "animals": {"playable": ["fox"]},
@@ -236,12 +221,8 @@ func _manifest_bytes() -> PackedByteArray:
 
 func _cleanup(hooks: Variant, Mode: GDScript) -> void:
 	hooks.remove_content_folder(Mode.pack_folder(DRAFT, 1))
-	hooks.remove_content_folder(STRINGS_FOLDER)
 	hooks.set_draft_opener(Callable())
-	hooks.remove_grownup_button("explore.builder_mode")
-	hooks.remove_places_button("explore.ask_place")
 	_remove_dir(Mode.pack_folder(DRAFT, 1).trim_suffix("/").get_base_dir())
-	_remove_dir("user://packs/_addon")
 
 
 func _remove_dir(path: String) -> void:

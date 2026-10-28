@@ -17,7 +17,6 @@ from builder.pipeline import (
     Pipeline,
     StageFailedError,
     reset_stages,
-    stages_for_kind,
 )
 from builder.prices import Prices
 
@@ -172,109 +171,9 @@ def test_tracker_math() -> None:
     assert tracker.spent_usd == pytest.approx(1000 * 1.25 / 1e6)
 
 
-class NamedStage:
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-    def run(self, ctx):  # type: ignore[no-untyped-def]
-        return {}
-
-
-def test_new_place_runs_everything() -> None:
-    stages = [NamedStage("intake"), NamedStage("survey")]
-    run, missing = stages_for_kind(stages, "new_place")
-    assert [s.name for s in run] == ["intake", "survey"]
-    assert missing == []
-
-
-def test_new_place_skips_home_only() -> None:
-    stages = [
-        NamedStage(n)
-        for n in (
-            "intake",
-            "research",
-            "minimum",
-            "looks",
-            "newhome",
-            "home",
-            "reuse",
-            "oneshot",
-            "survey",
-            "pack",
-        )
-    ]
-    run, missing = stages_for_kind(stages, "new_place")
-    assert [s.name for s in run] == ["intake", "survey", "pack"]
-    assert missing == []
-
-
-def test_animal_home_runs_home_subset() -> None:
-    stages = [NamedStage(n) for n in ("intake", "home", "survey", "words")]
-    run, missing = stages_for_kind(stages, "animal_home")
-    assert [s.name for s in run] == ["intake", "home", "words"]
-    assert missing == ["research", "minimum", "looks", "newhome", "oneshot", "pack"]
-
-
-def test_improve_home_remaps_choices_to_home_stages() -> None:
-    stages = [NamedStage(n) for n in ("home", "oneshot", "pack")]
-    cases = {
-        "animal_looks_wrong": ["oneshot", "pack"],
-        "too_few_animals": ["home", "pack"],
-        "colours_off": ["home", "pack"],
-        "other": ["home", "oneshot", "pack"],
-    }
-    for choice, names in cases.items():
-        run, missing = stages_for_kind(stages, "improve", [choice], improve_home=True)
-        assert [s.name for s in run] == names, choice
-        assert missing == [], choice
-
-
-def test_improve_place_keeps_place_stages() -> None:
-    stages = [NamedStage(n) for n in ("region", "models", "safety", "pack")]
-    run, missing = stages_for_kind(stages, "improve", ["colours_off"])
-    assert [s.name for s in run] == ["region", "models", "safety", "pack"]
-    assert missing == []
-
-
 def test_reset_stages_forgets_only_named(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     state_file.write_text(json.dumps({"completed": ["home", "oneshot", "pack"]}))
     reset_stages(state_file, ["home", "pack"])
     assert json.loads(state_file.read_text())["completed"] == ["oneshot"]
     reset_stages(tmp_path / "missing.json", ["home"])
-
-
-def test_animal_home_safety_flag_restores_review() -> None:
-    stages = [NamedStage(n) for n in ("intake", "home", "words", "safety", "pack")]
-    run, _ = stages_for_kind(stages, "animal_home", safety=True)
-    assert [s.name for s in run] == ["intake", "home", "words", "safety", "pack"]
-
-
-def test_animal_home_reuse_swaps_home_for_reuse() -> None:
-    stages = [NamedStage(n) for n in ("intake", "newhome", "home", "reuse", "pack")]
-    run, missing = stages_for_kind(stages, "animal_home", reuse=True)
-    assert [s.name for s in run] == ["intake", "reuse", "pack"]
-    assert missing == ["research", "minimum", "looks", "oneshot", "words"]
-
-
-def test_submit_needs_pull_request() -> None:
-    run, missing = stages_for_kind([NamedStage("intake")], "submit")
-    assert run == []
-    assert missing == ["pull_request"]
-
-
-def test_improve_runs_only_touched_stages() -> None:
-    stages = [NamedStage(n) for n in ("region", "species_plan", "animals")]
-    run, missing = stages_for_kind(stages, "improve", ["colours_off"])
-    assert [s.name for s in run] == ["region"]
-    assert missing == ["models", "safety", "pack"]
-    run, missing = stages_for_kind(stages, "improve", ["too_few_animals"])
-    assert [s.name for s in run] == ["species_plan", "animals"]
-    assert missing == ["models", "words", "safety", "pack"]
-
-
-def test_improve_unknown_choice_fails() -> None:
-    with pytest.raises(ValueError, match="unknown improve choice"):
-        stages_for_kind([NamedStage("region")], "improve", ["add_dragon"])
-    with pytest.raises(ValueError, match="unknown job kind"):
-        stages_for_kind([NamedStage("region")], "add_animal")

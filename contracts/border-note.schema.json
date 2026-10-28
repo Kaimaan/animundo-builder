@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/border-note.schema.json",
+  "title": "A border note: the game saw a player near a tile they cannot walk into",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "tile", "species"],
+  "properties": {
+    "format": {"const": 1},
+    "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "species": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+  }
+}

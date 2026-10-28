@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/tile-index.schema.json",
+  "title": "The tile index: which group files changed and how many tiles are ready",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "made_at", "world", "groups", "counts"],
+  "properties": {
+    "format": {"const": 1},
+    "made_at": {"type": "string", "minLength": 1},
+    "world": {"type": "string", "minLength": 1},
+    "groups": {
+      "type": "object",
+      "propertyNames": {"pattern": "^ease2_[ns]25/[0-9]{2}_[0-9]{2}$"},
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ready", "blocked"],
+      "properties": {
+        "ready": {"type": "integer", "minimum": 0},
+        "blocked": {
+          "type": "object",
+          "propertyNames": {"enum": ["no_home", "no_animal", "excluded"]},
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

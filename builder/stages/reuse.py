@@ -1,6 +1,6 @@
-"""Stage `reuse`: a built place gets the picked animal (#82.3).
+"""Stage `reuse`: a built place gets the picked animal.
 
-On `place:` drafts no home is made: the job copies the place's
+When the place exists no home is made: the job copies the place's
 region from the world, seats the picked animal as playable, feeds
 it from the research, and writes the species plan with the picked
 animal (reuse for a library animal, new for one the one-shot

@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "tile": "n_413_296",
+  "reason": "no_home",
+  "habitat": "tundra",
+  "notes_by_day": {
+    "2026-11-01": 3
+  },
+  "species_played": {
+    "fox": 2,
+    "moose": 1
+  },
+  "priority": 3.0,
+  "created_at": "2026-11-01T10:00:00Z",
+  "last_note_at": "2026-11-01T12:00:00Z"
+}

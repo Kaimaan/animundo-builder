@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "tile": "n_413_296",
+  "species": "fox",
+  "status": "being_built",
+  "items": [
+    {
+      "id": "tundra-home",
+      "kind": "home",
+      "what": "tundra",
+      "status": "building"
+    }
+  ],
+  "pack_version": 0,
+  "cost_usd": 0.5,
+  "created_at": "2026-11-01T10:00:00Z",
+  "updated_at": "2026-11-01T10:05:00Z"
+}

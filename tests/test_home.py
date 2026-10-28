@@ -88,6 +88,37 @@ def _world(tmp_path: Path, *, tool: bool = True) -> Path:
         )
     )
     (animals / "archetypes.json").write_text("{}")
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [
+                    {
+                        "id": "fox",
+                        "name": "Red fox",
+                        "latin": "Vulpes vulpes",
+                        "gbif_key": 5219243,
+                        "habitats": ["boreal_forest"],
+                    },
+                    {
+                        "id": "lynx",
+                        "name": "Eurasian lynx",
+                        "latin": "Lynx lynx",
+                        "gbif_key": 2435240,
+                        "habitats": ["boreal_forest"],
+                    },
+                    {
+                        "id": "mountain_hare",
+                        "name": "Mountain hare",
+                        "latin": "Lepus timidus",
+                        "gbif_key": 2436756,
+                        "habitats": ["boreal_forest"],
+                    },
+                ],
+            }
+        )
+    )
     if tool:
         tools = world / "tools"
         tools.mkdir(parents=True)
@@ -753,6 +784,23 @@ def _replay_world(
         )
     )
     (animals / "archetypes.json").write_text("{}")
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [
+                    {
+                        "id": stem,
+                        "name": latin,
+                        "latin": latin,
+                        "gbif_key": key,
+                        "habitats": ["boreal_forest"],
+                    }
+                ],
+            }
+        )
+    )
     tools = world / "tools"
     tools.mkdir(parents=True)
     (tools / "homes.py").write_text(STUB_TOOL)

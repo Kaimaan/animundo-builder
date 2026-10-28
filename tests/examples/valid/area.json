@@ -1,8 +1,42 @@
 {
-  "area_id": "gb_cairngorms",
-  "name": "Cairngorms",
-  "country": "GB",
-  "centroid": {"lat": 57.07, "lon": -3.67},
-  "ecoregion": "Caledon conifer forests",
-  "outline": [[-3.9, 57.0], [-3.4, 57.0], [-3.4, 57.2], [-3.9, 57.2]]
+  "format": 1,
+  "tile": "n_413_296",
+  "route": "admin",
+  "name": {
+    "en": "Forest north of Nuuksio",
+    "fi": "Metsa Nuuksion pohjoispuolella"
+  },
+  "status": "waiting",
+  "approval": "pending",
+  "plan": {
+    "expand": {
+      "home": "tundra",
+      "animal": "reindeer",
+      "food": [
+        "lichen"
+      ],
+      "find": "cloudberry"
+    },
+    "improve": [
+      "wolverine"
+    ]
+  },
+  "estimate_usd": 1.2,
+  "cost_usd": 0.0,
+  "coming": [
+    "wolverine"
+  ],
+  "items": [
+    {
+      "id": "tundra-home",
+      "kind": "home",
+      "what": "tundra",
+      "status": "building"
+    }
+  ],
+  "version": 1,
+  "tiles": [
+    "n_413_296"
+  ],
+  "updated_at": "2026-11-01T10:00:00Z"
 }

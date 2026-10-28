@@ -1,9 +1,8 @@
-"""The static animal list for animal-first builds.
+"""The static animal list from animundo-world.
 
-animundo-world owns `animal-list.json` (the animals a grown-up can
-ask for, with GBIF keys, starting models and habitats); the web app
-vendors a copy. Both sides resolve the animal's home the same way:
-its first habitat with a built home.
+animundo-world owns `animal-list.json` (the library animals, with
+GBIF keys, starting models and habitats). The builder reads it
+from a checkout at run time and never copies it.
 """
 
 from __future__ import annotations
@@ -12,19 +11,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .schemas import ROOT
-
 LIST_NAME = "animal-list.json"
 
 
 def find_list(world: Path | None) -> Path:
-    """The animal list: the world's, else the web app's vendored copy."""
+    """The animal list in the world checkout."""
     if world is not None and (world / LIST_NAME).is_file():
         return world / LIST_NAME
-    vendored = ROOT / "web" / "build" / LIST_NAME
-    if vendored.is_file():
-        return vendored
-    raise ValueError("no animal-list.json in the world or the web app")
+    raise ValueError("no animal-list.json in the world checkout")
 
 
 def load_list(path: Path) -> dict[str, Any]:

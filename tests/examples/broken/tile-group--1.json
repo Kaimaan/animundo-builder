@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "grid": "ease2_n25",
+  "group": [
+    51,
+    37
+  ],
+  "version": 4,
+  "tiles": {},
+  "blocked": {
+    "412_301": {
+      "reason": "no_home",
+      "habitat": "tundra"
+    }
+  }
+}

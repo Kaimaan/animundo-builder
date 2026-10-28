@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "made_at": "2026-11-02T03:00:00Z",
+  "world": "c341d52",
+  "groups": {
+    "ease2_n25/51_37": 4
+  },
+  "counts": {
+    "ready": 1,
+    "blocked": {
+      "no_home": 1
+    }
+  }
+}

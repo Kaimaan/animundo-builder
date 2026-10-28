@@ -10,7 +10,6 @@ from pathlib import Path
 from builder.schemas import ROOT
 
 ADMIN = ROOT / "web" / "admin"
-BUILD = ROOT / "web" / "build"
 
 
 def _json(path: Path) -> object:
@@ -50,15 +49,6 @@ def test_nothing_shows_until_admin() -> None:
     assert 'collection("admins").doc(user.uid).get()' in app
 
 
-def test_same_project_as_web_app() -> None:
-    admin = (ADMIN / "app.js").read_text(encoding="utf-8")
-    build = (BUILD / "app.js").read_text(encoding="utf-8")
-    for key in ("apiKey", "projectId", "storageBucket"):
-        found = re.search(rf'{key}: "([^"]+)"', admin)
-        assert found, key
-        assert f'{key}: "{found.group(1)}"' in build, key
-
-
 def test_emulator_ports_match_firebase_json() -> None:
     config = _json(ROOT / "firebase" / "firebase.json")["emulators"]
     app = (ADMIN / "app.js").read_text(encoding="utf-8")
@@ -78,7 +68,7 @@ def test_test_admin_matches_seed() -> None:
 
 def test_actions_match_rules() -> None:
     app = (ADMIN / "app.js").read_text(encoding="utf-8")
-    asked = set(re.findall(r'sendAction\(draft\.id, "([a-z_]+)"', app))
+    asked = set(re.findall(r'sendAction\([^,]+, "([a-z_]+)"', app))
     assert asked
     rules = (ROOT / "firebase" / "firestore.rules").read_text(encoding="utf-8")
     allowed = set(re.findall(r"'([a-z_]+)'", rules.split("admin_actions")[1]))

@@ -1,13 +1,13 @@
 "use strict";
-/* Animundo Builder: the admin panel (short T24).
+/* Animundo Builder: the admin panel.
  *
  * Static files only (the game's copy publishes this folder at
- * animundo.app/admin). Admins sign in with an email link; every
- * button only does what the Firestore and Storage rules allow:
- * read drafts, the inbox and packs, mark inbox items handled,
- * and ask the worker to publish, turn down, show again or remove
- * a draft through admin_actions. Draft ids only, never names or
- * emails. English only.
+ * animundo.app/admin). Admins sign in with email and password;
+ * every button only does what the Firestore rules allow: read
+ * border requests, areas, judge builds and the inbox, mark inbox
+ * items handled, and ask the worker to approve, turn down, ship,
+ * refuse or reopen through admin_actions. Tile ids only, never
+ * names or emails. English only.
  */
 
 const FIREBASE_CONFIG = {
@@ -31,24 +31,20 @@ const EMULATORS = {
 const TEST_ADMIN = { email: "admin@example.org", password: "admin-1" };
 
 const STATUSES = [
-  "requested",
-  "queued",
-  "building",
+  "waiting",
+  "being_built",
+  "being_checked",
   "ready",
-  "improving",
-  "in_review",
-  "public",
-  "not_accepted",
-  "hidden",
-  "removed",
-  "expired",
-  "not_possible_yet",
+  "turned_down",
   "failed",
 ];
 
+const TURN_DOWN_REASONS = ["too_costly", "odd_request", "not_now", "quality", "other"];
+
 const state = {
   user: null,
-  drafts: [],
+  areas: [],
+  requests: {},
 };
 
 function $(id) {
@@ -57,10 +53,6 @@ function $(id) {
 
 function db() {
   return firebase.firestore();
-}
-
-function storage() {
-  return firebase.storage();
 }
 
 function showError(text) {
@@ -106,32 +98,19 @@ function emulatorMode() {
   return new URLSearchParams(window.location.search).has("emulator");
 }
 
-function returnUrl() {
-  const url = new URL(window.location.href);
-  const clean = `${url.origin}${url.pathname}`;
-  return url.searchParams.has("emulator") ? `${clean}?emulator=1` : clean;
-}
-
-async function sendLink() {
+async function signIn() {
   clearError();
   const email = $("auth-email").value.trim();
-  if (!email) {
+  const password = $("auth-password").value;
+  if (!email || !password) {
+    showError("Type your email and password.");
     return;
   }
   try {
-    localStorage.setItem("animundoAdminEmail", email);
-  } catch (_) {
-    /* private mode */
-  }
-  try {
-    await firebaseAuth().sendSignInLinkToEmail(email, {
-      url: returnUrl(),
-      handleCodeInApp: true,
-    });
-    $("auth-note").textContent = "Check your email for the sign-in link.";
+    await firebaseAuth().signInWithEmailAndPassword(email, password);
   } catch (error) {
     console.error(error);
-    showError();
+    showError("Wrong email or password.");
   }
 }
 
@@ -145,30 +124,6 @@ async function signInTestAdmin() {
   } catch (error) {
     console.error(error);
     showError("Seed the emulators first: node firebase/seed-emulator.mjs");
-  }
-}
-
-async function finishLink() {
-  if (!firebaseAuth().isSignInWithEmailLink(window.location.href)) {
-    return false;
-  }
-  let email = null;
-  try {
-    email = localStorage.getItem("animundoAdminEmail");
-  } catch (_) {
-    /* private mode */
-  }
-  if (!email) {
-    email = window.prompt("Email:") || "";
-  }
-  try {
-    await firebaseAuth().signInWithEmailLink(email, window.location.href);
-    window.history.replaceState({}, "", returnUrl());
-    return true;
-  } catch (error) {
-    console.error(error);
-    showError("That sign-in link is bad or expired.");
-    return false;
   }
 }
 
@@ -202,20 +157,18 @@ async function boot() {
   if (emulatorMode()) {
     firebaseAuth().useEmulator(EMULATORS.auth);
     db().useEmulator(...EMULATORS.firestore);
-    storage().useEmulator(...EMULATORS.storage);
     $("auth-test").hidden = false;
   }
-  $("auth-send").addEventListener("click", sendLink);
+  $("auth-signin").addEventListener("click", signIn);
   $("auth-test").addEventListener("click", signInTestAdmin);
   $("auth-out").addEventListener("click", () => firebaseAuth().signOut());
-  $("draft-filter").addEventListener("change", renderDrafts);
+  $("area-filter").addEventListener("change", renderAreas);
   for (const status of STATUSES) {
     const option = document.createElement("option");
     option.value = status;
     option.textContent = status;
-    $("draft-filter").append(option);
+    $("area-filter").append(option);
   }
-  await finishLink();
   firebaseAuth().onAuthStateChanged(onUser);
 }
 
@@ -224,230 +177,200 @@ async function boot() {
 async function loadAll() {
   clearError();
   try {
-    const snap = await db().collection("drafts").limit(200).get();
-    state.drafts = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    state.drafts.sort((a, b) => stampOf(b) - stampOf(a));
+    const snap = await db().collection("areas").limit(200).get();
+    state.areas = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    state.areas.sort((a, b) => stampOf(b) - stampOf(a));
+    const reqs = await db().collection("border_requests").limit(200).get();
+    state.requests = Object.fromEntries(
+      reqs.docs.map((doc) => [doc.id, doc.data()]),
+    );
   } catch (error) {
     console.error(error);
     showError();
     return;
   }
-  renderDrafts();
-  renderSubmitted();
-  await loadProblems();
+  renderQueue();
+  renderAreas();
+  await loadInbox();
 }
 
-function stampOf(draft) {
-  for (const key of ["updated_at", "created_at"]) {
-    const value = draft[key];
-    if (!value) {
-      continue;
-    }
-    const date =
-      typeof value.toDate === "function" ? value.toDate() : new Date(value);
-    if (!Number.isNaN(date.getTime())) {
-      return date.getTime();
-    }
+function stampOf(area) {
+  const value = area.updated_at;
+  if (!value) {
+    return 0;
   }
-  return 0;
+  const date =
+    typeof value.toDate === "function" ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
-function draftTitle(draft) {
-  return (
-    draft.place_name ||
-    (draft.kind === "animal_home"
-      ? `home ${draft.cell || draft.id}`
-      : draft.area_id || draft.id)
+/* -- request queue ------------------------------------------- */
+
+function renderQueue() {
+  const list = $("queue-list");
+  list.innerHTML = "";
+  const pending = state.areas.filter(
+    (area) => area.route === "admin" && area.approval === "pending",
   );
-}
-
-/* -- places being built -------------------------------------- */
-
-function renderDrafts() {
-  const list = $("draft-list");
-  list.innerHTML = "";
-  const wanted = $("draft-filter").value;
-  const drafts = wanted
-    ? state.drafts.filter((draft) => draft.status === wanted)
-    : state.drafts;
-  if (!drafts.length) {
-    list.append(el("p", "No drafts.", "muted"));
-    return;
-  }
-  for (const draft of drafts) {
-    list.append(draftCard(draft));
-  }
-}
-
-function draftCard(draft) {
-  const card = el("div", undefined, "draft");
-  card.append(el("h3", `${draftTitle(draft)} · ${draft.id}`));
-  const lines = [
-    `Status: ${draft.status || "?"}`,
-    `Stage: ${draft.stage_detail || draft.stage || "—"}`,
-    `Round: ${draft.round || "—"}`,
-    `Cost so far: ${fmtCost(draft.cost_usd)}`,
-    `Started: ${fmtDate(draft.created_at)}`,
-    `Last played: ${fmtDate(draft.last_played_at)}`,
-  ];
-  if (draft.error) {
-    lines.push(`Reason: ${draft.error}`);
-  }
-  for (const line of lines) {
-    card.append(el("p", line, "muted"));
-  }
-  if (draft.pack_version) {
-    const species = el("p", "New species: loading…", "muted");
-    card.append(species);
-    fillSpecies(draft, species, card);
-  }
-  if (draft.round) {
-    const reports = el("p", undefined, "muted");
-    reports.append("Reports: ");
-    card.append(reports);
-    fillReports(draft, reports);
-  }
-  return card;
-}
-
-async function fillSpecies(draft, line, card) {
-  let manifest = null;
-  try {
-    const url = await storage()
-      .ref(`packs/${draft.id}/${draft.pack_version}/manifest.json`)
-      .getDownloadURL();
-    manifest = await (await fetch(url)).json();
-  } catch (error) {
-    console.error(error);
-    line.textContent = "New species: the pack is gone.";
-    return;
-  }
-  const fresh = manifest.new_species || [];
-  const reused = manifest.reused_species || [];
-  line.textContent =
-    `New species: ${fresh.join(", ") || "none"}` +
-    (reused.length ? ` (reusing ${reused.length})` : "");
-  if (!fresh.length) {
-    return;
-  }
-  const row = el("div", undefined, "previews");
-  card.append(row);
-  for (const species of fresh) {
-    try {
-      const url = await storage()
-        .ref(`packs/${draft.id}/${draft.pack_version}/previews/${species}.png`)
-        .getDownloadURL();
-      const figure = document.createElement("figure");
-      const img = document.createElement("img");
-      img.src = url;
-      img.alt = species;
-      img.loading = "lazy";
-      figure.append(img, species);
-      row.append(figure);
-    } catch (error) {
-      console.error(error);
-    }
-  }
-}
-
-async function fillReports(draft, line) {
-  let any = false;
-  for (let round = 1; round <= (draft.round || 0); round++) {
-    try {
-      const url = await storage()
-        .ref(`reports/${draft.id}/${round}/report.html`)
-        .getDownloadURL();
-      const link = document.createElement("a");
-      link.href = url;
-      link.textContent = `round ${round}`;
-      link.target = "_blank";
-      link.rel = "noopener";
-      if (any) {
-        line.append(" · ");
-      }
-      line.append(link);
-      any = true;
-    } catch (error) {
-      console.error(error);
-    }
-  }
-  if (!any) {
-    line.append("none yet");
-  }
-}
-
-/* -- submitted ----------------------------------------------- */
-
-function renderSubmitted() {
-  const list = $("submitted-list");
-  list.innerHTML = "";
-  const drafts = state.drafts.filter((draft) => draft.status === "in_review");
-  if (!drafts.length) {
+  if (!pending.length) {
     list.append(el("p", "Nothing waiting.", "muted"));
     return;
   }
-  for (const draft of drafts) {
-    list.append(submittedCard(draft));
+  for (const area of pending) {
+    list.append(queueCard(area));
   }
 }
 
-function submittedCard(draft) {
-  const card = el("div", undefined, "item");
-  card.append(el("h3", `${draftTitle(draft)} · ${draft.id}`));
-  const cmd = el("code", `builder submit ${draft.id}`, "cmd");
-  const copy = el("button", "Copy");
-  copy.type = "button";
-  copy.classList.add("ghost");
-  copy.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(`builder submit ${draft.id}`);
-      copy.textContent = "Copied";
-    } catch (error) {
-      console.error(error);
-    }
-  });
-  const cmdRow = el("p");
-  cmdRow.append(cmd, " ", copy);
-  card.append(cmdRow);
-  if (draft.pr_url) {
-    const row = el("p");
-    const link = document.createElement("a");
-    link.href = draft.pr_url;
-    link.textContent = "Pull request";
-    link.target = "_blank";
-    link.rel = "noopener";
-    row.append(link);
-    card.append(row);
-  } else {
-    card.append(el("p", "Not sent on yet.", "muted"));
+function planText(plan) {
+  if (!plan) {
+    return "—";
   }
-  const answer = document.createElement("input");
-  answer.type = "text";
-  answer.placeholder = "Reason (to turn it down)";
-  answer.maxLength = 300;
-  const publish = el("button", "Published");
-  publish.type = "button";
-  publish.addEventListener("click", () => sendAction(draft.id, "published", {}));
-  const refuse = el("button", "Not accepted");
-  refuse.type = "button";
-  refuse.classList.add("ghost");
-  refuse.addEventListener("click", () => {
-    if (!answer.value.trim()) {
-      showError("Give a reason the family will see.");
-      return;
-    }
-    sendAction(draft.id, "not_accepted", { reason: answer.value.trim() });
-  });
+  const parts = [];
+  const expand = plan.expand || {};
+  if (expand.home) {
+    parts.push(`home ${expand.home}`);
+  }
+  if (expand.animal) {
+    parts.push(`animal ${expand.animal}`);
+  }
+  if (expand.food && expand.food.length) {
+    parts.push(`food ${expand.food.join(", ")}`);
+  }
+  if (expand.find) {
+    parts.push(`find ${expand.find}`);
+  }
+  if (plan.improve && plan.improve.length) {
+    parts.push(`improve ${plan.improve.join(", ")}`);
+  }
+  return parts.join("; ") || "nothing missing";
+}
+
+function queueCard(area) {
+  const card = el("div", undefined, "item");
+  const name = (area.name && area.name.en) || area.tile;
+  card.append(el("h3", `${name} · ${area.tile}`));
+  const request = state.requests[area.tile] || {};
+  const species = Object.entries(request.species_played || {})
+    .map(([id, n]) => `${id} ${n}`)
+    .join(", ");
+  for (const line of [
+    `Route: ${area.route || "?"}`,
+    `Plan: ${planText(area.plan)}`,
+    `Estimate: ${fmtCost(area.estimate_usd)}`,
+    `Notes: ${request.notes || "—"} (priority ${request.priority ?? "—"})`,
+    `Animals played: ${species || "—"}`,
+  ]) {
+    card.append(el("p", line, "muted"));
+  }
+  const reason = document.createElement("select");
+  for (const value of TURN_DOWN_REASONS) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    reason.append(option);
+  }
+  const approve = el("button", "Approve");
+  approve.type = "button";
+  approve.addEventListener("click", () =>
+    sendAction(area.tile, "approve_request", {}),
+  );
+  const turnDown = el("button", "Turn down");
+  turnDown.type = "button";
+  turnDown.classList.add("ghost");
+  turnDown.addEventListener("click", () =>
+    sendAction(area.tile, "turn_down_request", { reason: reason.value }),
+  );
   const row = el("div", undefined, "draft answer-row");
-  row.append(answer, publish, refuse);
+  row.append(reason, approve, turnDown);
   card.append(row);
   return card;
 }
 
-/* -- reported problems --------------------------------------- */
+/* -- areas --------------------------------------------------- */
 
-async function loadProblems() {
-  const list = $("problem-list");
+function renderAreas() {
+  const list = $("area-list");
+  list.innerHTML = "";
+  const wanted = $("area-filter").value;
+  const areas = wanted
+    ? state.areas.filter((area) => area.status === wanted)
+    : state.areas;
+  if (!areas.length) {
+    list.append(el("p", "No areas.", "muted"));
+    return;
+  }
+  for (const area of areas) {
+    list.append(areaCard(area));
+  }
+}
+
+function areaCard(area) {
+  const card = el("div", undefined, "draft");
+  const name = (area.name && area.name.en) || area.tile;
+  card.append(el("h3", `${name} · ${area.tile}`));
+  for (const line of [
+    `Status: ${area.status || "?"}`,
+    `Approval: ${area.approval || "?"}`,
+    `Cost so far: ${fmtCost(area.cost_usd)}`,
+    `Updated: ${fmtDate(area.updated_at)}`,
+  ]) {
+    card.append(el("p", line, "muted"));
+  }
+  for (const item of area.items || []) {
+    card.append(
+      el(
+        "p",
+        `${item.kind} ${item.what}: ${item.status}`,
+        "muted",
+      ),
+    );
+    if (item.status === "checking") {
+      card.append(itemReviewRow(area.tile, item));
+    }
+  }
+  if (area.status === "turned_down" || area.status === "failed") {
+    const reopen = el("button", "Reopen");
+    reopen.type = "button";
+    reopen.classList.add("ghost");
+    reopen.addEventListener("click", () =>
+      sendAction(area.tile, "reopen_request", {}),
+    );
+    card.append(reopen);
+  }
+  return card;
+}
+
+function itemReviewRow(tile, item) {
+  const row = el("div", undefined, "draft answer-row");
+  const reason = document.createElement("select");
+  for (const value of TURN_DOWN_REASONS) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    reason.append(option);
+  }
+  const ship = el("button", `Ship ${item.what}`);
+  ship.type = "button";
+  ship.addEventListener("click", () =>
+    sendAction(tile, "ship_item", { item: item.id }),
+  );
+  const refuse = el("button", "Not accepted");
+  refuse.type = "button";
+  refuse.classList.add("ghost");
+  refuse.addEventListener("click", () =>
+    sendAction(tile, "not_accepted_item", {
+      item: item.id,
+      reason: reason.value,
+    }),
+  );
+  row.append(reason, ship, refuse);
+  return row;
+}
+
+/* -- inbox --------------------------------------------------- */
+
+async function loadInbox() {
+  const list = $("inbox-list");
   list.innerHTML = "";
   let items = [];
   try {
@@ -462,30 +385,25 @@ async function loadProblems() {
     showError();
     return;
   }
-  const problems = items.filter((item) => item.kind === "problem");
-  problems.sort(
-    (a, b) =>
-      Number(!!a.handled) - Number(!!b.handled) ||
-      Number(!!b.urgent) - Number(!!a.urgent),
-  );
-  if (!problems.length) {
-    list.append(el("p", "Nothing reported.", "muted"));
+  if (!items.length) {
+    list.append(el("p", "Nothing here.", "muted"));
     return;
   }
-  const byId = Object.fromEntries(state.drafts.map((draft) => [draft.id, draft]));
-  for (const item of problems) {
-    list.append(problemCard(item, byId[item.draft_id]));
+  for (const item of items) {
+    list.append(inboxCard(item));
   }
 }
 
-function problemCard(item, draft) {
+function inboxCard(item) {
   const card = el("div", undefined, "item");
-  const head = el("h3", `Report on ${item.draft_id}`);
+  const head = el("h3", `${item.kind || "note"} · ${item.tile || item.id}`);
   if (item.urgent && !item.handled) {
     head.append(el("span", "urgent", "urgent-tag"));
   }
   card.append(head);
-  card.append(el("p", `Reason: ${item.reason || "—"}`));
+  if (item.reason) {
+    card.append(el("p", `Reason: ${item.reason}`));
+  }
   if (item.note) {
     card.append(el("p", `Note: ${item.note}`));
   }
@@ -497,49 +415,21 @@ function problemCard(item, draft) {
   const done = el("button", "Mark handled");
   done.type = "button";
   done.classList.add("ghost");
-  done.addEventListener("click", () => markHandled(item, card));
+  done.addEventListener("click", () => markHandled(item));
   card.append(done);
-  if (draft && draft.status === "hidden") {
-    const answer = document.createElement("input");
-    answer.type = "text";
-    answer.placeholder = "Answer the family sees";
-    answer.maxLength = 300;
-    const show = el("button", "Show again");
-    show.type = "button";
-    show.addEventListener("click", () =>
-      sendAction(draft.id, "show_again", withAnswer(answer)),
-    );
-    const remove = el("button", "Remove");
-    remove.type = "button";
-    remove.classList.add("ghost");
-    remove.addEventListener("click", () => {
-      if (!answer.value.trim()) {
-        showError("Give an answer the family will see.");
-        return;
-      }
-      sendAction(draft.id, "remove", { answer: answer.value.trim() });
-    });
-    const row = el("div", undefined, "draft answer-row");
-    row.append(answer, show, remove);
-    card.append(row);
-  }
   return card;
-}
-
-function withAnswer(input) {
-  return input.value.trim() ? { answer: input.value.trim() } : {};
 }
 
 /* -- actions ------------------------------------------------- */
 
-async function sendAction(draftId, action, extra) {
+async function sendAction(tile, action, extra) {
   clearError();
   try {
     await db()
       .collection("admin_actions")
       .add({
         admin_uid: state.user.uid,
-        draft_id: draftId,
+        tile,
         action,
         ...extra,
         at: firebase.firestore.FieldValue.serverTimestamp(),
@@ -551,14 +441,14 @@ async function sendAction(draftId, action, extra) {
   }
 }
 
-async function markHandled(item, card) {
+async function markHandled(item) {
   clearError();
   try {
     await db().collection("admin_inbox").doc(item.id).update({
       handled: true,
       handled_at: new Date().toISOString(),
     });
-    await loadProblems();
+    await loadInbox();
   } catch (error) {
     console.error(error);
     showError();

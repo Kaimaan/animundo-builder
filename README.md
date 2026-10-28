@@ -1,24 +1,33 @@
 # Animundo Builder
 
-Open-source agents that turn a real natural area into a playable place for
-Animundo, a nature game where children play real animals in real places.
-Built with Muse Code for the Meta Global AI Developer Hackathon
+Open-source tools that grow Animundo's world ahead of the children who
+explore it. Animundo is a nature game where children play real animals in
+real places. Built with Muse Code for the Meta Global AI Developer Hackathon
 (Oct 26 to Nov 4, 2026).
 
-**Status:** day one. This repository is a skeleton; the pipeline, the Builder
-mode addon and the rules are being built task by task. The full README,
-written for the hackathon judges, lands with the finished work.
+The grown-up builder is gone. Every grown-up-built place was a separate
+world and a separate decision; nature changes slowly, so most land is now
+made by code from content already reviewed, and agents build only where
+children reach the edge of the known world. No animundo.app/build, no
+family drafts, no grown-up requests.
+
+**Status:** phase 0. The contracts are schemas, the grown-up builder is
+removed, and the tile maker lands next. The full README, written for the
+hackathon judges, lands with the finished work.
 
 ## Layout
 
 ```
 builder/    # the Python package: CLI, worker, pipeline, stages, tools
+contracts/  # the shared contracts as JSON Schemas
+schemas/    # the agents' working schemas
 tests/      # pytest suite; no paid API calls in unit tests
 docs/       # design docs, written as each part lands
+firebase/   # Firestore and Storage rules with emulator tests
+godot/      # the game-side addon for judge previews
+web/admin/  # the admin panel: the request queue and review
+data/       # baked data: the habitat grid, well-known places
 ```
-
-Later tasks add `prompts/`, `schemas/`, `contracts/`, `firebase/`,
-`godot/addons/animundo_builder/`, `examples/` and `evals/`.
 
 ## Models
 

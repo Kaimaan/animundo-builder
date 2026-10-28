@@ -1,14 +1,13 @@
-"""The worker's Firestore + Storage backend, via the Admin SDK.
+"""The worker's Firestore backend, via the Admin SDK.
 
 Connects with Application Default Credentials (`gcloud auth
 application-default login` on Kai's Mac, the service account on
-Cloud Run later), so no key file. Honors the emulator
+Modal later), so no key file. Honors the emulator
 environment variables when they are set.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import firebase_admin
@@ -43,71 +42,50 @@ class FirebaseStore:
         except Exception as error:
             raise StoreError(f"cannot open the Storage bucket: {error}") from error
 
-    # -- drafts --------------------------------------------------------
+    # -- requests and areas --------------------------------------------
 
-    def get_draft(self, draft_id: str) -> dict[str, Any] | None:
-        snap = self._db.collection("drafts").document(draft_id).get()
+    def get_request(self, tile: str) -> dict[str, Any] | None:
+        snap = self._db.collection("border_requests").document(tile).get()
         return snap.to_dict() if snap.exists else None
 
-    def update_draft(self, draft_id: str, fields: dict[str, Any]) -> None:
+    def get_area(self, tile: str) -> dict[str, Any] | None:
+        snap = self._db.collection("areas").document(tile).get()
+        return snap.to_dict() if snap.exists else None
+
+    def update_area(self, tile: str, fields: dict[str, Any]) -> None:
         from .worker import DELETE
 
-        self._db.collection("drafts").document(draft_id).update(
+        self._db.collection("areas").document(tile).update(
             {
                 key: firestore.DELETE_FIELD if value is DELETE else value
                 for key, value in fields.items()
             }
         )
 
-    def claim_draft(self, draft_id: str, worker_id: str) -> bool:
-        """Move `requested` to `queued` atomically; the loser gets False."""
+    def claim_area(self, tile: str, worker_id: str) -> bool:
+        """Claim a waiting area atomically; the loser gets False."""
         from .worker import now_iso
 
-        ref = self._db.collection("drafts").document(draft_id)
-        return _claim_requested(self._db.transaction(), ref, worker_id, now_iso())
+        ref = self._db.collection("areas").document(tile)
+        return _claim_waiting(self._db.transaction(), ref, worker_id, now_iso())
 
-    def drafts_by_owner(self, owner_uid: str) -> list[tuple[str, dict[str, Any]]]:
-        return [
-            (snap.id, snap.to_dict() or {})
-            for snap in self._db.collection("drafts")
-            .where("owner_uid", "==", owner_uid)
-            .stream()
-        ]
+    # -- judge builds ----------------------------------------------------
 
-    def requested_drafts(self) -> list[tuple[str, dict[str, Any]]]:
-        return [
-            (snap.id, snap.to_dict() or {})
-            for snap in self._db.collection("drafts")
-            .where("status", "==", "requested")
-            .stream()
-        ]
+    def get_judge_build(self, build_id: str) -> dict[str, Any] | None:
+        snap = self._db.collection("judge_builds").document(build_id).get()
+        return snap.to_dict() if snap.exists else None
 
-    def drafts_in_statuses(
-        self, statuses: list[str]
-    ) -> list[tuple[str, dict[str, Any]]]:
-        return [
-            (snap.id, snap.to_dict() or {})
-            for snap in self._db.collection("drafts")
-            .where("status", "in", statuses)
-            .stream()
-        ]
+    def update_judge_build(self, build_id: str, fields: dict[str, Any]) -> None:
+        from .worker import DELETE
 
-    # -- feed, inbox, jobs ----------------------------------------------
-
-    def add_feed(self, draft_id: str, entry: dict[str, Any]) -> None:
-        self._db.collection("drafts").document(draft_id).collection("feed").document(
-            str(entry["n"])
-        ).set(entry)
-
-    def feed_count(self, draft_id: str) -> int:
-        return len(
-            list(
-                self._db.collection("drafts")
-                .document(draft_id)
-                .collection("feed")
-                .stream()
-            )
+        self._db.collection("judge_builds").document(build_id).update(
+            {
+                key: firestore.DELETE_FIELD if value is DELETE else value
+                for key, value in fields.items()
+            }
         )
+
+    # -- inbox, jobs, admin actions ----------------------------------------
 
     def add_inbox(self, item: dict[str, Any]) -> str:
         _, ref = self._db.collection("admin_inbox").add(item)
@@ -123,11 +101,6 @@ class FirebaseStore:
     def update_job(self, job_id: str, fields: dict[str, Any]) -> None:
         self._db.collection("jobs").document(job_id).update(fields)
 
-    def set_public(self, area_id: str, doc: dict[str, Any]) -> None:
-        self._db.collection("places_public").document(area_id).set(doc)
-
-    # -- admin actions ---------------------------------------------------
-
     def get_action(self, action_id: str) -> dict[str, Any] | None:
         snap = self._db.collection("admin_actions").document(action_id).get()
         return snap.to_dict() if snap.exists else None
@@ -142,70 +115,48 @@ class FirebaseStore:
             if not (snap.to_dict() or {}).get("done_at")
         ]
 
-    # -- storage ----------------------------------------------------------
-
-    def upload_pack(self, draft_id: str, version: int, pack_dir: Path) -> None:
-        for path in sorted(pack_dir.rglob("*")):
-            if not path.is_file():
-                continue
-            rel = path.relative_to(pack_dir)
-            self._bucket.blob(f"packs/{draft_id}/{version}/{rel}").upload_from_filename(
-                str(path)
-            )
-
-    def upload_report(self, draft_id: str, round_no: int, report: Path) -> None:
-        self._bucket.blob(
-            f"reports/{draft_id}/{round_no}/report.html"
-        ).upload_from_filename(str(report))
-
-    def delete_pack(self, draft_id: str) -> None:
-        for blob in self._bucket.list_blobs(prefix=f"packs/{draft_id}/"):
-            blob.delete()
-
     # -- watch -------------------------------------------------------------
 
-    def watch_drafts(self, callback: Any) -> Any:
-        return self._db.collection("drafts").on_snapshot(callback)
+    def watch_requests(self, callback: Any) -> Any:
+        return self._db.collection("border_requests").on_snapshot(callback)
+
+    def watch_judge_builds(self, callback: Any) -> Any:
+        return self._db.collection("judge_builds").on_snapshot(callback)
 
     def watch_actions(self, callback: Any) -> Any:
         return self._db.collection("admin_actions").on_snapshot(callback)
 
 
 #: Every store method the worker calls. Both the real `FirebaseStore`
-#: and the tests' fake must have them all: #81 nested half the real
-#: class inside a function and nothing caught it (#94).
+#: and the tests' fake must have them all.
 STORE_METHODS = (
-    "add_feed",
     "add_inbox",
-    "claim_draft",
-    "delete_pack",
-    "drafts_by_owner",
-    "drafts_in_statuses",
-    "feed_count",
+    "claim_area",
     "get_action",
-    "get_draft",
+    "get_area",
     "get_job",
+    "get_judge_build",
+    "get_request",
     "pending_actions",
-    "requested_drafts",
     "set_job",
-    "set_public",
     "update_action",
-    "update_draft",
+    "update_area",
     "update_job",
-    "upload_pack",
-    "upload_report",
+    "update_judge_build",
     "watch_actions",
-    "watch_drafts",
+    "watch_judge_builds",
+    "watch_requests",
 )
 
 
 @firestore.transactional
-def _claim_requested(transaction: Any, ref: Any, worker_id: str, at: str) -> bool:
-    """One transaction: still requested, it is ours (#81.1)."""
+def _claim_waiting(transaction: Any, ref: Any, worker_id: str, at: str) -> bool:
+    """One transaction: still waiting and unclaimed, it is ours."""
     snap = ref.get(transaction=transaction)
-    if not snap.exists or (snap.to_dict() or {}).get("status") != "requested":
+    if not snap.exists:
         return False
-    transaction.update(
-        ref, {"status": "queued", "worker_id": worker_id, "updated_at": at}
-    )
+    data = snap.to_dict() or {}
+    if data.get("status") != "waiting" or data.get("worker_id"):
+        return False
+    transaction.update(ref, {"worker_id": worker_id, "updated_at": at})
     return True

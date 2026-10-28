@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/known-world.schema.json",
+  "title": "The shared known world: ready tiles near explored land, with no player data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "day",
+    "made_at",
+    "known",
+    "explored",
+    "first",
+    "border",
+    "areas",
+    "totals"
+  ],
+  "properties": {
+    "format": {"const": 1},
+    "day": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "made_at": {"type": "string", "minLength": 1},
+    "known": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "explored": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"}
+    },
+    "first": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["species"],
+        "properties": {
+          "species": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "name": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "border": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "additionalProperties": {"enum": ["no_home", "no_animal", "excluded"]}
+    },
+    "areas": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "additionalProperties": {
+        "enum": [
+          "waiting",
+          "being_built",
+          "being_checked",
+          "ready",
+          "turned_down",
+          "failed"
+        ]
+      }
+    },
+    "totals": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tiles", "km2"],
+        "properties": {
+          "tiles": {"type": "integer", "minimum": 0},
+          "km2": {"type": "number", "minimum": 0}
+        }
+      }
+    }
+  }
+}

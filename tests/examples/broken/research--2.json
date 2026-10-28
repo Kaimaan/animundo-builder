@@ -1,0 +1,57 @@
+{
+  "main_food": {
+    "name": "mountain hare",
+    "kind": "prey",
+    "size_cm": 55
+  },
+  "other_foods": [
+    {
+      "name": "bilberries",
+      "kind": "berries"
+    },
+    {
+      "name": "bank vole",
+      "kind": "prey",
+      "size_cm": 11
+    }
+  ],
+  "surroundings": [
+    {
+      "name": "Norway spruce",
+      "kind": "tree",
+      "food_kind": "cones"
+    },
+    {
+      "name": "bilberry",
+      "kind": "plant",
+      "food_kind": "berries"
+    },
+    {
+      "name": "timothy grass",
+      "kind": "plant",
+      "food_kind": "grass"
+    },
+    {
+      "name": "mossy rocks",
+      "kind": "ground"
+    },
+    {
+      "name": "forest pond",
+      "kind": "water"
+    }
+  ],
+  "size": {
+    "length_cm": 70,
+    "weight_kg": 6.5
+  },
+  "year": {
+    "winter": "active",
+    "shelter": "Sleeps curled up in the open.",
+    "young": "Cubs are born in spring.",
+    "food": "Hunts hares and voles all year, berries in autumn."
+  },
+  "sources": [
+    "https://example.org/fox"
+  ],
+  "zzz_extra_forbidden": 1
+}

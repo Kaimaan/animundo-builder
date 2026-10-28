@@ -21,7 +21,7 @@ def schema_path(name: str) -> Path:
 
 
 def load_schema(name: str) -> dict[str, Any]:
-    """Read one schema by its short name, for example `"draft"`."""
+    """Read one schema by its short name, for example `"tile"`."""
     return json.loads(schema_path(name).read_text(encoding="utf-8"))
 
 

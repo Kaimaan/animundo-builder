@@ -20,7 +20,6 @@ from .stages import (
     CapabilityStage,
     HomeMakerStage,
     HomeStage,
-    IntakeStage,
     LooksStage,
     MinimumStage,
     ModelsStage,
@@ -38,7 +37,6 @@ from .stages import (
 
 
 def pipeline_stages(
-    intake: IntakeStage,
     author: str,
     max_new_species: int,
     reference: str,
@@ -47,7 +45,6 @@ def pipeline_stages(
 ) -> list:
     """Every stage in run order, with the pack stamped for its round."""
     return [
-        intake,
         ResearchStage(),
         MinimumStage(),
         LooksStage(),

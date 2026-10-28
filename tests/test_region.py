@@ -133,8 +133,8 @@ def _ctx(tmp_path: Path, client: Any, world: Path) -> JobContext:
 class ScriptClient:
     model = "fake-test-model"
 
-    def __init__(self, drafts: list[dict]) -> None:
-        self.drafts = list(drafts)
+    def __init__(self, scripts: list[dict]) -> None:
+        self.scripts = list(scripts)
         self.calls: list[dict] = []
         self.prompts: list[str] = []
 
@@ -142,7 +142,7 @@ class ScriptClient:
         content = messages[-1]["content"]
         self.prompts.append(content if isinstance(content, str) else content[0]["text"])
         self.calls.append(kwargs)
-        content = json.dumps(self.drafts.pop(0))
+        content = json.dumps(self.scripts.pop(0))
         message = SimpleNamespace(content=content, tool_calls=None)
         return SimpleNamespace(
             model="fake-test-model",
@@ -153,7 +153,7 @@ class ScriptClient:
         )
 
 
-def _draft(**overrides: Any) -> dict:
+def _answer(**overrides: Any) -> dict:
     region: dict[str, Any] = {
         "id": "wrong",
         "name": "Good",
@@ -173,7 +173,7 @@ def _draft(**overrides: Any) -> dict:
 def test_writes_validated_region(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    client = ScriptClient([_draft()])
+    client = ScriptClient([_answer()])
     result = RegionStage(author="Tester").run(_ctx(tmp_path, client, world))
     assert result["planned_species"] == ["zz_new"]
     written = json.loads((tmp_path / "regions" / "gb_test.json").read_text())
@@ -197,7 +197,7 @@ def test_writes_validated_region(tmp_path: Path) -> None:
 def test_validator_error_sent_back(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    client = ScriptClient([_draft(name="Bad"), _draft()])
+    client = ScriptClient([_answer(name="Bad"), _answer()])
     result = RegionStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == 2
     written = json.loads((tmp_path / "regions" / "gb_test.json").read_text())
@@ -207,9 +207,9 @@ def test_validator_error_sent_back(tmp_path: Path) -> None:
 def test_schema_break_sent_back(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    nameless = _draft()
+    nameless = _answer()
     del nameless["name"]
-    client = ScriptClient([nameless, _draft()])
+    client = ScriptClient([nameless, _answer()])
     RegionStage().run(_ctx(tmp_path, client, world))
     assert len(client.calls) == 2
     assert "region schema" in client.prompts[1]
@@ -218,9 +218,9 @@ def test_schema_break_sent_back(tmp_path: Path) -> None:
 def test_unknown_non_surveyed_animal_is_an_error(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    bad = _draft()
+    bad = _answer()
     bad["animals"]["playable"] = ["fox", "zz_stranger"]
-    client = ScriptClient([bad, _draft()])
+    client = ScriptClient([bad, _answer()])
     RegionStage().run(_ctx(tmp_path, client, world))
     assert len(client.calls) == 2
 
@@ -228,9 +228,9 @@ def test_unknown_non_surveyed_animal_is_an_error(tmp_path: Path) -> None:
 def test_missing_surveyed_species_sent_back(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    thin = _draft()
+    thin = _answer()
     thin["animals"]["playable"] = ["fox"]
-    client = ScriptClient([thin, _draft()])
+    client = ScriptClient([thin, _answer()])
     RegionStage().run(_ctx(tmp_path, client, world))
     assert len(client.calls) == 2
     assert "zz_new" in client.prompts[1]
@@ -243,7 +243,7 @@ def test_missing_surveyed_species_sent_back(tmp_path: Path) -> None:
 def test_rounds_exhausted(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    client = ScriptClient([_draft(name="Bad")] * 3)
+    client = ScriptClient([_answer(name="Bad")] * 3)
     pipeline = Pipeline([RegionStage(max_rounds=2)], tmp_path / "state.json")
     with pytest.raises(StageFailedError):
         pipeline.run(_ctx(tmp_path, client, world))
@@ -257,7 +257,7 @@ def test_skipped_region_check_stops(tmp_path: Path) -> None:
         "{'check': 'region', 'status': 'skip', "
         "'problems': [], 'reason': 'no models yet'}]}))"
     )
-    client = ScriptClient([_draft()])
+    client = ScriptClient([_answer()])
     pipeline = Pipeline([RegionStage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage region failed"):
         pipeline.run(_ctx(tmp_path, client, world))
@@ -285,7 +285,7 @@ def test_named_nest_site_sent_back(tmp_path: Path) -> None:
         }
     )
     (tmp_path / "survey.json").write_text(json.dumps(survey))
-    nested = _draft(
+    nested = _answer(
         animals={
             "playable": ["fox", "zz_new"],
             "predators": ["golden_eagle"],
@@ -293,7 +293,7 @@ def test_named_nest_site_sent_back(tmp_path: Path) -> None:
         },
         places=[{"name": "Eagle nest on Grey Crag"}],
     )
-    clean = _draft(
+    clean = _answer(
         animals={
             "playable": ["fox", "zz_new"],
             "predators": ["golden_eagle"],
@@ -341,7 +341,7 @@ def test_unknown_plant_lines_excused(tmp_path: Path) -> None:
         "{'check': 'animals', 'status': 'skip', 'problems': []},"
         "{'check': 'models', 'status': 'skip', 'problems': []}]}))"
     )
-    draft = _draft(ground_cover={"plants": [{"model": "sorrel", "density": 0.2}]})
+    draft = _answer(ground_cover={"plants": [{"model": "sorrel", "density": 0.2}]})
     client = ScriptClient([draft])
     result = RegionStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == 1
@@ -350,12 +350,12 @@ def test_unknown_plant_lines_excused(tmp_path: Path) -> None:
 def test_fourth_new_plant_sent_back(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    draft = _draft(
+    draft = _answer(
         ground_cover={
             "plants": [{"model": f"weed_{n}", "density": 0.1} for n in range(4)]
         }
     )
-    client = ScriptClient([draft, _draft()])
+    client = ScriptClient([draft, _answer()])
     RegionStage().run(_ctx(tmp_path, client, world))
     assert len(client.calls) == 2
     assert "at most 3" in client.prompts[1]
@@ -364,7 +364,7 @@ def test_fourth_new_plant_sent_back(tmp_path: Path) -> None:
 def test_unbuilt_checkout_plant_sent_back(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    draft = _draft(ground_cover={"plants": [{"model": "fern", "density": 0.2}]})
-    client = ScriptClient([draft, _draft()])
+    draft = _answer(ground_cover={"plants": [{"model": "fern", "density": 0.2}]})
+    client = ScriptClient([draft, _answer()])
     RegionStage().run(_ctx(tmp_path, client, world))
     assert "not built" in client.prompts[1]

@@ -1,0 +1,46 @@
+{
+  "species": "red_deer",
+  "reference": "sheet",
+  "sourced": {
+    "body_cm": 200,
+    "tail_cm": 15,
+    "shoulder_cm": 120,
+    "weight_kg": 150
+  },
+  "measured": {
+    "proportions": {
+      "body_length": 1.0,
+      "body_height": 0.62,
+      "torso_depth": 0.2,
+      "leg_length": 0.42,
+      "head_size": 0.21,
+      "tail_length": 0.08
+    },
+    "colours": [
+      {
+        "hex": "#7a5230",
+        "fraction": 0.7
+      },
+      {
+        "hex": "#e8dcc8",
+        "fraction": 0.1
+      }
+    ]
+  },
+  "comparison": [
+    {
+      "proportion": "tail_length",
+      "sourced": 0.075,
+      "measured": 0.08,
+      "within_15_percent": true
+    },
+    {
+      "proportion": "shoulder_height",
+      "sourced": 0.6,
+      "measured": 0.62,
+      "within_15_percent": true
+    }
+  ],
+  "redrawn": false,
+  "zzz_extra_forbidden": 1
+}

@@ -3,6 +3,33 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #115-#116 (phase 0), tagged `v0.4.0`
+
+- T47: the nine shared contracts as JSON Schemas in `contracts/`
+  (tile, tile-group, tile-index, border-note, border-request,
+  admin-action with the new actions, area, judge-build,
+  known-world), draft 2020-12, `additionalProperties: false`
+  everywhere. One valid and at least two broken examples each in
+  `tests/examples/`; `border-request` refuses every player field
+  tried. Old draft, feed-entry, place-public and area-index
+  schemas gone; `pack-manifest` kept for judge previews.
+- T48: the grown-up builder removed. `web/build/` gone (places
+  data moved to `data/` for phase 4 landmarks); Firestore rules
+  rebuilt for `areas`, `border_requests`, `judge_builds`,
+  `judges` and the new `admin_actions`, Storage rules for
+  `previews/`; worker stripped to listener plus atomic claim
+  (border flows land in phase 2); CLI `build`/`resume`/`submit`
+  gone with intake and submit; admin panel on email and password
+  with the request queue; addon down to the `?draft=` opener and
+  pack install. README and AGENTS.md say the grown-up builder is
+  gone and why.
+- Evidence: `uv run pytest -q` → 551 passed, 12 skipped; `ruff
+  check` + `format --check` clean; `gitleaks git` clean; 3
+  headless Godot checks 0 errors; `builder check --world`
+  skeletons on; Firebase emulator tests rewritten for the new
+  rules (CI runs them; the sandbox blocks emulator ports
+  locally).
+
 ## 2026-10-28: inbox #87, #89 (D11) + #92 (D12) + #97, #98, #100, tagged `v0.3.5`
 
 - #87.1: `scripts/places_of_interest.py fetch` wrote

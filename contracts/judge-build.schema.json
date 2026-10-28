@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/judge-build.schema.json",
+  "title": "One judge build: a private preview one judge account plays before review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "judge_uid",
+    "tile",
+    "species",
+    "status",
+    "items",
+    "pack_version",
+    "cost_usd",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "format": {"const": 1},
+    "judge_uid": {"type": "string", "minLength": 1},
+    "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "species": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "status": {"enum": ["being_built", "ready_for_judge", "failed"]},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "what", "status"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["home", "animal", "plant", "food"]},
+          "what": {"type": "string", "minLength": 1},
+          "status": {
+            "enum": ["building", "checking", "shipped", "not_accepted", "failed"]
+          }
+        }
+      }
+    },
+    "pack_version": {"type": "integer", "minimum": 0},
+    "cost_usd": {"type": "number", "minimum": 0},
+    "created_at": {"type": "string", "minLength": 1},
+    "updated_at": {"type": "string", "minLength": 1}
+  }
+}

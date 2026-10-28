@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/tile-group.schema.json",
+  "title": "One group file: 8 by 8 cells with their ready tiles and blocked cells",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "grid", "group", "version", "tiles", "blocked"],
+  "properties": {
+    "format": {"const": 1},
+    "grid": {"enum": ["ease2_n25", "ease2_s25"]},
+    "group": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"type": "integer", "minimum": 0, "maximum": 89}
+    },
+    "version": {"type": "integer", "minimum": 1},
+    "tiles": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "additionalProperties": {"type": "object"}
+    },
+    "blocked": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason", "habitat"],
+        "properties": {
+          "reason": {"enum": ["no_home", "no_animal", "excluded"]},
+          "habitat": {
+            "enum": [
+              "boreal_forest",
+              "boreal_lake",
+              "desert",
+              "forest",
+              "grassland",
+              "ice",
+              "lake",
+              "mangrove",
+              "mountain",
+              "rainforest",
+              "reef",
+              "river",
+              "savanna",
+              "sea",
+              "tundra",
+              "wetland",
+              "dry_forest",
+              "mediterranean",
+              "open_ocean"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

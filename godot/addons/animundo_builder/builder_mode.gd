@@ -1,28 +1,22 @@
 extends Node
-## Builder mode: the game-side addon (spec 06, decision D9).
+## Builder mode: the game-side addon for judge previews.
 ##
 ## Installed as the "BuilderMode" autoload by tools/sync_builder.sh. It uses
 ## only the game's plug-in points (BuilderHooks, the generic Cloud calls) and
-## the engine. Drafts live in the web app until they are published: the
-## grown-up button and the places button both just open animundo.app/build,
-## and opening animundo.app/?draft=<id> (the web app's Play in the game) has
-## the game await the draft opener, which installs that draft's pack for this
-## session only. The backend is injected through boot(), so the headless
-## checks run the same code against stubs with no game and no net.
+## the engine. It adds no buttons and no looks: opening
+## animundo.app/?draft=<id> has the game await the draft opener, which
+## installs that build's pack for this session only. The backend is injected
+## through boot(), so the headless checks run the same code against stubs
+## with no game and no net.
 ##
-## What it does not do: it never signs in (the game and the web app do that),
-## never builds (the worker does that), never lists drafts, and never starts
+## What it does not do: it never signs in (the game does that), never
+## builds (the worker does that), never lists builds, and never starts
 ## gameplay itself (the game starts the opened place once the pack is in).
 
-const WEB_BUILD := "https://animundo.app/build"
 const PACKS_DIR := "user://packs"
-const STRINGS_FOLDER := "user://packs/_addon/1/"
-const STRINGS_SRC := "res://addons/animundo_builder/locale"
-const STRINGS_LANGS: Array[String] = ["en", "fi"]
 
 var _hooks ## BuilderHooks, or a stub in the checks.
 var _cloud: BuilderCloud
-var _explorer := ""
 var _booted := false
 var _last_error := ""
 
@@ -47,26 +41,8 @@ func booted() -> bool:
 func boot(hooks: Variant, cloud_backend: Variant) -> void:
 	_hooks = hooks
 	_cloud = BuilderCloud.new(cloud_backend)
-	_install_strings_folder()
-	_hooks.add_grownup_button("explore.builder_mode", open_web_app)
-	_hooks.add_places_button("explore.ask_place", open_web_app)
 	_hooks.set_draft_opener(open_draft)
 	_booted = true
-
-
-## Opens the builder web app (both buttons' callable).
-func open_web_app() -> void:
-	var url := WEB_BUILD
-	if _explorer != "":
-		url += "?explorer=" + _explorer.uri_encode()
-	OS.shell_open(url)
-
-
-## The animal the web app starts exploring with. The game doesn't pass its
-## current animal through the plug-in points yet, so this stays empty until
-## it does (docs/game-interface.md).
-func set_explorer(species: String) -> void:
-	_explorer = species
 
 
 ## The reason the last opening failed (which step, with its HTTP status
@@ -169,26 +145,6 @@ static func pack_folder(draft_id: String, version: int) -> String:
 		draft_id.to_lower(), "_", true)
 	var tag := PackRules.sha256_hex(draft_id.to_utf8_buffer()).left(8)
 	return "%s/%s_%s/%d/" % [PACKS_DIR, safe, tag, version]
-
-
-# --- boot ---------------------------------------------------------------
-
-## The addon's own words as a content folder, so the game's menus can show
-## its two buttons in the player's language.
-func _install_strings_folder() -> void:
-	DirAccess.make_dir_recursive_absolute(STRINGS_FOLDER + "locale/en")
-	DirAccess.make_dir_recursive_absolute(STRINGS_FOLDER + "locale/fi")
-	# Empty folders the game's readers expect; the folder holds only words.
-	DirAccess.make_dir_recursive_absolute(STRINGS_FOLDER + "regions")
-	DirAccess.make_dir_recursive_absolute(STRINGS_FOLDER + "animals")
-	for lang in STRINGS_LANGS:
-		var src := STRINGS_SRC + "/" + lang + ".json"
-		var dst := STRINGS_FOLDER + "locale/" + lang + "/explore.json"
-		var same := FileAccess.file_exists(dst) \
-			and FileAccess.get_file_as_string(src) == FileAccess.get_file_as_string(dst)
-		if not same:
-			DirAccess.copy_absolute(src, dst)
-	_hooks.add_content_folder(STRINGS_FOLDER)
 
 
 # --- packs ----------------------------------------------------------------

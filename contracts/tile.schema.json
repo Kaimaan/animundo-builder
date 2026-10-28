@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/contracts/tile.schema.json",
+  "title": "One ready tile: land built by code from a home, a seed and GBIF species",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "id",
+    "kind",
+    "version",
+    "center",
+    "grid_north",
+    "edges",
+    "requires"
+  ],
+  "properties": {
+    "format": {"const": 1},
+    "id": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "kind": {"enum": ["code", "place"]},
+    "version": {"type": "integer", "minimum": 1},
+    "center": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lat", "lon"],
+      "properties": {
+        "lat": {"type": "number", "minimum": -90, "maximum": 90},
+        "lon": {"type": "number", "minimum": -180, "maximum": 180}
+      }
+    },
+    "grid_north": {"type": "number", "minimum": -180, "maximum": 180},
+    "habitat": {
+      "enum": [
+        "boreal_forest",
+        "boreal_lake",
+        "desert",
+        "forest",
+        "grassland",
+        "ice",
+        "lake",
+        "mangrove",
+        "mountain",
+        "rainforest",
+        "reef",
+        "river",
+        "savanna",
+        "sea",
+        "tundra",
+        "wetland",
+        "dry_forest",
+        "mediterranean",
+        "open_ocean"
+      ]
+    },
+    "home": {
+      "enum": [
+        "boreal_forest",
+        "boreal_lake",
+        "desert",
+        "forest",
+        "grassland",
+        "ice",
+        "lake",
+        "mangrove",
+        "mountain",
+        "rainforest",
+        "reef",
+        "river",
+        "savanna",
+        "sea",
+        "tundra",
+        "wetland",
+        "dry_forest",
+        "mediterranean",
+        "open_ocean"
+      ]
+    },
+    "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+    "water": {"type": "number", "minimum": 0, "maximum": 1},
+    "species": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["playable", "prey", "predators"],
+      "properties": {
+        "playable": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+        },
+        "prey": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+        },
+        "predators": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+        }
+      }
+    },
+    "edges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["n", "e", "s", "w"],
+      "properties": {
+        "n": {
+          "type": "array",
+          "minItems": 65,
+          "maxItems": 65,
+          "items": {"type": "integer"}
+        },
+        "e": {
+          "type": "array",
+          "minItems": 65,
+          "maxItems": 65,
+          "items": {"type": "integer"}
+        },
+        "s": {
+          "type": "array",
+          "minItems": 65,
+          "maxItems": 65,
+          "items": {"type": "integer"}
+        },
+        "w": {
+          "type": "array",
+          "minItems": 65,
+          "maxItems": 65,
+          "items": {"type": "integer"}
+        }
+      }
+    },
+    "landmarks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "kind", "wikidata"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "fi": {"type": "string", "minLength": 1},
+          "kind": {"type": "string", "minLength": 1},
+          "wikidata": {"type": "string", "pattern": "^Q[0-9]+$"}
+        }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["homes", "animals"],
+      "properties": {
+        "homes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "animals": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["habitat", "water", "species"],
+      "properties": {
+        "habitat": {"type": "string", "minLength": 1},
+        "water": {"type": "string", "minLength": 1},
+        "species": {"type": "string", "minLength": 1}
+      }
+    },
+    "made": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by", "maker", "world", "at"],
+      "properties": {
+        "by": {"const": "tile_maker"},
+        "maker": {"type": "string", "minLength": 1},
+        "world": {"type": "string", "minLength": 1},
+        "at": {"type": "string", "minLength": 1}
+      }
+    },
+    "place": {"type": "string", "minLength": 1},
+    "part": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"type": "integer", "minimum": 0}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "code"}}},
+      "then": {
+        "required": ["habitat", "home", "seed", "water", "species", "sources", "made"],
+        "properties": {"place": false, "part": false}
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "place"}}},
+      "then": {
+        "required": ["place", "part"],
+        "properties": {
+          "habitat": false,
+          "home": false,
+          "seed": false,
+          "water": false,
+          "species": false
+        }
+      }
+    }
+  ]
+}

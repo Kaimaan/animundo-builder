@@ -18,9 +18,10 @@
     <div class="header-right">
       <div id="auth-signed-out">
         <input id="auth-email" type="email" placeholder="admin@example.org" autocomplete="email">
-        <button id="auth-send" type="button">Send sign-in link</button>
+        <input id="auth-password" type="password" placeholder="Password" autocomplete="current-password">
+        <button id="auth-signin" type="button">Sign in</button>
         <button id="auth-test" type="button" hidden>Use the test admin</button>
-        <p id="auth-note" class="muted">Admins only: sign in with an email link.</p>
+        <p id="auth-note" class="muted">Admins only: sign in with email and password.</p>
       </div>
       <div id="auth-signed-in" hidden>
         <span id="auth-who"></span>
@@ -34,26 +35,26 @@
 
 <main id="app" hidden>
   <section>
-    <article id="problems">
-      <h2>Reported problems</h2>
-      <div id="problem-list"><p class="muted">Loading…</p></div>
+    <article id="queue">
+      <h2>Request queue</h2>
+      <div id="queue-list"><p class="muted">Loading…</p></div>
     </article>
 
-    <article id="submitted">
-      <h2>Submitted</h2>
-      <div id="submitted-list"><p class="muted">Loading…</p></div>
+    <article id="areas">
+      <h2>Areas</h2>
+      <label class="filter">Status
+        <select id="area-filter">
+          <option value="">All</option>
+        </select>
+      </label>
+      <div id="area-list"><p class="muted">Loading…</p></div>
     </article>
   </section>
 
   <section>
-    <article id="drafts">
-      <h2>Places being built</h2>
-      <label class="filter">Status
-        <select id="draft-filter">
-          <option value="">All</option>
-        </select>
-      </label>
-      <div id="draft-list"><p class="muted">Loading…</p></div>
+    <article id="inbox">
+      <h2>Inbox</h2>
+      <div id="inbox-list"><p class="muted">Loading…</p></div>
     </article>
   </section>
 </main>

@@ -1,0 +1,53 @@
+{
+  "species": [
+    {
+      "species": "mountain_hare",
+      "decision": "reuse",
+      "reason": "Same species lives here.",
+      "taxon": {
+        "gbif_key": 2436756,
+        "rank": "SPECIES",
+        "name": "Lepus timidus"
+      },
+      "wild": true
+    },
+    {
+      "species": "red_deer",
+      "decision": "new",
+      "reason": "No deer in the game yet.",
+      "taxon": {
+        "gbif_key": 2440958,
+        "rank": "SPECIES",
+        "name": "Cervus elaphus"
+      },
+      "wild": true
+    },
+    {
+      "species": "common_mosquito",
+      "decision": "food",
+      "reason": "Eaten, not built.",
+      "taxon": {
+        "gbif_key": 1651255,
+        "rank": "SPECIES",
+        "name": "Aedes communis"
+      },
+      "food_kind": "water_bugs",
+      "wild": true
+    },
+    {
+      "species": "pine_marten",
+      "decision": "candidate",
+      "reason": "Saved for later: over the cap of 3.",
+      "taxon": {
+        "gbif_key": 5218878,
+        "rank": "SPECIES",
+        "name": "Martes martes"
+      },
+      "wild": true
+    }
+  ],
+  "food_web_ok": true,
+  "missing_food": [],
+  "sensitive_species": [],
+  "zzz_extra_forbidden": 1
+}

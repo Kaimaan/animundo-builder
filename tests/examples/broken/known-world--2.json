@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "day": "11/02/2026",
+  "made_at": "2026-11-02T03:00:00Z",
+  "known": {
+    "n_412_301": 3,
+    "n_413_301": 1
+  },
+  "explored": [
+    "n_412_301"
+  ],
+  "first": {
+    "n_412_301": {
+      "species": "fox",
+      "name": "Brave Fox"
+    }
+  },
+  "border": {
+    "n_413_296": "no_home"
+  },
+  "areas": {
+    "n_413_296": "being_built"
+  },
+  "totals": {
+    "fox": {
+      "tiles": 12,
+      "km2": 7500
+    }
+  }
+}

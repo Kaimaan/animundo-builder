@@ -1,4 +1,4 @@
-"""Animal stage: drafts, checker loop, and round caps. No network."""
+"""Animal stage: scripted answers, checker loop, and round caps. No network."""
 
 from __future__ import annotations
 
@@ -177,8 +177,8 @@ def _ctx(tmp_path: Path, client: Any, world: Path) -> JobContext:
 class ScriptClient:
     model = "fake-test-model"
 
-    def __init__(self, drafts: dict[str, list[dict]]) -> None:
-        self.drafts = {k: list(v) for k, v in drafts.items()}
+    def __init__(self, scripts: dict[str, list[dict]]) -> None:
+        self.scripts = {k: list(v) for k, v in scripts.items()}
         self.prompts: list[str] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
@@ -186,8 +186,8 @@ class ScriptClient:
         last = messages[-1]["content"]
         self.prompts.append(last if isinstance(last, str) else last[0]["text"])
         species_id = re.search(r'"species": "([^"]+)"', content).group(1)  # type: ignore[union-attr]
-        draft = self.drafts[species_id].pop(0)
-        message = SimpleNamespace(content=json.dumps(draft), tool_calls=None)
+        answer = self.scripts[species_id].pop(0)
+        message = SimpleNamespace(content=json.dumps(answer), tool_calls=None)
         return SimpleNamespace(
             model="fake-test-model",
             choices=[SimpleNamespace(message=message)],
@@ -197,23 +197,23 @@ class ScriptClient:
         )
 
 
-def _draft(species_id: str, **overrides: Any) -> dict:
-    draft: dict[str, Any] = {
+def _answer(species_id: str, **overrides: Any) -> dict:
+    answer: dict[str, Any] = {
         "id": species_id,
         "name": "Good",
         "latin": "X y",
         "diet": ["grass"],
         "text": {"title": "T"},
     }
-    draft.update(overrides)
-    return draft
+    answer.update(overrides)
+    return answer
 
 
 def test_writes_valid_animals(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["animal_files"] == ["animals/zz_deer.json", "animals/zz_owl.json"]
@@ -227,9 +227,9 @@ def test_writes_valid_animals(tmp_path: Path) -> None:
 def test_checker_error_fixed_per_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    bad = _draft("zz_owl", diet=["meat"])
+    bad = _answer("zz_owl", diet=["meat"])
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [bad, _draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [bad, _answer("zz_owl")]}
     )
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == {"zz_deer": 1, "zz_owl": 2}
@@ -240,7 +240,7 @@ def test_missing_world_models_are_ignored(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == {"zz_deer": 1, "zz_owl": 1}
@@ -262,7 +262,7 @@ def test_new_species_missing_model_is_ignored(tmp_path: Path) -> None:
         )
     )
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == {"zz_deer": 1, "zz_owl": 1}
@@ -277,7 +277,7 @@ def test_unowned_problem_stops(tmp_path: Path) -> None:
         "'problems': ['ERROR: taxonomy database is on fire']}]}))"
     )
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage animals failed"):
@@ -289,10 +289,10 @@ def test_unowned_problem_stops(tmp_path: Path) -> None:
 def test_schema_break_fixed_per_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    nameless = _draft("zz_owl")
+    nameless = _answer("zz_owl")
     del nameless["name"]
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [nameless, _draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [nameless, _answer("zz_owl")]}
     )
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == {"zz_deer": 1, "zz_owl": 2}
@@ -302,8 +302,8 @@ def test_schema_break_fixed_per_species(tmp_path: Path) -> None:
 def test_rounds_cap_per_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    bad = [_draft("zz_owl", diet=["meat"]) for _ in range(8)]
-    client = ScriptClient({"zz_deer": [_draft("zz_deer")], "zz_owl": bad})
+    bad = [_answer("zz_owl", diet=["meat"]) for _ in range(8)]
+    client = ScriptClient({"zz_deer": [_answer("zz_deer")], "zz_owl": bad})
     pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage animals failed"):
         pipeline.run(_ctx(tmp_path, client, world))
@@ -314,8 +314,8 @@ def test_rounds_cap_per_species(tmp_path: Path) -> None:
 def test_crash_keeps_paid_work(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
-    bad = [_draft("zz_owl", diet=["meat"]) for _ in range(8)]
-    client = ScriptClient({"zz_deer": [_draft("zz_deer")], "zz_owl": bad})
+    bad = [_answer("zz_owl", diet=["meat"]) for _ in range(8)]
+    client = ScriptClient({"zz_deer": [_answer("zz_deer")], "zz_owl": bad})
     pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage animals failed"):
         pipeline.run(_ctx(tmp_path, client, world))
@@ -334,16 +334,16 @@ def test_resume_carries_on_with_the_rest(tmp_path: Path) -> None:
     animals_dir = tmp_path / "animals"
     animals_dir.mkdir()
     (animals_dir / "zz_deer.json").write_text(
-        json.dumps(_draft("zz_deer")), encoding="utf-8"
+        json.dumps(_answer("zz_deer")), encoding="utf-8"
     )
     (animals_dir / "zz_owl.json").write_text(
-        json.dumps(_draft("zz_owl", diet=["meat"])), encoding="utf-8"
+        json.dumps(_answer("zz_owl", diet=["meat"])), encoding="utf-8"
     )
     (animals_dir / "progress.json").write_text(
         json.dumps({"rounds": {"zz_deer": 1, "zz_owl": 1}, "passed": ["zz_deer"]}),
         encoding="utf-8",
     )
-    client = ScriptClient({"zz_owl": [_draft("zz_owl")]})
+    client = ScriptClient({"zz_owl": [_answer("zz_owl")]})
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == {"zz_deer": 1, "zz_owl": 2}
     assert len(client.prompts) == 1
@@ -355,7 +355,7 @@ def test_taxon_reaches_the_prompt(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     AnimalsStage().run(_ctx(tmp_path, client, world))
     by_species = {
@@ -373,7 +373,7 @@ def test_cast_tags_reach_the_prompt(tmp_path: Path) -> None:
         json.dumps({"latin": "Vulpes vulpes", "tags": ["predator"]})
     )
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     AnimalsStage().run(_ctx(tmp_path, client, world))
     assert "predator" in client.prompts[0]
@@ -384,7 +384,7 @@ def test_role_examples_in_prompt(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     AnimalsStage().run(_ctx(tmp_path, client, world))
     by_species = {
@@ -422,7 +422,7 @@ def test_new_plant_region_failure_is_excused(tmp_path: Path) -> None:
     _region_with_plant(tmp_path)
     (world / "tools" / "check_draft.py").write_text(_region_verdict([PLANT_LINE]))
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     result = AnimalsStage().run(_ctx(tmp_path, client, world))
     assert result["rounds"] == {"zz_deer": 1, "zz_owl": 1}
@@ -437,7 +437,7 @@ def test_known_plant_region_failure_still_stops(tmp_path: Path) -> None:
     (plants / "zz_cloudberry.json").write_text("{}")
     (world / "tools" / "check_draft.py").write_text(_region_verdict([PLANT_LINE]))
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage animals failed"):
@@ -453,7 +453,7 @@ def test_other_region_failure_still_stops(tmp_path: Path) -> None:
         _region_verdict(["ERROR: the terrain seed is missing"])
     )
     client = ScriptClient(
-        {"zz_deer": [_draft("zz_deer")], "zz_owl": [_draft("zz_owl")]}
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
     )
     pipeline = Pipeline([AnimalsStage()], tmp_path / "state.json")
     with pytest.raises(StageFailedError, match="stage animals failed"):

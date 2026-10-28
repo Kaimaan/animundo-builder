@@ -3,6 +3,25 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #68 (Builder mode never boots in export, v0.2.1)
+
+- #68.1: the boot gate used `FileAccess.file_exists` on
+  `res://scripts/builder_hooks.gd`, false in an exported game (the
+  .pck holds .gdc, never .gd). Now `ResourceLoader.exists`, which
+  follows the remap — in `builder_mode.gd` and the same gate in
+  the three headless checks. Every other `FileAccess` use is on
+  `user://` paths or JSON reads, both fine in the .pck.
+- #68.2: a source-rule test (`tests/test_addon_source.py`) fails on
+  any `FileAccess.file_exists` on a `.gd` path; verified it fails
+  on the pre-fix tree.
+- #68.3: the `tests/` exclusion belongs to the game's copy script
+  and export preset (both live outside this repo), so it's one
+  line for the reviewer, not a change here.
+- Moved `v0.2.1` onto this commit: the item defines it as #67 plus
+  this fix, and nothing had consumed the tag yet (the fox test
+  runs on v0.2.0; Kai copies v0.2.1 afterwards).
+- Suite: 575 passed, 12 skipped; ruff check + format clean.
+
 ## 2026-10-28: inbox #67 (#66.1's second wording, tag v0.2.1)
 
 - #67.1: the hunter shows up in two checks with two wordings, so no

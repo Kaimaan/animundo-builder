@@ -39,7 +39,9 @@ var _booted := false
 func _ready() -> void:
 	# In the game the hooks exist; with no game (checks, a bare project)
 	# the node stays dormant until boot() is called with stubs.
-	if FileAccess.file_exists("res://scripts/builder_hooks.gd"):
+	# ResourceLoader follows the export remap (.gd to .gdc); FileAccess
+	# would never see the script in an exported game (#68).
+	if ResourceLoader.exists("res://scripts/builder_hooks.gd"):
 		var game_cloud := get_node_or_null("/root/Cloud")
 		if game_cloud != null:
 			boot(load("res://scripts/builder_hooks.gd"), game_cloud)

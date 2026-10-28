@@ -16,7 +16,7 @@ var I18nAPI = null
 
 
 func _init() -> void:
-	game = FileAccess.file_exists("res://scripts/builder_hooks.gd")
+	game = ResourceLoader.exists("res://scripts/builder_hooks.gd")
 	if game:
 		I18nAPI = load("res://scripts/i18n.gd")
 		I18nAPI.start("en")

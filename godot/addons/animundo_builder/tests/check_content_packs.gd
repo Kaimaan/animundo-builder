@@ -20,7 +20,7 @@ var SavesAPI = null
 
 
 func _init() -> void:
-	game = FileAccess.file_exists("res://scripts/builder_hooks.gd")
+	game = ResourceLoader.exists("res://scripts/builder_hooks.gd")
 	if game:
 		RegionAPI = load("res://scripts/region.gd")
 		SpeciesAPI = load("res://scripts/species.gd")

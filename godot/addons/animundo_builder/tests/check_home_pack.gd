@@ -19,7 +19,7 @@ var RegionAPI = null
 
 
 func _init() -> void:
-	game = FileAccess.file_exists("res://scripts/builder_hooks.gd")
+	game = ResourceLoader.exists("res://scripts/builder_hooks.gd")
 	if game:
 		RegionAPI = load("res://scripts/region.gd")
 		load("res://scripts/i18n.gd").start("en")

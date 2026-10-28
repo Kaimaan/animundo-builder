@@ -32,11 +32,13 @@ import jsonschema
 from ..animal_list import find_entry, load_list, match_by_name
 from ..animal_list import find_list as find_animal_list
 from ..prompts import PROMPTS_DIR, fix_messages, for_children
-from ..taxa import taxon_block
+from ..taxa import match_entry, taxon_block
 from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
 from .capability import NotPossibleError
+from .home import refresh_welcome
 from .models import _ensure_sandbox, build_in_sandbox
+from .species_plan import SpeciesPlanStage, animal_file
 
 #: Tries per thing: the write, then at most one fix round.
 MAX_TRIES = 2
@@ -124,9 +126,8 @@ class AnimalMakerStage:
             (ctx.job_dir / "research.json").read_text(encoding="utf-8")
         )
         minset = json.loads((ctx.job_dir / "minset.json").read_text(encoding="utf-8"))
-        region = json.loads(
-            next((ctx.job_dir / "regions").glob("*.json")).read_text(encoding="utf-8")
-        )
+        region_path = next((ctx.job_dir / "regions").glob("*.json"))
+        region = json.loads(region_path.read_text(encoding="utf-8"))
         data = load_list(find_animal_list(world))
         looks_path = ctx.job_dir / "looks.json"
         looks_file: dict[str, Any] = (
@@ -134,9 +135,19 @@ class AnimalMakerStage:
             if looks_path.is_file()
             else {}
         )
-        targets = _targets(
-            brief, minset, data["animals"], ctx.job_dir, looks_file.get("prey")
+        all_targets = _all_targets(
+            brief, minset, data["animals"], looks_file.get("prey")
         )
+        # Earlier runs' targets count as made too: seat and plan
+        # them first, so a resume heals a job that stopped halfway
+        # (#84.1). Everything below is idempotent.
+        for target in all_targets:
+            if _made(ctx.job_dir, target["id"]):
+                self._seat_target(world, ctx, region, region_path, target)
+                self._plan_target(ctx, brief, target)
+        targets = [
+            target for target in all_targets if not _made(ctx.job_dir, target["id"])
+        ]
         before = ctx.tracker.spent_usd
         made = []
         unmakable: dict[str, list[str]] = {}
@@ -155,7 +166,14 @@ class AnimalMakerStage:
             made.append(animal_id)
             if marks:
                 unmakable[animal_id] = marks
-        self._update_plan(ctx, brief, targets)
+            self._seat_target(world, ctx, region, region_path, target)
+            self._plan_target(ctx, brief, target)
+        if "welcome" in region:
+            stem = brief.get("in_library") or brief.get("id", "")
+            region["welcome"] = refresh_welcome(
+                world, ctx.job_dir, region, brief, research, stem
+            )
+            region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
         cost = round(ctx.tracker.spent_usd - before, 6)
         checks = ctx.job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
@@ -165,8 +183,11 @@ class AnimalMakerStage:
             ),
             encoding="utf-8",
         )
+        made_all = [
+            target["id"] for target in all_targets if _made(ctx.job_dir, target["id"])
+        ]
         return {
-            "animal_files": [f"animals/{animal_id}.json" for animal_id in made],
+            "animal_files": [f"animals/{animal_id}.json" for animal_id in made_all],
             "cost_usd": cost,
         }
 
@@ -206,6 +227,11 @@ class AnimalMakerStage:
     ) -> None:
         """The animal file, one try plus one fix round."""
         animal_id = target["id"]
+        hunts = (
+            self._code_hunts(world, ctx, research, region, animal_id)
+            if not target["prey"]
+            else []
+        )
         prompt = self._animal_prompt(world, brief, research, region, target)
         errors: list[str] | None = None
         previous: str | None = None
@@ -215,6 +241,8 @@ class AnimalMakerStage:
             previous = answer
             files, file_errors = self._animal_files(world, answer)
             if files is not None:
+                if hunts:
+                    files["animal"]["hunts"] = hunts
                 self._place_animal(ctx, animal_id, files)
                 file_errors = self._check_animal(
                     world, ctx, animal_id, attempt, excused
@@ -391,6 +419,56 @@ class AnimalMakerStage:
             json.dumps(files["animal"], indent=2), encoding="utf-8"
         )
 
+    def _code_hunts(
+        self,
+        world: Path,
+        ctx: Any,
+        research: dict[str, Any],
+        region: dict[str, Any],
+        animal_id: str,
+    ) -> list[str]:
+        """The hunter's hunts, from its seated research prey (#84.2).
+
+        Every tag of every research prey that has a file and a
+        seat: the food check matches them against the cast, so the
+        fix round can neither drop them nor swap prey for plants.
+        When prey has files but no seat, the run stops here: the
+        pipeline seats made prey before the hunter's file is
+        checked, so no fix round can help. [] leaves the model's
+        own hunts alone (no prey, or none with a file yet).
+        """
+        entries = load_list(find_animal_list(world))["animals"]
+        overlay = ctx.job_dir
+        tags: set[str] = set()
+        unseated: list[str] = []
+        saw_file = False
+        seated_any = False
+        for food in [research["main_food"], *research.get("other_foods", [])]:
+            if food.get("kind") != "prey":
+                continue
+            match, _ = match_entry(entries, world, food)
+            if match is None:
+                continue
+            stem = match.get("in_library") or match.get("id", "")
+            data = animal_file(world, stem, overlay) if stem else {}
+            if not data:
+                continue
+            saw_file = True
+            if not _seated(region, stem):
+                unseated.append(food["name"])
+                continue
+            seated_any = True
+            tags.update(
+                tag for tag in data.get("tags", []) or [] if isinstance(tag, str)
+            )
+        if saw_file and not seated_any:
+            raise _Stopped(
+                f"{animal_id}: its prey ({', '.join(unseated)}) isn't seated "
+                "in the region; the pipeline seats made prey before the "
+                "hunter's file is checked, so this run stops for a person"
+            )
+        return sorted(tags)
+
     def _check_animal(
         self, world: Path, ctx: Any, animal_id: str, attempt: int, excused: set[str]
     ) -> list[str]:
@@ -539,37 +617,62 @@ class AnimalMakerStage:
             json.dumps(errors, indent=2), encoding="utf-8"
         )
 
-    def _update_plan(
-        self, ctx: Any, brief: dict[str, Any], targets: list[dict[str, Any]]
+    def _seat_target(
+        self,
+        world: Path,
+        ctx: Any,
+        region: dict[str, Any],
+        region_path: Path,
+        target: dict[str, Any],
     ) -> None:
-        """The made prey joins the species plan, as new (#54).
+        """Seat a made target in the region, in place and on disk (#84.1).
+
+        A prey swims or is preyed upon; the home's animal plays.
+        Idempotent: seating twice seats once.
+        """
+        role = "prey" if target["prey"] else "playable"
+        SpeciesPlanStage.place_backfilled(
+            world,
+            region,
+            {target["id"]: {"backfilled": True, "file": target["id"], "role": role}},
+            ctx.job_dir,
+        )
+        if not target["prey"]:
+            playable = region.setdefault("animals", {}).setdefault("playable", [])
+            if target["id"] not in playable:
+                playable.append(target["id"])
+        region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
+
+    def _plan_target(
+        self, ctx: Any, brief: dict[str, Any], target: dict[str, Any]
+    ) -> None:
+        """The made target joins the species plan, as new (#54, #84.1).
 
         The home wrote the plan before anything was made; the
         pack reads it to decide what ships. Without this the
-        prey's files would never leave the job.
+        target's files would never leave the job.
         """
         plan_path = ctx.job_dir / "species-plan.json"
         if not plan_path.is_file():
             return
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
         have = {entry.get("species") for entry in plan.get("species", [])}
-        for target in targets:
-            if target["id"] in have:
-                continue
-            entry = target["entry"]
-            plan.setdefault("species", []).append(
-                {
-                    "species": target["id"],
-                    "decision": "new",
-                    "reason": (
-                        f"made one-shot as {brief['latin']}'s prey"
-                        if target["prey"]
-                        else "made one-shot for this home"
-                    ),
-                    "wild": True,
-                    "taxon": taxon_block(entry["gbif_key"], entry["latin"]),
-                }
-            )
+        if target["id"] in have:
+            return
+        entry = target["entry"]
+        plan.setdefault("species", []).append(
+            {
+                "species": target["id"],
+                "decision": "new",
+                "reason": (
+                    f"made one-shot as {brief['latin']}'s prey"
+                    if target["prey"]
+                    else "made one-shot for this home"
+                ),
+                "wild": True,
+                "taxon": taxon_block(entry["gbif_key"], entry["latin"]),
+            }
+        )
         plan_path.write_text(json.dumps(plan, indent=2), encoding="utf-8")
 
     def _save_final(self, ctx: Any, world: Path, animal_id: str) -> None:
@@ -660,6 +763,20 @@ def _targets(
     prey_looks: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """What to make, in order: the prey, then the animal. Made ones skip."""
+    return [
+        target
+        for target in _all_targets(brief, minset, entries, prey_looks)
+        if not _made(job_dir, target["id"])
+    ]
+
+
+def _all_targets(
+    brief: dict[str, Any],
+    minset: dict[str, Any],
+    entries: list[dict[str, Any]],
+    prey_looks: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Every target, made or not: the prey, then the animal (#84.1)."""
     targets = []
     prey = minset.get("prey") or {}
     if prey:
@@ -680,40 +797,50 @@ def _targets(
                 f"{prey['name']} is no longer on the animal list; "
                 "a person picks the prey"
             )
-        if not _made(job_dir, match["id"]):
-            if not match.get("start_from"):
-                raise NotPossibleError(
-                    f"{prey['name']} has no starting spec on the list; "
-                    "a person picks one"
-                )
-            targets.append(
-                {
-                    "id": match["id"],
-                    "entry": match,
-                    "start_from": match["start_from"],
-                    "prey": True,
-                    "size_cm": prey.get("size_cm"),
-                    "looks": prey_looks,
-                }
+        if not match.get("start_from"):
+            raise NotPossibleError(
+                f"{prey['name']} has no starting spec on the list; a person picks one"
             )
+        targets.append(
+            {
+                "id": match["id"],
+                "entry": match,
+                "start_from": match["start_from"],
+                "prey": True,
+                "size_cm": prey.get("size_cm"),
+                "looks": prey_looks,
+            }
+        )
     if minset.get("make_animal"):
         entry = find_entry(entries, brief["species_key"])
-        if not _made(job_dir, entry["id"]):
-            start_from = entry.get("start_from") or brief.get("start_from")
-            if not start_from:
-                raise NotPossibleError(
-                    f"{brief['latin']} has no starting spec; a person picks one"
-                )
-            targets.append(
-                {
-                    "id": entry["id"],
-                    "entry": entry,
-                    "start_from": start_from,
-                    "prey": False,
-                    "size_cm": None,
-                }
+        start_from = entry.get("start_from") or brief.get("start_from")
+        if not start_from:
+            raise NotPossibleError(
+                f"{brief['latin']} has no starting spec; a person picks one"
             )
+        targets.append(
+            {
+                "id": entry["id"],
+                "entry": entry,
+                "start_from": start_from,
+                "prey": False,
+                "size_cm": None,
+            }
+        )
     return targets
+
+
+def _seated(region: dict[str, Any], stem: str) -> bool:
+    """Whether the cast seats this stem, on land or as a fish."""
+    for group in region.get("animals", {}).values():
+        if stem in (group or []):
+            return True
+    for fish in region.get("fish", []) or []:
+        if not isinstance(fish, dict):
+            continue
+        if stem in (fish.get("kind"), fish.get("file")):
+            return True
+    return False
 
 
 def _made(job_dir: Path, animal_id: str) -> bool:

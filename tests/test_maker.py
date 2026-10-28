@@ -809,8 +809,13 @@ def test_skips_already_made_prey(tmp_path: Path) -> None:
     (tmp_path / "models" / "capybara.json").write_text("{}")
     client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
     result = _stage().run(_ctx(tmp_path, world, client))
-    assert result["animal_files"] == ["animals/lynx.json"]
+    assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
     assert len(client.prompts) == 2
+    region = json.loads(
+        next((tmp_path / "regions").glob("*.json")).read_text(encoding="utf-8")
+    )
+    assert "capybara" in region["animals"]["prey"]
+    assert "lynx" in region["animals"]["playable"]
 
 
 def test_resume_skips_a_passed_animal_file(tmp_path: Path) -> None:
@@ -829,6 +834,194 @@ def test_resume_skips_a_passed_animal_file(tmp_path: Path) -> None:
     assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
     assert len(client.prompts) == 3
     assert json.loads((tmp_path / "animals" / "capybara.json").read_text()) == placed
+
+
+def _strip_cast(tmp_path: Path) -> None:
+    path = next((tmp_path / "regions").glob("*.json"))
+    region = json.loads(path.read_text(encoding="utf-8"))
+    region["animals"] = {"playable": [], "predators": [], "prey": []}
+    path.write_text(json.dumps(region), encoding="utf-8")
+
+
+def _seed_plan(tmp_path: Path, *species: str) -> None:
+    taxa = {
+        "lynx": (2435240, "Lynx lynx"),
+        "capybara": (2437585, "Hydrochoerus hydrochaeris"),
+    }
+    (tmp_path / "species-plan.json").write_text(
+        json.dumps(
+            {
+                "species": [
+                    {
+                        "species": name,
+                        "decision": "new",
+                        "reason": "made one-shot for this home",
+                        "wild": True,
+                        "taxon": {
+                            "gbif_key": taxa[name][0],
+                            "rank": "SPECIES",
+                            "name": taxa[name][1],
+                        },
+                    }
+                    for name in species
+                ],
+                "food_web_ok": True,
+                "missing_food": [],
+                "added_young": [],
+            }
+        )
+    )
+
+
+def test_prey_made_before_its_hunter_is_seated_and_packed(
+    tmp_path: Path,
+) -> None:
+    from builder.stages.pack import PackStage
+
+    world = _world(tmp_path)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    _strip_cast(tmp_path)
+    _seed_plan(tmp_path, "lynx")
+    client = ScriptClient(
+        [
+            _animal_answer("capybara"),
+            _edits_answer(),
+            _animal_answer("lynx"),
+            _edits_answer(),
+        ]
+    )
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
+    region = json.loads(
+        next((tmp_path / "regions").glob("*.json")).read_text(encoding="utf-8")
+    )
+    assert "capybara" in region["animals"]["prey"]
+    assert "lynx" in region["animals"]["playable"]
+    plan = json.loads((tmp_path / "species-plan.json").read_text(encoding="utf-8"))
+    assert [(e["species"], e["decision"]) for e in plan["species"]] == [
+        ("lynx", "new"),
+        ("capybara", "new"),
+    ]
+    (tmp_path / "models" / "capybara.glb").write_bytes(b"glb")
+    (tmp_path / "models" / "lynx.glb").write_bytes(b"glb")
+    PackStage().run(_ctx(tmp_path, world, client))
+    manifest = json.loads((tmp_path / "pack" / "manifest.json").read_text())
+    assert manifest["new_species"] == ["capybara", "lynx"]
+    assert (tmp_path / "pack" / "animals" / "capybara.json").is_file()
+    assert (tmp_path / "pack" / "models" / "capybara.glb").is_file()
+    pack_region = json.loads(
+        next((tmp_path / "pack" / "regions").glob("*.json")).read_text()
+    )
+    assert "capybara" in pack_region["animals"]["prey"]
+
+
+def test_resume_seats_and_plans_earlier_made_prey(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    _strip_cast(tmp_path)
+    _seed_plan(tmp_path, "lynx")
+    (tmp_path / "animals").mkdir()
+    (tmp_path / "animals" / "capybara.json").write_text(
+        json.dumps({"id": "capybara", "name": "Good", "tags": ["rodent"]})
+    )
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "capybara.json").write_text("{}")
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
+    assert len(client.prompts) == 2
+    region = json.loads(
+        next((tmp_path / "regions").glob("*.json")).read_text(encoding="utf-8")
+    )
+    assert "capybara" in region["animals"]["prey"]
+    plan = json.loads((tmp_path / "species-plan.json").read_text(encoding="utf-8"))
+    assert [(e["species"], e["decision"]) for e in plan["species"]] == [
+        ("lynx", "new"),
+        ("capybara", "new"),
+    ]
+
+
+def _hare_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    (world / "animals" / "hare.json").write_text(
+        json.dumps({"id": "hare", "tags": ["rodent", "mammal"]})
+    )
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [
+                    LYNX,
+                    CAPYBARA,
+                    {
+                        "id": "hare",
+                        "name": "Mountain hare",
+                        "latin": "Lepus timidus",
+                        "gbif_key": 2436756,
+                        "in_library": "hare",
+                    },
+                ],
+            }
+        )
+    )
+    return world
+
+
+def _hare_research(tmp_path: Path) -> None:
+    research = json.loads((tmp_path / "research.json").read_text(encoding="utf-8"))
+    research["main_food"] = {"name": "mountain hare", "kind": "prey", "size_cm": 55}
+    (tmp_path / "research.json").write_text(json.dumps(research))
+
+
+def test_hunter_keeps_its_preys_tags_through_the_fix_round(
+    tmp_path: Path,
+) -> None:
+    world = _hare_world(tmp_path)
+    _inputs(tmp_path)
+    _hare_research(tmp_path)
+    path = next((tmp_path / "regions").glob("*.json"))
+    region = json.loads(path.read_text(encoding="utf-8"))
+    region["animals"]["prey"] = ["hare"]
+    path.write_text(json.dumps(region), encoding="utf-8")
+    client = ScriptClient(
+        [
+            _animal_answer("lynx", diet=["lichen"]),
+            _animal_answer("lynx", diet=["grass"], hunts=[]),
+            _edits_answer(),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    assert len(client.prompts) == 3
+    made = json.loads((tmp_path / "animals" / "lynx.json").read_text())
+    assert made["hunts"] == ["mammal", "rodent"]
+
+
+def test_hunter_stops_when_its_prey_is_not_seated(tmp_path: Path) -> None:
+    world = _hare_world(tmp_path)
+    _inputs(tmp_path)
+    _hare_research(tmp_path)
+    _strip_cast(tmp_path)
+    client = ScriptClient([])
+    with pytest.raises(_Stopped, match="isn't seated"):
+        _stage().run(_ctx(tmp_path, world, client))
+    assert client.prompts == []
+
+
+def test_oneshot_refreshes_a_stale_welcome(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    research = json.loads((tmp_path / "research.json").read_text(encoding="utf-8"))
+    research["main_food"] = {"name": "capybara", "kind": "prey", "size_cm": 110}
+    (tmp_path / "research.json").write_text(json.dumps(research))
+    path = next((tmp_path / "regions").glob("*.json"))
+    region = json.loads(path.read_text(encoding="utf-8"))
+    region["welcome"] = "Go and find some kapok leaves to eat!"
+    path.write_text(json.dumps(region), encoding="utf-8")
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    _stage().run(_ctx(tmp_path, world, client))
+    region = json.loads(path.read_text(encoding="utf-8"))
+    assert region["welcome"].endswith("Go and find a capybara to eat!")
 
 
 def test_nothing_to_make_calls_nothing(tmp_path: Path) -> None:

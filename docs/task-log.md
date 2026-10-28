@@ -3,6 +3,33 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #84 (anaconda fixes; v0.3.1 waits for #82)
+
+- #84.1: oneshot seats and plans every made target per target
+  (a prey into `animals.prey`, fish by archetype), and a resume
+  heals earlier runs' targets the same way; `animal_files`
+  lists all made. The pack ships file and model off the plan.
+- #84.2: a hunter's hunts are its seated research prey's tags
+  in code, rewritten after every parse, so no fix round can
+  drop them or swap prey for plants. Prey with files but no
+  seat stops the run before any call (structural, no wording).
+- #84.3: oneshot refreshes the welcome from the seated cast
+  (before `words`), so it names the made prey.
+- #84.4: `home` drops `seasons` within 23° of the equator. The
+  `tropical` key itself is NOT carried: the region schema
+  forbids extra keys and the game reads latitude, not the key
+  (`season.gd`; |lat| < 23 with no seasons block is already
+  seasonless). The "summer" word is the game's default name.
+  Needs a world schema change to carry the key, if wanted.
+- Finding (not fixed, out of scope): `home._cast_files` reads
+  fish `file`, but real regions and the game use `kind`, so it
+  misses real fish; `species_plan._cast_files` reads `kind`.
+- Suite: 603 passed, 12 skipped; ruff check + format clean.
+- Not tagged: #84.6's v0.3.1 is #82+#83+#84 now (#81 shipped
+  in v0.3.0). #82 waits on the reviewer: `places.json` is not
+  in the world yet (exact keys unknown), and the `?place=`
+  game commit (#82.2) is not posted.
+
 ## 2026-10-28: inbox #80-#81, `v0.3.0` is #72-#81
 
 - #80: the game's draft opener is live (bf3b016, in this

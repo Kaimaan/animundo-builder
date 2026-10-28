@@ -72,6 +72,11 @@ class HomeStage:
             data = animal_file(world, stem, overlay)
         place_id = _place_id(brief["cell"], stem, brief.get("country", ""))
         region = self._make_region(world, ctx, brief, place_id)
+        if abs(float(brief["center"]["lat"])) < 23.0:
+            # The game's tropics branch needs no seasons config
+            # (season.gd reads the latitude, not a key); a template
+            # seasons block would give the equator autumns (#84.4).
+            region.pop("seasons", None)
         neighbours, unchecked = self._seat_cast(
             world, overlay, region, brief, taxa, stem
         )
@@ -382,6 +387,22 @@ def _home_sources(research: dict[str, Any]) -> list[str]:
             seen.add(url)
             ordered.append(url)
     return ordered
+
+
+def refresh_welcome(
+    world: Path,
+    overlay: Path,
+    region: dict[str, Any],
+    brief: dict[str, Any],
+    research: dict[str, Any],
+    stem: str,
+) -> str:
+    """The welcome from the seated cast, once the set is complete (#84.3).
+
+    The first welcome names what the minset promises; this one names
+    what is really there, so it can't go stale.
+    """
+    return _welcome(world, overlay, region, brief, research, stem, None)
 
 
 def _welcome(

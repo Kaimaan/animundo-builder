@@ -269,6 +269,37 @@ def test_home_unchecked_neighbours_stay_visible(tmp_path: Path) -> None:
     assert result["backfill_unchecked"] == ["lynx"]
 
 
+def test_home_drops_seasons_in_the_tropics(tmp_path: Path) -> None:
+    world = _world(tmp_path, tool=False)
+    _write_inputs(tmp_path, center={"lat": -3.45, "lon": -61.95})
+    homes = tmp_path / "homes"
+    homes.mkdir()
+    (homes / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "animals": {"playable": [], "predators": [], "prey": []},
+                "fish": [],
+                "food": [
+                    {"kind": "berries", "amount": 10, "names": ["bilberry"]},
+                    {"kind": "carrion", "amount": 10, "names": ["remains"]},
+                    {"kind": "grass", "amount": 10, "names": ["grass"]},
+                ],
+                "places": [],
+                "sources": [],
+                "seasons": {"snow": False},
+            }
+        )
+    )
+    run = HomeStage(recorded=lambda lat, lon, key: True).run
+    first = run(_ctx(tmp_path, ScriptClient([]), world))
+    region = json.loads((tmp_path / first["region_file"]).read_text(encoding="utf-8"))
+    assert "seasons" not in region
+    _write_inputs(tmp_path, center={"lat": 60.15, "lon": 24.95})
+    second = run(_ctx(tmp_path, ScriptClient([]), world))
+    region = json.loads((tmp_path / second["region_file"]).read_text(encoding="utf-8"))
+    assert region["seasons"] == {"snow": False}
+
+
 def test_home_uses_made_template(tmp_path: Path) -> None:
     world = _world(tmp_path, tool=False)
     _write_inputs(tmp_path)

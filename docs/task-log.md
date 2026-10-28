@@ -3,6 +3,25 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #94-#95 (worker store + recordings), tagged `v0.3.4`
+
+- #94: `_claim_requested` had been pasted inside the class, so
+  every method after it became a dead nested function and the
+  live worker died at `watch_drafts`. It now lives below the
+  class; `STORE_METHODS` lists the 21 worker-called methods and
+  `test_stores_expose_every_worker_method` checks the real and
+  fake stores expose them all (it caught the fake missing both
+  watch stubs).
+- #95: replay recordings
+  (`tests/fixtures/replays/*/records/research.jsonl`) were
+  ignored by `*.jsonl`, red since ab01189. `.gitignore` now
+  un-ignores fixture jsonl; scanned for keys, tokens, headers
+  and emails (clean); `jobs/` and the ledger stay ignored.
+- `v0.3.3` stays as pushed; this ships as `v0.3.4` on green
+  `check`.
+- Evidence: `uv run pytest -q` → 648 passed, 12 skipped; `ruff
+  check` + `ruff format --check` clean.
+
 ## 2026-10-28: inbox D10 (#82, #83, #85.2, #86, #88), tagged `v0.3.3`
 
 - #82.1/#88: `web/build/places.json` synced from the world (2

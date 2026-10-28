@@ -66,18 +66,6 @@ class FirebaseStore:
         ref = self._db.collection("drafts").document(draft_id)
         return _claim_requested(self._db.transaction(), ref, worker_id, now_iso())
 
-
-@firestore.transactional
-def _claim_requested(transaction: Any, ref: Any, worker_id: str, at: str) -> bool:
-    """One transaction: still requested, it is ours (#81.1)."""
-    snap = ref.get(transaction=transaction)
-    if not snap.exists or (snap.to_dict() or {}).get("status") != "requested":
-        return False
-    transaction.update(
-        ref, {"status": "queued", "worker_id": worker_id, "updated_at": at}
-    )
-    return True
-
     def drafts_by_owner(self, owner_uid: str) -> list[tuple[str, dict[str, Any]]]:
         return [
             (snap.id, snap.to_dict() or {})
@@ -181,3 +169,43 @@ def _claim_requested(transaction: Any, ref: Any, worker_id: str, at: str) -> boo
 
     def watch_actions(self, callback: Any) -> Any:
         return self._db.collection("admin_actions").on_snapshot(callback)
+
+
+#: Every store method the worker calls. Both the real `FirebaseStore`
+#: and the tests' fake must have them all: #81 nested half the real
+#: class inside a function and nothing caught it (#94).
+STORE_METHODS = (
+    "add_feed",
+    "add_inbox",
+    "claim_draft",
+    "delete_pack",
+    "drafts_by_owner",
+    "drafts_in_statuses",
+    "feed_count",
+    "get_action",
+    "get_draft",
+    "get_job",
+    "pending_actions",
+    "requested_drafts",
+    "set_job",
+    "set_public",
+    "update_action",
+    "update_draft",
+    "update_job",
+    "upload_pack",
+    "upload_report",
+    "watch_actions",
+    "watch_drafts",
+)
+
+
+@firestore.transactional
+def _claim_requested(transaction: Any, ref: Any, worker_id: str, at: str) -> bool:
+    """One transaction: still requested, it is ours (#81.1)."""
+    snap = ref.get(transaction=transaction)
+    if not snap.exists or (snap.to_dict() or {}).get("status") != "requested":
+        return False
+    transaction.update(
+        ref, {"status": "queued", "worker_id": worker_id, "updated_at": at}
+    )
+    return True

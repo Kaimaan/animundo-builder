@@ -16,6 +16,7 @@ from builder.pipeline import StageFailedError
 from builder.stages.capability import NotPossibleError
 from builder.stages.pack import draft_place_id
 from builder.worker import DELETE, RoundFailed, Worker
+from builder.worker_store import STORE_METHODS, FirebaseStore
 
 AREA = {
     "area_id": "fi_repovesi",
@@ -36,6 +37,7 @@ class FakeStore:
         self.inbox: list[dict[str, Any]] = []
         self.jobs: dict[str, dict[str, Any]] = {}
         self.public: dict[str, dict[str, Any]] = {}
+        self.watchers: list[tuple[str, Any]] = []
         self.actions: dict[str, dict[str, Any]] = {}
         self.uploads: list[tuple[str, ...]] = []
         self.deleted: list[str] = []
@@ -128,6 +130,14 @@ class FakeStore:
     def delete_pack(self, draft_id: str) -> None:
         self.deleted.append(draft_id)
 
+    def watch_drafts(self, callback: Any) -> Any:
+        self.watchers.append(("drafts", callback))
+        return lambda: None
+
+    def watch_actions(self, callback: Any) -> Any:
+        self.watchers.append(("actions", callback))
+        return lambda: None
+
 
 def _areas(tmp_path: Path, area: dict[str, Any] | None = AREA) -> Path:
     path = tmp_path / "areas.json"
@@ -208,6 +218,16 @@ def _draft(owner: str = "grown", **over: Any) -> dict[str, Any]:
     }
     doc.update(over)
     return doc
+
+
+def test_stores_expose_every_worker_method() -> None:
+    """Inbox 2026-10-28 #94.2: #81 nested half the real class inside a
+    function and no test noticed. The fake and the real store must both
+    expose every method the worker calls."""
+    assert len(STORE_METHODS) == len(set(STORE_METHODS))
+    for name in STORE_METHODS:
+        assert callable(getattr(FakeStore, name, None)), f"fake lacks {name}"
+        assert callable(getattr(FirebaseStore, name, None)), f"real lacks {name}"
 
 
 def test_note_draft_finds_creates(tmp_path: Path) -> None:

@@ -54,12 +54,20 @@ Job folders live under `jobs/` (local only, never committed).
 - #100: `last_error()` keeps the failed step with its HTTP
   status (`packs/<id>/1/manifest.json: 403`); proposed
   game-side plug: `BuilderHooks.draft_opener_error()`.
+- #103: the Fireworks host, its key and the configurable base
+  URL are gone; unknown hosts fail clearly; every model call
+  is api.meta.ai or inference.baseten.co (GBIF is data, not
+  models). modal-glimmer stays raising.
+- #104: `?judge=1` shows a password form (EN + FI strings, a
+  Finnish browser overlays `i18n/fi.json`, rest falls back to
+  English); one error only, password never stored; kept
+  through sign-out; emulator test button untouched.
 - Runnable now: `builder build --kind animal_home --animal
   fox --poi Q1815268 --world ../animundo-world --dry-run`.
-- Evidence: `uv run pytest -q` green; `ruff check` +
-  `format --check` clean; `node tests/web-harness.cjs` 68
-  checks pass; 3 headless Godot checks 0 errors; `check` CI
-  green, then tagged.
+- Evidence: `uv run pytest -q` → 658 passed, 12 skipped;
+  `ruff check` + `format --check` clean; `node
+  tests/web-harness.cjs` 79 checks pass; 3 headless Godot
+  checks 0 errors; `check` CI green, then tagged.
 
 ## 2026-10-28: inbox #94-#95 (worker store + recordings), tagged `v0.3.4`
 

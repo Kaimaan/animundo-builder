@@ -35,7 +35,7 @@
 <p id="app-error" class="error" hidden></p>
 
 <main id="app" hidden>
-  <section class="map-pane">
+  <section class="map-pane" id="map-pane" hidden>
     <div id="map" aria-label="Map"></div>
   </section>
 
@@ -55,8 +55,9 @@
       <p id="cell-msg" class="muted"></p>
     </article>
 
-    <article id="drafts">
+    <article id="drafts" hidden>
       <h2 data-i18n="drafts.title">Your drafts</h2>
+      <p class="muted" data-i18n="drafts.lede">These are your drafts.</p>
       <div id="draft-list"></div>
     </article>
   </section>

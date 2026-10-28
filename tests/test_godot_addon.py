@@ -39,6 +39,7 @@ PLUGIN_CALLS = [
     "set_place_look",
     "add_grownup_button",
     "add_places_button",
+    "set_draft_opener",
     "firestore_query",
     "firestore_get",
     "firestore_patch",
@@ -55,12 +56,10 @@ def test_addon_files_exist():
         "builder_mode.gd",
         "builder_cloud.gd",
         "pack_rules.gd",
-        "explore_states.gd",
-        "builder_strings.gd",
         "plugin.cfg",
         "locale/en.json",
         "locale/fi.json",
-        "tests/check_explore_states.gd",
+        "tests/check_draft_opener.gd",
         "tests/check_content_packs.gd",
         "tests/check_home_pack.gd",
         "tests/fixture/fox-pack/manifest.json",
@@ -103,32 +102,37 @@ def test_addon_has_no_place_list():
     assert not (ADDON / "areas.json").exists()
 
 
-def test_addon_states_cover_every_draft_status():
-    schema = _load_json(ROOT / "contracts" / "draft.schema.json")
-    statuses = schema["properties"]["status"]["enum"]
+def test_addon_carries_only_its_buttons_words():
+    # Drafts live in the web app (D9, #79): the game menus read the two
+    # button labels through a content folder, and nothing else travels.
     for lang in ("en", "fi"):
         words = _load_json(ADDON / "locale" / f"{lang}.json")
-        for status in statuses:
-            key = f"explore.state.{status}"
-            assert words.get(key), f"{lang} has no {key}"
+        assert set(words) == {"explore.builder_mode", "explore.ask_place"}
+
+
+def test_addon_opens_drafts_without_a_panel():
+    # Decision D9 (#79): no Builder screen, no draft looks, no reinstall.
+    # Both buttons open the web app; the draft opener installs one pack.
+    mode = (ADDON / "builder_mode.gd").read_text(encoding="utf-8")
+    cloud = (ADDON / "builder_cloud.gd").read_text(encoding="utf-8")
+    for present in ("set_draft_opener", "open_draft", "pack_folder", "record_played"):
+        assert present in mode or present in cloud, f"missing {present}"
+    for gone in (
+        "refresh_globe",
+        "set_place_look",
+        "open_builder",
+        "family_drafts",
+        "send_feedback",
+    ):
+        assert gone not in mode and gone not in cloud, f"still there: {gone}"
+    assert not (ADDON / "explore_states.gd").exists()
+    assert not (ADDON / "builder_strings.gd").exists()
 
 
 def test_addon_locales_match():
     en = _load_json(ADDON / "locale" / "en.json")
     fi = _load_json(ADDON / "locale" / "fi.json")
     assert set(en) == set(fi)
-
-
-def test_addon_reasons_match_the_web_app_word_for_word():
-    # The web app is English only during the event; the game keeps both.
-    addon = _load_json(ADDON / "locale" / "en.json")
-    web = _load_json(ROOT / "web" / "build" / "i18n" / "en.json")
-    web_reasons = {k[7:]: v for k, v in web.items() if k.startswith("reason.")}
-    addon_reasons = {
-        k[15:]: v for k, v in addon.items() if k.startswith("explore.reason.")
-    }
-    assert addon_reasons
-    assert addon_reasons == web_reasons
 
 
 def test_game_interface_documents_every_plugin_call():
@@ -139,7 +143,7 @@ def test_game_interface_documents_every_plugin_call():
 
 def test_checks_report_and_quit():
     for name in (
-        "check_explore_states.gd",
+        "check_draft_opener.gd",
         "check_content_packs.gd",
         "check_home_pack.gd",
     ):

@@ -77,6 +77,101 @@ def test_natural_earth_shapes_are_vendored() -> None:
     assert len(urban["features"]) > 1000
 
 
+def _inside(ring: list[list[float]], lon: float, lat: float) -> bool:
+    hits = False
+    n = len(ring)
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
+            hits = not hits
+        j = i
+    return hits
+
+
+def _on_land(geo: dict, lon: float, lat: float) -> bool:
+    for feature in geo["features"]:
+        geom = feature["geometry"]
+        coords = geom["coordinates"]
+        polys = coords if geom["type"] == "MultiPolygon" else [coords]
+        for poly in polys:
+            if _inside(poly[0], lon, lat) and not any(
+                _inside(hole, lon, lat) for hole in poly[1:]
+            ):
+                return True
+    return False
+
+
+def test_packed_drafts_play_in_the_game() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    en = _json(WEB / "i18n" / "en.json")
+    assert en["draft.play"] == "Play in the game"
+    assert 'data-act="play"' in app
+    assert "(draft.pack_version || 0) >= 1" in app
+    assert "?draft=${encodeURIComponent(draft.id)}" in app
+    assert '"_blank"' in app
+
+
+def test_coastline_gains_detail_with_zoom() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "updateBaseDetail" in app
+    assert "zoomend" in app
+    assert "zoom >= 6" in app and "ne_10m_land" in app
+    assert "zoom >= 4" in app and "ne_50m_land" in app
+    assert "ne_50m_coastline" in app
+    for name in ("ne_50m_land.geojson", "ne_50m_coastline.geojson"):
+        geo = _json(WEB / "vendor" / "natural-earth" / name)
+        assert geo["type"] == "FeatureCollection"
+        assert len(geo["features"]) > 1000
+    land10 = _json(WEB / "vendor" / "natural-earth" / "ne_10m_land.geojson")
+    assert land10["type"] == "FeatureCollection"
+    assert _on_land(land10, 16.0, 78.2)  # Spitsbergen, Svalbard
+    assert _on_land(land10, 24.95, 60.15)  # Helsinki
+    assert not _on_land(land10, 10.0, 78.0)  # Fram Strait
+    assert not _on_land(land10, 20.0, 59.0)  # Åland Sea
+
+
+def test_map_and_drafts_wait_for_the_pick() -> None:
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    en = _json(WEB / "i18n" / "en.json")
+    assert 'id="map-pane" hidden' in html
+    assert 'id="drafts" hidden' in html
+    assert 'id="animal-picker"' in html
+    assert "map-pane" in app and "initMap()" in app
+    assert "drafts.lede" in en
+    assert en["drafts.lede"] == "These are your drafts."
+    assert "drafts.none" not in en
+    assert "drafts.none" not in app
+
+
+def test_taps_only_pick_recorded_cells() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    en = _json(WEB / "i18n" / "en.json")
+    assert "recordsNear" in app
+    assert "pickMark" in app and "L.rectangle" in app
+    assert 't("home.outside"' not in app
+    assert "home.outside" not in en
+    assert "home.no_records" in en
+    assert "We don't know where" in en["home.no_records"]
+
+
+def test_map_snaps_taps_and_fits_the_range() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "bin=hex" in app and "hexPerTile" in app
+    assert "recordsNear" in app and "ringWithRecords" in app
+    assert "fitBounds" in app and "has_coordinate=true" in app
+
+
+def test_records_draw_above_the_land() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert 'createPane("records")' in app
+    assert "zIndex = 450" in app
+    assert 'pane: "records"' in app
+    assert 'pointerEvents = "none"' in app
+
+
 def test_app_uses_only_gbif_tiles() -> None:
     app = (WEB / "app.js").read_text(encoding="utf-8")
     for banned in ("basemaps", "cartocdn", "tile.openstreetmap"):

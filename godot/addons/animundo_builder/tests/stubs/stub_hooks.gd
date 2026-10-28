@@ -9,6 +9,7 @@ var looks := {}
 var models := {}
 var grownup: Array = []
 var places: Array = []
+var opener := Callable()
 
 
 func add_content_folder(path: String) -> bool:
@@ -101,3 +102,11 @@ func remove_places_button(label_key: String) -> void:
 
 func places_buttons() -> Array:
 	return places.duplicate()
+
+
+func set_draft_opener(open: Callable) -> void:
+	opener = open
+
+
+func draft_opener() -> Callable:
+	return opener

@@ -79,7 +79,9 @@ class HomeStage:
             world, overlay, region, brief, research, stem
         )
         region["sources"] = _home_sources(research)
-        region["welcome"] = _welcome(world, overlay, region, brief, research, stem)
+        region["welcome"] = _welcome(
+            world, overlay, region, brief, research, stem, minset.get("prey")
+        )
         region_path = ctx.job_dir / "regions" / f"{place_id}.json"
         region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
         brief["place_id"] = place_id
@@ -389,10 +391,11 @@ def _welcome(
     brief: dict[str, Any],
     research: dict[str, Any],
     stem: str,
+    minset_prey: dict[str, Any] | None,
 ) -> str:
     """The first-session hello, from the animal and its main food."""
     animal = short_name(brief.get("name", "")).lower() or stem.replace("_", " ")
-    food = _main_food(world, overlay, region, research, stem)
+    food = _main_food(world, overlay, region, research, stem, minset_prey)
     if food.endswith("s"):
         article = "some"
     elif food[:1].lower() in "aeiou":
@@ -412,10 +415,12 @@ def _main_food(
     region: dict[str, Any],
     research: dict[str, Any],
     stem: str,
+    minset_prey: dict[str, Any] | None,
 ) -> str:
     """The research's main food, never carrion, always findable.
 
-    A hunter's prey only when it sits in this cast; otherwise the
+    A hunter's prey only when it sits in this cast, or the minset
+    says it will be made in this build (#73.1); otherwise the
     first named food in diet order that is not carrion (#48.4).
     """
     cast = _cast_files(region)
@@ -423,7 +428,9 @@ def _main_food(
     for food in [research["main_food"], *research.get("other_foods", [])]:
         if food["kind"] == "carrion":
             continue
-        if food["kind"] == "prey" and not _prey_seated(world, entries, cast, food):
+        if food["kind"] == "prey" and not _prey_seated(
+            world, entries, cast, food, minset_prey
+        ):
             continue
         return food["name"]
     data = animal_file(world, stem, overlay)
@@ -452,13 +459,29 @@ def _cast_files(region: dict[str, Any]) -> set[str]:
 
 
 def _prey_seated(
-    world: Path, entries: list[dict[str, Any]], cast: set[str], food: dict[str, Any]
+    world: Path,
+    entries: list[dict[str, Any]],
+    cast: set[str],
+    food: dict[str, Any],
+    minset_prey: dict[str, Any] | None,
 ) -> bool:
-    """Whether the named prey sits in this cast, via the list."""
+    """Whether the named prey sits in this cast, via the list.
+
+    A prey the minset says will be made counts as seated: the
+    welcome names it, and the maker seats it later (#73.1).
+    """
     match, _ = match_entry(entries, world, food)
     if match is None:
         return False
-    return (match.get("in_library") or match.get("id", "")) in cast
+    if (match.get("in_library") or match.get("id", "")) in cast:
+        return True
+    if not minset_prey:
+        return False
+    key = minset_prey.get("gbif_key")
+    if isinstance(key, int) and key == match.get("gbif_key"):
+        return True
+    want = minset_prey.get("name", "").strip().lower()
+    return want != "" and want == food["name"].strip().lower()
 
 
 def _read_minset(ctx: Any) -> dict[str, Any]:

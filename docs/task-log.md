@@ -3,6 +3,46 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #72-#79, tagged `v0.3.0`
+
+- #76: the GBIF records draw in their own `records` pane (z450,
+  taps pass through) above the land: inland Finland reads orange
+  for the red fox.
+- #74: hexagon bins (`bin=hex`, 8 per tile), taps snap to the
+  nearest recorded 0.1-degree cell within ~50 km (box query plus
+  expanding rings), and the pick zooms to the records' bounds.
+  Live GBIF probe: Helsinki cell 136 records, mid-ocean 0.
+- #78: only recorded cells make a card (misses, cities and check
+  failures stay silent); the pick highlights; only an animal with
+  no records anywhere says "We don't know where it lives yet".
+  Raster tiles can't hover-highlight per hexagon; noted, not built.
+- #72: the map and the drafts stay hidden until the animal is
+  picked; the drafts' only words are "These are your drafts."
+- #75: the outline switches by zoom (110m to 3, 50m from 4, 10m
+  land from 6), each tier lazy-loaded once; the 10m file is
+  rounded to ~1 km (see `vendor/natural-earth/README.md`) and
+  its outline doubles as the shore, so no 10m coastline ships.
+  Point-in-polygon over the vendored land: Spitsbergen and
+  Helsinki land, Fram Strait and the Aland Sea water.
+- #73: a prey the minset says will be made counts as seated for
+  the welcome ("Go and find a capybara to eat!").
+- #77: the model reference falls back to `models/examples/`
+  (adapt gets the found path; the looks fall back to the spec's
+  name), and a resume skips an animal file whose last try passed.
+- #79 (D9): drafts live in the web app. Packed cards get Play in
+  the game (`?draft=<id>`, new tab); the addon loses its panel,
+  looks and reinstall, both buttons open /build, and the draft
+  opener installs one pack for the session (safe folder per id:
+  lowercased plus a hash, so `Draft-1_ok` fits the pattern).
+  Downloads verify everything before anything lands on disk.
+- Suite: 591 passed, 12 skipped; ruff check + format clean;
+  `node --check` clean; the three headless addon checks pass
+  0-errors (one is new: `check_draft_opener.gd`).
+- Reviewer reruns from here: resume `oneshot` on
+  `jobs/anaconda-v020`, then `words` and `pack`; copy `v0.3.0`
+  into the game. Kai's fox test needs the Storage IAM role
+  first (#79.7).
+
 ## 2026-10-28: inbox #71 (animal-first panel) and #70 (`file_from`)
 
 - #71.1: the Builder screen opens on the drafts, with one button at

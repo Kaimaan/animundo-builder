@@ -355,6 +355,38 @@ def test_home_welcome_names_seated_prey(tmp_path: Path) -> None:
     assert region["welcome"].endswith("Go and find a mountain hare to eat!")
 
 
+def test_home_welcome_names_prey_the_minset_will_make(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _write_inputs(tmp_path)
+    (world / "animals" / "hare.json").unlink()
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [{"id": "hare", "name": "Mountain hare"}],
+            }
+        )
+    )
+    run = HomeStage(recorded=lambda lat, lon, key: True).run
+    first = run(_ctx(tmp_path, ScriptClient([]), world))
+    region = json.loads((tmp_path / first["region_file"]).read_text(encoding="utf-8"))
+    assert "hare" not in region["animals"]["prey"]
+    assert region["welcome"].endswith("Go and find some bilberries to eat!")
+    (tmp_path / "minset.json").write_text(
+        json.dumps(
+            {
+                "make_animal": False,
+                "make_home": False,
+                "prey": {"name": "mountain hare", "size_cm": 55},
+            }
+        )
+    )
+    second = run(_ctx(tmp_path, ScriptClient([]), world))
+    region = json.loads((tmp_path / second["region_file"]).read_text(encoding="utf-8"))
+    assert region["welcome"].endswith("Go and find a mountain hare to eat!")
+
+
 def test_home_seats_prey_by_species_key(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _write_inputs(tmp_path)

@@ -34,11 +34,14 @@ const EMULATORS = {
 const TEST_GROWN_UP = { email: "test@example.org", password: "grown-up-1" };
 
 // GBIF's free occurrence tiles for the picked animal (the style name
-// is from GBIF's maps API docs), over the Natural Earth map.
+// is from GBIF's maps API docs), over the Natural Earth map. Hexagon
+// bins, not points: a range reads as a filled area, and even one
+// record draws a fingertip-sized cell instead of a 1 px dot (#74).
 const GBIF_TILES =
   "https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png" +
-  "?taxonKey={key}&style=orange.marker";
+  "?taxonKey={key}&style=orange.marker&bin=hex&hexPerTile=8";
 const GBIF_OCCURRENCES = "https://api.gbif.org/v1/occurrence/search";
+const GAME_URL = "https://animundo.app/";
 
 const state = {
   lang: "en",
@@ -61,6 +64,11 @@ const state = {
   feedRetry: {},
   feedTries: {},
   map: null,
+  base110: null,
+  base50: null,
+  base50Loading: false,
+  base10: null,
+  base10Loading: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -213,6 +221,9 @@ function onUser(user) {
     state.pickedHabitat = null;
     state.selectedCell = null;
     setGbifLayer(null);
+    clearPickMark();
+    $("map-pane").hidden = true;
+    $("drafts").hidden = true;
     return;
   }
   $("auth-who").textContent = t("auth.signed_in", { email: user.email || "" });
@@ -242,7 +253,6 @@ async function boot() {
     state.adminShapes = admin.features || [];
     state.urbanShapes = urban.features || [];
     state.dataLoaded = true;
-    initMap();
   }
   if (state.draftsUnsub) {
     renderDrafts();
@@ -291,25 +301,103 @@ function initMap() {
     return;
   }
   state.map = L.map("map", { worldCopyJump: true }).setView([30, 10], 2);
+  // The records draw above the land (#76): the Natural Earth layers
+  // live in Leaflet's overlayPane (z-index 400) while plain tile
+  // layers sit in the tilePane (200), so the opaque land would cover
+  // every record on land. Taps pass through: the map keeps them.
+  state.map.createPane("records");
+  state.map.getPane("records").style.zIndex = 450;
+  state.map.getPane("records").style.pointerEvents = "none";
   // Natural Earth land, vendored: no tile service, no terms, no limits.
+  state.base110 = L.layerGroup().addTo(state.map);
   fetch("vendor/natural-earth/ne_110m_land.geojson")
     .then((response) => response.json())
     .then((land) => {
-      L.geoJSON(land, {
-        style: { color: "#3b5544", weight: 1, fillColor: "#2c3a32", fillOpacity: 1 },
-        attribution: "Natural Earth",
-      }).addTo(state.map);
+      L.geoJSON(land, LAND_STYLE).addTo(state.base110);
     })
     .catch((error) => console.error(error));
   fetch("vendor/natural-earth/ne_110m_coastline.geojson")
     .then((response) => response.json())
     .then((coast) => {
-      L.geoJSON(coast, {
-        style: { color: "#c9c2ad", weight: 1, opacity: 0.4 },
-      }).addTo(state.map);
+      L.geoJSON(coast, { style: COAST_STYLE }).addTo(state.base110);
     })
     .catch((error) => console.error(error));
   state.map.on("click", (event) => onMapTap(event.latlng));
+  state.map.on("zoomend", updateBaseDetail);
+  updateBaseDetail();
+}
+
+const LAND_STYLE = {
+  style: {
+    color: "#3b5544",
+    weight: 1,
+    fillColor: "#2c3a32",
+    fillOpacity: 1,
+  },
+  attribution: "Natural Earth",
+};
+const COAST_STYLE = { color: "#c9c2ad", weight: 1, opacity: 0.4 };
+
+// The coastline gains detail with the zoom (#75): the 110m base
+// draws first, the 50m pair loads on the first zoom to 4, the
+// 10m land on the first zoom to 6. While a tier loads, the map
+// keeps showing the coarser one.
+function updateBaseDetail() {
+  const zoom = state.map.getZoom();
+  if (zoom >= 6) {
+    if (state.base10) {
+      showBase(state.base10);
+    } else if (!state.base10Loading) {
+      state.base10Loading = true;
+      fetch("vendor/natural-earth/ne_10m_land.geojson")
+        .then((response) => response.json())
+        .then((land) => {
+          const group = L.layerGroup();
+          L.geoJSON(land, LAND_STYLE).addTo(group);
+          L.geoJSON(land, { style: { ...COAST_STYLE, fill: false } }).addTo(group);
+          state.base10 = group;
+          updateBaseDetail();
+        })
+        .catch((error) => {
+          console.error(error);
+          state.base10Loading = false;
+        });
+    }
+    return;
+  }
+  if (zoom >= 4) {
+    if (state.base50) {
+      showBase(state.base50);
+    } else if (!state.base50Loading) {
+      state.base50Loading = true;
+      Promise.all([
+        fetch("vendor/natural-earth/ne_50m_land.geojson").then((r) => r.json()),
+        fetch("vendor/natural-earth/ne_50m_coastline.geojson").then((r) => r.json()),
+      ])
+        .then(([land, coast]) => {
+          const group = L.layerGroup();
+          L.geoJSON(land, LAND_STYLE).addTo(group);
+          L.geoJSON(coast, { style: COAST_STYLE }).addTo(group);
+          state.base50 = group;
+          updateBaseDetail();
+        })
+        .catch((error) => {
+          console.error(error);
+          state.base50Loading = false;
+        });
+    }
+    return;
+  }
+  showBase(state.base110);
+}
+
+function showBase(layer) {
+  for (const known of [state.base110, state.base50, state.base10]) {
+    if (known && known !== layer) {
+      state.map.removeLayer(known);
+    }
+  }
+  state.map.addLayer(layer);
 }
 
 function setGbifLayer(gbifKey) {
@@ -322,7 +410,36 @@ function setGbifLayer(gbifKey) {
   }
   state.gbifLayer = L.tileLayer(GBIF_TILES.replace("{key}", gbifKey), {
     attribution: "GBIF.org",
+    pane: "records",
   }).addTo(state.map);
+}
+
+// The picked animal's range, armed (#78): only an animal with no
+// records anywhere says so; anything else gets its layer and a zoom.
+async function armRange(animal) {
+  let count = 0;
+  try {
+    const url = `${GBIF_OCCURRENCES}?taxon_key=${animal.gbif_key}&limit=0`;
+    count = (await (await fetch(url)).json()).count || 0;
+  } catch (error) {
+    console.error(error);
+  }
+  if (!state.picked || state.picked.gbif_key !== animal.gbif_key) {
+    return;
+  }
+  if (!count) {
+    $("animal-msg").textContent = t("home.no_records", { name: animal.name });
+    return;
+  }
+  setGbifLayer(animal.gbif_key);
+  void zoomToRange(animal.gbif_key);
+}
+
+function clearPickMark() {
+  if (state.pickMark) {
+    state.map.removeLayer(state.pickMark);
+    state.pickMark = null;
+  }
 }
 
 /* -- the animal ---------------------------------------------- */
@@ -367,6 +484,7 @@ function pickAnimal(animal) {
   $("cell-card").hidden = true;
   $("animal-suggest").innerHTML = "";
   setGbifLayer(null);
+  clearPickMark();
   if (!animal.can_make) {
     $("animal-msg").textContent =
       state.notYet[animal.not_yet] || t("home.cannot", { name: animal.name });
@@ -386,18 +504,23 @@ function pickAnimal(animal) {
   state.pickedShort =
     animal.name.split(" ").pop().replace(/^./, (c) => c.toUpperCase());
   state.pickedHabitat = home.split("_").pop();
-  setGbifLayer(animal.gbif_key);
+  void armRange(animal);
   const built = state.animalHomes.includes(home);
   $("animal-msg").textContent = built
     ? t("home.picked", { name: animal.name })
     : t("home.make_home_too");
+  $("map-pane").hidden = false;
+  $("drafts").hidden = false;
+  initMap();
+  state.map.invalidateSize();
 }
 
 /* -- the spot ------------------------------------------------ */
 
 function snapCell(lat, lng) {
+  const norm = ((((lng + 180) % 360) + 360) % 360) - 180;
   const south = Math.floor(lat * 10) / 10;
-  const west = Math.floor(lng * 10) / 10;
+  const west = Math.floor(norm * 10) / 10;
   return {
     id: `${south.toFixed(1)}_${west.toFixed(1)}`,
     south,
@@ -446,15 +569,104 @@ function urbanAt(lat, lon) {
   return state.urbanShapes.some((feature) => shapeHas(feature.geometry, lon, lat));
 }
 
-async function occurrencesInCell(gbifKey, cell) {
-  const box = `POLYGON((${cell.west} ${cell.south}, ${cell.west + 0.1} ${cell.south}, ` +
-    `${cell.west + 0.1} ${cell.south + 0.1}, ${cell.west} ${cell.south + 0.1}, ` +
-    `${cell.west} ${cell.south}))`;
+async function occurrencesInBox(gbifKey, west, south, east, north) {
+  const box = `POLYGON((${west} ${south}, ${east} ${south}, ` +
+    `${east} ${north}, ${west} ${north}, ${west} ${south}))`;
   const url = `${GBIF_OCCURRENCES}?taxon_key=${gbifKey}` +
     `&geometry=${encodeURIComponent(box)}&limit=0`;
   const response = await fetch(url);
   const data = await response.json();
   return (data.count || 0) > 0;
+}
+
+async function occurrencesInCell(gbifKey, cell) {
+  return occurrencesInBox(
+    gbifKey, cell.west, cell.south, cell.west + 0.1, cell.south + 0.1,
+  );
+}
+
+// The nearest 0.1° cell with a record within about 50 km (#74):
+// one box call rejects empty ground, then expanding rings (each
+// ring checked together) find the closest recorded cell.
+async function recordsNear(gbifKey, lat, lng) {
+  if (!await occurrencesInBox(gbifKey, lng - 0.5, lat - 0.5, lng + 0.5, lat + 0.5)) {
+    return null;
+  }
+  for (let ring = 0; ring <= 5; ring++) {
+    const found = await ringWithRecords(gbifKey, lat, lng, ring);
+    if (found.length) {
+      found.sort((a, b) => cellDistance(a, lat, lng) - cellDistance(b, lat, lng));
+      return found[0];
+    }
+  }
+  return null;
+}
+
+function ringCells(lat, lng, ring) {
+  const middle = snapCell(lat, lng);
+  const cells = [];
+  for (let di = -ring; di <= ring; di++) {
+    for (let dj = -ring; dj <= ring; dj++) {
+      if (Math.max(Math.abs(di), Math.abs(dj)) !== ring) {
+        continue;
+      }
+      const south = Math.round((middle.south + di * 0.1) * 10) / 10;
+      if (south < -90 || south >= 90) {
+        continue;
+      }
+      let west = Math.round((middle.west + dj * 0.1) * 10) / 10;
+      if (west < -180) {
+        west += 360;
+      } else if (west >= 180) {
+        west -= 360;
+      }
+      cells.push({ id: `${south.toFixed(1)}_${west.toFixed(1)}`, south, west });
+    }
+  }
+  return cells;
+}
+
+async function ringWithRecords(gbifKey, lat, lng, ring) {
+  const cells = ringCells(lat, lng, ring);
+  const hits = await Promise.all(
+    cells.map(async (cell) =>
+      (await occurrencesInCell(gbifKey, cell)) ? cell : null
+    ),
+  );
+  return hits.filter((cell) => cell);
+}
+
+function cellDistance(cell, lat, lng) {
+  const dLat = cell.south + 0.05 - lat;
+  const dLng = cell.west + 0.05 - lng;
+  return dLat * dLat + dLng * dLng;
+}
+
+// Fit the map to where the animal lives (#74): a sample of its
+// records gives the bounding area.
+async function zoomToRange(gbifKey) {
+  try {
+    const url = `${GBIF_OCCURRENCES}?taxon_key=${gbifKey}` +
+      "&has_coordinate=true&has_geospatial_issue=false&limit=300";
+    const data = await (await fetch(url)).json();
+    const points = (data.results || []).filter(
+      (row) => row.decimalLatitude != null && row.decimalLongitude != null,
+    );
+    if (!points.length || !state.map) {
+      return;
+    }
+    const lats = points.map((row) => row.decimalLatitude);
+    const lons = points.map((row) => row.decimalLongitude);
+    state.map.fitBounds(
+      [
+        [Math.min(...lats), Math.min(...lons)],
+        [Math.max(...lats), Math.max(...lons)],
+      ],
+      { padding: [20, 20] },
+    );
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 async function onMapTap(latlng) {
@@ -464,19 +676,34 @@ async function onMapTap(latlng) {
     return;
   }
   const animal = state.picked;
-  const cell = snapCell(latlng.lat, latlng.lng);
   const check = ++state.cellCheck;
   const card = $("cell-card");
   card.hidden = false;
   $("cell-make").hidden = true;
   $("cell-msg").textContent = "";
-  const country = countryAt(latlng.lat, latlng.lng);
-  if (!country || !country.name || urbanAt(latlng.lat, latlng.lng)) {
-    $("cell-name").textContent = "";
-    $("cell-facts").textContent = "";
-    $("cell-state").textContent = t(country ? "home.in_city" : "home.outside", {
-      name: animal.name,
-    });
+  $("cell-name").textContent = "";
+  $("cell-facts").textContent = "";
+  $("cell-state").textContent = t("home.checking");
+  let cell = null;
+  try {
+    cell = await recordsNear(animal.gbif_key, latlng.lat, latlng.lng);
+  } catch (error) {
+    console.error(error);
+    if (check !== state.cellCheck) {
+      return;
+    }
+  }
+  if (check !== state.cellCheck) {
+    return;
+  }
+  // The picked cell decides: a tap near the shore can land across
+  // the water, and cities stay out even with records in them. A tap
+  // with nothing near makes no card at all — only a pick does (#78).
+  const at = cell ? { lat: cell.south + 0.05, lng: cell.west + 0.05 } : null;
+  const country = at ? countryAt(at.lat, at.lng) : null;
+  if (!cell || !country || !country.name || urbanAt(at.lat, at.lng)) {
+    card.hidden = true;
+    clearPickMark();
     state.selectedCell = null;
     return;
   }
@@ -484,30 +711,14 @@ async function onMapTap(latlng) {
     `${state.pickedShort} ${state.pickedHabitat}, ${country.name}`;
   $("cell-name").textContent = title;
   $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
-  $("cell-state").textContent = t("home.checking");
-  let recorded = false;
-  try {
-    recorded = await occurrencesInCell(animal.gbif_key, cell);
-  } catch (error) {
-    console.error(error);
-    if (check !== state.cellCheck) {
-      return;
-    }
-    $("cell-state").textContent = t("home.check_failed");
-    state.selectedCell = null;
-    return;
-  }
-  if (check !== state.cellCheck) {
-    return;
-  }
-  if (!recorded) {
-    $("cell-state").textContent = t("home.outside", { name: animal.name });
-    state.selectedCell = null;
-    return;
-  }
   state.selectedCell = { ...cell, title, country, animal };
   $("cell-state").textContent = t("home.about");
   $("cell-make").hidden = false;
+  clearPickMark();
+  state.pickMark = L.rectangle(
+    [[cell.south, cell.west], [cell.south + 0.1, cell.west + 0.1]],
+    { color: "#f2b84b", weight: 2, fill: false },
+  ).addTo(state.map);
 }
 
 function homeForCell(speciesKey, cellId) {
@@ -569,10 +780,6 @@ function renderDrafts() {
       stampMillis(b.updated_at || b.created_at) -
       stampMillis(a.updated_at || a.created_at),
   );
-  if (!drafts.length) {
-    list.innerHTML = `<p class="muted">${escapeHtml(t("drafts.none"))}</p>`;
-    return;
-  }
   list.innerHTML = "";
   for (const draft of drafts) {
     list.appendChild(renderDraft(draft));
@@ -630,6 +837,11 @@ function renderDraft(draft) {
 function draftActions(draft) {
   const status = draft.status;
   let html = `<div class="actions" data-actions="${escapeHtml(draft.id)}">`;
+  if ((draft.pack_version || 0) >= 1) {
+    html += `<button type="button" data-act="play">${
+      escapeHtml(t("draft.play"))
+    }</button>`;
+  }
   if (status === "failed") {
     html += `<p>${escapeHtml(t("draft.failed_words"))}</p>` +
       `<button type="button" data-act="try_again">${escapeHtml(t("draft.try_again"))}</button>` +
@@ -720,7 +932,9 @@ async function actOnDraft(draft, button) {
   const card = button.closest("[data-actions]");
   const stamp = firebase.firestore.FieldValue.serverTimestamp();
   try {
-    if (action === "improve") {
+    if (action === "play") {
+      window.open(`${GAME_URL}?draft=${encodeURIComponent(draft.id)}`, "_blank");
+    } else if (action === "improve") {
       const choices = [...card.querySelectorAll('input[name="choice"]:checked')]
         .map((box) => {
           const entry = { choice: box.value };

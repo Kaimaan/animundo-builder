@@ -188,7 +188,8 @@ class AnimalMakerStage:
         make yet.
         """
         animal_id = target["id"]
-        self._make_animal(ctx, world, brief, research, region, target, excused)
+        if not _animal_passed(ctx.job_dir, animal_id):
+            self._make_animal(ctx, world, brief, research, region, target, excused)
         marks = self._make_model(ctx, world, brief, research, target)
         self._save_final(ctx, world, animal_id)
         return animal_id, marks
@@ -722,6 +723,35 @@ def _made(job_dir: Path, animal_id: str) -> bool:
     ).is_file()
 
 
+def _animal_passed(job_dir: Path, animal_id: str) -> bool:
+    """Whether a run already passed this animal's file (#77.2).
+
+    The file is there and its last try's errors are empty: a
+    resume goes straight to the model and never pays for the
+    file again. Anything else — no file, no tries, a failing
+    last try — makes it again.
+    """
+    if not (job_dir / "animals" / f"{animal_id}.json").is_file():
+        return False
+    tries = job_dir / "tries" / animal_id / "animal"
+    if not tries.is_dir():
+        return False
+    attempts = sorted(
+        (path for path in tries.iterdir() if path.name.isdigit()),
+        key=lambda path: int(path.name),
+    )
+    if not attempts:
+        return False
+    errors_path = attempts[-1] / "errors.json"
+    if not errors_path.is_file():
+        return False
+    try:
+        errors = json.loads(errors_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    return errors == []
+
+
 def _pruned_regions(job_dir: Path, excused: set[str], dest: Path) -> dict[str, Path]:
     """Copies of the job's regions without the still-unmade targets (#67.1).
 
@@ -886,7 +916,8 @@ def _reference_looks(world: Path, start_from: str) -> str | None:
     """What the reference model looks like (#63.2).
 
     The reference table's Looks column when it lands there,
-    else the three lines above.
+    else the three lines above, else the reference spec's own
+    name — the examples describe themselves (#77.1).
     """
     readme = world / "models" / "README.md"
     if readme.is_file():
@@ -899,7 +930,12 @@ def _reference_looks(world: Path, start_from: str) -> str | None:
             starts = set(re.findall(r"[a-z][a-z0-9_]*", cells[1].lower()))
             if start_from.lower() in starts and cells[3]:
                 return cells[3]
-    return _REFERENCE_LOOKS.get(start_from)
+    if start_from in _REFERENCE_LOOKS:
+        return _REFERENCE_LOOKS[start_from]
+    ref = _reference_spec(world, start_from)
+    if ref is not None and isinstance(ref.get("name"), str) and ref["name"]:
+        return ref["name"]
+    return None
 
 
 def _reference_line(world: Path, start_from: str, entry: dict[str, Any]) -> str:
@@ -1106,10 +1142,21 @@ def _measure_errors(
     return _size_errors(found, sourced) + _ratio_errors(found, target, world)
 
 
+def _reference_path(world: Path, start_from: str) -> Path | None:
+    """Where the reference spec lives: models, then examples (#77.1)."""
+    for path in (
+        world / "models" / f"{start_from}.json",
+        world / "models" / "examples" / f"{start_from}.json",
+    ):
+        if path.is_file():
+            return path
+    return None
+
+
 def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:
     """The reference spec, or nothing when it isn't a plain file."""
-    path = world / "models" / f"{start_from}.json"
-    if not path.is_file():
+    path = _reference_path(world, start_from)
+    if path is None:
         return None
     try:
         spec = json.loads(path.read_text(encoding="utf-8"))
@@ -1123,7 +1170,7 @@ def _run_adapt(
 ) -> dict[str, Any]:
     """The world's adapt tool: reference plus edits become the spec."""
     tool = world / "tools" / "adapt_model.py"
-    ref = world / "models" / f"{start_from}.json"
+    ref = _reference_path(world, start_from) or world / "models" / f"{start_from}.json"
     try:
         done = subprocess.run(
             [

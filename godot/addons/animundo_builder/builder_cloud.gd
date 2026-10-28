@@ -1,11 +1,11 @@
 class_name BuilderCloud
 extends RefCounted
-## The game's Cloud, seen by Builder mode: drafts, packs and reports.
+## The game's Cloud, seen by Builder mode: one draft, its pack, playing it.
 ##
 ## The backend is injected (the game's Cloud autoload in the game, a stub in
 ## the checks), and only the generic calls from spec 06 are used: the signed
-## in grown-up's uid, one document, one query, one patch, one file. Every
-## call can fail; failures come back as empty values, never crashes.
+## in grown-up's uid, one document, one patch, one file. Every call can
+## fail; failures come back as empty values, never crashes.
 
 var _cloud
 
@@ -24,13 +24,6 @@ func signed_in() -> bool:
 	return uid() != ""
 
 
-## [{id, path, fields}] of the drafts this family may see. [] on failure.
-func family_drafts() -> Array:
-	if not signed_in():
-		return []
-	return await _cloud.firestore_query("drafts", "family_uids", "array-contains", uid())
-
-
 ## One draft's plain fields, or {} when it isn't there or can't be read.
 func get_draft(draft_id: String) -> Dictionary:
 	if not signed_in() or not is_draft_id(draft_id):
@@ -45,20 +38,6 @@ func record_played(draft_id: String) -> bool:
 		return false
 	return await _cloud.firestore_patch("drafts/" + draft_id, {
 		"last_played_at": utc_now(), "updated_at": utc_now()})
-
-
-## Reports a draft, once, in the shape the security rules accept. Only the
-## grown-up who started the draft may report it.
-func send_feedback(draft_id: String, kind: String, reason: String, note: String) -> bool:
-	if not signed_in() or not is_draft_id(draft_id):
-		return false
-	if kind != "not_right" and kind != "problem":
-		return false
-	var feedback := {"kind": kind, "reason": reason, "at": utc_now()}
-	if note.strip_edges() != "":
-		feedback["note"] = note.strip_edges().left(300)
-	return await _cloud.firestore_patch("drafts/" + draft_id, {
-		"feedback": feedback, "updated_at": utc_now()})
 
 
 ## One pack file's bytes, or empty when it can't be read.

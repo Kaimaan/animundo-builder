@@ -8,15 +8,15 @@ extends SceneTree
 ##      res://addons/animundo_builder/tests/check_content_packs.gd
 
 const ADDON := "res://addons/animundo_builder"
-const PACK := "user://packs/zzpk1/"
-const V1 := "user://packs/zzpk1/1/"
-const V2 := "user://packs/zzpk1/2/"
+const DRAFT := "zzpk1"
 
 var errors: Array[String] = []
 var game := false
 var RegionAPI = null
 var SpeciesAPI = null
 var SavesAPI = null
+var V1 := ""
+var V2 := ""
 
 
 func _init() -> void:
@@ -108,10 +108,13 @@ func _with_file(m: Dictionary, key: String, value: Variant, size := -1) -> Dicti
 func _run() -> void:
 	var hooks = load("res://scripts/builder_hooks.gd") if game else StubHooks.new()
 	var Mode = load(ADDON + "/builder_mode.gd")
+	V1 = Mode.pack_folder(DRAFT, 1)
+	V2 = Mode.pack_folder(DRAFT, 2)
 	_write_version(V1, "Pack place one")
 	_write_version(V2, "Pack place two")
 	var mode = Mode.new()
 	mode.boot(hooks, StubCloud.new())
+	_check_booted(hooks)
 	_check_installed(mode, hooks)
 	if game:
 		_check_game(hooks)
@@ -123,7 +126,18 @@ func _run() -> void:
 	quit(1 if errors.size() > 0 else 0)
 
 
-func _check_installed(_mode: Node, hooks: Variant) -> void:
+## Boot installs nothing: packs arrive through the draft opener only (D9).
+func _check_booted(hooks: Variant) -> void:
+	var folders: PackedStringArray = hooks.content_folders()
+	if V1 in folders or V2 in folders:
+		errors.append("boot registered packs: %s" % [folders])
+
+
+func _check_installed(mode: Node, hooks: Variant) -> void:
+	if not mode._install_pack(DRAFT, 2):
+		errors.append("the newer version doesn't install")
+	if not mode._install_pack(DRAFT, 1):
+		errors.append("the older version doesn't install")
 	var folders: PackedStringArray = hooks.content_folders()
 	if not V2 in folders or not V1 in folders:
 		errors.append("the installed versions aren't registered: %s" % [folders])
@@ -132,14 +146,12 @@ func _check_installed(_mode: Node, hooks: Variant) -> void:
 	var found := str(hooks.find_file("regions", "draft_zzpk1"))
 	if found != V2 + "regions/draft_zzpk1.json":
 		errors.append("the newer version's place isn't found: %s" % found)
-	# A corrupted file on disk unregisters its version at the next boot.
+	# A corrupted file fails the install and unregisters its version.
 	FileAccess.open(V2 + "regions/draft_zzpk1.json", FileAccess.WRITE).store_string("junk")
-	var Mode = load(ADDON + "/builder_mode.gd")
-	var mode2 = Mode.new()
-	mode2.boot(hooks, StubCloud.new())
-	if V2 in (hooks.content_folders() as PackedStringArray):
-		errors.append("a pack with a wrong hash is installed")
-	mode2.free()
+	if mode._install_pack(DRAFT, 2):
+		errors.append("a pack with a wrong hash installs")
+	elif V2 in (hooks.content_folders() as PackedStringArray):
+		errors.append("a pack with a wrong hash stays registered")
 
 
 func _check_game(hooks: Variant) -> void:
@@ -236,9 +248,10 @@ func _cleanup(hooks: Variant) -> void:
 	hooks.remove_content_folder(V1)
 	hooks.remove_content_folder(V2)
 	hooks.remove_content_folder("user://packs/_addon/1/")
+	hooks.set_draft_opener(Callable())
 	hooks.remove_grownup_button("explore.builder_mode")
 	hooks.remove_places_button("explore.ask_place")
-	_remove_dir("user://packs/zzpk1")
+	_remove_dir(V1.trim_suffix("/").get_base_dir())
 	_remove_dir("user://packs/_addon")
 
 

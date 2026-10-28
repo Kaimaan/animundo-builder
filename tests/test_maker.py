@@ -33,7 +33,9 @@ from builder.stages.maker import (
     _pruned_regions,
     _reference_line,
     _reference_looks,
+    _reference_path,
     _reference_row,
+    _reference_spec,
     _run_adapt,
     _run_adapt_home,
     _size_misses,
@@ -811,6 +813,24 @@ def test_skips_already_made_prey(tmp_path: Path) -> None:
     assert len(client.prompts) == 2
 
 
+def test_resume_skips_a_passed_animal_file(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    placed = json.loads(_animal_answer("capybara"))
+    (tmp_path / "animals").mkdir()
+    (tmp_path / "animals" / "capybara.json").write_text(json.dumps(placed))
+    attempt = tmp_path / "tries" / "capybara" / "animal" / "1"
+    attempt.mkdir(parents=True)
+    (attempt / "answer.json").write_text(_animal_answer("capybara"))
+    (attempt / "animal.json").write_text(json.dumps(placed))
+    (attempt / "errors.json").write_text("[]")
+    client = ScriptClient([_edits_answer(), _animal_answer("lynx"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
+    assert len(client.prompts) == 3
+    assert json.loads((tmp_path / "animals" / "capybara.json").read_text()) == placed
+
+
 def test_nothing_to_make_calls_nothing(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(
@@ -1348,6 +1368,25 @@ def test_reference_looks_prefers_the_table_column(tmp_path: Path) -> None:
         "| Snakes | `examples/grass_snake` | Size, head | long smooth coils |\n"
     )
     assert _reference_looks(world, "grass_snake") == "long smooth coils"
+
+
+def test_reference_spec_falls_back_to_examples(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    assert _reference_spec(world, "grass_snake") is None
+    example = world / "models" / "examples"
+    example.mkdir()
+    (example / "grass_snake.json").write_text(
+        json.dumps({"id": "grass_snake", "name": "Grass snake coils"})
+    )
+    assert _reference_path(world, "grass_snake") == example / "grass_snake.json"
+    assert _reference_spec(world, "grass_snake")["id"] == "grass_snake"
+    assert _reference_looks(world, "grass_snake") == "Grass snake coils"
+    (world / "models" / "grass_snake.json").write_text(
+        json.dumps({"id": "grass_snake", "name": "Plain grass snake"})
+    )
+    assert _reference_path(world, "grass_snake") == (
+        world / "models" / "grass_snake.json"
+    )
 
 
 def test_guide_turns_a_missing_text_into_guidance() -> None:

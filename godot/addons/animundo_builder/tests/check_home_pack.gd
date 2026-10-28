@@ -10,12 +10,13 @@ extends SceneTree
 
 const ADDON := "res://addons/animundo_builder"
 const FIXTURE := ADDON + "/tests/fixture/fox-pack"
-const FOLDER := "user://packs/review_fox/1/"
+const DRAFT := "review_fox"
 const DRAFT_PLACE := "draft_review_fox"
 
 var errors: Array[String] = []
 var game := false
 var RegionAPI = null
+var FOLDER := ""
 
 
 func _init() -> void:
@@ -64,10 +65,13 @@ func _run() -> void:
 		quit(1)
 		return
 	var hooks = load("res://scripts/builder_hooks.gd") if game else StubHooks.new()
-	_install_fixture()
 	var Mode = load(ADDON + "/builder_mode.gd")
+	FOLDER = Mode.pack_folder(DRAFT, 1)
+	_install_fixture()
 	var mode = Mode.new()
 	mode.boot(hooks, StubCloud.new())
+	if not mode._install_pack(DRAFT, 1):
+		errors.append("the fox pack doesn't install")
 	_check_installed(hooks)
 	if game:
 		_check_game()
@@ -127,9 +131,10 @@ func _check_game() -> void:
 func _cleanup(hooks: Variant) -> void:
 	hooks.remove_content_folder(FOLDER)
 	hooks.remove_content_folder("user://packs/_addon/1/")
+	hooks.set_draft_opener(Callable())
 	hooks.remove_grownup_button("explore.builder_mode")
 	hooks.remove_places_button("explore.ask_place")
-	_remove_dir("user://packs/review_fox")
+	_remove_dir(FOLDER.trim_suffix("/").get_base_dir())
 	_remove_dir("user://packs/_addon")
 
 

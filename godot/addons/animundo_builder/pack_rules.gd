@@ -30,6 +30,12 @@ static func manifest_error(manifest: Variant) -> String:
 	if RegEx.create_from_string(PLACE_ID_PATTERN).search(
 			str(manifest["draft_place_id"])) == null:
 		return "draft_place_id is not a game id"
+	# The draft's animal for the opener (#98.1): optional, so old
+	# packs still install, but a present one must be a species id.
+	if manifest.has("animal") \
+			and RegEx.create_from_string(PLACE_ID_PATTERN).search(
+				str(manifest["animal"])) == null:
+		return "animal is not a species id"
 	if not _is_int(manifest["version"]) or int(manifest["version"]) < 1:
 		return "version is not a positive integer"
 	if not _is_int(manifest["format"]) or int(manifest["format"]) < 1:

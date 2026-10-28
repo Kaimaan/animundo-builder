@@ -113,6 +113,12 @@ class PackStage:
             "new_species": sorted(new_ids),
             "reused_species": reused,
         }
+        if brief_path.is_file():
+            # The draft's animal, for the game's opener (#98.1): the
+            # home stage's stem, or the brief's id on reused places.
+            animal = brief.get("stem") or brief.get("id")
+            if animal:
+                manifest["animal"] = animal
         validate("pack-manifest", manifest)
         _write(pack / "manifest.json", manifest)
         total = sum(entry["bytes"] for entry in manifest["files"])

@@ -4,6 +4,7 @@ and every referenced string present."""
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -62,47 +63,40 @@ def test_emulator_ports_match_firebase_json() -> None:
         assert entry["host"] in app, service
 
 
-def test_natural_earth_shapes_are_vendored() -> None:
-    for name in ("ne_110m_land.geojson", "ne_110m_coastline.geojson"):
-        data = _json(WEB / "vendor" / "natural-earth" / name)
-        assert data["type"] == "FeatureCollection"
-        assert len(data["features"]) > 100
-    admin = _json(
-        WEB / "vendor" / "natural-earth" / "ne_110m_admin_0_countries.geojson"
-    )
-    assert admin["type"] == "FeatureCollection"
-    assert len(admin["features"]) > 100
-    for feature in admin["features"]:
-        assert set(feature["properties"]) == {"NAME", "ISO_A2"}, feature
+def test_no_map_code_ships() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    for banned in (
+        "leaflet",
+        "L.map",
+        "tileLayer",
+        "geoJSON",
+        "createPane",
+        "fitBounds",
+        "snapCell",
+        "placeAt",
+        "recordsNear",
+        "onMapTap",
+        "initMap",
+        "armRange",
+        "urbanAt",
+        "countryAt",
+        "ne_110m",
+        "ne_50m_land",
+        "ne_50m_coastline",
+        "ne_10m",
+        "v2/map/occurrence/density",
+        "cell-card",
+        "map-pane",
+        "selectedCell",
+    ):
+        assert banned not in app, banned
+        assert banned not in html, banned
+    assert not (WEB / "vendor" / "leaflet").exists()
     urban = _json(WEB / "vendor" / "natural-earth" / "ne_50m_urban_areas.geojson")
     assert urban["type"] == "FeatureCollection"
     assert len(urban["features"]) > 1000
-
-
-def _inside(ring: list[list[float]], lon: float, lat: float) -> bool:
-    hits = False
-    n = len(ring)
-    j = n - 1
-    for i in range(n):
-        xi, yi = ring[i][0], ring[i][1]
-        xj, yj = ring[j][0], ring[j][1]
-        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
-            hits = not hits
-        j = i
-    return hits
-
-
-def _on_land(geo: dict, lon: float, lat: float) -> bool:
-    for feature in geo["features"]:
-        geom = feature["geometry"]
-        coords = geom["coordinates"]
-        polys = coords if geom["type"] == "MultiPolygon" else [coords]
-        for poly in polys:
-            if _inside(poly[0], lon, lat) and not any(
-                _inside(hole, lon, lat) for hole in poly[1:]
-            ):
-                return True
-    return False
+    assert "api.gbif.org/v1/occurrence/search" in app
 
 
 def test_web_harness_drives_the_app() -> None:
@@ -130,84 +124,48 @@ def test_packed_drafts_play_in_the_game() -> None:
     assert '"_blank"' in app
 
 
-def test_coastline_gains_detail_with_zoom() -> None:
+def test_picker_waits_for_the_pick() -> None:
+    html = (WEB / "index.html").read_text(encoding="utf-8")
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    assert "updateBaseDetail" in app
-    assert "zoomend" in app
-    assert "zoom >= 6" in app and "ne_10m_land" in app
-    assert "zoom >= 4" in app and "ne_50m_land" in app
-    assert "ne_50m_coastline" in app
-    for name in ("ne_50m_land.geojson", "ne_50m_coastline.geojson"):
-        geo = _json(WEB / "vendor" / "natural-earth" / name)
-        assert geo["type"] == "FeatureCollection"
-        assert len(geo["features"]) > 1000
-    land10 = _json(WEB / "vendor" / "natural-earth" / "ne_10m_land.geojson")
-    assert land10["type"] == "FeatureCollection"
-    assert _on_land(land10, 16.0, 78.2)  # Spitsbergen, Svalbard
-    assert _on_land(land10, 24.95, 60.15)  # Helsinki
-    assert not _on_land(land10, 10.0, 78.0)  # Fram Strait
-    assert not _on_land(land10, 20.0, 59.0)  # Åland Sea
+    assert 'id="place-picker" hidden' in html
+    assert 'id="picked-card" hidden' in html
+    assert 'id="animal-picker"' in html
+    assert "openPicker()" in app and "ensurePickerData" in app
+    # The big files load once, on the picker step, never at boot.
+    assert app.count('fetch("places-of-interest.json")') == 1
+    assert app.count('fetch("animal-places.json")') == 1
+    assert "geoDistance" in app and "liveCount" in app
 
 
-def test_map_waits_for_the_pick() -> None:
+def test_your_animals_is_the_start_page() -> None:
     html = (WEB / "index.html").read_text(encoding="utf-8")
     app = (WEB / "app.js").read_text(encoding="utf-8")
     en = _json(WEB / "i18n" / "en.json")
-    assert 'id="map-pane" hidden' in html
-    assert 'id="drafts" hidden' in html
-    assert 'id="animal-picker"' in html
-    assert "map-pane" in app and "initMap()" in app
-    assert "drafts.lede" in en
-    assert en["drafts.lede"] == "These are your drafts."
-    assert "drafts.none" not in en
-    assert "drafts.none" not in app
+    assert 'id="animals-pane"' in html
+    assert 'id="new-pane" hidden' in html
+    assert 'id="animal-list"' in html
+    assert en["animals.title"] == "Your animals"
+    assert en["animals.new"] == "New animal"
+    assert "renderAnimals()" in app
+    assert "data-new" in app
+    # With no drafts yet, straight to New animal (#92.1).
+    assert 'showView("new")' in app
+    assert "drafts.lede" not in en
 
 
-def test_drafts_show_from_sign_in_not_from_the_pick() -> None:
+def test_only_sighted_places_build() -> None:
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    # Unhidden in the sign-in handler, before any animal is picked (#90).
-    head = app.split("state.picked = animal")[0]
-    assert '$("drafts").hidden = !user' in head
-    # Every draft renders a card, and a packed one gets Play in the game.
-    assert "renderDrafts()" in app
-    assert "(draft.pack_version || 0) >= 1" in app
-    assert 'data-act="play"' in app
-    en = _json(WEB / "i18n" / "en.json")
-    assert en["draft.play"] == "Play in the game"
+    assert "MIN_SIGHTINGS = 5" in app
+    assert "seen >= MIN_SIGHTINGS" in app
+    assert "place.none_seen" in app
 
 
-def test_taps_only_pick_recorded_cells() -> None:
+def test_country_never_asks_location() -> None:
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    en = _json(WEB / "i18n" / "en.json")
-    assert "recordsNear" in app
-    assert "pickMark" in app and "L.rectangle" in app
-    assert 't("home.outside"' not in app
-    assert "home.outside" not in en
-    assert "home.no_records" in en
-    assert "We don't know where" in en["home.no_records"]
-
-
-def test_map_snaps_taps_and_fits_the_range() -> None:
-    app = (WEB / "app.js").read_text(encoding="utf-8")
-    assert "bin=hex" in app and "hexPerTile" in app
-    assert "recordsNear" in app and "ringWithRecords" in app
-    assert "fitBounds" in app and "has_coordinate=true" in app
-
-
-def test_records_draw_above_the_land() -> None:
-    app = (WEB / "app.js").read_text(encoding="utf-8")
-    assert 'createPane("records")' in app
-    assert "zIndex = 450" in app
-    assert 'pane: "records"' in app
-    assert 'pointerEvents = "none"' in app
-
-
-def test_app_uses_only_gbif_tiles() -> None:
-    app = (WEB / "app.js").read_text(encoding="utf-8")
-    for banned in ("basemaps", "cartocdn", "tile.openstreetmap"):
-        assert banned not in app, banned
-    assert "api.gbif.org/v2/map/occurrence/density" in app
-    assert "ne_110m_land.geojson" in app
+    assert "geolocation" not in app
+    assert "resolvedOptions().timeZone" in app
+    assert "tz-country.json" in app
+    assert 'collection("grownups")' in app
 
 
 def test_app_references_only_shipped_files() -> None:
@@ -284,9 +242,109 @@ def test_animal_list_matches_world() -> None:
 def test_play_link_uses_the_firestore_draft_id() -> None:
     app = (WEB / "app.js").read_text(encoding="utf-8")
     # The address carries the draft's Firestore id, capitals and all;
-    # the safe lower-case place id lives only in the pack (#93).
+    # the safe lower-case place id lives only in the pack (#93) and
+    # in the published card's place address (#92.3).
     assert "?draft=${encodeURIComponent(draft.id)}" in app
-    assert "draft_place_id" not in app
+    assert app.count("draft_place_id") == 2
+
+
+def test_published_drafts_play_as_places() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "playUrl(draft)" in app
+    assert "?place=${encodeURIComponent" in app
+    assert "&animal=${encodeURIComponent(animal.id)}" in app
+    en = _json(WEB / "i18n" / "en.json")
+    assert en["draft.status.public"] == "In the game for everyone"
+
+
+def test_emulator_play_stays_local() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "gameBase()" in app and "cloudSuffix()" in app
+    assert "location.origin" in app and "&cloud=emulator" in app
+    assert "GAME_URL}?place" not in app and "GAME_URL}?draft" not in app
+
+
+def test_app_fits_the_rules_bounds() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "place.n.slice(0, 80)" in app
+    assert 'name="species" maxlength="64"' in app
+
+
+def test_places_of_interest_shape() -> None:
+    data = _json(WEB / "places-of-interest.json")
+    assert set(data) == {"about", "places"}
+    places = data["places"]
+    assert len(places) >= 10000
+    kinds = {
+        "park",
+        "marine_area",
+        "marine_park",
+        "protected_area",
+        "island",
+        "lake",
+        "mountain",
+        "bay",
+        "cape",
+        "reef",
+        "desert",
+        "forest",
+        "wetland",
+        "glacier",
+        "valley",
+        "waterfall",
+        "volcano",
+        "peninsula",
+        "delta",
+    }
+    by_id = {}
+    for place in places:
+        assert set(place) == {"i", "n", "f", "k", "c", "la", "lo", "a", "l"}, place
+        assert re.fullmatch(r"Q\d+", place["i"]), place["i"]
+        assert place["i"] not in by_id, place["i"]
+        by_id[place["i"]] = place
+        assert place["n"] and place["k"] in kinds
+        assert -90 <= place["la"] <= 90 and -180 <= place["lo"] <= 180
+        assert place["l"] >= 1
+    assert by_id["Q1815268"]["n"] == "Nuuksio National Park"
+    assert by_id["Q192770"]["n"] == "Saimaa"
+    assert by_id["Q41858"]["n"] == "Banff National Park"
+    assert by_id["Q41858"]["c"] == "CA"
+    assert by_id["Q547012"]["c"] is None  # Cape Crozier, Antarctica
+
+
+def test_animal_places_shape() -> None:
+    animals = _json(WEB / "animal-list.json")["animals"]
+    interest = {
+        place["i"]: place for place in _json(WEB / "places-of-interest.json")["places"]
+    }
+    data = _json(WEB / "animal-places.json")
+    keyed = [animal for animal in animals if isinstance(animal.get("gbif_key"), int)]
+    assert len(keyed) >= 200
+    for animal in keyed:
+        assert animal["id"] in data, animal["id"]
+    for animal_id, rows in data.items():
+        last = math.inf
+        for qid, seen in rows:
+            assert qid in interest, (animal_id, qid)
+            assert seen >= 5, (animal_id, qid, seen)
+            rank = math.log(seen + 1) * interest[qid]["l"]
+            assert rank <= last, (animal_id, qid)
+            last = rank
+    assert "Q192770" in [qid for qid, _ in data["moose"]]
+    assert "Q41858" in [qid for qid, _ in data["moose"]]
+
+
+def test_timezone_country_and_alias_tables() -> None:
+    zones = _json(WEB / "tz-country.json")["zones"]
+    assert len(zones) > 200
+    assert zones["Europe/Helsinki"] == "FI"
+    assert zones["America/Toronto"] == "CA"
+    names = _json(WEB / "country-names.json")["names"]
+    assert len(names) > 100
+    assert names["FI"] == "Finland"
+    assert names["CA"] == "Canada"
+    aliases = _json(WEB / "place-aliases.json")["aliases"]
+    assert aliases == {"Q192770": "fi_saimaa"}
 
 
 def test_improve_other_sends_species_when_named() -> None:

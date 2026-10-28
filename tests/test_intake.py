@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -117,93 +116,156 @@ FOX_ENTRY = {
     "in_library": "fox",
 }
 
-TEST_SQUARE = [
-    [20.0, 60.0],
-    [30.0, 60.0],
-    [30.0, 70.0],
-    [20.0, 70.0],
-    [20.0, 60.0],
+#: Places-of-interest rows (the committed file's short keys): a park,
+#: a country-less cape in Antarctica, a country-less sea, and a lake
+#: the aliases call a built place.
+TEST_PLACES = [
+    {
+        "i": "Q1",
+        "n": "Test Park",
+        "f": None,
+        "k": "park",
+        "c": "TT",
+        "la": 61.5,
+        "lo": 26.0,
+        "a": 100.0,
+        "l": 20,
+    },
+    {
+        "i": "Q2",
+        "n": "Cape Crozier",
+        "f": None,
+        "k": "cape",
+        "c": None,
+        "la": -77.5,
+        "lo": 169.33,
+        "a": None,
+        "l": 21,
+    },
+    {
+        "i": "Q3",
+        "n": "South Atlantic",
+        "f": None,
+        "k": "marine_area",
+        "c": None,
+        "la": 0.0,
+        "lo": -10.0,
+        "a": 500000.0,
+        "l": 15,
+    },
+    {
+        "i": "Q9",
+        "n": "Test Lake",
+        "f": None,
+        "k": "lake",
+        "c": "TT",
+        "la": 61.6,
+        "lo": 26.1,
+        "a": 50.0,
+        "l": 30,
+    },
 ]
 
-FAR_SQUARE = [
-    [0.0, 0.0],
-    [1.0, 0.0],
-    [1.0, 1.0],
-    [0.0, 1.0],
-    [0.0, 0.0],
-]
 
-
-def _home_files(
-    tmp_path: Path, entry: dict | None = None, square: list | None = None
-) -> tuple[Path, Path]:
+def _home_files(tmp_path: Path, entry: dict | None = None) -> dict[str, Path]:
     animals = dict(FOX_ENTRY if entry is None else entry)
-    list_path = _write(
-        tmp_path / "animal-list.json",
-        {
-            "homes": ["boreal_forest"],
-            "not_yet": {},
-            "animals": [animals],
-        },
-    )
-    shapes_path = _write(
-        tmp_path / "admin.geojson",
-        {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                    "type": "Feature",
-                    "properties": {"NAME": "Testland", "ISO_A2": "TT"},
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [square or TEST_SQUARE],
-                    },
-                }
-            ],
-        },
-    )
-    return list_path, shapes_path
+    return {
+        "animal_list_path": _write(
+            tmp_path / "animal-list.json",
+            {
+                "homes": ["boreal_forest"],
+                "not_yet": {},
+                "animals": [animals],
+            },
+        ),
+        "places_path": _write(
+            tmp_path / "places-of-interest.json", {"places": TEST_PLACES}
+        ),
+        "aliases_path": _write(
+            tmp_path / "place-aliases.json", {"aliases": {"Q9": "tt_park"}}
+        ),
+        "names_path": _write(
+            tmp_path / "country-names.json", {"names": {"TT": "Testland"}}
+        ),
+    }
 
 
 def _home_ctx(tmp_path: Path) -> SimpleNamespace:
     return SimpleNamespace(job_dir=tmp_path, world_path=tmp_path)
 
 
-def _home_stage(tmp_path: Path, cell: str = "61.5_26.0", **over: object) -> IntakeStage:
-    list_path, shapes_path = _home_files(
-        tmp_path,
-        over.pop("entry", None),
-        over.pop("square", None),
-    )
+def _home_stage(
+    tmp_path: Path,
+    qid: str = "Q1",
+    seen: int = 12,
+    points: list[tuple[float, float]] | None = None,
+    **over: object,
+) -> IntakeStage:
+    files = _home_files(tmp_path, over.pop("entry", None))  # type: ignore[arg-type]
     return IntakeStage(
         species_key=5219243,
-        cell=cell,
-        animal_list_path=list_path,
-        shapes_path=shapes_path,
-        recorded=lambda lat, lon, key: True,
+        place={"wikidata_id": qid, "name": "Client lies", "country": "XX"},
+        animal_list_path=files["animal_list_path"],
+        places_path=files["places_path"],
+        aliases_path=files["aliases_path"],
+        names_path=files["names_path"],
+        sightings=lambda key, lat, lon, radius: seen,
+        sample=lambda key, lat, lon, radius: list(points or []),
         **over,  # type: ignore[arg-type]
     )
 
 
-def test_home_writes_brief_with_worker_name(tmp_path: Path) -> None:
+def _brief(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
+
+
+def test_home_writes_brief_with_place_name(tmp_path: Path) -> None:
     result = _home_stage(tmp_path).run(_home_ctx(tmp_path))
     assert result["home"] == "boreal_forest"
-    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
-    assert brief["place_name"] == "Fox forest"
-    assert brief["country"] == "TT"
+    assert result["place"] == "Q1"
+    brief = _brief(tmp_path)
+    assert brief["place_name"] == "Test Park"
+    assert brief["country"] == "tt"
     assert brief["country_name"] == "Testland"
-    assert brief["center"] == {"lat": 61.55, "lon": 26.05}
+    assert brief["center"] == {"lat": 61.5, "lon": 26.0}
     assert brief["in_library"] == "fox"
+    assert brief["new_place_id"] == "tt_test_park"
+    assert brief["place"] == {
+        "wikidata_id": "Q1",
+        "name": "Test Park",
+        "fi": None,
+        "kind": "park",
+        "country": "TT",
+        "lat": 61.5,
+        "lon": 26.0,
+        "area": 100.0,
+        "radius_km": 5.64,
+    }
 
 
-def test_home_bad_cell_refused(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="bad cell"):
-        _home_stage(tmp_path, cell="here").run(_home_ctx(tmp_path))
+def test_home_bad_place_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="bad place"):
+        _home_stage(tmp_path, qid="here").run(_home_ctx(tmp_path))
 
 
-def test_home_outside_country_refused(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="outside any country"):
-        _home_stage(tmp_path, square=FAR_SQUARE).run(_home_ctx(tmp_path))
+def test_home_missing_place_refused(tmp_path: Path) -> None:
+    files = _home_files(tmp_path)
+    stage = IntakeStage(
+        species_key=5219243,
+        animal_list_path=files["animal_list_path"],
+        places_path=files["places_path"],
+        aliases_path=files["aliases_path"],
+        names_path=files["names_path"],
+        sightings=lambda key, lat, lon, radius: 12,
+        sample=lambda key, lat, lon, radius: [],
+    )
+    with pytest.raises(ValueError, match="bad place"):
+        stage.run(_home_ctx(tmp_path))
+
+
+def test_home_unlisted_place_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unknown place: Q999"):
+        _home_stage(tmp_path, qid="Q999").run(_home_ctx(tmp_path))
 
 
 def test_home_unmakable_refused(tmp_path: Path) -> None:
@@ -216,23 +278,15 @@ def test_home_without_home_is_flagged(tmp_path: Path) -> None:
     entry = {**FOX_ENTRY, "habitats": ["grassland"]}
     result = _home_stage(tmp_path, entry=entry).run(_home_ctx(tmp_path))
     assert result["home"] == "grassland"
-    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
+    brief = _brief(tmp_path)
     assert brief["needs_home"] is True
     assert brief["habitats"] == ["grassland"]
-    assert brief["place_name"] == "Fox grassland"
+    assert brief["place_name"] == "Test Park"
 
 
-def test_home_unrecorded_refused(tmp_path: Path) -> None:
-    list_path, shapes_path = _home_files(tmp_path)
-    stage = IntakeStage(
-        species_key=5219243,
-        cell="61.5_26.0",
-        animal_list_path=list_path,
-        shapes_path=shapes_path,
-        recorded=lambda lat, lon, key: False,
-    )
-    with pytest.raises(ValueError, match="recorded near"):
-        stage.run(_home_ctx(tmp_path))
+def test_home_too_few_recorded_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="need 5"):
+        _home_stage(tmp_path, seen=3).run(_home_ctx(tmp_path))
 
 
 def test_home_excluded_country_refused(tmp_path: Path) -> None:
@@ -243,30 +297,31 @@ def test_home_excluded_country_refused(tmp_path: Path) -> None:
         _home_stage(tmp_path, exclusions_path=exclusions).run(_home_ctx(tmp_path))
 
 
-def _place(tmp_path: Path, region: dict) -> None:
+def test_home_center_is_sample_median(tmp_path: Path) -> None:
+    points = [(61.52, 26.0), (61.54, 26.0), (70.0, 26.0)]
+    _home_stage(tmp_path, points=points).run(_home_ctx(tmp_path))
+    assert _brief(tmp_path)["center"] == {"lat": 61.53, "lon": 26.0}
+
+
+def _place(tmp_path: Path, region: dict, name: str = "tt_park") -> None:
     regions = tmp_path / "regions"
     regions.mkdir(exist_ok=True)
-    (regions / "tt_park.json").write_text(json.dumps(region), encoding="utf-8")
+    (regions / f"{name}.json").write_text(json.dumps(region), encoding="utf-8")
 
 
 def test_home_in_place_writes_place_id(tmp_path: Path) -> None:
     _place(
         tmp_path,
-        {
-            "center": {"lat": 61.55, "lon": 26.05},
-            "animals": {"playable": ["hare"]},
-        },
+        {"wikidata": "Q1", "animals": {"playable": ["hare"]}},
     )
     result = _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
-    assert result["cell"] == "61.5_26.0"
-    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
-    assert brief["reuse_place_id"] == "tt_park"
+    assert result["place"] == "Q1"
+    assert _brief(tmp_path)["reuse_place_id"] == "tt_park"
 
 
 def test_home_without_place_writes_no_place_id(tmp_path: Path) -> None:
     _home_stage(tmp_path).run(_home_ctx(tmp_path))
-    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
-    assert brief["reuse_place_id"] is None
+    assert _brief(tmp_path)["reuse_place_id"] is None
 
 
 def test_home_unknown_place_refused(tmp_path: Path) -> None:
@@ -274,59 +329,92 @@ def test_home_unknown_place_refused(tmp_path: Path) -> None:
         _home_stage(tmp_path, place_id="xx_nowhere").run(_home_ctx(tmp_path))
 
 
-def test_home_cell_outside_place_refused(tmp_path: Path) -> None:
-    _place(
-        tmp_path,
-        {
-            "center": {"lat": 62.5, "lon": 26.05},
-            "animals": {"playable": []},
-        },
-    )
-    with pytest.raises(ValueError, match="not in tt_park anymore"):
+def test_home_wikidata_mismatch_refused(tmp_path: Path) -> None:
+    _place(tmp_path, {"wikidata": "Q2", "animals": {"playable": []}})
+    with pytest.raises(ValueError, match="is not Q1 anymore"):
         _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
 
 
-def test_home_place_without_center_refused(tmp_path: Path) -> None:
-    _place(tmp_path, {"animals": {"playable": []}})
-    with pytest.raises(ValueError, match="not in tt_park anymore"):
-        _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
+def test_home_alias_matches_built_place(tmp_path: Path) -> None:
+    _place(tmp_path, {"wikidata": "Q1", "animals": {"playable": []}})
+    _home_stage(tmp_path, qid="Q9", place_id="tt_park").run(_home_ctx(tmp_path))
+    assert _brief(tmp_path)["reuse_place_id"] == "tt_park"
+
+
+def test_home_alias_wrong_place_refused(tmp_path: Path) -> None:
+    _place(tmp_path, {"wikidata": "Q1", "animals": {"playable": []}}, name="xx_other")
+    with pytest.raises(ValueError, match="is the built place tt_park"):
+        _home_stage(tmp_path, qid="Q9", place_id="xx_other").run(_home_ctx(tmp_path))
 
 
 def test_home_already_playable_refused(tmp_path: Path) -> None:
-    _place(
-        tmp_path,
-        {
-            "center": {"lat": 61.55, "lon": 26.05},
-            "animals": {"playable": ["fox"]},
-        },
-    )
+    _place(tmp_path, {"wikidata": "Q1", "animals": {"playable": ["fox"]}})
     with pytest.raises(ValueError, match="already playable"):
         _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
 
 
-def test_home_lynx_tapped_inside_real_nuuksio(tmp_path: Path) -> None:
+def test_home_antarctic_place_makes_aq_id(tmp_path: Path) -> None:
+    _home_stage(tmp_path, qid="Q2").run(_home_ctx(tmp_path))
+    brief = _brief(tmp_path)
+    assert brief["new_place_id"] == "aq_cape_crozier"
+    assert brief["country"] == "aq"
+    assert brief["country_name"] == "Antarctica"
+
+
+def test_home_ocean_place_makes_int_id(tmp_path: Path) -> None:
+    _home_stage(tmp_path, qid="Q3").run(_home_ctx(tmp_path))
+    brief = _brief(tmp_path)
+    assert brief["new_place_id"] == "int_south_atlantic"
+    assert brief["country"] == "int"
+    assert brief["country_name"] == ""
+
+
+def test_home_real_saimaa_makes_fi_saimaa(tmp_path: Path) -> None:
+    """Inbox 2026-10-28 #87.9: the intake for a picked place makes fi_saimaa."""
+    files = _home_files(tmp_path)
     root = Path(__file__).resolve().parent.parent
+    stage = IntakeStage(
+        species_key=5219243,
+        place={"wikidata_id": "Q192770"},
+        animal_list_path=files["animal_list_path"],
+        places_path=root / "web" / "build" / "places-of-interest.json",
+        aliases_path=root / "web" / "build" / "place-aliases.json",
+        names_path=root / "web" / "build" / "country-names.json",
+        sightings=lambda key, lat, lon, radius: 12,
+        sample=lambda key, lat, lon, radius: [],
+    )
+    stage.run(_home_ctx(tmp_path))
+    brief = _brief(tmp_path)
+    assert brief["new_place_id"] == "fi_saimaa"
+    assert brief["country"] == "fi"
+    assert brief["country_name"] == "Finland"
+    assert brief["place_name"] == "Saimaa"
+
+
+def test_home_real_nuuksio_reuse(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parent.parent
+    web = root / "web" / "build"
     world = root.parent / "animundo-world"
     region_path = world / "regions" / "fi_nuuksio.json"
     list_path = world / "animal-list.json"
     if not region_path.is_file() or not list_path.is_file():
         pytest.skip(f"needs {world}")
-    center = json.loads(region_path.read_text(encoding="utf-8"))["center"]
-    south = math.floor(center["lat"] * 10) / 10
-    west = math.floor(center["lon"] * 10) / 10
-    cell = f"{south:.1f}_{west:.1f}"
     stage = IntakeStage(
         species_key=2435240,
-        cell=cell,
+        place={"wikidata_id": "Q1815268"},
         place_id="fi_nuuksio",
         animal_list_path=list_path,
-        recorded=lambda lat, lon, key: True,
+        places_path=web / "places-of-interest.json",
+        aliases_path=web / "place-aliases.json",
+        names_path=web / "country-names.json",
+        sightings=lambda key, lat, lon, radius: 12,
+        sample=lambda key, lat, lon, radius: [],
     )
     job = tmp_path / "job"
     job.mkdir()
     ctx = SimpleNamespace(job_dir=job, world_path=world)
     result = stage.run(ctx)
-    assert result["cell"] == cell
+    assert result["place"] == "Q1815268"
     brief = json.loads((job / "home.json").read_text(encoding="utf-8"))
     assert brief["id"] == "lynx"
     assert brief["reuse_place_id"] == "fi_nuuksio"

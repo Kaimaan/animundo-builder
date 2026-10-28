@@ -415,7 +415,7 @@ def _home_draft(owner: str = "grown", **over: Any) -> dict[str, Any]:
     doc = {
         "kind": "animal_home",
         "species_key": 5219243,
-        "cell": "60.1_24.9",
+        "place": {"wikidata_id": "Q1"},
         "owner_uid": owner,
         "family_uids": [owner],
         "status": "requested",
@@ -486,7 +486,7 @@ def test_create_home_in_place_runs_reuse_subset(tmp_path: Path) -> None:
 
 def test_create_home_missing_fields_fails(tmp_path: Path) -> None:
     store = FakeStore()
-    store.drafts["d1"] = _home_draft(cell="")
+    store.drafts["d1"] = _home_draft(place=None)
     worker = _worker(tmp_path, store)
     worker.runner = ScriptRunner()
     worker.handle_create("d1")
@@ -699,7 +699,7 @@ def test_improve_home_reruns_remapped_stages_with_the_note(
                 "params": {
                     "kind": "animal_home",
                     "species_key": 5219243,
-                    "cell": "60.1_24.9",
+                    "place": {"wikidata_id": "Q1"},
                     "world": str(tmp_path / "world"),
                 },
                 "completed": done,
@@ -751,7 +751,7 @@ def test_improve_home_other_runs_home_then_oneshot(tmp_path: Path) -> None:
                 "params": {
                     "kind": "animal_home",
                     "species_key": 5219243,
-                    "cell": "60.1_24.9",
+                    "place": {"wikidata_id": "Q1"},
                     "world": str(tmp_path / "world"),
                 },
                 "completed": [],

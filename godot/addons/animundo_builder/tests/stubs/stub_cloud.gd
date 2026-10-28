@@ -9,6 +9,11 @@ var drafts: Array = []  # [{id, fields}]
 var packs := {}  # "draft_id/version/rel_path" -> PackedByteArray
 var fail := {}  # "firestore_query", "firestore_get", "firestore_patch", "storage_get"
 var patched: Array = []  # [{path, fields}]
+var last_code := 200
+
+
+func last_status() -> int:
+	return last_code
 
 
 func firestore_query(collection: String, field: String, op: String, value: Variant,
@@ -29,22 +34,29 @@ func firestore_query(collection: String, field: String, op: String, value: Varia
 
 func firestore_get(path: String) -> Dictionary:
 	if bool(fail.get("firestore_get", false)):
+		last_code = 403
 		return {}
 	for d in drafts:
 		if "drafts/" + d["id"] == path:
+			last_code = 200
 			return d["fields"]
+	last_code = 200
 	return {}
 
 
 func firestore_patch(path: String, fields: Dictionary) -> bool:
 	if bool(fail.get("firestore_patch", false)):
+		last_code = 403
 		return false
 	patched.append({"path": path, "fields": fields})
+	last_code = 200
 	return true
 
 
 func storage_get(path: String, max_bytes := 8 * 1024 * 1024) -> PackedByteArray:
 	if bool(fail.get("storage_get", false)):
+		last_code = 403
 		return PackedByteArray()
 	var data: PackedByteArray = packs.get(path.trim_prefix("packs/"), PackedByteArray())
+	last_code = 200
 	return data.slice(0, max_bytes)

@@ -2,12 +2,14 @@
 /* Animundo Builder: the grown-ups' web app.
  *
  * Static files only (the game's copy publishes this folder at
- * animundo.app/build). Animal first: the grown-up picks an animal
- * from a static list, taps its home on GBIF's occurrence map, and
- * the worker builds the home. Talks to Firestore and Storage with
- * the signed-in grown-up's own account, so the security rules are
- * what lets each button work: the app never does what the rules
- * forbid, and it never sees another family's drafts.
+ * animundo.app/build). Your animals first: one card per draft, and
+ * New animal starts the flow — the grown-up picks an animal from
+ * a static list, then one of its suggested places of interest (or
+ * a searched one), and the worker builds the home. Talks to
+ * Firestore and Storage with the signed-in grown-up's own
+ * account, so the security rules are what lets each button work:
+ * the app never does what the rules forbid, and it never sees
+ * another family's drafts.
  *
  * English only during the event. The park flow (areas, area cards,
  * wishes) is parked, not deleted: areas.json stays vendored.
@@ -33,16 +35,39 @@ const EMULATORS = {
 };
 const TEST_GROWN_UP = { email: "test@example.org", password: "grown-up-1" };
 
-// GBIF's free occurrence tiles for the picked animal (the style name
-// is from GBIF's maps API docs), over the Natural Earth map. Hexagon
-// bins, not points: a range reads as a filled area, and even one
-// record draws a fingertip-sized cell instead of a 1 px dot (#74).
-const GBIF_TILES =
-  "https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png" +
-  "?taxonKey={key}&style=orange.marker&bin=hex&hexPerTile=8";
+// GBIF's free occurrence search: one count per searched place, live
+// in the browser. No map, no tiles since D11.
 const GBIF_OCCURRENCES = "https://api.gbif.org/v1/occurrence/search";
 const GAME_URL = "https://animundo.app/";
-const PLACE_KM = 25;
+// Only a place with this many wild sightings can be built (#87.3).
+const MIN_SIGHTINGS = 5;
+// Suggestion cards on the picker step.
+const MAX_CARDS = 6;
+// Search matches shown; each unconfirmed one costs one GBIF count.
+const MAX_SEARCH = 8;
+
+// The list's kinds in words, for the cards (#87.3).
+const KIND_WORDS = {
+  park: "National park",
+  marine_area: "Marine area",
+  marine_park: "Marine park",
+  protected_area: "Protected area",
+  island: "Island",
+  lake: "Lake",
+  mountain: "Mountain",
+  bay: "Bay",
+  cape: "Cape",
+  reef: "Reef",
+  desert: "Desert",
+  forest: "Forest",
+  wetland: "Wetland",
+  glacier: "Glacier",
+  valley: "Valley",
+  waterfall: "Waterfall",
+  volcano: "Volcano",
+  peninsula: "Peninsula",
+  delta: "Delta",
+};
 
 const state = {
   lang: "en",
@@ -52,25 +77,28 @@ const state = {
   animalHomes: [],
   places: [],
   notYet: {},
+  view: "animals",
   picked: null,
   pickedHome: null,
-  pickedShort: null,
-  pickedHabitat: null,
-  gbifLayer: null,
-  adminShapes: null,
-  urbanShapes: null,
-  selectedCell: null,
-  cellCheck: 0,
+  pickerLoaded: false,
+  pickerLoading: null,
+  interest: [],
+  byQid: {},
+  animalPlaces: {},
+  tzZones: {},
+  countryNames: {},
+  aliases: {},
+  pickerCountry: undefined,
+  savedCountry: undefined,
+  suggestions: [],
+  selectedPlace: null,
+  searchCounts: {},
+  searchSeq: 0,
   drafts: {},
+  draftsSeen: false,
   feedUnsubs: {},
   feedRetry: {},
   feedTries: {},
-  map: null,
-  base110: null,
-  base50: null,
-  base50Loading: false,
-  base10: null,
-  base10Loading: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -196,14 +224,17 @@ async function finishLink() {
   }
 }
 
+function showView(view) {
+  state.view = view;
+  $("animals-pane").hidden = view !== "animals";
+  $("new-pane").hidden = view !== "new";
+}
+
 function onUser(user) {
   state.user = user;
   $("auth-signed-out").hidden = !!user;
   $("auth-signed-in").hidden = !user;
   $("app").hidden = !user;
-  // Your drafts shows from the first paint when signed in; only the
-  // map waits for an animal (#90).
-  $("drafts").hidden = !user;
   if (!user) {
     for (const unsub of Object.values(state.feedUnsubs)) {
       unsub();
@@ -219,19 +250,20 @@ function onUser(user) {
       state.draftsUnsub = null;
     }
     state.drafts = {};
+    state.draftsSeen = false;
     state.feeds = {};
     state.picked = null;
     state.pickedHome = null;
-    state.pickedShort = null;
-    state.pickedHabitat = null;
-    state.selectedCell = null;
-    setGbifLayer(null);
-    clearPickMark();
-    $("map-pane").hidden = true;
-    $("drafts").hidden = true;
+    state.suggestions = [];
+    state.selectedPlace = null;
+    state.searchCounts = {};
+    state.savedCountry = undefined;
+    state.pickerCountry = undefined;
+    showView("animals");
     return;
   }
   $("auth-who").textContent = t("auth.signed_in", { email: user.email || "" });
+  showView("animals");
   void boot();
 }
 
@@ -247,22 +279,18 @@ function storage() {
 
 async function boot() {
   if (!state.dataLoaded) {
-    const [animals, admin, urban, places] = await Promise.all([
+    const [animals, places] = await Promise.all([
       fetch("animal-list.json").then((r) => r.json()),
-      fetch("vendor/natural-earth/ne_110m_admin_0_countries.geojson").then((r) => r.json()),
-      fetch("vendor/natural-earth/ne_50m_urban_areas.geojson").then((r) => r.json()),
       fetch("places.json").then((r) => r.json()),
     ]);
     state.places = places.places || [];
     state.animalList = animals.animals || [];
     state.animalHomes = animals.homes || [];
     state.notYet = animals.not_yet || {};
-    state.adminShapes = admin.features || [];
-    state.urbanShapes = urban.features || [];
     state.dataLoaded = true;
   }
   if (state.draftsUnsub) {
-    renderDrafts();
+    renderAnimals();
     return;
   }
   state.draftsUnsub = db().collection("drafts")
@@ -292,161 +320,22 @@ async function boot() {
             delete state.feedTries[id];
           }
         }
-        renderDrafts();
+        renderAnimals();
+        // With no drafts yet, straight to New animal, as the game's
+        // Start does (#92.1). Only on the first snapshot: deleting
+        // the last draft must not yank the page away.
+        if (!state.draftsSeen) {
+          state.draftsSeen = true;
+          if (Object.keys(state.drafts).length === 0) {
+            showView("new");
+          }
+        }
       },
       (error) => {
         console.error(error);
         showError();
       },
     );
-}
-
-/* -- map ----------------------------------------------------- */
-
-function initMap() {
-  if (state.map) {
-    return;
-  }
-  state.map = L.map("map", { worldCopyJump: true }).setView([30, 10], 2);
-  // The records draw above the land (#76): the Natural Earth layers
-  // live in Leaflet's overlayPane (z-index 400) while plain tile
-  // layers sit in the tilePane (200), so the opaque land would cover
-  // every record on land. Taps pass through: the map keeps them.
-  state.map.createPane("records");
-  state.map.getPane("records").style.zIndex = 450;
-  state.map.getPane("records").style.pointerEvents = "none";
-  // Natural Earth land, vendored: no tile service, no terms, no limits.
-  state.base110 = L.layerGroup().addTo(state.map);
-  fetch("vendor/natural-earth/ne_110m_land.geojson")
-    .then((response) => response.json())
-    .then((land) => {
-      L.geoJSON(land, LAND_STYLE).addTo(state.base110);
-    })
-    .catch((error) => console.error(error));
-  fetch("vendor/natural-earth/ne_110m_coastline.geojson")
-    .then((response) => response.json())
-    .then((coast) => {
-      L.geoJSON(coast, { style: COAST_STYLE }).addTo(state.base110);
-    })
-    .catch((error) => console.error(error));
-  state.map.on("click", (event) => onMapTap(event.latlng));
-  state.map.on("zoomend", updateBaseDetail);
-  updateBaseDetail();
-}
-
-const LAND_STYLE = {
-  style: {
-    color: "#3b5544",
-    weight: 1,
-    fillColor: "#2c3a32",
-    fillOpacity: 1,
-  },
-  attribution: "Natural Earth",
-};
-const COAST_STYLE = { color: "#c9c2ad", weight: 1, opacity: 0.4 };
-
-// The coastline gains detail with the zoom (#75): the 110m base
-// draws first, the 50m pair loads on the first zoom to 4, the
-// 10m land on the first zoom to 6. While a tier loads, the map
-// keeps showing the coarser one.
-function updateBaseDetail() {
-  const zoom = state.map.getZoom();
-  if (zoom >= 6) {
-    if (state.base10) {
-      showBase(state.base10);
-    } else if (!state.base10Loading) {
-      state.base10Loading = true;
-      fetch("vendor/natural-earth/ne_10m_land.geojson")
-        .then((response) => response.json())
-        .then((land) => {
-          const group = L.layerGroup();
-          L.geoJSON(land, LAND_STYLE).addTo(group);
-          L.geoJSON(land, { style: { ...COAST_STYLE, fill: false } }).addTo(group);
-          state.base10 = group;
-          updateBaseDetail();
-        })
-        .catch((error) => {
-          console.error(error);
-          state.base10Loading = false;
-        });
-    }
-    return;
-  }
-  if (zoom >= 4) {
-    if (state.base50) {
-      showBase(state.base50);
-    } else if (!state.base50Loading) {
-      state.base50Loading = true;
-      Promise.all([
-        fetch("vendor/natural-earth/ne_50m_land.geojson").then((r) => r.json()),
-        fetch("vendor/natural-earth/ne_50m_coastline.geojson").then((r) => r.json()),
-      ])
-        .then(([land, coast]) => {
-          const group = L.layerGroup();
-          L.geoJSON(land, LAND_STYLE).addTo(group);
-          L.geoJSON(coast, { style: COAST_STYLE }).addTo(group);
-          state.base50 = group;
-          updateBaseDetail();
-        })
-        .catch((error) => {
-          console.error(error);
-          state.base50Loading = false;
-        });
-    }
-    return;
-  }
-  showBase(state.base110);
-}
-
-function showBase(layer) {
-  for (const known of [state.base110, state.base50, state.base10]) {
-    if (known && known !== layer) {
-      state.map.removeLayer(known);
-    }
-  }
-  state.map.addLayer(layer);
-}
-
-function setGbifLayer(gbifKey) {
-  if (state.gbifLayer) {
-    state.map.removeLayer(state.gbifLayer);
-    state.gbifLayer = null;
-  }
-  if (!gbifKey) {
-    return;
-  }
-  state.gbifLayer = L.tileLayer(GBIF_TILES.replace("{key}", gbifKey), {
-    attribution: "GBIF.org",
-    pane: "records",
-  }).addTo(state.map);
-}
-
-// The picked animal's range, armed (#78): only an animal with no
-// records anywhere says so; anything else gets its layer and a zoom.
-async function armRange(animal) {
-  let count = 0;
-  try {
-    const url = `${GBIF_OCCURRENCES}?taxon_key=${animal.gbif_key}&limit=0`;
-    count = (await (await fetch(url)).json()).count || 0;
-  } catch (error) {
-    console.error(error);
-  }
-  if (!state.picked || state.picked.gbif_key !== animal.gbif_key) {
-    return;
-  }
-  if (!count) {
-    $("animal-msg").textContent = t("home.no_records", { name: animal.name });
-    return;
-  }
-  setGbifLayer(animal.gbif_key);
-  void zoomToRange(animal.gbif_key);
-}
-
-function clearPickMark() {
-  if (state.pickMark) {
-    state.map.removeLayer(state.pickMark);
-    state.pickMark = null;
-  }
 }
 
 /* -- the animal ---------------------------------------------- */
@@ -485,13 +374,12 @@ function renderSuggestions() {
 function pickAnimal(animal) {
   state.picked = null;
   state.pickedHome = null;
-  state.pickedShort = null;
-  state.pickedHabitat = null;
-  state.selectedCell = null;
-  $("cell-card").hidden = true;
+  state.suggestions = [];
+  state.selectedPlace = null;
+  state.searchCounts = {};
+  $("picked-card").hidden = true;
+  $("place-picker").hidden = true;
   $("animal-suggest").innerHTML = "";
-  setGbifLayer(null);
-  clearPickMark();
   if (!animal.can_make) {
     $("animal-msg").textContent =
       state.notYet[animal.not_yet] || t("home.cannot", { name: animal.name });
@@ -508,91 +396,158 @@ function pickAnimal(animal) {
   }
   state.picked = animal;
   state.pickedHome = home;
-  state.pickedShort =
-    animal.name.split(" ").pop().replace(/^./, (c) => c.toUpperCase());
-  state.pickedHabitat = home.split("_").pop();
-  void armRange(animal);
   const built = state.animalHomes.includes(home);
   $("animal-msg").textContent = built
     ? t("home.picked", { name: animal.name })
     : t("home.make_home_too");
-  $("map-pane").hidden = false;
-  $("drafts").hidden = false;
-  initMap();
-  state.map.invalidateSize();
+  $("place-picker").hidden = false;
+  void openPicker();
 }
 
-/* -- the spot ------------------------------------------------ */
+/* -- the place picker ----------------------------------------- */
 
-function snapCell(lat, lng) {
-  const norm = ((((lng + 180) % 360) + 360) % 360) - 180;
-  const south = Math.floor(lat * 10) / 10;
-  const west = Math.floor(norm * 10) / 10;
-  return {
-    id: `${south.toFixed(1)}_${west.toFixed(1)}`,
-    south,
-    west,
-  };
+// The big files load only on the picker step (#87.1): the 12,000
+// places, the suggestions per animal, the time-zone table, the
+// country names and the aliases.
+async function ensurePickerData() {
+  if (state.pickerLoaded) {
+    return;
+  }
+  if (!state.pickerLoading) {
+    state.pickerLoading = (async () => {
+      const [interest, animalPlaces, tz, names, aliases] = await Promise.all([
+        fetch("places-of-interest.json").then((r) => r.json()),
+        fetch("animal-places.json").then((r) => r.json()),
+        fetch("tz-country.json").then((r) => r.json()),
+        fetch("country-names.json").then((r) => r.json()),
+        fetch("place-aliases.json").then((r) => r.json()),
+      ]);
+      state.interest = interest.places || [];
+      state.byQid = {};
+      for (const place of state.interest) {
+        state.byQid[place.i] = place;
+      }
+      state.animalPlaces = animalPlaces || {};
+      state.tzZones = tz.zones || {};
+      state.countryNames = names.names || {};
+      state.aliases = aliases.aliases || {};
+      state.pickerLoaded = true;
+    })();
+  }
+  return state.pickerLoading;
 }
 
-function ringHas(ring, lon, lat) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
-      inside = !inside;
+// The country from the time zone, never the location prompt (#87.4).
+// The grown-up's saved choice wins over it next time.
+function countryFromTimeZone() {
+  let zone = "";
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch (_) {
+    /* no time zone */
+  }
+  return state.tzZones[zone] || null;
+}
+
+async function pickerCountry() {
+  if (state.pickerCountry === undefined) {
+    let saved = null;
+    try {
+      const snap = await db().collection("grownups").doc(state.user.uid).get();
+      if (snap.exists) {
+        saved = snap.data().country || null;
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    state.savedCountry = saved;
+    state.pickerCountry = saved || countryFromTimeZone();
+  }
+  return state.pickerCountry;
+}
+
+async function openPicker() {
+  const animal = state.picked;
+  $("place-msg").textContent = t("place.loading");
+  $("place-cards").innerHTML = "";
+  $("place-search").innerHTML = "";
+  try {
+    await ensurePickerData();
+  } catch (error) {
+    console.error(error);
+    showError();
+    return;
+  }
+  if (state.picked !== animal) {
+    return;
+  }
+  await pickerCountry();
+  if (state.picked !== animal) {
+    return;
+  }
+  renderCountrySelect();
+  // renderPlaceCards clears the loading line itself, or says the
+  // range is unknown when there is nothing to show.
+  renderPlaceCards();
+  renderPlaceSearch();
+}
+
+function renderCountrySelect() {
+  const select = $("place-country");
+  select.innerHTML = "";
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = t("place.everywhere");
+  select.appendChild(empty);
+  const codes = Object.keys(state.countryNames).sort((a, b) =>
+    state.countryNames[a].localeCompare(state.countryNames[b])
+  );
+  for (const code of codes) {
+    const option = document.createElement("option");
+    option.value = code;
+    option.textContent = state.countryNames[code];
+    select.appendChild(option);
+  }
+  select.value = state.pickerCountry || "";
+}
+
+async function onCountryChange() {
+  clearError();
+  state.pickerCountry = $("place-country").value || null;
+  if (state.pickerCountry) {
+    try {
+      await db().collection("grownups").doc(state.user.uid).set({
+        country: state.pickerCountry,
+      });
+      state.savedCountry = state.pickerCountry;
+    } catch (error) {
+      console.error(error);
+      showError();
     }
   }
-  return inside;
+  renderPlaceCards();
 }
 
-function shapeHas(geometry, lon, lat) {
-  if (!geometry) {
-    return false;
-  }
-  if (geometry.type === "Polygon") {
-    return ringHas(geometry.coordinates[0], lon, lat);
-  }
-  if (geometry.type === "MultiPolygon") {
-    return geometry.coordinates.some((poly) => ringHas(poly[0], lon, lat));
-  }
-  return false;
+// The lab's rank: log(sightings + 1) x links.
+function placeRank(seen, links) {
+  return Math.log(seen + 1) * links;
 }
 
-function countryAt(lat, lon) {
-  for (const feature of state.adminShapes) {
-    if (shapeHas(feature.geometry, lon, lat)) {
-      return {
-        name: feature.properties.NAME || "",
-        iso: feature.properties.ISO_A2 || "",
-      };
+// The built place a list place counts as: a direct Wikidata match,
+// or the hand-kept alias (the lake Saimaa counts as fi_saimaa).
+function builtFor(qid) {
+  const direct = (state.places || []).find((p) => p.wikidata === qid) || null;
+  if (direct) {
+    return { built: direct, direct: true };
+  }
+  const aliasId = state.aliases[qid];
+  if (aliasId) {
+    const built = (state.places || []).find((p) => p.id === aliasId) || null;
+    if (built) {
+      return { built, direct: false };
     }
   }
-  return null;
-}
-
-function urbanAt(lat, lon) {
-  return state.urbanShapes.some((feature) => shapeHas(feature.geometry, lon, lat));
-}
-
-// The built place whose centre is nearest, when it's within PLACE_KM (#82.1).
-function placeAt(lat, lon) {
-  let best = null;
-  let bestKm = PLACE_KM;
-  for (const place of state.places || []) {
-    const dLat = (place.center.lat - lat) * Math.PI / 180;
-    const dLon = (place.center.lon - lon) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat * Math.PI / 180) * Math.cos(place.center.lat * Math.PI / 180) *
-      Math.sin(dLon / 2) ** 2;
-    const km = 2 * 6371 * Math.asin(Math.sqrt(a));
-    if (km <= bestKm) {
-      best = place;
-      bestKm = km;
-    }
-  }
-  return best;
+  return { built: null, direct: false };
 }
 
 // Both exist: the animal is in the library and the place already has it
@@ -604,211 +559,353 @@ function bothExist(animal, place) {
   );
 }
 
-async function occurrencesInBox(gbifKey, west, south, east, north) {
-  const box = `POLYGON((${west} ${south}, ${east} ${south}, ` +
-    `${east} ${north}, ${west} ${north}, ${west} ${south}))`;
-  const url = `${GBIF_OCCURRENCES}?taxon_key=${gbifKey}` +
-    `&geometry=${encodeURIComponent(box)}&limit=0`;
-  const response = await fetch(url);
-  const data = await response.json();
-  return (data.count || 0) > 0;
-}
-
-async function occurrencesInCell(gbifKey, cell) {
-  return occurrencesInBox(
-    gbifKey, cell.west, cell.south, cell.west + 0.1, cell.south + 0.1,
-  );
-}
-
-// The nearest 0.1° cell with a record within about 50 km (#74):
-// one box call rejects empty ground, then expanding rings (each
-// ring checked together) find the closest recorded cell.
-async function recordsNear(gbifKey, lat, lng) {
-  if (!await occurrencesInBox(gbifKey, lng - 0.5, lat - 0.5, lng + 0.5, lat + 0.5)) {
-    return null;
-  }
-  for (let ring = 0; ring <= 5; ring++) {
-    const found = await ringWithRecords(gbifKey, lat, lng, ring);
-    if (found.length) {
-      found.sort((a, b) => cellDistance(a, lat, lng) - cellDistance(b, lat, lng));
-      return found[0];
+// Up to 6 cards: ready places in the grown-up's country first
+// ("Ready, go and play"), then the 2 best in their country, then
+// ready places elsewhere, then the best elsewhere, ranked as the
+// lab does (#87.3). Ready stays global in spirit, but a Canadian
+// picking a moose sees Banff before Finland's ready Saimaa (#87.9):
+// near-you outranks foreign-ready. Direct built matches come
+// before alias ones. Country-less places never count as near-you.
+function suggestFor(animal, country) {
+  const confirmed = state.animalPlaces[animal.id] || [];
+  const entries = [];
+  const seenBuilt = new Set();
+  for (const [qid, seen] of confirmed) {
+    const place = state.byQid[qid];
+    if (!place) {
+      continue;
     }
-  }
-  return null;
-}
-
-function ringCells(lat, lng, ring) {
-  const middle = snapCell(lat, lng);
-  const cells = [];
-  for (let di = -ring; di <= ring; di++) {
-    for (let dj = -ring; dj <= ring; dj++) {
-      if (Math.max(Math.abs(di), Math.abs(dj)) !== ring) {
-        continue;
-      }
-      const south = Math.round((middle.south + di * 0.1) * 10) / 10;
-      if (south < -90 || south >= 90) {
-        continue;
-      }
-      let west = Math.round((middle.west + dj * 0.1) * 10) / 10;
-      if (west < -180) {
-        west += 360;
-      } else if (west >= 180) {
-        west -= 360;
-      }
-      cells.push({ id: `${south.toFixed(1)}_${west.toFixed(1)}`, south, west });
+    const { built, direct } = builtFor(qid);
+    const ready = Boolean(built && bothExist(animal, built));
+    if (built) {
+      seenBuilt.add(built.id);
     }
+    entries.push({ qid, place, seen, built, direct, ready });
   }
-  return cells;
-}
-
-async function ringWithRecords(gbifKey, lat, lng, ring) {
-  const cells = ringCells(lat, lng, ring);
-  const hits = await Promise.all(
-    cells.map(async (cell) =>
-      (await occurrencesInCell(gbifKey, cell)) ? cell : null
-    ),
-  );
-  return hits.filter((cell) => cell);
-}
-
-function cellDistance(cell, lat, lng) {
-  const dLat = cell.south + 0.05 - lat;
-  const dLng = cell.west + 0.05 - lng;
-  return dLat * dLat + dLng * dLng;
-}
-
-// Fit the map to where the animal lives (#74): a sample of its
-// records gives the bounding area.
-async function zoomToRange(gbifKey) {
-  try {
-    const url = `${GBIF_OCCURRENCES}?taxon_key=${gbifKey}` +
-      "&has_coordinate=true&has_geospatial_issue=false&limit=300";
-    const data = await (await fetch(url)).json();
-    const points = (data.results || []).filter(
-      (row) => row.decimalLatitude != null && row.decimalLongitude != null,
-    );
-    if (!points.length || !state.map) {
-      return;
+  // Built places with the animal but no confirmed row (Nuuksio's fox
+  // never made the lab's top 40): they still open ready to play.
+  for (const built of state.places || []) {
+    if (!bothExist(animal, built) || seenBuilt.has(built.id)) {
+      continue;
     }
-    const lats = points.map((row) => row.decimalLatitude);
-    const lons = points.map((row) => row.decimalLongitude);
-    state.map.fitBounds(
-      [
-        [Math.min(...lats), Math.min(...lons)],
-        [Math.max(...lats), Math.max(...lons)],
-      ],
-      { padding: [20, 20] },
-    );
-  } catch (error) {
-    console.error(error);
+    entries.push({
+      qid: built.wikidata,
+      place: state.byQid[built.wikidata] || null,
+      seen: null,
+      built,
+      direct: true,
+      ready: true,
+    });
   }
+  const rank = (entry) =>
+    entry.seen == null
+      ? Infinity
+      : placeRank(entry.seen, entry.place ? entry.place.l : 0);
+  const byRank = (a, b) => rank(b) - rank(a);
+  const byReady = (a, b) => b.direct - a.direct || byRank(a, b);
+  const inCountry = (entry) =>
+    entry.place && country != null && entry.place.c === country;
+  const readyMine = entries.filter((e) => e.ready && inCountry(e)).sort(byReady);
+  const readyMineSet = new Set(readyMine);
+  const mine = entries
+    .filter((e) => !e.ready && inCountry(e))
+    .sort(byRank)
+    .slice(0, 2);
+  const readyElse = entries
+    .filter((e) => e.ready && !readyMineSet.has(e))
+    .sort(byReady);
+  const shown = new Set([...readyMine, ...mine, ...readyElse]);
+  const elsewhere = entries.filter((e) => !shown.has(e)).sort(byRank);
+  return [...readyMine, ...mine, ...readyElse, ...elsewhere].slice(0, MAX_CARDS);
 }
 
-async function onMapTap(latlng) {
-  clearError();
+function placeDisplayName(place) {
+  if (state.lang === "fi" && place.f) {
+    return place.f;
+  }
+  return place.n;
+}
+
+function kindWord(place) {
+  return KIND_WORDS[place.k] || "";
+}
+
+// Antarctica shows, the open sea shows nothing (#89.2).
+function countryLabel(place) {
+  if (place.c) {
+    return state.countryNames[place.c] || place.c;
+  }
+  return place.la < -60 ? "Antarctica" : "";
+}
+
+function cardFacts(place) {
+  const kind = kindWord(place);
+  const country = countryLabel(place);
+  if (kind && country) {
+    return `${kind} · ${country}`;
+  }
+  return kind || country;
+}
+
+function renderPlaceCards() {
+  const box = $("place-cards");
+  box.innerHTML = "";
   if (!state.picked) {
-    $("animal-msg").textContent = t("home.pick_first");
     return;
   }
   const animal = state.picked;
-  const check = ++state.cellCheck;
-  const card = $("cell-card");
-  card.hidden = false;
-  $("cell-make").hidden = true;
-  $("cell-play").hidden = true;
-  $("cell-msg").textContent = "";
-  $("cell-name").textContent = "";
-  $("cell-facts").textContent = "";
-  $("cell-state").textContent = t("home.checking");
-  let cell = null;
-  try {
-    cell = await recordsNear(animal.gbif_key, latlng.lat, latlng.lng);
-  } catch (error) {
-    console.error(error);
-    if (check !== state.cellCheck) {
+  state.suggestions = suggestFor(animal, state.pickerCountry || null);
+  if (!state.suggestions.length) {
+    $("place-msg").textContent = t("home.no_records", { name: animal.name });
+    return;
+  }
+  $("place-msg").textContent = "";
+  for (const entry of state.suggestions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost";
+    const name = entry.place
+      ? placeDisplayName(entry.place)
+      : entry.built.name.en;
+    const facts = entry.place ? cardFacts(entry.place) : "";
+    const ready = entry.ready ? ` <small>${escapeHtml(t("place.ready_go"))}</small>` : "";
+    button.innerHTML = `${escapeHtml(name)} <small>${escapeHtml(facts)}</small>${ready}`;
+    button.addEventListener("click", () => pickPlace(entry));
+    box.appendChild(button);
+  }
+}
+
+// The lab's circle: 10 km without an area, clamped to 5–50 km.
+function radiusKm(area) {
+  if (!area || area <= 0) {
+    return 10;
+  }
+  return Math.max(5, Math.min(50, Math.sqrt(area / Math.PI)));
+}
+
+// One GBIF count from the browser, for a searched place outside the
+// suggestions (#87.3). Cached: typing must not recount.
+async function liveCount(gbifKey, place) {
+  const params = new URLSearchParams({
+    taxon_key: String(gbifKey),
+    limit: "0",
+    year: "1996,2026",
+    hasCoordinate: "true",
+    occurrenceStatus: "PRESENT",
+    geoDistance: `${place.la},${place.lo},${Math.round(radiusKm(place.a))}km`,
+  });
+  params.append("basisOfRecord", "HUMAN_OBSERVATION");
+  params.append("basisOfRecord", "MACHINE_OBSERVATION");
+  const data = await (await fetch(`${GBIF_OCCURRENCES}?${params}`)).json();
+  return data.count || 0;
+}
+
+function topPlaces(animalId, count) {
+  const confirmed = state.animalPlaces[animalId] || [];
+  return confirmed
+    .map(([qid, seen]) => ({ place: state.byQid[qid], seen }))
+    .filter((row) => row.place)
+    .sort((a, b) => placeRank(b.seen, b.place.l) - placeRank(a.seen, a.place.l))
+    .slice(0, count);
+}
+
+function entryFor(animal, qid, seen) {
+  const { built, direct } = builtFor(qid);
+  return {
+    qid,
+    place: state.byQid[qid],
+    seen,
+    built,
+    direct,
+    ready: Boolean(built && bothExist(animal, built)),
+  };
+}
+
+function renderPlaceSearch() {
+  const box = $("place-search");
+  box.innerHTML = "";
+  const query = $("place-q").value.trim().toLowerCase();
+  if (!query || !state.picked || !state.pickerLoaded) {
+    return;
+  }
+  const seq = ++state.searchSeq;
+  const animal = state.picked;
+  const matches = state.interest
+    .filter(
+      (p) =>
+        p.n.toLowerCase().includes(query) ||
+        (p.f || "").toLowerCase().includes(query),
+    )
+    .slice(0, MAX_SEARCH);
+  const confirmed = new Map(state.animalPlaces[animal.id] || []);
+  for (const place of matches) {
+    const row = document.createElement("p");
+    const name = document.createElement("strong");
+    name.textContent = `${placeDisplayName(place)} — ${cardFacts(place)}`;
+    row.appendChild(name);
+    const status = document.createElement("span");
+    status.textContent = " …";
+    row.appendChild(status);
+    box.appendChild(row);
+    if (confirmed.has(place.i)) {
+      status.textContent = ` ${t("place.seen_here", { name: animal.name })}`;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ghost";
+      button.textContent = entryFor(animal, place.i, confirmed.get(place.i)).ready
+        ? t("place.ready_go")
+        : t("home.make");
+      button.addEventListener("click", () =>
+        pickPlace(entryFor(animal, place.i, confirmed.get(place.i)))
+      );
+      row.appendChild(document.createTextNode(" "));
+      row.appendChild(button);
+    } else {
+      void fillSearchCount(seq, animal, place, row, status);
+    }
+  }
+}
+
+async function fillSearchCount(seq, animal, place, row, status) {
+  if (state.searchCounts[place.i] === undefined) {
+    try {
+      state.searchCounts[place.i] = await liveCount(animal.gbif_key, place);
+    } catch (error) {
+      console.error(error);
+      if (seq !== state.searchSeq || state.picked !== animal) {
+        return;
+      }
+      status.textContent = "";
       return;
     }
   }
-  if (check !== state.cellCheck) {
+  if (seq !== state.searchSeq || state.picked !== animal) {
     return;
   }
-  // The picked cell decides: a tap near the shore can land across
-  // the water, and cities stay out even with records in them. A tap
-  // with nothing near makes no card at all — only a pick does (#78).
-  const at = cell ? { lat: cell.south + 0.05, lng: cell.west + 0.05 } : null;
-  const country = at ? countryAt(at.lat, at.lng) : null;
-  if (!cell || !country || !country.name || urbanAt(at.lat, at.lng)) {
-    card.hidden = true;
-    clearPickMark();
-    state.selectedCell = null;
+  const seen = state.searchCounts[place.i];
+  if (seen >= MIN_SIGHTINGS) {
+    status.textContent = ` ${t("place.seen_here", { name: animal.name })}`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost";
+    button.textContent = entryFor(animal, place.i, seen).ready
+      ? t("place.ready_go")
+      : t("home.make");
+    button.addEventListener("click", () => pickPlace(entryFor(animal, place.i, seen)));
+    row.appendChild(document.createTextNode(" "));
+    row.appendChild(button);
     return;
   }
-  const place = placeAt(at.lat, at.lng);
-  const title =
-    `${state.pickedShort} ${state.pickedHabitat}, ${country.name}`;
-  state.selectedCell = { ...cell, title, country, animal, place };
-  if (bothExist(animal, place)) {
-    $("cell-name").textContent = t("draft.ready_place", { place: place.name.en });
-    $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
-    $("cell-state").textContent = t("home.about");
-    $("cell-play").hidden = false;
-    $("cell-play").onclick = () => playPlaceAnimal(place.id, animal.id);
+  status.textContent = ` ${t("place.none_seen", { name: animal.name.toLowerCase() })}`;
+  const best = topPlaces(animal.id, 3);
+  if (best.length) {
+    row.appendChild(document.createTextNode(` ${t("place.try")}`));
+    for (const { place: top, seen: topSeen } of best) {
+      row.appendChild(document.createTextNode(" "));
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ghost";
+      button.textContent = placeDisplayName(top);
+      button.addEventListener("click", () =>
+        pickPlace(entryFor(animal, top.i, topSeen))
+      );
+      row.appendChild(button);
+    }
+  }
+}
+
+function pickPlace(entry) {
+  if (!state.picked) {
+    return;
+  }
+  state.selectedPlace = { ...entry, animal: state.picked };
+  const card = $("picked-card");
+  card.hidden = false;
+  $("picked-make").hidden = true;
+  $("picked-play").hidden = true;
+  $("picked-msg").textContent = "";
+  if (entry.place) {
+    $("picked-name").textContent = placeDisplayName(entry.place);
+    $("picked-facts").textContent = cardFacts(entry.place);
   } else {
-    $("cell-name").textContent = title;
-    $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
-    $("cell-state").textContent = t("home.about");
-    $("cell-make").hidden = false;
+    $("picked-name").textContent = entry.built.name.en;
+    $("picked-facts").textContent = "";
   }
-  clearPickMark();
-  state.pickMark = L.rectangle(
-    [[cell.south, cell.west], [cell.south + 0.1, cell.west + 0.1]],
-    { color: "#f2b84b", weight: 2, fill: false },
-  ).addTo(state.map);
+  if (entry.ready) {
+    $("picked-state").textContent = t("place.ready_go");
+    $("picked-play").hidden = false;
+    $("picked-play").onclick = () =>
+      playPlaceAnimal(entry.built.id, state.picked.id);
+  } else {
+    $("picked-state").textContent = t("place.seen_here", {
+      name: state.picked.name,
+    });
+    $("picked-make").hidden = false;
+  }
+}
+
+// In emulator mode Play opens the local game, never production (#98.3).
+function gameBase() {
+  // location.origin has no trailing slash; GAME_URL has one.
+  return emulatorMode() ? `${location.origin}/` : GAME_URL;
+}
+
+function cloudSuffix() {
+  return emulatorMode() ? "&cloud=emulator" : "";
 }
 
 // Both exist: straight into the game, no draft (#82.2, game c685a04).
 function playPlaceAnimal(placeId, animalId) {
-  const url = `${GAME_URL}?place=${encodeURIComponent(placeId)}` +
-    `&animal=${encodeURIComponent(animalId)}`;
+  const url = `${gameBase()}?place=${encodeURIComponent(placeId)}` +
+    `&animal=${encodeURIComponent(animalId)}${cloudSuffix()}`;
   window.open(url, "_blank");
 }
 
-function homeForCell(speciesKey, cellId) {
+function homeForPlace(speciesKey, qid) {
   return Object.values(state.drafts).find((d) =>
-    d.kind === "animal_home" && d.species_key === speciesKey && d.cell === cellId
+    d.kind === "animal_home" && d.species_key === speciesKey &&
+    d.place && d.place.wikidata_id === qid
   ) || null;
 }
 
 async function makeHome() {
   clearError();
-  const selected = state.selectedCell;
-  if (!selected || !state.picked) {
+  const selected = state.selectedPlace;
+  if (!selected || !state.picked || !selected.place) {
     return;
   }
-  if (homeForCell(state.picked.gbif_key, selected.id)) {
-    $("cell-msg").textContent = t("home.exists");
+  if (homeForPlace(state.picked.gbif_key, selected.qid)) {
+    $("picked-msg").textContent = t("home.exists");
     return;
   }
-  // The card titles from the request (#82.5): the built place when the
-  // tap falls in one, else the country. The worker replaces the name
-  // with the region's when the round lands.
+  const place = selected.place;
   const fields = {
     kind: "animal_home",
     species_key: state.picked.gbif_key,
-    cell: selected.id,
+    place: {
+      wikidata_id: selected.qid,
+      name: place.n,
+      fi: place.f || null,
+      kind: place.k,
+      country: place.c || null,
+    },
     owner_uid: state.user.uid,
     family_uids: [state.user.uid],
     status: "requested",
     created_at: firebase.firestore.FieldValue.serverTimestamp(),
-    place_name: selected.place ? selected.place.name.en : selected.country.name,
+    // The rules bound the card title to 80 characters (#97); the
+    // worker titles from its own list anyway.
+    place_name: place.n.slice(0, 80),
   };
-  if (selected.place) {
-    fields.place_id = selected.place.id;
+  if (selected.built && !selected.ready) {
+    fields.place_id = selected.built.id;
   }
   try {
     await db().collection("drafts").add(fields);
-    $("cell-msg").textContent = t("home.started");
-    $("cell-make").hidden = true;
+    $("picked-msg").textContent = t("home.started");
+    $("picked-make").hidden = true;
+    // A fresh build ends back on Your animals with its card on top (#92.4).
+    showView("animals");
   } catch (error) {
     console.error(error);
     showError();
@@ -831,15 +928,26 @@ function stampMillis(value) {
   return Date.parse(value) || 0;
 }
 
-function renderDrafts() {
-  const list = $("draft-list");
-  const drafts = Object.values(state.drafts).sort(
+function sortedDrafts() {
+  return Object.values(state.drafts).sort(
     (a, b) =>
       stampMillis(b.updated_at || b.created_at) -
       stampMillis(a.updated_at || a.created_at),
   );
+}
+
+function renderAnimals() {
+  const list = $("animal-list");
   list.innerHTML = "";
-  for (const draft of drafts) {
+  // New animal first, then one card per draft, newest first (#92.1).
+  const fresh = document.createElement("article");
+  fresh.className = "draft new-animal";
+  fresh.innerHTML = `<button type="button" data-new>${
+    escapeHtml(t("animals.new"))
+  }</button>`;
+  fresh.querySelector("[data-new]").addEventListener("click", () => showView("new"));
+  list.appendChild(fresh);
+  for (const draft of sortedDrafts()) {
     list.appendChild(renderDraft(draft));
     // The feed rule reads the draft, so a locally-written draft starts
     // no listener until the server has it.
@@ -847,7 +955,42 @@ function renderDrafts() {
       watchFeed(draft);
     }
     renderFeed(draft.id);
+    fillPicture(draft);
   }
+}
+
+// The draft's preview render when it has one, else nothing (#92.2).
+function fillPicture(draft) {
+  const box = document.querySelector(`[data-pic="${draft.id}"]`);
+  if (!box || box.dataset.done) {
+    return;
+  }
+  const image = draftPreview(draft);
+  if (!image) {
+    return;
+  }
+  box.dataset.done = "1";
+  storage().ref(image).getDownloadURL().then(
+    (url) => {
+      const img = document.createElement("img");
+      img.alt = "";
+      img.loading = "lazy";
+      img.src = url;
+      box.appendChild(img);
+    },
+    (error) => {
+      console.error(error);
+    },
+  );
+}
+
+function draftPreview(draft) {
+  for (const entry of (state.feeds || {})[draft.id] || []) {
+    if (entry.kind === "preview" && entry.image) {
+      return entry.image;
+    }
+  }
+  return null;
 }
 
 function draftTitle(draft) {
@@ -908,7 +1051,8 @@ function renderDraft(draft) {
   const card = document.createElement("article");
   card.className = "draft";
   card.dataset.id = draft.id;
-  let html = `<h3>${escapeHtml(draftTitle(draft))}</h3>`;
+  let html = `<div class="pic" data-pic="${escapeHtml(draft.id)}"></div>`;
+  html += `<h3>${escapeHtml(draftTitle(draft))}</h3>`;
   html += `<p class="muted">${escapeHtml(draftState(draft))}</p>`;
   if (draft.admin_answer) {
     html += `<p class="answer">${escapeHtml(t("draft.answer", { answer: draft.admin_answer }))}</p>`;
@@ -934,25 +1078,29 @@ function renderDraft(draft) {
 function draftActions(draft) {
   const status = draft.status;
   let html = `<div class="actions" data-actions="${escapeHtml(draft.id)}">`;
-  if ((draft.pack_version || 0) >= 1) {
+  // Ready: Play, Improve, Submit, Delete. Making: none. Failed: Try
+  // again, Delete. Submitted: Play only. Published: Play (#92.3).
+  const packed = (draft.pack_version || 0) >= 1;
+  if (packed && ["ready", "in_review", "public", "not_accepted"].includes(status)) {
     html += `<button type="button" data-act="play">${
       escapeHtml(t("draft.play"))
     }</button>`;
   }
   if (status === "failed") {
     html += `<p>${escapeHtml(t("draft.failed_words"))}</p>` +
-      `<button type="button" data-act="try_again">${escapeHtml(t("draft.try_again"))}</button>` +
-      `<button type="button" data-act="remove">${escapeHtml(t("draft.remove"))}</button>`;
+      `<button type="button" data-act="try_again">${escapeHtml(t("draft.try_again"))}</button>`;
   }
   const canImprove = status === "ready" && (draft.round || 1) < 4;
   const needsPerson = status === "ready" && (draft.round || 1) >= 4;
   if (canImprove) {
-    html += `<div class="improve"><h4>${escapeHtml(t("draft.improve"))}</h4>` +
+    html += `<div class="improve"><h4>${escapeHtml(
+      t("draft.improve_left", { n: 4 - (draft.round || 1) })
+    )}</h4>` +
       ["animal_looks_wrong", "too_few_animals", "colours_off", "other"].map((choice) =>
         `<label><input type="checkbox" name="choice" value="${choice}"> ` +
         `${escapeHtml(t(`choice.${choice}`))}</label>`
       ).join("") +
-      `<input type="text" name="species" maxlength="80" placeholder="${
+      `<input type="text" name="species" maxlength="64" placeholder="${
         escapeHtml(t("choice.species_ph"))
       }">` +
       `<input type="text" name="note" maxlength="200" placeholder="${
@@ -969,7 +1117,10 @@ function draftActions(draft) {
   } else if (status === "ready" || status === "not_accepted") {
     html += `<p class="muted">${escapeHtml(t("draft.play_first"))}</p>`;
   }
-  if (["ready", "in_review", "not_accepted"].includes(status)) {
+  if (status === "ready" || status === "failed") {
+    html += `<button type="button" data-act="remove">${escapeHtml(t("draft.remove"))}</button>`;
+  }
+  if (["ready", "not_accepted"].includes(status)) {
     html += `<div class="feedback"><h4>${escapeHtml(t("draft.not_right"))}</h4>` +
       `<select name="nr_reason">` +
       ["wrong_animals", "looks_wrong", "not_like_the_real_place", "other"].map((reason) =>
@@ -1023,6 +1174,19 @@ function draftMessage(draftId, text) {
   }
 }
 
+// Published drafts open as the normal place; everything else opens
+// the draft for this session only (#92.3, #92.5).
+function playUrl(draft) {
+  if (draft.status === "public" && draft.draft_place_id) {
+    const animal = state.animalList.find((a) => a.gbif_key === draft.species_key);
+    if (animal) {
+      return `${gameBase()}?place=${encodeURIComponent(draft.draft_place_id)}` +
+        `&animal=${encodeURIComponent(animal.id)}${cloudSuffix()}`;
+    }
+  }
+  return `${gameBase()}?draft=${encodeURIComponent(draft.id)}${cloudSuffix()}`;
+}
+
 async function actOnDraft(draft, button) {
   clearError();
   const action = button.getAttribute("data-act");
@@ -1030,7 +1194,7 @@ async function actOnDraft(draft, button) {
   const stamp = firebase.firestore.FieldValue.serverTimestamp();
   try {
     if (action === "play") {
-      window.open(`${GAME_URL}?draft=${encodeURIComponent(draft.id)}`, "_blank");
+      window.open(playUrl(draft), "_blank");
     } else if (action === "improve") {
       const choices = [...card.querySelectorAll('input[name="choice"]:checked')]
         .map((box) => {
@@ -1150,6 +1314,7 @@ function renderFeed(draftId) {
   if (!box) {
     return;
   }
+  fillPicture({ id: draftId });
   box.innerHTML = "";
   for (const entry of (state.feeds || {})[draftId] || []) {
     const line = document.createElement("p");
@@ -1195,7 +1360,10 @@ async function start() {
   $("auth-test").addEventListener("click", signInTestGrownUp);
   $("auth-out").addEventListener("click", () => firebaseAuth().signOut());
   $("animal-q").addEventListener("input", renderSuggestions);
-  $("cell-make").addEventListener("click", makeHome);
+  $("back-animals").addEventListener("click", () => showView("animals"));
+  $("place-country").addEventListener("change", onCountryChange);
+  $("place-q").addEventListener("input", renderPlaceSearch);
+  $("picked-make").addEventListener("click", makeHome);
   await finishLink();
   firebaseAuth().onAuthStateChanged(onUser);
 }

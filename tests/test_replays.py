@@ -302,9 +302,9 @@ class ScriptClient:
         )
 
 
-def _facets(cell: str) -> dict[int, int]:
+def _facets(lat: float, lon: float, radius_km: float) -> dict[int, int]:
     """The stub world's GBIF: the fox and the hare live in Finland."""
-    if float(cell.split("_")[0]) < 0:
+    if lat < 0:
         return {}
     return {FOX_KEY: 3, HARE_KEY: 3}
 
@@ -673,11 +673,11 @@ def test_improve_too_few_raises_the_cap(tmp_path: Path) -> None:
             )
         )
     ctx = _maker_ctx(job, world, tracker, ScriptClient([]))
-    plain = HomeStage(facets=lambda cell: dict(counts)).run(ctx)
+    plain = HomeStage(facets=lambda lat, lon, radius_km: dict(counts)).run(ctx)
     assert len(plain["neighbours"]) == 8
     assert "improved" not in plain
     _improve(job, [{"choice": "too_few_animals"}])
-    raised = HomeStage(facets=lambda cell: dict(counts)).run(ctx)
+    raised = HomeStage(facets=lambda lat, lon, radius_km: dict(counts)).run(ctx)
     assert len(raised["neighbours"]) == 10
     assert raised["improved"] == []
 

@@ -2,7 +2,7 @@
 
 ## Job
 
-One short call about $NAME ($LATIN), living near $LAT, $LON.
+One short call about $NAME ($LATIN), living near $LAT, $LON.$PLACE_LINE
 Five searches at most. Answer with JSON only, no prose.
 
 ## Wanted

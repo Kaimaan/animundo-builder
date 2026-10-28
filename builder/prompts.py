@@ -20,6 +20,49 @@ def for_children() -> str:
     return (PROMPTS_DIR / "for_children.md").read_text(encoding="utf-8")
 
 
+KIND_WORDS = {
+    "park": "national park",
+    "marine_area": "marine area",
+    "marine_park": "marine park",
+    "protected_area": "protected area",
+    "island": "island",
+    "lake": "lake",
+    "mountain": "mountain",
+    "bay": "bay",
+    "cape": "cape",
+    "reef": "reef",
+    "desert": "desert",
+    "forest": "forest",
+    "wetland": "wetland",
+    "glacier": "glacier",
+    "valley": "valley",
+    "waterfall": "waterfall",
+    "volcano": "volcano",
+    "peninsula": "peninsula",
+    "delta": "delta",
+}
+
+
+def place_line(brief: dict[str, Any]) -> str:
+    """`$PLACE_LINE`: the picked place next to the coordinates (#87.5).
+
+    A lake makes a lake home and a desert a desert one, but the
+    animal's habitat still decides when they disagree. Empty for
+    briefs from before picked places, so their prompts read exactly
+    as recorded.
+    """
+    place = brief.get("place") or {}
+    name = place.get("name") or ""
+    word = KIND_WORDS.get(place.get("kind") or "", "")
+    if not name or not word:
+        return ""
+    article = "an" if word[0] in "aeiou" else "a"
+    return (
+        f" It lives in {name}, {article} {word},"
+        " but its habitat decides when they disagree."
+    )
+
+
 def fix_messages(
     first: dict[str, Any], previous: str, problems: str
 ) -> list[dict[str, Any]]:

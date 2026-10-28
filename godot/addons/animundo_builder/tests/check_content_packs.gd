@@ -49,6 +49,9 @@ func _check_rules() -> void:
 	if PackRules.manifest_error(
 			_with(_good_manifest(), "draft_place_id", "tt_park")) != "":
 		errors.append("a reused place id is refused (#82.3)")
+	if PackRules.manifest_error(
+			_with(_good_manifest(), "animal", "saimaa_seal")) != "":
+		errors.append("a manifest animal is refused (#98.1)")
 	if PackRules.sha256_hex("abc".to_utf8_buffer()) \
 			!= "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad":
 		errors.append("sha256 is wrong")
@@ -56,6 +59,8 @@ func _check_rules() -> void:
 		["not an object", [1, 2]],
 		["missing key", _without(_good_manifest(), "place_id")],
 		["capital draft_place_id", _with(_good_manifest(), "draft_place_id", "draft_ZzPk1")],
+		["capital animal", _with(_good_manifest(), "animal", "RedDeer")],
+		["empty animal", _with(_good_manifest(), "animal", "")],
 		["version 0", _with(_good_manifest(), "version", 0)],
 		["newer format", _with(_good_manifest(), "format", 99)],
 		["no files", _with(_good_manifest(), "files", [])],

@@ -2,7 +2,7 @@
 
 ## Job
 
-Choose how a game home for the $HABITAT looks, where the $ANIMAL lives near $LAT, $LON. Code makes the
+Choose how a game home for the $HABITAT looks, where the $ANIMAL lives near $LAT, $LON.$PLACE_LINE Code makes the
 home from your choices; it keeps the land above the water and sets every number. You choose words and
 colours only.
 

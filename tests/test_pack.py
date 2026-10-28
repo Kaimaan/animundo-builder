@@ -210,6 +210,33 @@ def test_pack_keeps_a_reused_place_id(tmp_path: Path) -> None:
     assert manifest["place_id"] == "xx_test"
 
 
+def test_pack_manifest_names_the_home_animal(tmp_path: Path) -> None:
+    """Inbox 2026-10-28 #98.1: the opener starts the manifest's animal."""
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    (job / "home.json").write_text(json.dumps({"stem": "red_deer", "id": "deer"}))
+    PackStage().run(_ctx(job, world))
+    manifest = json.loads((job / "pack" / "manifest.json").read_text())
+    assert manifest["animal"] == "red_deer"
+
+
+def test_pack_manifest_falls_back_to_brief_id(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    (job / "home.json").write_text(json.dumps({"id": "lynx"}))
+    PackStage().run(_ctx(job, world))
+    manifest = json.loads((job / "pack" / "manifest.json").read_text())
+    assert manifest["animal"] == "lynx"
+
+
+def test_pack_manifest_omits_animal_for_parks(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    PackStage().run(_ctx(job, world))
+    manifest = json.loads((job / "pack" / "manifest.json").read_text())
+    assert "animal" not in manifest
+
+
 def test_pack_ignores_a_made_home_place_id(tmp_path: Path) -> None:
     world = _world(tmp_path)
     job = _job(tmp_path)

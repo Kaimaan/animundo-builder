@@ -28,26 +28,47 @@ service cloud.firestore {
             && (!('first_explorer_species' in request.resource.data)
               || request.resource.data.first_explorer_species is string)
           )
-          // Animal first: one animal in its home, no area. The card
-          // titles from the request (#82.5), so the grown-up names the
-          // built place (or the country) and the worker replaces it with
-          // the region's name when the round lands.
+          // Animal first: one animal in its picked place of interest
+          // (D11), no area. The card titles from the request (#82.5),
+          // so the grown-up names the place and the worker replaces it
+          // with the region's name when the round lands. The worker
+          // rechecks the place from its own list; the request only
+          // names the Wikidata id.
           || (
             request.resource.data.kind == 'animal_home'
             && request.resource.data.keys().hasOnly(
-              ['kind', 'species_key', 'cell', 'place_id', 'place_name',
+              ['kind', 'species_key', 'place', 'place_id', 'place_name',
                'owner_uid', 'family_uids', 'status', 'created_at'])
             && request.resource.data.keys().hasAll(
-              ['kind', 'species_key', 'cell',
+              ['kind', 'species_key', 'place',
                'owner_uid', 'family_uids', 'status'])
             && request.resource.data.species_key is int
             && request.resource.data.species_key > 0
-            && request.resource.data.cell is string
-            && request.resource.data.cell.matches('^-?[0-9]+\\.[0-9]_-?[0-9]+\\.[0-9]$')
+            && request.resource.data.place is map
+            && request.resource.data.place.keys().hasOnly(
+              ['wikidata_id', 'name', 'fi', 'kind', 'country'])
+            && request.resource.data.place.keys().hasAll(
+              ['wikidata_id', 'name', 'fi', 'kind', 'country'])
+            && request.resource.data.place.wikidata_id is string
+            && request.resource.data.place.wikidata_id.matches('^Q[0-9]+$')
+            && request.resource.data.place.name is string
+            && (request.resource.data.place.fi == null
+              || request.resource.data.place.fi is string)
+            && request.resource.data.place.kind is string
+            && (request.resource.data.place.country == null
+              || request.resource.data.place.country is string)
             && (!('place_id' in request.resource.data)
-              || request.resource.data.place_id is string)
+              || (
+                request.resource.data.place_id is string
+                && request.resource.data.place_id
+                  .matches('^[a-z]{2}_[a-z0-9_]+$')
+                && request.resource.data.place_id.size() <= 64
+              ))
             && (!('place_name' in request.resource.data)
-              || request.resource.data.place_name is string)
+              || (
+                request.resource.data.place_name is string
+                && request.resource.data.place_name.size() <= 80
+              ))
           )
         )
         && (!('created_at' in request.resource.data)
@@ -97,8 +118,14 @@ service cloud.firestore {
                     : request.resource.data.improve.choices[0].choice
                       == 'other'
                     ? !('species' in request.resource.data.improve.choices[0])
-                      || request.resource.data.improve.choices[0].species
-                        is string
+                      || (
+                        request.resource.data.improve.choices[0].species
+                          is string
+                        && request.resource.data.improve.choices[0].species
+                          .matches('^[a-z][a-z0-9_]*$')
+                        && request.resource.data.improve.choices[0].species
+                          .size() <= 64
+                      )
                     : !('species' in request.resource.data.improve.choices[0])
                   )
                 ))
@@ -119,8 +146,14 @@ service cloud.firestore {
                     : request.resource.data.improve.choices[1].choice
                       == 'other'
                     ? !('species' in request.resource.data.improve.choices[1])
-                      || request.resource.data.improve.choices[1].species
-                        is string
+                      || (
+                        request.resource.data.improve.choices[1].species
+                          is string
+                        && request.resource.data.improve.choices[1].species
+                          .matches('^[a-z][a-z0-9_]*$')
+                        && request.resource.data.improve.choices[1].species
+                          .size() <= 64
+                      )
                     : !('species' in request.resource.data.improve.choices[1])
                   )
                 ))
@@ -141,8 +174,14 @@ service cloud.firestore {
                     : request.resource.data.improve.choices[2].choice
                       == 'other'
                     ? !('species' in request.resource.data.improve.choices[2])
-                      || request.resource.data.improve.choices[2].species
-                        is string
+                      || (
+                        request.resource.data.improve.choices[2].species
+                          is string
+                        && request.resource.data.improve.choices[2].species
+                          .matches('^[a-z][a-z0-9_]*$')
+                        && request.resource.data.improve.choices[2].species
+                          .size() <= 64
+                      )
                     : !('species' in request.resource.data.improve.choices[2])
                   )
                 ))
@@ -163,8 +202,14 @@ service cloud.firestore {
                     : request.resource.data.improve.choices[3].choice
                       == 'other'
                     ? !('species' in request.resource.data.improve.choices[3])
-                      || request.resource.data.improve.choices[3].species
-                        is string
+                      || (
+                        request.resource.data.improve.choices[3].species
+                          is string
+                        && request.resource.data.improve.choices[3].species
+                          .matches('^[a-z][a-z0-9_]*$')
+                        && request.resource.data.improve.choices[3].species
+                          .size() <= 64
+                      )
                     : !('species' in request.resource.data.improve.choices[3])
                   )
                 ))
@@ -282,6 +327,24 @@ service cloud.firestore {
     match /places_public/{areaId} {
       allow read: if request.auth != null;
       allow write: if false;
+    }
+
+    // The grown-up's own settings: only their country, for the
+    // place picker's "near you" (#87.4). Nobody else reads it.
+    match /grownups/{uid} {
+      allow create, update: if request.auth != null
+        && request.auth.token.email_verified == true
+        && uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['country'])
+        && request.resource.data.country is string
+        && request.resource.data.country.matches('^[A-Z]{2}$');
+      allow get: if request.auth != null
+        && (
+          uid == request.auth.uid
+          || exists(
+            /databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+      allow list, delete: if false;
     }
 
     // The worker's own record: no client access.

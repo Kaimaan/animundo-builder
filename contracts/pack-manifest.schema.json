@@ -35,6 +35,7 @@
       }
     },
     "new_species": {"type": "array", "items": {"type": "string"}},
-    "reused_species": {"type": "array", "items": {"type": "string"}}
+    "reused_species": {"type": "array", "items": {"type": "string"}},
+    "animal": {"type": "string", "pattern": "^[a-z0-9_]+$"}
   }
 }

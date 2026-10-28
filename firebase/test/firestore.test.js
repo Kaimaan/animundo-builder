@@ -43,17 +43,30 @@ describe("drafts create", () => {
     );
   });
 
-  it("an animal home starts with a species key and a cell", async () => {
+  it("an animal home starts with a species key and a picked place", async () => {
     const db = grownUp(env, "grown").firestore();
+    const place = {
+      wikidata_id: "Q1815268",
+      name: "Nuuksio National Park",
+      fi: "Nuuksion kansallispuisto",
+      kind: "park",
+      country: "FI",
+    };
     const home = {
       kind: "animal_home",
       species_key: 2435240,
-      cell: "61.2_26.9",
+      place,
       owner_uid: "grown",
       family_uids: ["grown"],
       status: "requested",
     };
     await assertSucceeds(setDoc(doc(db, "drafts/h1"), home));
+    await assertSucceeds(
+      setDoc(
+        doc(db, "drafts/h1b"),
+        { ...home, place: { ...place, fi: null, country: null } },
+      ),
+    );
     await assertSucceeds(
       setDoc(doc(db, "drafts/h2"), { ...home, created_at: AT() }),
     );
@@ -61,7 +74,21 @@ describe("drafts create", () => {
     await assertFails(
       setDoc(doc(db, "drafts/h4"), { ...home, species_key: "2435240" }),
     );
-    await assertFails(setDoc(doc(db, "drafts/h5"), { ...home, cell: "here" }));
+    await assertFails(
+      setDoc(
+        doc(db, "drafts/h5"),
+        { ...home, place: { ...place, wikidata_id: "here" } },
+      ),
+    );
+    await assertFails(
+      setDoc(doc(db, "drafts/h5b"), { ...home, place: "Q1815268" }),
+    );
+    await assertFails(
+      setDoc(
+        doc(db, "drafts/h5c"),
+        { ...home, place: { ...place, cell: "61.2_26.9" } },
+      ),
+    );
     await assertFails(
       setDoc(doc(db, "drafts/h6"), { ...home, area_id: "fi_repovesi" }),
     );
@@ -77,6 +104,36 @@ describe("drafts create", () => {
     );
     await assertFails(
       setDoc(doc(db, "drafts/h7b"), { ...home, place_id: 7 }),
+    );
+    await assertFails(
+      setDoc(doc(db, "drafts/h7c"), { ...home, place_id: "K8j5PJ8oSZJix8PqYV8P" }),
+    );
+    await assertFails(
+      setDoc(doc(db, "drafts/h7d"), { ...home, place_id: "fi_nuuksio!" }),
+    );
+    await assertFails(
+      setDoc(
+        doc(db, "drafts/h7e"),
+        { ...home, place_id: `fi_${"n".repeat(62)}` },
+      ),
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(db, "drafts/h7f"),
+        { ...home, place_id: `fi_${"n".repeat(61)}` },
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(db, "drafts/h7g"),
+        { ...home, place_name: "N".repeat(81) },
+      ),
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(db, "drafts/h7h"),
+        { ...home, place_name: "N".repeat(80) },
+      ),
     );
     await assertFails(
       setDoc(doc(db, "drafts/h8"), { ...home, country: "FI" }),
@@ -133,6 +190,47 @@ describe("drafts create", () => {
     );
     await assertFails(
       setDoc(doc(db, "drafts/d1"), draftDoc("grown", { round: 1 })),
+    );
+  });
+});
+
+describe("grownups country", () => {
+  let env;
+  before(async () => (env = await makeEnv()));
+  after(async () => env.cleanup());
+  beforeEach(async () => env.clearFirestore());
+
+  it("a grown-up saves their own country, nothing else", async () => {
+    const db = grownUp(env, "grown").firestore();
+    await assertSucceeds(setDoc(doc(db, "grownups/grown"), { country: "FI" }));
+    await assertSucceeds(
+      updateDoc(doc(db, "grownups/grown"), { country: "CA" }),
+    );
+    await assertFails(
+      setDoc(doc(db, "grownups/grown"), { country: "Finland" }),
+    );
+    await assertFails(setDoc(doc(db, "grownups/grown"), { country: "fi" }));
+    await assertFails(
+      setDoc(doc(db, "grownups/grown"), { country: "FI", name: "Bo" }),
+    );
+  });
+
+  it("nobody saves another grown-up's country", async () => {
+    const db = grownUp(env, "other").firestore();
+    await assertFails(setDoc(doc(db, "grownups/grown"), { country: "FI" }));
+    const anon = env.unauthenticatedContext().firestore();
+    await assertFails(setDoc(doc(anon, "grownups/grown"), { country: "FI" }));
+  });
+
+  it("only the grown-up reads it", async () => {
+    const db = grownUp(env, "grown").firestore();
+    await assertSucceeds(setDoc(doc(db, "grownups/grown"), { country: "FI" }));
+    await assertSucceeds(getDoc(doc(db, "grownups/grown")));
+    await assertFails(
+      getDoc(doc(grownUp(env, "other").firestore(), "grownups/grown")),
+    );
+    await assertFails(
+      getDocs(collection(grownUp(env, "grown").firestore(), "grownups")),
     );
   });
 });
@@ -210,6 +308,15 @@ describe("drafts improve", () => {
       improve(db, "ready", [{ choice: "other", species: "red_deer" }]),
     );
     await assertSucceeds(improve(db, "ready", [{ choice: "other" }]));
+    await assertFails(
+      improve(db, "ready", [{ choice: "other", species: "Red deer!" }]),
+    );
+    await assertFails(
+      improve(db, "ready", [{ choice: "other", species: "r".repeat(65) }]),
+    );
+    await assertSucceeds(
+      improve(db, "ready", [{ choice: "other", species: "r".repeat(64) }]),
+    );
   });
 
   it("choices come from the fixed list, one to four", async () => {

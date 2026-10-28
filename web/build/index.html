@@ -3,16 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Build a home · Animundo</title>
+<title>Your animals · Animundo</title>
 <meta name="theme-color" content="#1d2a22">
 <link rel="icon" href="icon_192.png">
-<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="styles.css">
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
-<script src="vendor/leaflet/leaflet.js"></script>
 </head>
 <body>
 <header>
@@ -35,11 +33,13 @@
 <p id="app-error" class="error" hidden></p>
 
 <main id="app" hidden>
-  <section class="map-pane" id="map-pane" hidden>
-    <div id="map" aria-label="Map"></div>
+  <section class="side-pane" id="animals-pane">
+    <h2 data-i18n="animals.title">Your animals</h2>
+    <div id="animal-list"></div>
   </section>
 
-  <section class="side-pane">
+  <section class="side-pane" id="new-pane" hidden>
+    <p><button id="back-animals" type="button" class="ghost" data-i18n="animals.back">Your animals</button></p>
     <article id="animal-picker">
       <h2 data-i18n="home.ask">Which animal would you like to be?</h2>
       <input id="animal-q" type="text" data-i18n-ph="home.ask_ph" placeholder="Type an animal…" autocomplete="off">
@@ -47,25 +47,28 @@
       <p id="animal-msg" class="muted"></p>
     </article>
 
-    <article id="cell-card" hidden>
-      <h2 id="cell-name"></h2>
-      <p id="cell-facts" class="muted"></p>
-      <p id="cell-state"></p>
-      <button id="cell-make" type="button" data-i18n="home.make">Make this home</button>
-      <button id="cell-play" type="button" data-i18n="draft.play" hidden>Play in the game</button>
-      <p id="cell-msg" class="muted"></p>
+    <article id="place-picker" hidden>
+      <h2><span data-i18n="place.near">Places near</span> <select id="place-country" aria-label="Country"></select></h2>
+      <div id="place-cards"></div>
+      <h3 data-i18n="place.search_more">Search more places</h3>
+      <input id="place-q" type="text" data-i18n-ph="place.search_ph" placeholder="Type a place…" autocomplete="off">
+      <div id="place-search"></div>
+      <p id="place-msg" class="muted"></p>
     </article>
 
-    <article id="drafts" hidden>
-      <h2 data-i18n="drafts.title">Your drafts</h2>
-      <p class="muted" data-i18n="drafts.lede">These are your drafts.</p>
-      <div id="draft-list"></div>
+    <article id="picked-card" hidden>
+      <h2 id="picked-name"></h2>
+      <p id="picked-facts" class="muted"></p>
+      <p id="picked-state"></p>
+      <button id="picked-make" type="button" data-i18n="home.make">Make this home</button>
+      <button id="picked-play" type="button" data-i18n="draft.play" hidden>Play in the game</button>
+      <p id="picked-msg" class="muted"></p>
     </article>
   </section>
 </main>
 
 <footer>
-  <span data-i18n="app.credit">Map: Natural Earth, GBIF.org.</span>
+  <span data-i18n="app.credit">Places: Wikidata and GBIF.org.</span>
   <a href="/" data-i18n="app.play">Play Animundo</a>
 </footer>
 <script src="app.js"></script>

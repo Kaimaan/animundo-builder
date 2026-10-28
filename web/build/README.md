@@ -7,24 +7,33 @@ parked, not deleted: `areas.json` stays vendored but unused.
 
 - `index.html`, `app.js`, `styles.css`: the app.
 - `animal-list.json`: the static animal list (name, latin,
-  GBIF key, body plan, can_make, habitat). A stub of 8 now;
-  the reviewer's ~200-animal list replaces it file for file
-  (same shape, tested).
+  GBIF key, body plan, can_make, habitat), synced with the
+  world's file for file (same shape, tested).
+- `places-of-interest.json`: ~12,000 well-known natural places
+  from Wikidata (short keys, 4 decimals), written by
+  `scripts/places_of_interest.py fetch`. Loaded only on the
+  place-picker step.
+- `animal-places.json`: confirmed places per animal
+  (`{animal_id: [[place_id, sightings], ...]}`), written by
+  `scripts/places_of_interest.py suggest`. Loaded with the
+  picker.
+- `tz-country.json`, `country-names.json`: the time-zone table
+  (IANA `zone1970.tab`) and ISO-to-name table, written by
+  `scripts/places_of_interest.py tables`. The country is
+  guessed from the time zone, never the location prompt.
+- `place-aliases.json`: hand-kept list ids that count as a
+  built place (the lake Saimaa is `fi_saimaa`).
+- `places.json`: the game's built places, synced from the
+  world like the animal list.
 - `i18n/en.json`: every UI string plus the live feed's
   `explore.feed.*` strings.
-- `vendor/leaflet/`: Leaflet 1.9.4 (BSD-2-Clause), vendored so
-  the app needs no JavaScript CDN besides Firebase itself.
 
-Map data: Natural Earth land and coastline (public domain,
-1:110m), vendored under `vendor/natural-earth/` and drawn as
-GeoJSON in the game's dark colours. Countries (110m, slimmed
-to NAME + ISO_A2) name the tapped spot; urban areas (50m,
-geometry only) refuse cities. The only tile layer is GBIF's
-free occurrence density for the picked animal
-(`api.gbif.org/v2/map/occurrence/density`, `orange.marker`
-style); the tapped square is confirmed with one GBIF
-occurrence count query. The stylesheet follows the game
-site's own look (dark forest, cream, sun yellow).
+No map since D11: the grown-up picks an animal, then one of
+its suggested places (or a searched one). A searched place
+outside the suggestions gets one live GBIF occurrence count
+in the browser; only places with 5+ wild sightings build.
+The stylesheet follows the game site's own look (dark
+forest, cream, sun yellow).
 
 Firebase: the app signs grown-ups in with email links and reads
 and writes Firestore and Storage with their own account on the

@@ -253,24 +253,24 @@ def test_build_home_dry_run(tmp_path: Path, monkeypatch, capsys) -> None:
             "animal_home",
             "--animal",
             "fox",
-            "--cell",
-            "61.5_26.0",
+            "--poi",
+            "Q1815268",
             "--world",
             str(world),
             "--dry-run",
         ]
     )
     assert code == 0
-    assert "would build fox at 61.5_26.0" in capsys.readouterr().out
+    assert "would build fox at Q1815268" in capsys.readouterr().out
     assert not (tmp_path / "jobs").exists()
 
 
-def test_build_home_needs_animal_and_cell(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_build_home_needs_animal_and_poi(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     world = _world_with_list(tmp_path)
     code = main(["build", "--kind", "animal_home", "--world", str(world), "--dry-run"])
     assert code == 1
-    assert "--animal <id> --cell" in capsys.readouterr().err
+    assert "--animal <id> --poi" in capsys.readouterr().err
 
 
 def test_build_home_unknown_animal(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -283,8 +283,8 @@ def test_build_home_unknown_animal(tmp_path: Path, monkeypatch, capsys) -> None:
             "animal_home",
             "--animal",
             "dragon",
-            "--cell",
-            "61.5_26.0",
+            "--poi",
+            "Q1815268",
             "--world",
             str(world),
             "--dry-run",
@@ -294,7 +294,7 @@ def test_build_home_unknown_animal(tmp_path: Path, monkeypatch, capsys) -> None:
     assert "not on the animal list" in capsys.readouterr().err
 
 
-def test_build_home_bad_cell(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_build_home_bad_poi(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     world = _world_with_list(tmp_path)
     code = main(
@@ -304,7 +304,7 @@ def test_build_home_bad_cell(tmp_path: Path, monkeypatch, capsys) -> None:
             "animal_home",
             "--animal",
             "fox",
-            "--cell",
+            "--poi",
             "here",
             "--world",
             str(world),
@@ -312,7 +312,7 @@ def test_build_home_bad_cell(tmp_path: Path, monkeypatch, capsys) -> None:
         ]
     )
     assert code == 1
-    assert "bad cell" in capsys.readouterr().err
+    assert "bad place" in capsys.readouterr().err
 
 
 def _area_job(tmp_path: Path) -> Path:

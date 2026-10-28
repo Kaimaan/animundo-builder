@@ -33,7 +33,7 @@ from .pipeline import (
 from .records import RecordingClient, ReplayClient, ReplayError
 from .report import build_report
 from .stages import IntakeStage
-from .stages.intake import CELL_PATTERN
+from .stages.intake import WIKIDATA_PATTERN
 from .submit import SubmitFailed, run_submit
 
 NOT_BUILT_YET = 3
@@ -94,8 +94,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--animal", help="Animal id from the animal list (with --kind animal_home)."
     )
     build.add_argument(
-        "--cell",
-        help="Snapped 0.1-degree cell, like 61.5_26.0 (with --kind animal_home).",
+        "--poi",
+        help="Picked place's Wikidata id, like Q1815268 (with --kind animal_home).",
     )
     build.add_argument(
         "--place",
@@ -255,7 +255,7 @@ def _intake_from_params(params: dict[str, Any]) -> IntakeStage:
     if params.get("kind") == "animal_home":
         return IntakeStage(
             species_key=params.get("species_key"),
-            cell=params.get("cell"),
+            place=params.get("place"),
             place_id=params.get("place_id"),
         )
     return IntakeStage(
@@ -374,9 +374,9 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_build_home(args: argparse.Namespace, world: Path) -> int:
     """Start one animal's home from the command line, no web app."""
-    if not args.animal or not args.cell:
+    if not args.animal or not args.poi:
         print(
-            "error: --kind animal_home needs --animal <id> --cell <lat_lon>",
+            "error: --kind animal_home needs --animal <id> --poi <Qid>",
             file=sys.stderr,
         )
         return 1
@@ -385,11 +385,14 @@ def cmd_build_home(args: argparse.Namespace, world: Path) -> int:
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    if not CELL_PATTERN.match(args.cell):
-        print(f"error: bad cell, want like 61.5_26.0: {args.cell}", file=sys.stderr)
+    if not WIKIDATA_PATTERN.match(args.poi):
+        print(
+            f"error: bad place, want a Wikidata id like Q1815268: {args.poi}",
+            file=sys.stderr,
+        )
         return 1
     if args.dry_run:
-        print(f"would build {args.animal} at {args.cell}; wrote nothing")
+        print(f"would build {args.animal} at {args.poi}; wrote nothing")
         return 0
     config = load_config()
     job_id = uuid.uuid4().hex[:12]
@@ -398,13 +401,14 @@ def cmd_build_home(args: argparse.Namespace, world: Path) -> int:
     ctx = make_context(config, job_id, job_dir, world)
     if args.record:
         ctx = _recording(ctx, job_dir)
-    stage = IntakeStage(species_key=species_key, cell=args.cell, place_id=args.place)
+    place = {"wikidata_id": args.poi}
+    stage = IntakeStage(species_key=species_key, place=place, place_id=args.place)
     (job_dir / "state.json").write_text(
         json.dumps(
             fresh_state(
                 {
                     "species_key": species_key,
-                    "cell": args.cell,
+                    "place": place,
                     "place_id": args.place,
                     "world": str(world),
                     "author": args.author,

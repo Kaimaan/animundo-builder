@@ -165,7 +165,7 @@ def _write_inputs(tmp_path: Path, **brief_over: Any) -> None:
 def _facets(*taxa: dict[str, Any]) -> Any:
     """A facet answer recording these taxa, three sightings each."""
     counts = {taxon["gbif_key"]: 3 for taxon in taxa}
-    return lambda cell: dict(counts)
+    return lambda lat, lon, radius_km: dict(counts)
 
 
 def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
@@ -201,6 +201,33 @@ def test_home_seats_cast_and_writes_plan(tmp_path: Path) -> None:
     kept = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
     assert kept["place_id"] == result["place_id"]
     assert kept["stem"] == "fox"
+
+
+def test_home_uses_intake_place_id_and_wikidata(tmp_path: Path) -> None:
+    """Inbox 2026-10-28 #87.5/#88.3: the region id and wikidata come along."""
+    world = _world(tmp_path)
+    _write_inputs(
+        tmp_path,
+        new_place_id="fi_saimaa",
+        place={
+            "wikidata_id": "Q192770",
+            "name": "Saimaa",
+            "kind": "lake",
+            "radius_km": 42.0,
+        },
+    )
+    seen: list[tuple[float, float, float]] = []
+
+    def facets(lat: float, lon: float, radius_km: float) -> dict[int, int]:
+        seen.append((lat, lon, radius_km))
+        return {}
+
+    result = HomeStage(facets=facets).run(_ctx(tmp_path, ScriptClient([]), world))
+    assert result["place_id"] == "fi_saimaa"
+    assert seen == [(60.15, 24.95, 42.0)]
+    region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
+    assert region["id"] == "fi_saimaa"
+    assert region["wikidata"] == "Q192770"
 
 
 def test_home_keeps_only_facet_matched_neighbours(tmp_path: Path) -> None:
@@ -264,14 +291,14 @@ def test_home_caps_neighbours_at_eight_in_one_search(tmp_path: Path) -> None:
                 }
             )
         )
-    seen: list[str] = []
+    seen: list[tuple[float, float, float]] = []
 
-    def facets(cell: str) -> dict[int, int]:
-        seen.append(cell)
+    def facets(lat: float, lon: float, radius_km: float) -> dict[int, int]:
+        seen.append((lat, lon, radius_km))
         return dict(counts)
 
     result = HomeStage(facets=facets).run(_ctx(tmp_path, ScriptClient([]), world))
-    assert seen == ["60.1_24.9"]
+    assert seen == [(60.15, 24.95, 10)]
     assert len(result["neighbours"]) == 8
     assert set(result["neighbours"]) == {f"n{number}" for number in range(8)}
     region = json.loads((tmp_path / result["region_file"]).read_text(encoding="utf-8"))
@@ -389,7 +416,7 @@ def test_home_unchecked_neighbours_stay_visible(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _write_inputs(tmp_path)
 
-    def down(cell: str) -> dict[int, int]:
+    def down(lat: float, lon: float, radius_km: float) -> dict[int, int]:
         raise RuntimeError("GBIF is down")
 
     result = HomeStage(facets=down).run(_ctx(tmp_path, ScriptClient([]), world))
@@ -663,15 +690,15 @@ def test_home_seats_made_animals_unasked(tmp_path: Path) -> None:
             }
         )
     )
-    seen: list[str] = []
+    seen: list[tuple[float, float, float]] = []
 
-    def facets(cell: str) -> dict[int, int]:
-        seen.append(cell)
+    def facets(lat: float, lon: float, radius_km: float) -> dict[int, int]:
+        seen.append((lat, lon, radius_km))
         return {}
 
     result = HomeStage(facets=facets).run(_ctx(tmp_path, ScriptClient([]), world))
     assert result["neighbours"] == ["vole"]
-    assert seen == ["60.1_24.9"]
+    assert seen == [(60.15, 24.95, 10)]
     plan = json.loads((tmp_path / "species-plan.json").read_text(encoding="utf-8"))
     vole = next(e for e in plan["species"] if e["species"] == "vole")
     assert vole["decision"] == "new"

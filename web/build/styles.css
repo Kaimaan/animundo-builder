@@ -118,51 +118,9 @@ header {
 }
 
 main {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 16px;
   padding: 20px 16px 48px;
-  max-width: 1200px;
+  max-width: 800px;
   margin: 0 auto;
-}
-
-@media (max-width: 900px) {
-  main {
-    grid-template-columns: 1fr;
-  }
-}
-
-#map {
-  height: 420px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #16211a;
-}
-
-.leaflet-bar a {
-  background: var(--card);
-  color: var(--cream);
-  border-color: var(--line);
-}
-
-.leaflet-control-attribution {
-  background: rgba(29, 42, 34, 0.8);
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.leaflet-control-attribution a {
-  color: var(--muted);
-}
-
-.leaflet-tooltip {
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--cream);
-}
-
-.leaflet-tooltip::before {
-  display: none;
 }
 
 .counts {
@@ -286,6 +244,37 @@ a {
 #animal-suggest small {
   color: var(--muted);
   font-weight: 400;
+}
+
+#place-cards button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 4px 0;
+}
+
+#place-cards small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+#place-q {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+#place-search p {
+  margin: 8px 0;
+}
+
+.draft .pic img {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.new-animal button {
+  width: 100%;
 }
 
 .improve label {

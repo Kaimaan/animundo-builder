@@ -116,3 +116,10 @@ func set_draft_opener(open: Callable) -> void:
 
 func draft_opener() -> Callable:
 	return opener
+
+
+var steps: Array = []  # [{step, ok, detail}]
+
+
+func draft_step(step: String, ok: bool, detail := "") -> void:
+	steps.append({"step": step, "ok": ok, "detail": detail})

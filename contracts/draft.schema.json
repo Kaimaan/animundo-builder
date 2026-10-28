@@ -230,9 +230,37 @@
       "type": "integer",
       "minimum": 1
     },
-    "cell": {
-      "type": "string",
-      "pattern": "^-?[0-9]+\\.[0-9]_-?[0-9]+\\.[0-9]$"
+    "place": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wikidata_id",
+        "name",
+        "fi",
+        "kind",
+        "country"
+      ],
+      "properties": {
+        "wikidata_id": {
+          "type": "string",
+          "pattern": "^Q[0-9]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fi": {
+          "type": ["string", "null"]
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "country": {
+          "type": ["string", "null"],
+          "maxLength": 2
+        }
+      }
     },
     "country_name": {
       "type": "string",

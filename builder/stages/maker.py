@@ -31,7 +31,13 @@ import jsonschema
 
 from ..animal_list import find_entry, load_list, match_by_name
 from ..animal_list import find_list as find_animal_list
-from ..prompts import PROMPTS_DIR, fix_messages, for_children, improve_blocks
+from ..prompts import (
+    PROMPTS_DIR,
+    fix_messages,
+    for_children,
+    improve_blocks,
+    place_line,
+)
 from ..taxa import match_entry, taxon_block
 from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
@@ -2019,6 +2025,7 @@ class HomeMakerStage:
                 "ANIMAL": brief.get("name", "") or "animal",
                 "LAT": str(center.get("lat", 0.0)),
                 "LON": str(center.get("lon", 0.0)),
+                "PLACE_LINE": place_line(brief),
                 "SURROUNDINGS": _surroundings_text(research, looks),
                 "FOODS": _foods_text(research),
                 "BASE": json.dumps(excerpt, indent=1).replace("$", "$$"),

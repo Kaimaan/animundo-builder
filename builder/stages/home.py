@@ -3,8 +3,9 @@
 Reads intake's `home.json` and the research stage's
 `research.json`; takes the template built (`homes.py`) or made
 in this job (`homes/`); seats the animal plus the neighbours one
-GBIF facet search records in the cell (the job's own animals join
-without asking GBIF), kept only if their taxon is sound and the
+GBIF facet search records in the place's circle (the job's own
+animals join without asking GBIF), kept only if their taxon is
+sound and the
 home has their food, at most eight; names food kinds the template
 lacks from the research; and writes `species-plan.json` for the
 later stages. Free: the one model call happened in research.
@@ -43,26 +44,21 @@ MAX_NEIGHBOURS = 8
 #: Facet buckets per search: plenty past the cap and the gates.
 FACET_LIMIT = 100
 
-#: The cell's facet counts: GBIF species keys to sightings.
-FacetsFn = Callable[[str], dict[int, int]]
+#: The place circle's facet counts: GBIF species keys to sightings.
+FacetsFn = Callable[[float, float, float], dict[int, int]]
 
 
-def facet_counts(cell: str) -> dict[int, int]:
-    """Species keys recorded in the cell, with counts: one GBIF call.
+def facet_counts(lat: float, lon: float, radius_km: float) -> dict[int, int]:
+    """Species keys recorded in the circle, with counts: one GBIF call.
 
-    A facet search over the cell's 0.1-degree box: real sightings,
-    not a range guess. Transient failures are retried; a stable
-    failure raises, and the home seats no neighbours visibly (they
-    land in `backfill_unchecked`, never silently).
+    A facet search over the place's circle: real sightings, not a
+    range guess. Transient failures are retried; a stable failure
+    raises, and the home seats no neighbours visibly (they land in
+    `backfill_unchecked`, never silently).
     """
-    south, west = (float(part) for part in cell.split("_"))
-    box = (
-        f"POLYGON(({west} {south}, {west + 0.1} {south}, "
-        f"{west + 0.1} {south + 0.1}, {west} {south + 0.1}, {west} {south}))"
-    )
     query = urllib.parse.urlencode(
         {
-            "geometry": box,
+            "geoDistance": f"{lat},{lon},{radius_km:.0f}km",
             "facet": "speciesKey",
             "facetLimit": FACET_LIMIT,
             "limit": 0,
@@ -77,7 +73,7 @@ def facet_counts(cell: str) -> dict[int, int]:
         except (OSError, ValueError) as error:
             last_error = str(error)
             time.sleep(2.0**attempt)
-    raise _Stopped(f"could not read GBIF facets for cell {cell} ({last_error})")
+    raise _Stopped(f"could not read GBIF facets for {lat},{lon} ({last_error})")
 
 
 def _parse_facets(payload: dict[str, Any]) -> dict[int, int]:
@@ -168,8 +164,14 @@ class HomeStage:
         if data.get("stage_of"):
             stem = data["stage_of"]
             data = animal_file(world, stem, overlay)
-        place_id = _place_id(brief["cell"], stem, brief.get("country", ""))
+        # New briefs carry the intake-made id; old local jobs keep
+        # their cell-made one.
+        place_id = brief.get("new_place_id") or _place_id(
+            brief["cell"], stem, brief.get("country", "")
+        )
         region = self._make_region(world, ctx, brief, place_id)
+        if brief.get("place"):
+            region["wikidata"] = brief["place"]["wikidata_id"]
         if abs(float(brief["center"]["lat"])) < 23.0:
             # The game's tropics branch needs no seasons config
             # (season.gd reads the latitude, not a key); a template
@@ -332,7 +334,7 @@ class HomeStage:
     ) -> tuple[set[str], set[str]]:
         """The animal plus recorded neighbours the home can feed, in place.
 
-        One facet search over the cell, matched to the files'
+        One facet search over the place's circle, matched to the files'
         gbif_keys; a neighbour stays only if its taxon is sound
         (the check_taxa rules) and the home has food for its diet.
         The job's own animals join without asking GBIF: they were
@@ -347,8 +349,10 @@ class HomeStage:
             # writer starts from, not an empty set.
             proxy = animal_file(world, brief["start_from"], overlay)
             hunts = set(proxy.get("hunts", []) or [])
+        center = brief.get("center", {})
+        radius = brief.get("place", {}).get("radius_km") or 10
         try:
-            counts = self._facets(brief["cell"])
+            counts = self._facets(center["lat"], center["lon"], radius)
         except Exception:
             counts = {}
             failed = True

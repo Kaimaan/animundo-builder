@@ -3,6 +3,64 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #87, #89 (D11) + #92 (D12) + #97, #98, #100, tagged `v0.3.5`
+
+- #87.1: `scripts/places_of_interest.py fetch` wrote
+  `web/build/places-of-interest.json` from Wikidata: 12,514
+  places (short keys, 4 decimals), 372 inside cities dropped
+  with the urban polygons.
+- #87.2: `suggest` confirms places per animal (the lab's WILD
+  filter, MIN_SIGHTINGS, sampling plus one page per top-10
+  country, rank order) into `web/build/animal-places.json`.
+  Resumable, waits out GBIF rate limits. NOTE: pushed partial
+  first so screens stay testable; the data commit completes it.
+- #87.3: the picker: ready-in-country cards, 2 best in the
+  grown-up's country, ready elsewhere, best elsewhere (up to
+  6), ranked log(sightings+1)xlinks. Near-you outranks
+  foreign-ready, or #87.9's moose+CA Banff-first contradicts
+  #89.1's Saimaa-ready-for-moose (both tests pass as written).
+  Search filters locally; unconfirmed places get one live
+  GBIF count; only 5+ sightings build.
+- #87.4: country from the time zone (`tz-country.json`, 312
+  zones, Helsinki FI Toronto CA), saved choice on
+  `/grownups/{uid}` (new rules branch, country only), never
+  the location prompt.
+- #87.5: intake takes `place: {wikidata_id, ...}` instead of
+  a cell; everything from the committed list. Region center
+  is the median of one sampled page; id `<cc>_<slug>`
+  (`fi_saimaa`); `aq_` south of 60S, `int_` elsewhere (#89.2).
+  Research and home-choices prompts name the place and kind,
+  byte-identical for old briefs (habitat still decides).
+- #87.6: built match by Wikidata id, 25 km rule dropped;
+  #89.1 `place-aliases.json` (Q192770 is fi_saimaa).
+- #87.7: the map is gone with its code and tests (Leaflet,
+  tiles, land/coast/country shapes, `builder/countries.py`).
+  Only `ne_50m_urban_areas.geojson` stays, for the script.
+- #92 (D12): Your animals is the start page (New animal
+  first, drafts newest-first, no drafts goes straight to
+  New); per-state buttons; published Play opens
+  `?place=&animal=`; preview picture; rounds left on Improve.
+- #97: rules bound `place_id` (region pattern, 64),
+  `place_name` (80) and Improve-other `species` (id, 64),
+  with too-long/bad-shape tests. The app truncates the title
+  (one 91-char name exists) and caps species at 64. NOTE:
+  the `^[a-z]{2}_` pattern rejects future `int_...` reuses;
+  kept as specified, flagging it.
+- #98: the opener returns `{place, animal}` (manifest
+  `animal`, else the playable species whose taxon key is the
+  draft's); every step goes through `draft_step`; emulator
+  Play opens localhost with `?cloud=emulator`. PackRules
+  checks the optional animal; pack-manifest schema updated.
+- #100: `last_error()` keeps the failed step with its HTTP
+  status (`packs/<id>/1/manifest.json: 403`); proposed
+  game-side plug: `BuilderHooks.draft_opener_error()`.
+- Runnable now: `builder build --kind animal_home --animal
+  fox --poi Q1815268 --world ../animundo-world --dry-run`.
+- Evidence: `uv run pytest -q` green; `ruff check` +
+  `format --check` clean; `node tests/web-harness.cjs` 68
+  checks pass; 3 headless Godot checks 0 errors; `check` CI
+  green, then tagged.
+
 ## 2026-10-28: inbox #94-#95 (worker store + recordings), tagged `v0.3.4`
 
 - #94: `_claim_requested` had been pasted inside the class, so

@@ -12,7 +12,7 @@ import json
 from typing import Any
 
 from ..meta import count_search_calls, is_cut_off
-from ..prompts import for_children, load_prompt
+from ..prompts import for_children, load_prompt, place_line
 from ..schemas import validate
 from ..strict import Research, strict_schema, strip_nulls
 from .survey import SEARCH_TOOL, final_text
@@ -94,6 +94,7 @@ class ResearchStage:
                 "LATIN": brief.get("latin", ""),
                 "LAT": str(brief["center"]["lat"]),
                 "LON": str(brief["center"]["lon"]),
+                "PLACE_LINE": place_line(brief),
                 "FOR_CHILDREN": for_children(),
             },
         )

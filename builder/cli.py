@@ -27,6 +27,7 @@ from .pipeline import (
     JobContext,
     Pipeline,
     StageFailedError,
+    reset_stages,
     stages_for_kind,
 )
 from .records import RecordingClient, ReplayClient, ReplayError
@@ -95,6 +96,11 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--cell",
         help="Snapped 0.1-degree cell, like 61.5_26.0 (with --kind animal_home).",
+    )
+    build.add_argument(
+        "--place",
+        default=None,
+        help="Built place id to reuse (with --kind animal_home).",
     )
     build.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
@@ -248,7 +254,9 @@ def _intake_from_params(params: dict[str, Any]) -> IntakeStage:
     """The job's intake, rebuilt from its saved params."""
     if params.get("kind") == "animal_home":
         return IntakeStage(
-            species_key=params.get("species_key"), cell=params.get("cell")
+            species_key=params.get("species_key"),
+            cell=params.get("cell"),
+            place_id=params.get("place_id"),
         )
     return IntakeStage(
         area_id=params.get("area"),
@@ -390,13 +398,14 @@ def cmd_build_home(args: argparse.Namespace, world: Path) -> int:
     ctx = make_context(config, job_id, job_dir, world)
     if args.record:
         ctx = _recording(ctx, job_dir)
-    stage = IntakeStage(species_key=species_key, cell=args.cell)
+    stage = IntakeStage(species_key=species_key, cell=args.cell, place_id=args.place)
     (job_dir / "state.json").write_text(
         json.dumps(
             fresh_state(
                 {
                     "species_key": species_key,
                     "cell": args.cell,
+                    "place_id": args.place,
                     "world": str(world),
                     "author": args.author,
                     "kind": "animal_home",
@@ -413,7 +422,9 @@ def cmd_build_home(args: argparse.Namespace, world: Path) -> int:
         config.reference,
         config.max_new_plants,
     )
-    run, missing = stages_for_kind(stages, "animal_home", [], args.safety)
+    run, missing = stages_for_kind(
+        stages, "animal_home", [], args.safety, reuse=bool(args.place)
+    )
     if missing:
         print(
             f"error: animal_home needs {', '.join(missing)}, not built yet",
@@ -466,7 +477,8 @@ def cmd_replay(args: argparse.Namespace) -> int:
         config.reference,
         config.max_new_plants,
     )
-    run, missing = stages_for_kind(stages, kind, [], args.safety)
+    reuse = kind == "animal_home" and bool(params.get("place_id"))
+    run, missing = stages_for_kind(stages, kind, [], args.safety, reuse=reuse)
     if missing:
         print(
             f"error: {kind} needs {', '.join(missing)}, not built yet",
@@ -578,13 +590,37 @@ def cmd_resume(args: argparse.Namespace) -> int:
         config.reference,
         config.max_new_plants,
     )
-    run, missing = stages_for_kind(stages, kind, choices, args.safety)
+    reuse = kind == "animal_home" and bool(params.get("place_id"))
+    improve_home = kind == "improve" and params.get("kind") == "animal_home"
+    run, missing = stages_for_kind(
+        stages, kind, choices, args.safety, reuse=reuse, improve_home=improve_home
+    )
     if missing:
         print(
             f"job {args.job_id}: needs {', '.join(missing)}, not built yet",
             file=sys.stderr,
         )
         return NOT_BUILT_YET
+    if kind == "improve":
+        reset_stages(state_file, [stage.name for stage in run])
+        manifest_path = job_dir / "pack" / "manifest.json"
+        try:
+            round_no = (
+                json.loads(manifest_path.read_text(encoding="utf-8"))["version"] + 1
+            )
+        except (OSError, ValueError, KeyError):
+            round_no = 2
+        (job_dir / "improve.json").write_text(
+            json.dumps(
+                {
+                    "round": round_no,
+                    "choices": [{"choice": choice} for choice in choices],
+                    "note": None,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
     try:
         Pipeline(run, state_file).run(ctx)
     except (StageFailedError, CapExceeded, MetaAuthError) as error:

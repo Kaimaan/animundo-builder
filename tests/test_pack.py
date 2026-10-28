@@ -195,3 +195,27 @@ def test_pack_place_id_is_lower_case_and_safe(tmp_path: Path) -> None:
     assert re.fullmatch(r"[a-z0-9_]+", place), place
     assert (job / "pack" / "regions" / f"{place}.json").is_file()
     assert draft_place_id("a-b") != draft_place_id("a_b")
+
+
+def test_pack_keeps_a_reused_place_id(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    (job / "home.json").write_text(json.dumps({"reuse_place_id": "xx_test"}))
+    PackStage().run(_ctx(job, world))
+    pack = job / "pack"
+    region = json.loads((pack / "regions" / "xx_test.json").read_text())
+    assert region["id"] == "xx_test"
+    manifest = json.loads((pack / "manifest.json").read_text())
+    assert manifest["draft_place_id"] == "xx_test"
+    assert manifest["place_id"] == "xx_test"
+
+
+def test_pack_ignores_a_made_home_place_id(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    # `home` writes the made place's id to `place_id`; the pack still
+    # ships under the draft id, not the made id.
+    (job / "home.json").write_text(json.dumps({"place_id": "xx_test"}))
+    PackStage().run(_ctx(job, world))
+    manifest = json.loads((job / "pack" / "manifest.json").read_text())
+    assert manifest["draft_place_id"] == draft_place_id("job-1")

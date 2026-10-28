@@ -1,0 +1,83 @@
+{
+  "about": "The game's built places, for Animundo Builder. Written by tools/places.py from regions/; edit the regions.",
+  "places": [
+    {
+      "id": "fi_nuuksio",
+      "name": {
+        "en": "Nuuksio National Park",
+        "fi": "Nuuksion kansallispuisto"
+      },
+      "country": "FI",
+      "center": {
+        "lat": 60.3007,
+        "lon": 24.5263
+      },
+      "wikidata": "Q1815268",
+      "animals": {
+        "playable": [
+          "moose",
+          "mountain_hare",
+          "squirrel",
+          "fox",
+          "kestrel",
+          "perch",
+          "pike",
+          "bee",
+          "chaffinch",
+          "flying_squirrel",
+          "mallard",
+          "great_tit",
+          "frog"
+        ],
+        "predators": [
+          "fox"
+        ],
+        "prey": [
+          "mountain_hare",
+          "vole",
+          "frog",
+          "lizard",
+          "chaffinch",
+          "mallard",
+          "great_tit"
+        ]
+      }
+    },
+    {
+      "id": "fi_saimaa",
+      "name": {
+        "en": "Lake Saimaa – Linnansaari",
+        "fi": "Saimaa – Linnansaari"
+      },
+      "country": "FI",
+      "center": {
+        "lat": 62.115,
+        "lon": 28.508
+      },
+      "wikidata": "Q1826934",
+      "animals": {
+        "playable": [
+          "saimaa_seal",
+          "perch",
+          "pike",
+          "mallard",
+          "moose",
+          "mountain_hare",
+          "squirrel",
+          "fox",
+          "great_tit"
+        ],
+        "predators": [
+          "fox"
+        ],
+        "prey": [
+          "mountain_hare",
+          "vole",
+          "mallard",
+          "great_tit",
+          "frog"
+        ]
+      }
+    }
+  ]
+}

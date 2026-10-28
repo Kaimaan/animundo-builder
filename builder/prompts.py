@@ -40,3 +40,34 @@ def fix_messages(
             ),
         },
     ]
+
+
+#: A grown-up's note in a fix prompt, at most this many characters (#83).
+NOTE_CHARS = 300
+
+
+def improve_blocks(previous: str | None, note: str | None) -> str:
+    """What a fix call sees beyond its prompt: the previous form, the note.
+
+    Each round's fix call sees the previous form and the note, so it
+    changes only what was asked (#82.6). The note goes in as the
+    grown-up's words with the children's rules; it can only change
+    the strict form, never text shown in the game (#83).
+    """
+    out = ""
+    if previous:
+        out += (
+            "\n\n## The previous form\n\n"
+            "Change only what is asked below; keep everything else exactly:\n\n"
+            f"{previous}\n"
+        )
+    words = (note or "").strip()[:NOTE_CHARS]
+    if words:
+        out += (
+            "\n\n## The grown-up's words\n\n"
+            f'"{words}"\n\n'
+            "Change only what they ask, and only inside this form: "
+            "never any text shown in the game.\n\n"
+            f"{for_children()}"
+        )
+    return out

@@ -69,6 +69,8 @@ class MinimumStage:
         return True, f"{brief['latin']} is not in the library yet"
 
     def _need_home(self, ctx: Any, brief: dict[str, Any]) -> tuple[bool, str]:
+        if brief.get("reuse_place_id"):
+            return False, f"{brief['reuse_place_id']} is built"
         if not brief.get("needs_home"):
             return False, f"{brief['home']} is built"
         made = ctx.job_dir / "homes" / f"{brief['home']}.json"

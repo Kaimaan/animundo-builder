@@ -13,6 +13,7 @@ from .plants import PlantsStage
 from .references import ReferencesStage
 from .region import RegionStage
 from .research import ResearchStage
+from .reuse import ReuseStage
 from .safety import SafetyStage
 from .species_plan import SpeciesPlanStage
 from .survey import SurveyStage
@@ -33,6 +34,7 @@ __all__ = [
     "PlantsStage",
     "ReferencesStage",
     "RegionStage",
+    "ReuseStage",
     "SafetyStage",
     "SpeciesPlanStage",
     "SurveyStage",

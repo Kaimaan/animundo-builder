@@ -9,6 +9,7 @@ is refused either way.
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,19 @@ from .species_plan import RecordedFn, recorded_near
 
 TEMP_AREAS = Path(__file__).resolve().parent.parent / "data" / "areas_temp.json"
 CELL_PATTERN = re.compile(r"^-?\d+\.\d_-?\d+\.\d$")
+PLACE_KM = 25
+
+
+def _km(lat: float, lon: float, to_lat: Any, to_lon: Any) -> float:
+    """Great-circle kilometres, or infinite when the place has no center."""
+    try:
+        lat1, lon1, lat2, lon2 = (math.radians(v) for v in (lat, lon, to_lat, to_lon))
+    except (TypeError, ValueError):
+        return float("inf")
+    half_lat = math.sin((lat2 - lat1) / 2) ** 2
+    half_lon = math.sin((lon2 - lon1) / 2) ** 2
+    delta = half_lat + math.cos(lat1) * math.cos(lat2) * half_lon
+    return 2 * 6371 * math.asin(math.sqrt(delta))
 
 
 class IntakeStage:
@@ -44,6 +58,7 @@ class IntakeStage:
         exclusions_path: str | Path | None = None,
         species_key: int | None = None,
         cell: str | None = None,
+        place_id: str | None = None,
         animal_list_path: str | Path | None = None,
         shapes_path: str | Path | None = None,
         recorded: RecordedFn = None,
@@ -60,6 +75,7 @@ class IntakeStage:
             self.exclusions_path = ROOT / "exclusions.json"
         self.species_key = species_key
         self.cell = cell
+        self.place_id = place_id
         self.animal_list_path = (
             Path(animal_list_path) if animal_list_path is not None else None
         )
@@ -111,6 +127,7 @@ class IntakeStage:
             raise ValueError(
                 f"no {entry.get('latin')} recorded near {self.cell} anymore"
             )
+        place_id = self._check_place(world, center, entry)
         brief = {
             "species_key": self.species_key,
             "id": entry.get("id", ""),
@@ -125,6 +142,9 @@ class IntakeStage:
             "center": center,
             "country": country,
             "country_name": country_name,
+            # The built place to reuse, if any; `home` later writes the
+            # made place's id to `place_id`, so this keeps its own key.
+            "reuse_place_id": place_id,
             # Just the place: the game adds the country itself
             # ("{place}, {country}"), so a country here doubles it (#64.4).
             "place_name": (f"{short_name(entry.get('name', ''))} {habitat_word(home)}"),
@@ -132,6 +152,32 @@ class IntakeStage:
         out = ctx.job_dir / "home.json"
         out.write_text(json.dumps(brief, indent=2), encoding="utf-8")
         return {"home_file": "home.json", "cell": self.cell, "home": home}
+
+    def _check_place(
+        self, world: Path, center: dict[str, float], entry: dict[str, Any]
+    ) -> str | None:
+        """The built place the cell falls in, or None in the wild (#82.3).
+
+        The web matches the same rule (25 km); intake rechecks from
+        the world's regions, never from the client. A place that
+        already has the animal playable is both-exist (#82.2) and
+        must not arrive as a draft.
+        """
+        if not self.place_id:
+            return None
+        region_path = world / "regions" / f"{self.place_id}.json"
+        if not region_path.is_file():
+            raise ValueError(f"unknown place: {self.place_id}")
+        region = json.loads(region_path.read_text(encoding="utf-8"))
+        at = region.get("center", {})
+        if _km(center["lat"], center["lon"], at.get("lat"), at.get("lon")) > PLACE_KM:
+            raise ValueError(f"cell {self.cell} is not in {self.place_id} anymore")
+        stem = entry.get("in_library") or entry.get("id", "")
+        if stem and stem in (region.get("animals", {}).get("playable", []) or []):
+            raise ValueError(
+                f"{entry.get('latin')} is already playable in {self.place_id}"
+            )
+        return self.place_id
 
     def _find(self, areas: list[dict[str, Any]]) -> dict[str, Any]:
         if self.area_id is not None:

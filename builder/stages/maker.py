@@ -31,7 +31,7 @@ import jsonschema
 
 from ..animal_list import find_entry, load_list, match_by_name
 from ..animal_list import find_list as find_animal_list
-from ..prompts import PROMPTS_DIR, fix_messages, for_children
+from ..prompts import PROMPTS_DIR, fix_messages, for_children, improve_blocks
 from ..taxa import match_entry, taxon_block
 from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
@@ -149,6 +149,9 @@ class AnimalMakerStage:
             target for target in all_targets if not _made(ctx.job_dir, target["id"])
         ]
         before = ctx.tracker.spent_usd
+        improved, summary = self._improve(
+            ctx, world, brief, research, all_targets, data["animals"]
+        )
         made = []
         unmakable: dict[str, list[str]] = {}
         for target in targets:
@@ -168,7 +171,9 @@ class AnimalMakerStage:
                 unmakable[animal_id] = marks
             self._seat_target(world, ctx, region, region_path, target)
             self._plan_target(ctx, brief, target)
-        if "welcome" in region:
+        if "welcome" in region and not brief.get("reuse_place_id"):
+            # A reused place keeps its own welcome; only a made home's
+            # welcome is rewritten for its new cast (#82.3).
             stem = brief.get("in_library") or brief.get("id", "")
             region["welcome"] = refresh_welcome(
                 world, ctx.job_dir, region, brief, research, stem
@@ -186,10 +191,81 @@ class AnimalMakerStage:
         made_all = [
             target["id"] for target in all_targets if _made(ctx.job_dir, target["id"])
         ]
-        return {
+        result: dict[str, Any] = {
             "animal_files": [f"animals/{animal_id}.json" for animal_id in made_all],
             "cost_usd": cost,
         }
+        if improved is not None:
+            result["improved"] = improved
+            if summary:
+                result["summary"] = summary
+        return result
+
+    def _improve(
+        self,
+        ctx: Any,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        all_targets: list[dict[str, Any]],
+        entries: list[dict[str, Any]],
+    ) -> tuple[list[str] | None, str | None]:
+        """Fix the named made animals: previous form plus note (#82.6).
+
+        Returns (improved, summary): (None, None) when this is no
+        improve round at all.
+        """
+        path = ctx.job_dir / "improve.json"
+        if not path.is_file():
+            return None, None
+        improve = json.loads(path.read_text(encoding="utf-8"))
+        names = [
+            entry.get("species", "")
+            for entry in improve.get("choices", [])
+            if entry.get("choice") == "animal_looks_wrong"
+            or (entry.get("choice") == "other" and entry.get("species"))
+        ]
+        if not names:
+            return [], None
+        made = {
+            target["id"] for target in all_targets if _made(ctx.job_dir, target["id"])
+        }
+        if not made:
+            return [], "nothing to change here"
+        tag = f"-r{improve.get('round', 2)}"
+        improved: list[str] = []
+        messages: list[str] = []
+        for name in names:
+            target = _match_target(all_targets, name)
+            if target is not None and target["id"] in made:
+                previous = _last_try_answer(
+                    ctx.job_dir / "tries" / target["id"], "edits"
+                )
+                self._make_model(
+                    ctx,
+                    world,
+                    brief,
+                    research,
+                    target,
+                    previous_form=previous,
+                    note=improve.get("note"),
+                    tag=tag,
+                )
+                improved.append(target["id"])
+            elif target is None:
+                kind, display = _classify_name(
+                    world, entries, brief, str(name or "").strip()
+                )
+                if kind == "library":
+                    messages.append(
+                        f"{display} is from the library and can't be changed here"
+                    )
+                else:
+                    messages.append(
+                        f'no animal called "{display}" was made here; nothing changed'
+                    )
+        parts = ([f"fixed {', '.join(improved)}"] if improved else []) + messages
+        return improved, "; ".join(parts) if parts else None
 
     def _make(
         self,
@@ -265,8 +341,15 @@ class AnimalMakerStage:
         brief: dict[str, Any],
         research: dict[str, Any],
         target: dict[str, Any],
+        previous_form: str | None = None,
+        note: str | None = None,
+        tag: str = "",
     ) -> list[str]:
-        """The model from the reference plus edits, then its checks."""
+        """The model from the reference plus edits, then its checks.
+
+        An improve fix passes the previous form and the grown-up's
+        note, and tags its tries with the round (#82.6).
+        """
         animal_id = target["id"]
         start_from = target["start_from"]
         ref = _reference_spec(world, start_from)
@@ -276,6 +359,7 @@ class AnimalMakerStage:
                 "a person picks one"
             )
         prompt = self._edits_prompt(world, brief, research, target, ref)
+        prompt += improve_blocks(previous_form, note)
         request = {
             "type": "json_schema",
             "json_schema": {
@@ -347,7 +431,9 @@ class AnimalMakerStage:
                                 f"{animal_id}: {'; '.join(file_errors)}: the tool "
                                 "saturated its range; a person looks"
                             )
-            self._save_try(ctx, animal_id, "edits", attempt, answer, edits, file_errors)
+            self._save_try(
+                ctx, animal_id, f"edits{tag}", attempt, answer, edits, file_errors
+            )
             if edits is not None and not file_errors:
                 marks = edits.get("unmakable") or []
                 return [mark for mark in marks if isinstance(mark, str)]
@@ -625,23 +711,8 @@ class AnimalMakerStage:
         region_path: Path,
         target: dict[str, Any],
     ) -> None:
-        """Seat a made target in the region, in place and on disk (#84.1).
-
-        A prey swims or is preyed upon; the home's animal plays.
-        Idempotent: seating twice seats once.
-        """
-        role = "prey" if target["prey"] else "playable"
-        SpeciesPlanStage.place_backfilled(
-            world,
-            region,
-            {target["id"]: {"backfilled": True, "file": target["id"], "role": role}},
-            ctx.job_dir,
-        )
-        if not target["prey"]:
-            playable = region.setdefault("animals", {}).setdefault("playable", [])
-            if target["id"] not in playable:
-                playable.append(target["id"])
-        region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
+        """Seat a made target in the region, in place and on disk (#84.1)."""
+        seat_made(world, ctx.job_dir, region, region_path, target["id"], target["prey"])
 
     def _plan_target(
         self, ctx: Any, brief: dict[str, Any], target: dict[str, Any]
@@ -830,6 +901,33 @@ def _all_targets(
     return targets
 
 
+def seat_made(
+    world: Path,
+    job_dir: Path,
+    region: dict[str, Any],
+    region_path: Path,
+    animal_id: str,
+    is_prey: bool,
+) -> None:
+    """Seat an animal in the region, in place and on disk (#84.1).
+
+    A prey swims or is preyed upon; the home's animal plays.
+    Idempotent: seating twice seats once.
+    """
+    role = "prey" if is_prey else "playable"
+    SpeciesPlanStage.place_backfilled(
+        world,
+        region,
+        {animal_id: {"backfilled": True, "file": animal_id, "role": role}},
+        job_dir,
+    )
+    if not is_prey:
+        playable = region.setdefault("animals", {}).setdefault("playable", [])
+        if animal_id not in playable:
+            playable.append(animal_id)
+    region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
+
+
 def _seated(region: dict[str, Any], stem: str) -> bool:
     """Whether the cast seats this stem, on land or as a fish."""
     for group in region.get("animals", {}).values():
@@ -848,6 +946,71 @@ def _made(job_dir: Path, animal_id: str) -> bool:
     return (job_dir / "animals" / f"{animal_id}.json").is_file() and (
         job_dir / "models" / f"{animal_id}.json"
     ).is_file()
+
+
+def _match_target(
+    all_targets: list[dict[str, Any]], name: str
+) -> dict[str, Any] | None:
+    """The target the grown-up's "which animal" names, if any."""
+    lowered = (name or "").strip().lower()
+    for target in all_targets:
+        entry = target.get("entry") or {}
+        if lowered in {
+            target["id"].lower(),
+            str(entry.get("id", "")).lower(),
+            str(entry.get("name", "")).lower(),
+        } - {""}:
+            return target
+    return None
+
+
+def _classify_name(
+    world: Path, entries: list[dict[str, Any]], brief: dict[str, Any], name: str
+) -> tuple[str, str]:
+    """A named animal that is no target: "library" or "unknown".
+
+    Returns the kind plus the display name for the message.
+    """
+    lowered = name.lower()
+    for entry in entries:
+        if lowered in {
+            str(entry.get("id", "")).lower(),
+            str(entry.get("name", "")).lower(),
+        } - {""}:
+            return "library", str(entry.get("name") or entry.get("id"))
+    stem = lowered.replace(" ", "_")
+    if (world / "animals" / f"{stem}.json").is_file() or lowered == (
+        brief.get("in_library") or ""
+    ).lower():
+        return "library", name
+    return "unknown", name
+
+
+def _last_try_answer(tries_dir: Path, phase: str) -> str | None:
+    """The latest saved answer for this phase, or None without one.
+
+    An empty phase reads the tries' own answers (the home maker's
+    two-level tries); otherwise the phase's answers below them.
+    """
+    found: list[Path] = []
+    if tries_dir.is_dir():
+        if phase:
+            attempts = [
+                attempt_dir / "answer.json"
+                for phase_dir in sorted(tries_dir.iterdir())
+                if phase_dir.name.startswith(phase) and phase_dir.is_dir()
+                for attempt_dir in sorted(phase_dir.iterdir())
+            ]
+        else:
+            attempts = [
+                attempt_dir / "answer.json"
+                for attempt_dir in sorted(tries_dir.iterdir())
+            ]
+        found = [answer for answer in attempts if answer.is_file()]
+    if not found:
+        return None
+    found.sort(key=lambda path: path.stat().st_mtime)
+    return found[-1].read_text(encoding="utf-8")
 
 
 def _animal_passed(job_dir: Path, animal_id: str) -> bool:
@@ -1664,17 +1827,7 @@ class HomeMakerStage:
             # passing run counts as done, or the failure stands (#64.3).
             return {"home_files": [f"homes/{habitat}.json"], "cost_usd": 0.0}
         before = ctx.tracker.spent_usd
-        base = _closest_home(world, habitat)
-        plants = sorted(
-            path.stem for path in (world / "models" / "plants").glob("*.json")
-        )
-        trees = _library_trees(world)
-        looks_path = ctx.job_dir / "looks.json"
-        looks: dict[str, Any] = (
-            json.loads(looks_path.read_text(encoding="utf-8"))
-            if looks_path.is_file()
-            else {}
-        )
+        base, plants, trees, looks = self._setup(world, ctx, brief)
         self._make(ctx, world, brief, research, habitat, base, plants, trees, looks)
         cost = round(ctx.tracker.spent_usd - before, 6)
         checks = ctx.job_dir / "checks"
@@ -1689,6 +1842,57 @@ class HomeMakerStage:
             "cost_usd": cost,
         }
 
+    @staticmethod
+    def _setup(
+        world: Path, ctx: Any, brief: dict[str, Any]
+    ) -> tuple[Path, list[str], list[str], dict[str, Any]]:
+        """The choices call's world inputs: base, plants, trees, looks."""
+        habitat = brief["home"]
+        base = _closest_home(world, habitat)
+        plants = sorted(
+            path.stem for path in (world / "models" / "plants").glob("*.json")
+        )
+        trees = _library_trees(world)
+        looks_path = ctx.job_dir / "looks.json"
+        looks: dict[str, Any] = (
+            json.loads(looks_path.read_text(encoding="utf-8"))
+            if looks_path.is_file()
+            else {}
+        )
+        return base, plants, trees, looks
+
+    def run_fix(
+        self,
+        ctx: Any,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        note: str | None,
+        round_no: int,
+    ) -> None:
+        """A D8 choices fix on the made template: previous form plus note.
+
+        The home stage drives this on an improve round, through a
+        deferred import (this module already imports that one) (#82.6).
+        """
+        habitat = brief["home"]
+        previous = _last_try_answer(ctx.job_dir / "tries" / habitat, "")
+        base, plants, trees, looks = self._setup(world, ctx, brief)
+        self._make(
+            ctx,
+            world,
+            brief,
+            research,
+            habitat,
+            base,
+            plants,
+            trees,
+            looks,
+            previous_form=previous,
+            note=note,
+            tag=f"r{round_no}-",
+        )
+
     def _make(
         self,
         ctx: Any,
@@ -1700,9 +1904,17 @@ class HomeMakerStage:
         plants: list[str],
         trees: list[str],
         looks: dict[str, Any],
+        previous_form: str | None = None,
+        note: str | None = None,
+        tag: str = "",
     ) -> None:
-        """One home: a choices call, then the adapt tool, plus one fix round."""
+        """One home: a choices call, then the adapt tool, plus one fix round.
+
+        An improve fix passes the previous form and the grown-up's
+        note, and tags its tries with the round (#82.6).
+        """
         prompt = self._prompt(brief, research, habitat, base, plants, trees, looks)
+        prompt += improve_blocks(previous_form, note)
         request = {
             "type": "json_schema",
             "json_schema": {
@@ -1721,11 +1933,11 @@ class HomeMakerStage:
             if choices is not None:
                 _code_choices(choices, habitat, brief, research)
                 file_errors = self._adapt_try(
-                    ctx, world, base, choices, habitat, attempt
+                    ctx, world, base, choices, habitat, attempt, tag
                 )
-            self._save_try(ctx, habitat, attempt, answer, file_errors)
+            self._save_try(ctx, habitat, attempt, answer, file_errors, tag)
             if choices is not None and not file_errors:
-                _place_home(ctx, habitat, attempt)
+                _place_home(ctx, habitat, attempt, tag)
                 return
             errors = file_errors or ["the answer held no usable choices"]
         raise _Stopped(
@@ -1759,9 +1971,10 @@ class HomeMakerStage:
         choices: dict[str, Any],
         habitat: str,
         attempt: int,
+        tag: str = "",
     ) -> list[str]:
         """The try's choices through the world's adapt tool, with its checks."""
-        folder = ctx.job_dir / "tries" / habitat / str(attempt)
+        folder = ctx.job_dir / "tries" / habitat / f"{tag}{attempt}"
         folder.mkdir(parents=True, exist_ok=True)
         choices_path = folder / "choices.json"
         choices_path.write_text(json.dumps(choices, indent=2), encoding="utf-8")
@@ -1774,8 +1987,9 @@ class HomeMakerStage:
         attempt: int,
         answer: str,
         errors: list[str],
+        tag: str = "",
     ) -> None:
-        folder = ctx.job_dir / "tries" / habitat / str(attempt)
+        folder = ctx.job_dir / "tries" / habitat / f"{tag}{attempt}"
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "answer.json").write_text(answer, encoding="utf-8")
         (folder / "errors.json").write_text(
@@ -2061,11 +2275,11 @@ def _code_choices(
         choices["ice"] = "none"
 
 
-def _place_home(ctx: Any, habitat: str, attempt: int) -> None:
+def _place_home(ctx: Any, habitat: str, attempt: int, tag: str = "") -> None:
     """The passing try's home, where the home stage finds it."""
     homes_dir = ctx.job_dir / "homes"
     homes_dir.mkdir(exist_ok=True)
-    src = ctx.job_dir / "tries" / habitat / str(attempt) / "home.json"
+    src = ctx.job_dir / "tries" / habitat / f"{tag}{attempt}" / "home.json"
     (homes_dir / f"{habitat}.json").write_text(
         src.read_text(encoding="utf-8"), encoding="utf-8"
     )

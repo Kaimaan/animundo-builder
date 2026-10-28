@@ -66,7 +66,13 @@ class PackStage:
         )
         region_path = next((ctx.job_dir / "regions").glob("*.json"))
         region = json.loads(region_path.read_text(encoding="utf-8"))
+        # A reused place keeps its own id in the pack; a made home
+        # ships under the draft id (#82.3).
         place = draft_place_id(ctx.job_id)
+        brief_path = ctx.job_dir / "home.json"
+        if brief_path.is_file():
+            brief = json.loads(brief_path.read_text(encoding="utf-8"))
+            place = brief.get("reuse_place_id") or place
         pack = ctx.job_dir / "pack"
         if pack.exists():
             shutil.rmtree(pack)

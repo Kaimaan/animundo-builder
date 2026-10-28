@@ -65,8 +65,18 @@ describe("drafts create", () => {
     await assertFails(
       setDoc(doc(db, "drafts/h6"), { ...home, area_id: "fi_repovesi" }),
     );
+    await assertSucceeds(
+      setDoc(
+        doc(db, "drafts/h7"),
+        {
+          ...home,
+          place_id: "fi_nuuksio",
+          place_name: "Nuuksio National Park",
+        },
+      ),
+    );
     await assertFails(
-      setDoc(doc(db, "drafts/h7"), { ...home, place_name: "Lynx den" }),
+      setDoc(doc(db, "drafts/h7b"), { ...home, place_id: 7 }),
     );
     await assertFails(
       setDoc(doc(db, "drafts/h8"), { ...home, country: "FI" }),
@@ -189,6 +199,17 @@ describe("drafts improve", () => {
     await assertFails(
       improve(db, "ready", [{ choice: "colours_off", species: "red_deer" }]),
     );
+    await assertFails(
+      improve(db, "ready", [{ choice: "too_few_animals", species: "red_deer" }]),
+    );
+  });
+
+  it("other may name its species, for the routing", async () => {
+    const db = grownUp(env, "grown").firestore();
+    await assertSucceeds(
+      improve(db, "ready", [{ choice: "other", species: "red_deer" }]),
+    );
+    await assertSucceeds(improve(db, "ready", [{ choice: "other" }]));
   });
 
   it("choices come from the fixed list, one to four", async () => {

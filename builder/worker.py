@@ -33,7 +33,13 @@ from .config import Config
 from .jobs import fresh_state, make_context, pipeline_stages
 from .ledger import CapExceeded, FileLedger, LedgerError
 from .meta import MetaAuthError
-from .pipeline import BudgetExceeded, Pipeline, StageFailedError, stages_for_kind
+from .pipeline import (
+    BudgetExceeded,
+    Pipeline,
+    StageFailedError,
+    reset_stages,
+    stages_for_kind,
+)
 from .report import build_report
 from .schemas import validate
 from .stages import IntakeStage
@@ -230,7 +236,7 @@ class Worker:
                 "place_name": region.get("name", ""),
                 "country": region.get("country", ""),
                 "center": _rounded(region.get("center")),
-                "draft_place_id": draft_place_id(draft_id),
+                "draft_place_id": doc.get("place_id") or draft_place_id(draft_id),
                 "place_id": doc.get("area_id", "") or region.get("id", ""),
             },
         )
@@ -257,6 +263,18 @@ class Worker:
         choices = [
             entry.get("choice", "") for entry in doc["improve"].get("choices", [])
         ]
+        job_dir = self.jobs_dir / draft_id
+        (job_dir / "improve.json").write_text(
+            json.dumps(
+                {
+                    "round": round_no,
+                    "choices": doc["improve"].get("choices", []),
+                    "note": doc["improve"].get("note"),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         self._update(draft_id, {"status": "improving"})
         try:
             manifest = self.run_round(draft_id, "improve", round_no, choices)
@@ -427,6 +445,7 @@ class Worker:
                 params = {
                     "species_key": draft.get("species_key"),
                     "cell": draft.get("cell"),
+                    "place_id": draft.get("place_id"),
                     "world": str(self.world),
                     "author": self.author,
                     "kind": kind,
@@ -451,6 +470,7 @@ class Worker:
             intake = IntakeStage(
                 species_key=params.get("species_key"),
                 cell=params.get("cell"),
+                place_id=params.get("place_id"),
                 areas_path=self.areas_path,
             )
         else:
@@ -468,11 +488,22 @@ class Worker:
             self.config.max_new_plants,
             pack_version=round_no,
         )
-        run, missing = stages_for_kind(stages, kind, choices, self.config.safety)
+        reuse = kind == "animal_home" and bool(params.get("place_id"))
+        improve_home = kind == "improve" and params.get("kind") == "animal_home"
+        run, missing = stages_for_kind(
+            stages,
+            kind,
+            choices,
+            self.config.safety,
+            reuse=reuse,
+            improve_home=improve_home,
+        )
         if missing:
             raise RoundFailed(
                 "choice_unbuilt", f"needs {', '.join(missing)}, not built yet"
             )
+        if kind == "improve":
+            reset_stages(job_dir / "state.json", [stage.name for stage in run])
         ctx = make_context(self.config, draft_id, job_dir, self.world)
         job_id = f"{draft_id}-r{round_no}"
         if self.store.get_job(job_id) is None:

@@ -3,6 +3,54 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox D10 (#82, #83, #85.2, #86, #88), tagged `v0.3.3`
+
+- #82.1/#88: `web/build/places.json` synced from the world (2
+  places); a tap is in a place within 25 km of its centre (one
+  constant each side: web `PLACE_KM`, intake `PLACE_KM`).
+- #82.2/#86: both exist → no draft; the card says "Ready:
+  <place>" with Play opening `?place=<id>&animal=<id>` (game
+  c685a04). Ready draft cards Play the same way.
+- #82.3: a `place:` draft reuses the built region: intake checks
+  the place (unknown / outside 25 km / already playable
+  refuse); the pipeline runs `reuse` instead of `newhome`/`home`
+  (copy region, seat playable, feed from the research, plan with
+  the picked); the pack carries the region under the place id;
+  submit PRs against the built region file ("Update place").
+  The brief keeps the reuse target in `reuse_place_id`: `home`
+  later writes the made id to `place_id`, and old live jobs
+  already carry it.
+- #82.4: a new home seats GBIF neighbours from one facet search
+  over the cell (`facet=speciesKey`, shape probed live), kept
+  only with a sound taxon (the check_taxa per-file rules) and
+  food in the template; the picked stays first in `playable`;
+  cap 8. The replay food expectation changed with it: an unfed
+  neighbour is dropped, not fed.
+- #82.5: cards read "{Animal} in {place}" with "making… about
+  40 min" from the request, "Ready to play · <today/yesterday/N
+  days ago>", or "Failed, try again".
+- #82.6/#83: Improve remapped for `animal_home` (looks →
+  `oneshot` D7 fix, colours → `home` D8 fix, too few → neighbours
+  at cap 12, other routed by "which animal"), then `pack` only:
+  a fix changes the strict form, never game text. Rounds reset
+  the touched stages (production re-runs skipped them as done).
+  The note reaches the fix prompt as the grown-up's words (300
+  chars) with the children's rules. Library animals and homes
+  say so; an all-library improve reports "nothing to change
+  here" at $0. The Improve heading is "Improve" already.
+- #85.2: the welcome reads a fish prey's `kind` like the rest.
+- Web sends `place_id`/`place_name` at request time and
+  `species` for "other" when named; rules allow both (emulator
+  tests for CI; ports blocked here). Contracts let
+  `draft_place_id` be a place id; the addon's game-id rule
+  already accepts those.
+- Suite: 647 passed, 12 skipped; ruff check + format clean;
+  node harness green; all 3 headless addon checks 0 errors.
+- Open: improve on a reused place says the built place can't be
+  changed (too-few there wants re-neighbouring the copy, not
+  built); game-side shadowing of a reused region id is the
+  reviewer's half; Kai's fox re-pack from #93 still pending.
+
 ## 2026-10-28: inbox #93, tagged `v0.3.2`
 
 - Every pack's `draft_place_id` had the Firestore id's capitals,

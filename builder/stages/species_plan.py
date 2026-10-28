@@ -642,7 +642,7 @@ class SpeciesPlanStage:
             cast = _cast_files(region)
             known = cast | added
             files = {stem: animal_file(world, stem, overlay) for stem in known}
-            kinds = _available_food(region)
+            kinds = available_food(region)
             changed = False
             for stem, data in files.items():
                 for kind in data.get("diet") or []:
@@ -765,7 +765,7 @@ def animal_file(world: Path, stem: str, overlay: Path | None = None) -> dict[str
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _available_food(region: dict[str, Any]) -> set[str]:
+def available_food(region: dict[str, Any]) -> set[str]:
     """Food kinds the region has: `food`, plant food, flower nectar."""
     kinds = {food.get("kind", "") for food in region.get("food", [])} - {""}
     ground = region.get("ground_cover", {})

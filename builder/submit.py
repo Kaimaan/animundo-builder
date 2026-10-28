@@ -61,14 +61,15 @@ def run_submit(
     if _branch_exists(world, branch):
         return _continue(world, job_dir, draft_id, branch, base, gh, place)
     _require_clean(world)
+    update = _is_update(job_dir)
     region = _read_region(job_dir)
-    files = _layout(world, job_dir, manifest, region, place, branch)
+    files = _layout(world, job_dir, manifest, region, place, branch, update)
     gate = _gate(world, job_dir, manifest, region, place, files, branch)
     build_report(job_dir, cost_usd=cost_usd)
     pr_body = _pr_body(job_dir, manifest, region, place, gate, cost_usd)
     pr_path = job_dir / "pr.md"
     pr_path.write_text(pr_body, encoding="utf-8")
-    _commit(world, branch, region, place, files)
+    _commit(world, branch, region, place, files, update)
     return _open_pr(world, job_dir, draft_id, branch, base, gh, place, files)
 
 
@@ -77,6 +78,16 @@ def _read_manifest(job_dir: Path) -> dict[str, Any]:
     if not path.is_file():
         raise SubmitFailed(f"no pack in {job_dir}; the pack stage must pass first")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _is_update(job_dir: Path) -> bool:
+    """Whether the draft reuses a built place instead of making one."""
+    brief_path = job_dir / "home.json"
+    if not brief_path.is_file():
+        return False
+    return bool(
+        json.loads(brief_path.read_text(encoding="utf-8")).get("reuse_place_id")
+    )
 
 
 def _submitted(job_dir: Path) -> str | None:
@@ -128,13 +139,24 @@ def _layout(
     region: dict[str, Any],
     place: str,
     branch: str,
+    update: bool = False,
 ) -> list[str]:
     """Lay the round out on a new branch. Returns the touched paths."""
     _git(world, "checkout", "-b", branch, check=True)
     touched: list[str] = []
     try:
         region_path = f"regions/{place}.json"
-        _write(world, region_path, dict(region, id=place))
+        if update:
+            # The pull request goes against the built region file (#82.3).
+            if not (world / region_path).is_file():
+                raise SubmitFailed(
+                    f"{region_path} is gone from the world; a person looks"
+                )
+            (world / region_path).write_text(
+                json.dumps(dict(region, id=place), indent=2), encoding="utf-8"
+            )
+        else:
+            _write(world, region_path, dict(region, id=place))
         touched.append(region_path)
         for species in manifest["new_species"]:
             for job_rel, world_rel in (
@@ -312,15 +334,17 @@ def _commit(
     region: dict[str, Any],
     place: str,
     files: list[str],
+    update: bool = False,
 ) -> None:
     _git(world, "add", "--", *files, check=True)
     name = region.get("name", place)
+    verb = "Update" if update else "Add"
     proc = _git(
         world,
         "commit",
         "-s",
         "-m",
-        f"Add {name} ({place}) via builder submit",
+        f"{verb} {name} ({place}) via builder submit",
     )
     if proc.returncode != 0:
         raise SubmitFailed(
@@ -403,6 +427,8 @@ def _title(job_dir: Path, place: str) -> str:
     name = place
     if regions:
         name = json.loads(regions[0].read_text(encoding="utf-8")).get("name", place)
+    if _is_update(job_dir):
+        return f"Update place: {name} ({place})"
     return f"New place: {name} ({place})"
 
 
@@ -426,10 +452,16 @@ def _pr_body(
         submitted = "submitted after 1 improvement round"
     else:
         submitted = f"submitted after {rounds} improvement rounds"
+    update = _is_update(job_dir)
+    heading = "Update place" if update else "New place"
+    if update:
+        made = f"Updated for a family in {area}."
+    else:
+        made = f"Built for a family for {area}."
     lines = [
-        f"# New place: {name} ({place})",
+        f"# {heading}: {name} ({place})",
         "",
-        f"Built for a family for {area}.",
+        made,
         "",
         "Made by Animundo Builder, played by the family that asked for "
         f"it, {submitted}, and sent on by a person.",

@@ -305,3 +305,13 @@ def test_kind_food_needs_no_prey(tmp_path: Path) -> None:
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["prey"] is None
     assert "does not hunt" in minset["prey_reason"]
+
+
+def test_place_home_is_never_made(tmp_path: Path) -> None:
+    brief = _brief(reuse_place_id="tt_park", needs_home=True, home="grassland")
+    world = _files(tmp_path, [FOX], brief, _research())
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert "home" not in result["make"]
+    minset = json.loads((tmp_path / "minset.json").read_text())
+    assert minset["make_home"] is False
+    assert minset["home_reason"] == "tt_park is built"

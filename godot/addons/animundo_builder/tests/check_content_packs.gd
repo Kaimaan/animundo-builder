@@ -46,6 +46,9 @@ func _good_manifest() -> Dictionary:
 func _check_rules() -> void:
 	if PackRules.manifest_error(_good_manifest()) != "":
 		errors.append("a good manifest is refused")
+	if PackRules.manifest_error(
+			_with(_good_manifest(), "draft_place_id", "tt_park")) != "":
+		errors.append("a reused place id is refused (#82.3)")
 	if PackRules.sha256_hex("abc".to_utf8_buffer()) \
 			!= "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad":
 		errors.append("sha256 is wrong")

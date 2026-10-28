@@ -42,6 +42,7 @@ const GBIF_TILES =
   "?taxonKey={key}&style=orange.marker&bin=hex&hexPerTile=8";
 const GBIF_OCCURRENCES = "https://api.gbif.org/v1/occurrence/search";
 const GAME_URL = "https://animundo.app/";
+const PLACE_KM = 25;
 
 const state = {
   lang: "en",
@@ -49,6 +50,7 @@ const state = {
   user: null,
   animalList: [],
   animalHomes: [],
+  places: [],
   notYet: {},
   picked: null,
   pickedHome: null,
@@ -245,11 +247,13 @@ function storage() {
 
 async function boot() {
   if (!state.dataLoaded) {
-    const [animals, admin, urban] = await Promise.all([
+    const [animals, admin, urban, places] = await Promise.all([
       fetch("animal-list.json").then((r) => r.json()),
       fetch("vendor/natural-earth/ne_110m_admin_0_countries.geojson").then((r) => r.json()),
       fetch("vendor/natural-earth/ne_50m_urban_areas.geojson").then((r) => r.json()),
+      fetch("places.json").then((r) => r.json()),
     ]);
+    state.places = places.places || [];
     state.animalList = animals.animals || [];
     state.animalHomes = animals.homes || [];
     state.notYet = animals.not_yet || {};
@@ -572,6 +576,34 @@ function urbanAt(lat, lon) {
   return state.urbanShapes.some((feature) => shapeHas(feature.geometry, lon, lat));
 }
 
+// The built place whose centre is nearest, when it's within PLACE_KM (#82.1).
+function placeAt(lat, lon) {
+  let best = null;
+  let bestKm = PLACE_KM;
+  for (const place of state.places || []) {
+    const dLat = (place.center.lat - lat) * Math.PI / 180;
+    const dLon = (place.center.lon - lon) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat * Math.PI / 180) * Math.cos(place.center.lat * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    const km = 2 * 6371 * Math.asin(Math.sqrt(a));
+    if (km <= bestKm) {
+      best = place;
+      bestKm = km;
+    }
+  }
+  return best;
+}
+
+// Both exist: the animal is in the library and the place already has it
+// playable — no draft, no worker, just Play (#82.2).
+function bothExist(animal, place) {
+  return Boolean(
+    animal && animal.in_library && place &&
+    (place.animals.playable || []).includes(animal.id),
+  );
+}
+
 async function occurrencesInBox(gbifKey, west, south, east, north) {
   const box = `POLYGON((${west} ${south}, ${east} ${south}, ` +
     `${east} ${north}, ${west} ${north}, ${west} ${south}))`;
@@ -683,6 +715,7 @@ async function onMapTap(latlng) {
   const card = $("cell-card");
   card.hidden = false;
   $("cell-make").hidden = true;
+  $("cell-play").hidden = true;
   $("cell-msg").textContent = "";
   $("cell-name").textContent = "";
   $("cell-facts").textContent = "";
@@ -710,18 +743,34 @@ async function onMapTap(latlng) {
     state.selectedCell = null;
     return;
   }
+  const place = placeAt(at.lat, at.lng);
   const title =
     `${state.pickedShort} ${state.pickedHabitat}, ${country.name}`;
-  $("cell-name").textContent = title;
-  $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
-  state.selectedCell = { ...cell, title, country, animal };
-  $("cell-state").textContent = t("home.about");
-  $("cell-make").hidden = false;
+  state.selectedCell = { ...cell, title, country, animal, place };
+  if (bothExist(animal, place)) {
+    $("cell-name").textContent = t("draft.ready_place", { place: place.name.en });
+    $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
+    $("cell-state").textContent = t("home.about");
+    $("cell-play").hidden = false;
+    $("cell-play").onclick = () => playPlaceAnimal(place.id, animal.id);
+  } else {
+    $("cell-name").textContent = title;
+    $("cell-facts").textContent = `${animal.latin} · ${cell.id}`;
+    $("cell-state").textContent = t("home.about");
+    $("cell-make").hidden = false;
+  }
   clearPickMark();
   state.pickMark = L.rectangle(
     [[cell.south, cell.west], [cell.south + 0.1, cell.west + 0.1]],
     { color: "#f2b84b", weight: 2, fill: false },
   ).addTo(state.map);
+}
+
+// Both exist: straight into the game, no draft (#82.2, game c685a04).
+function playPlaceAnimal(placeId, animalId) {
+  const url = `${GAME_URL}?place=${encodeURIComponent(placeId)}` +
+    `&animal=${encodeURIComponent(animalId)}`;
+  window.open(url, "_blank");
 }
 
 function homeForCell(speciesKey, cellId) {
@@ -740,7 +789,9 @@ async function makeHome() {
     $("cell-msg").textContent = t("home.exists");
     return;
   }
-  // The worker writes the name and the country from the cell (#41).
+  // The card titles from the request (#82.5): the built place when the
+  // tap falls in one, else the country. The worker replaces the name
+  // with the region's when the round lands.
   const fields = {
     kind: "animal_home",
     species_key: state.picked.gbif_key,
@@ -749,7 +800,11 @@ async function makeHome() {
     family_uids: [state.user.uid],
     status: "requested",
     created_at: firebase.firestore.FieldValue.serverTimestamp(),
+    place_name: selected.place ? selected.place.name.en : selected.country.name,
   };
+  if (selected.place) {
+    fields.place_id = selected.place.id;
+  }
   try {
     await db().collection("drafts").add(fields);
     $("cell-msg").textContent = t("home.started");
@@ -796,26 +851,65 @@ function renderDrafts() {
 }
 
 function draftTitle(draft) {
+  if (draft.kind === "animal_home") {
+    const name = animalName(draft.species_key);
+    if (name && draft.place_name) {
+      return t("draft.in_place", { animal: name, place: draft.place_name });
+    }
+    if (name) {
+      return t("home.draft_title", { animal: name });
+    }
+    return t("home.untitled");
+  }
   if (draft.place_name) {
     return draft.place_name;
   }
-  if (draft.kind === "animal_home") {
-    const name = animalName(draft.species_key);
-    return name ? t("home.draft_title", { animal: name }) : t("home.untitled");
-  }
   return draft.area_id || draft.id;
+}
+
+// Today, yesterday, or N days ago, in local calendar days (#82.5).
+function dayLabel(stamp) {
+  const at = stampMillis(stamp);
+  if (!at) {
+    return "";
+  }
+  const day = 24 * 60 * 60 * 1000;
+  const startOf = (time) => {
+    const date = new Date(time);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+  };
+  const days = Math.round((startOf(Date.now()) - startOf(at)) / day);
+  if (days <= 0) {
+    return t("draft.today");
+  }
+  if (days === 1) {
+    return t("draft.yesterday");
+  }
+  return t("draft.days_ago", { n: days });
+}
+
+function draftState(draft) {
+  const status = draft.status;
+  if (status === "failed") {
+    return t("draft.failed_retry");
+  }
+  if (status === "ready") {
+    return `${t("draft.ready_to_play")} · ${dayLabel(draft.created_at)}`;
+  }
+  if (["requested", "queued", "building", "improving"].includes(status)) {
+    return t("draft.making");
+  }
+  const words = state.strings[`draft.status.${status}`] || t("draft.status.failed");
+  return `${words} · ${dayLabel(draft.created_at)}`;
 }
 
 function renderDraft(draft) {
   const card = document.createElement("article");
   card.className = "draft";
   card.dataset.id = draft.id;
-  const statusKey = `draft.status.${draft.status}`;
-  const status = state.strings[statusKey] || t("draft.status.failed");
   let html = `<h3>${escapeHtml(draftTitle(draft))}</h3>`;
-  html += `<p class="muted">${escapeHtml(status)} · ${
-    escapeHtml(t("draft.round", { round: draft.round || 1 }))
-  }</p>`;
+  html += `<p class="muted">${escapeHtml(draftState(draft))}</p>`;
   if (draft.admin_answer) {
     html += `<p class="answer">${escapeHtml(t("draft.answer", { answer: draft.admin_answer }))}</p>`;
   }
@@ -941,13 +1035,17 @@ async function actOnDraft(draft, button) {
       const choices = [...card.querySelectorAll('input[name="choice"]:checked')]
         .map((box) => {
           const entry = { choice: box.value };
-          if (box.value === "animal_looks_wrong") {
+          if (box.value === "animal_looks_wrong" || box.value === "other") {
             const species = card.querySelector('input[name="species"]').value.trim();
-            if (!species) {
+            if (box.value === "animal_looks_wrong" && !species) {
               draftMessage(draft.id, t("choice.species_ph"));
               throw new Error("species");
             }
-            entry.species = species;
+            // "Something else" routes by the animal too, when one is
+            // named (#82.6).
+            if (species) {
+              entry.species = species;
+            }
           }
           return entry;
         });

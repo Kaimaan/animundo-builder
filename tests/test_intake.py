@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -240,3 +241,92 @@ def test_home_excluded_country_refused(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="country is excluded"):
         _home_stage(tmp_path, exclusions_path=exclusions).run(_home_ctx(tmp_path))
+
+
+def _place(tmp_path: Path, region: dict) -> None:
+    regions = tmp_path / "regions"
+    regions.mkdir(exist_ok=True)
+    (regions / "tt_park.json").write_text(json.dumps(region), encoding="utf-8")
+
+
+def test_home_in_place_writes_place_id(tmp_path: Path) -> None:
+    _place(
+        tmp_path,
+        {
+            "center": {"lat": 61.55, "lon": 26.05},
+            "animals": {"playable": ["hare"]},
+        },
+    )
+    result = _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
+    assert result["cell"] == "61.5_26.0"
+    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
+    assert brief["reuse_place_id"] == "tt_park"
+
+
+def test_home_without_place_writes_no_place_id(tmp_path: Path) -> None:
+    _home_stage(tmp_path).run(_home_ctx(tmp_path))
+    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
+    assert brief["reuse_place_id"] is None
+
+
+def test_home_unknown_place_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unknown place"):
+        _home_stage(tmp_path, place_id="xx_nowhere").run(_home_ctx(tmp_path))
+
+
+def test_home_cell_outside_place_refused(tmp_path: Path) -> None:
+    _place(
+        tmp_path,
+        {
+            "center": {"lat": 62.5, "lon": 26.05},
+            "animals": {"playable": []},
+        },
+    )
+    with pytest.raises(ValueError, match="not in tt_park anymore"):
+        _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
+
+
+def test_home_place_without_center_refused(tmp_path: Path) -> None:
+    _place(tmp_path, {"animals": {"playable": []}})
+    with pytest.raises(ValueError, match="not in tt_park anymore"):
+        _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
+
+
+def test_home_already_playable_refused(tmp_path: Path) -> None:
+    _place(
+        tmp_path,
+        {
+            "center": {"lat": 61.55, "lon": 26.05},
+            "animals": {"playable": ["fox"]},
+        },
+    )
+    with pytest.raises(ValueError, match="already playable"):
+        _home_stage(tmp_path, place_id="tt_park").run(_home_ctx(tmp_path))
+
+
+def test_home_lynx_tapped_inside_real_nuuksio(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parent.parent
+    world = root.parent / "animundo-world"
+    region_path = world / "regions" / "fi_nuuksio.json"
+    list_path = world / "animal-list.json"
+    if not region_path.is_file() or not list_path.is_file():
+        pytest.skip(f"needs {world}")
+    center = json.loads(region_path.read_text(encoding="utf-8"))["center"]
+    south = math.floor(center["lat"] * 10) / 10
+    west = math.floor(center["lon"] * 10) / 10
+    cell = f"{south:.1f}_{west:.1f}"
+    stage = IntakeStage(
+        species_key=2435240,
+        cell=cell,
+        place_id="fi_nuuksio",
+        animal_list_path=list_path,
+        recorded=lambda lat, lon, key: True,
+    )
+    job = tmp_path / "job"
+    job.mkdir()
+    ctx = SimpleNamespace(job_dir=job, world_path=world)
+    result = stage.run(ctx)
+    assert result["cell"] == cell
+    brief = json.loads((job / "home.json").read_text(encoding="utf-8"))
+    assert brief["id"] == "lynx"
+    assert brief["reuse_place_id"] == "fi_nuuksio"

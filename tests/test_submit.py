@@ -183,6 +183,36 @@ def test_submit_lays_out_branch_and_opens_pr(tmp_path: Path) -> None:
     assert (job / "checks" / "submit.json").is_file()
 
 
+def test_submit_update_rewrites_the_built_region(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    (world / "regions").mkdir()
+    (world / "regions" / "xx_test.json").write_text(
+        json.dumps({"id": "xx_test", "name": "Test Meadow"})
+    )
+    _git(world, "add", "-A")
+    _git(world, "commit", "-m", "the built place")
+    job = _job(tmp_path)
+    (job / "home.json").write_text(json.dumps({"reuse_place_id": "xx_test"}))
+    record = run_submit("draft-1", tmp_path / "jobs", world, gh=str(_gh(tmp_path)))
+    assert record["place_id"] == "xx_test"
+    region = json.loads((world / "regions" / "xx_test.json").read_text())
+    assert region["id"] == "xx_test"
+    assert region["country"] == "FI"
+    log = _git(world, "log", "--format=%B", "-1")
+    assert "Update Test Meadow (xx_test) via builder submit" in log.stdout
+    body = (job / "pr.md").read_text()
+    assert "# Update place: Test Meadow (xx_test)" in body
+    assert "Updated for a family in " in body
+
+
+def test_submit_update_refuses_a_gone_region(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    job = _job(tmp_path)
+    (job / "home.json").write_text(json.dumps({"reuse_place_id": "xx_test"}))
+    with pytest.raises(SubmitFailed, match="is gone from the world"):
+        run_submit("draft-1", tmp_path / "jobs", world, gh=str(_gh(tmp_path)))
+
+
 def test_submit_pr_body_is_complete_and_has_no_family_note(tmp_path: Path) -> None:
     world = _world(tmp_path)
     job = _job(tmp_path)

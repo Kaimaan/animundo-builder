@@ -2,11 +2,12 @@
 
 Reads intake's `home.json` and the research stage's
 `research.json`; takes the template built (`homes.py`) or made
-in this job (`homes/`); seats the animal plus its GBIF-recorded
-neighbours (the job's own animals join without asking GBIF);
-names food kinds the template lacks from the research; and
-writes `species-plan.json` for the later stages. Free: the one
-model call happened in research.
+in this job (`homes/`); seats the animal plus the neighbours one
+GBIF facet search records in the cell (the job's own animals join
+without asking GBIF), kept only if their taxon is sound and the
+home has their food, at most eight; names food kinds the template
+lacks from the research; and writes `species-plan.json` for the
+later stages. Free: the one model call happened in research.
 """
 
 from __future__ import annotations
@@ -14,6 +15,10 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
+import urllib.parse
+import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -22,15 +27,79 @@ from ..schemas import validate
 from ..taxa import match_entry, taxon_block
 from .capability import NotPossibleError
 from .species_plan import (
-    RecordedFn,
+    TAXON_TRIES,
     SpeciesPlanStage,
     animal_file,
+    available_food,
     backfill_role,
     file_taxa,
-    recorded_near,
 )
 
 HOMES_TIMEOUT = 60
+
+#: At most eight neighbours, so a place stays light (#82.4).
+MAX_NEIGHBOURS = 8
+
+#: Facet buckets per search: plenty past the cap and the gates.
+FACET_LIMIT = 100
+
+#: The cell's facet counts: GBIF species keys to sightings.
+FacetsFn = Callable[[str], dict[int, int]]
+
+
+def facet_counts(cell: str) -> dict[int, int]:
+    """Species keys recorded in the cell, with counts: one GBIF call.
+
+    A facet search over the cell's 0.1-degree box: real sightings,
+    not a range guess. Transient failures are retried; a stable
+    failure raises, and the home seats no neighbours visibly (they
+    land in `backfill_unchecked`, never silently).
+    """
+    south, west = (float(part) for part in cell.split("_"))
+    box = (
+        f"POLYGON(({west} {south}, {west + 0.1} {south}, "
+        f"{west + 0.1} {south + 0.1}, {west} {south + 0.1}, {west} {south}))"
+    )
+    query = urllib.parse.urlencode(
+        {
+            "geometry": box,
+            "facet": "speciesKey",
+            "facetLimit": FACET_LIMIT,
+            "limit": 0,
+        }
+    )
+    last_error = ""
+    for attempt in range(1, TAXON_TRIES + 1):
+        try:
+            url = f"https://api.gbif.org/v1/occurrence/search?{query}"
+            with urllib.request.urlopen(url, timeout=20) as response:
+                return _parse_facets(json.load(response))
+        except (OSError, ValueError) as error:
+            last_error = str(error)
+            time.sleep(2.0**attempt)
+    raise _Stopped(f"could not read GBIF facets for cell {cell} ({last_error})")
+
+
+def _parse_facets(payload: dict[str, Any]) -> dict[int, int]:
+    """Species-key counts from one facet search answer."""
+    counts: dict[int, int] = {}
+    for facet in payload.get("facets", []):
+        if facet.get("field") != "SPECIES_KEY":
+            continue
+        for bucket in facet.get("counts", []):
+            try:
+                key = int(bucket["name"])
+            except (TypeError, ValueError):
+                continue
+            counts[key] = counts.get(key, 0) + int(bucket.get("count", 0))
+    return counts
+
+
+def _taxon_sound(data: dict[str, Any], taxon: dict[str, Any]) -> bool:
+    """The check_taxa per-file rules: a real key and a matching name."""
+    return isinstance(taxon.get("gbif_key"), int) and (
+        taxon.get("name") == data.get("latin")
+    )
 
 
 class _Stopped(Exception):
@@ -42,8 +111,11 @@ class HomeStage:
 
     name = "home"
 
-    def __init__(self, recorded: RecordedFn | None = None) -> None:
-        self._recorded = recorded or recorded_near
+    def __init__(
+        self, facets: FacetsFn | None = None, maker: Any | None = None
+    ) -> None:
+        self._facets = facets or facet_counts
+        self._maker = maker
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -51,9 +123,35 @@ class HomeStage:
         world = Path(ctx.world_path)
         overlay = ctx.job_dir
         brief = json.loads((ctx.job_dir / "home.json").read_text(encoding="utf-8"))
+        if brief.get("reuse_place_id"):
+            # A built place keeps its home: there is no template to
+            # fix and no region to build (#82.6).
+            place = brief["reuse_place_id"]
+            return {
+                "place_id": place,
+                "cost_usd": 0.0,
+                "improved": [],
+                "summary": (
+                    f"{place} is a built place; its home can't be changed here"
+                ),
+            }
         research = json.loads(
             (ctx.job_dir / "research.json").read_text(encoding="utf-8")
         )
+        improve_path = ctx.job_dir / "improve.json"
+        improve: dict[str, Any] = (
+            json.loads(improve_path.read_text(encoding="utf-8"))
+            if improve_path.is_file()
+            else {}
+        )
+        choices = {entry.get("choice") for entry in improve.get("choices", [])}
+        before = ctx.tracker.spent_usd
+        summary: str | None = None
+        improved: list[str] = []
+        if "colours_off" in choices:
+            fixed, summary = self._fix_colours(ctx, world, brief, research, improve)
+            if fixed:
+                improved = ["home"]
         taxa = file_taxa(world, overlay)
         minset = _read_minset(ctx)
         stem = brief.get("in_library") or self._made_stem(ctx, brief)
@@ -77,8 +175,12 @@ class HomeStage:
             # (season.gd reads the latitude, not a key); a template
             # seasons block would give the equator autumns (#84.4).
             region.pop("seasons", None)
+        if "too_few_animals" in choices:
+            cap = MAX_NEIGHBOURS + 4
+        else:
+            cap = MAX_NEIGHBOURS
         neighbours, unchecked = self._seat_cast(
-            world, overlay, region, brief, taxa, stem
+            world, overlay, region, brief, taxa, stem, cap
         )
         added_kinds, added_young = self._feed_cast(
             world, overlay, region, brief, research, stem
@@ -96,14 +198,48 @@ class HomeStage:
             json.dumps(brief, indent=2), encoding="utf-8"
         )
         self._write_plan(ctx, world, stem, neighbours, brief)
-        return {
+        result: dict[str, Any] = {
             "region_file": f"regions/{place_id}.json",
             "place_id": place_id,
             "animal": stem,
             "neighbours": sorted(neighbours),
             "backfill_unchecked": sorted(unchecked),
             "foods_added": sorted(added_kinds),
+            "cost_usd": round(ctx.tracker.spent_usd - before, 6),
         }
+        if improve:
+            result["improved"] = improved
+            if summary:
+                result["summary"] = summary
+        return result
+
+    def _fix_colours(
+        self,
+        ctx: Any,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        improve: dict[str, Any],
+    ) -> tuple[bool, str]:
+        """A D8 choices fix on the made template, or why there is none."""
+        habitat = brief["home"]
+        if not (ctx.job_dir / "homes" / f"{habitat}.json").is_file():
+            return False, (
+                f"the {habitat} home is from the library and can't be changed here"
+            )
+        # Deferred: the maker already imports this module.
+        from .maker import HomeMakerStage
+
+        maker = self._maker or HomeMakerStage()
+        maker.run_fix(
+            ctx,
+            world,
+            brief,
+            research,
+            improve.get("note"),
+            improve.get("round", 2),
+        )
+        return True, "fixed the home's colours"
 
     def _made_stem(self, ctx: Any, brief: dict[str, Any]) -> str | None:
         """The job's own file for the animal, if the maker wrote it."""
@@ -192,11 +328,16 @@ class HomeStage:
         brief: dict[str, Any],
         taxa: dict[str, dict[str, Any]],
         stem: str,
+        cap: int = MAX_NEIGHBOURS,
     ) -> tuple[set[str], set[str]]:
-        """The animal plus every recorded neighbour, in place.
+        """The animal plus recorded neighbours the home can feed, in place.
 
+        One facet search over the cell, matched to the files'
+        gbif_keys; a neighbour stays only if its taxon is sound
+        (the check_taxa rules) and the home has food for its diet.
         The job's own animals join without asking GBIF: they were
-        made for this home.
+        made for this home. At most `cap` join, most-recorded
+        first; the picked animal stays first in playable.
         """
         main = animal_file(world, stem, overlay)
         made = set(file_taxa(overlay))
@@ -206,45 +347,54 @@ class HomeStage:
             # writer starts from, not an empty set.
             proxy = animal_file(world, brief["start_from"], overlay)
             hunts = set(proxy.get("hunts", []) or [])
-        center = brief["center"]
-        placed: dict[str, dict[str, Any]] = {}
-        unchecked: set[str] = set()
-        deferred: list[str] = []
-        for candidate in sorted(taxa):
-            if (
-                candidate == stem
-                or taxa[candidate].get("gbif_key") == brief["species_key"]
-            ):
-                continue
+        try:
+            counts = self._facets(brief["cell"])
+        except Exception:
+            counts = {}
+            failed = True
+        else:
+            failed = False
+        ranked, pool = self._ranked(world, overlay, taxa, brief, stem, made, counts)
+        kinds = available_food(region)
+        seen: set[int | None] = set()
+        selected: list[str] = []
+        for candidate in ranked:
+            if len(selected) >= cap:
+                break
             data = animal_file(world, candidate, overlay)
-            if data.get("stage_of"):
+            if candidate not in made and not _taxon_sound(data, taxa[candidate]):
                 continue
+            key = taxa[candidate].get("gbif_key")
+            if key in seen:
+                continue
+            if candidate not in made and not set(data.get("diet") or []) <= kinds:
+                continue
+            selected.append(candidate)
+            seen.add(key)
+        placed: dict[str, dict[str, Any]] = {}
+        deferred: list[str] = []
+        for candidate in selected:
+            data = animal_file(world, candidate, overlay)
             role = backfill_role(data, hunts)
             if role is None or role == "prey":
                 deferred.append(candidate)
                 continue
-            if candidate in made:
-                placed[candidate] = {
-                    "backfilled": True,
-                    "file": candidate,
-                    "role": role,
-                }
-                hunts |= set(data.get("hunts", []) or [])
-            elif self._recorded_here(center, candidate, taxa, role, placed, unchecked):
-                hunts |= set(data.get("hunts", []) or [])
+            placed[candidate] = {
+                "backfilled": True,
+                "file": candidate,
+                "role": role,
+            }
+            hunts |= set(data.get("hunts", []) or [])
         for candidate in deferred:
             data = animal_file(world, candidate, overlay)
             role = backfill_role(data, hunts)
             if role is None:
                 continue
-            if candidate in made:
-                placed[candidate] = {
-                    "backfilled": True,
-                    "file": candidate,
-                    "role": role,
-                }
-            else:
-                self._recorded_here(center, candidate, taxa, role, placed, unchecked)
+            placed[candidate] = {
+                "backfilled": True,
+                "file": candidate,
+                "role": role,
+            }
         main_role = backfill_role(main, hunts) or "playable"
         placed[stem] = {"backfilled": True, "file": stem, "role": main_role}
         SpeciesPlanStage.place_backfilled(world, region, placed, overlay)
@@ -254,29 +404,55 @@ class HomeStage:
             playable = region.setdefault("animals", {}).setdefault("playable", [])
             if stem not in playable:
                 playable.append(stem)
+        playable = region.setdefault("animals", {}).setdefault("playable", [])
+        if stem in playable:
+            playable.remove(stem)
+            playable.insert(0, stem)
         neighbours = set(placed) - {stem}
+        unchecked = set(pool) if failed else set()
         return neighbours, unchecked
 
-    def _recorded_here(
+    @staticmethod
+    def _rank_key(item: tuple[int | None, str]) -> tuple[int, int, str]:
+        count, candidate = item
+        if count is None:
+            return (0, 0, candidate)
+        return (1, -count, candidate)
+
+    def _ranked(
         self,
-        center: dict[str, float],
-        stem: str,
+        world: Path,
+        overlay: Path,
         taxa: dict[str, dict[str, Any]],
-        role: str,
-        placed: dict[str, dict[str, Any]],
-        unchecked: set[str],
-    ) -> bool:
-        try:
-            recorded = self._recorded(
-                center["lat"], center["lon"], taxa[stem]["gbif_key"]
-            )
-        except Exception:
-            unchecked.add(stem)
-            return False
-        if not recorded:
-            return False
-        placed[stem] = {"backfilled": True, "file": stem, "role": role}
-        return True
+        brief: dict[str, Any],
+        stem: str,
+        made: set[str],
+        counts: dict[int, int],
+    ) -> tuple[list[str], list[str]]:
+        """Candidates, most-recorded first; the job's own first of all.
+
+        Returns the ranked stems plus the library pool, so a failed
+        search can mark every unasked candidate unchecked.
+        """
+        ranked: list[tuple[int | None, str]] = []
+        pool: list[str] = []
+        for candidate in taxa:
+            if (
+                candidate == stem
+                or taxa[candidate].get("gbif_key") == brief["species_key"]
+            ):
+                continue
+            if animal_file(world, candidate, overlay).get("stage_of"):
+                continue
+            if candidate in made:
+                ranked.append((None, candidate))
+                continue
+            pool.append(candidate)
+            key = taxa[candidate].get("gbif_key")
+            if key in counts:
+                ranked.append((counts[key], candidate))
+        ranked.sort(key=self._rank_key)
+        return [candidate for _, candidate in ranked], pool
 
     def _feed_cast(
         self,
@@ -295,7 +471,7 @@ class HomeStage:
         )
         if not kinds:
             return set(), added_young
-        names = _researched_names(research)
+        names = researched_names(research)
         by_kind = {food.get("kind"): food for food in region.get("food", [])}
         for kind in kinds:
             if kind not in names:
@@ -361,7 +537,7 @@ class HomeStage:
         return plan
 
 
-def _researched_names(research: dict[str, Any]) -> dict[str, list[str]]:
+def researched_names(research: dict[str, Any]) -> dict[str, list[str]]:
     """Food names per kind, from the main food and the surroundings."""
     names: dict[str, list[str]] = {}
     foods = [research["main_food"], *research.get("other_foods", [])]
@@ -475,7 +651,8 @@ def _cast_files(region: dict[str, Any]) -> set[str]:
     for group in region.get("animals", {}).values():
         files.update(group or [])
     for fish in region.get("fish", []) or []:
-        files.add(fish.get("file", ""))
+        # Fish swim under `kind`, like the regions and the game (#85.2).
+        files.add(fish.get("kind", ""))
     return files - {""}
 
 

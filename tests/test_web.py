@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -101,6 +103,21 @@ def _on_land(geo: dict, lon: float, lat: float) -> bool:
             ):
                 return True
     return False
+
+
+def test_web_harness_drives_the_app() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    done = subprocess.run(
+        [node, str(ROOT / "tests" / "web-harness.cjs")],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "harness: all checks passed" in done.stdout
 
 
 def test_packed_drafts_play_in_the_game() -> None:
@@ -270,3 +287,11 @@ def test_play_link_uses_the_firestore_draft_id() -> None:
     # the safe lower-case place id lives only in the pack (#93).
     assert "?draft=${encodeURIComponent(draft.id)}" in app
     assert "draft_place_id" not in app
+
+
+def test_improve_other_sends_species_when_named() -> None:
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    # "Something else" routes by the animal too, when one is named;
+    # only "looks wrong" requires it (#82.6).
+    assert 'if (box.value === "animal_looks_wrong" || box.value === "other") {' in app
+    assert 'if (box.value === "animal_looks_wrong" && !species) {' in app

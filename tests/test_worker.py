@@ -434,6 +434,36 @@ def test_create_home_runs_home_subset(tmp_path: Path) -> None:
     assert store.inbox == []
 
 
+def test_create_home_in_place_runs_reuse_subset(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _home_draft(place_id="tt_park")
+    worker = _worker(tmp_path, store)
+    runner = ScriptRunner()
+    worker.runner = runner
+    job_dir = tmp_path / "jobs" / "d1"
+    _seed_home(job_dir)
+    manifest_path = job_dir / "pack" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["draft_place_id"] = "tt_park"
+    manifest["place_id"] = "tt_park"
+    manifest_path.write_text(json.dumps(manifest))
+    worker.handle_create("d1")
+    assert store.drafts["d1"]["status"] == "ready"
+    assert store.drafts["d1"]["draft_place_id"] == "tt_park"
+    assert runner.ran == [
+        "intake",
+        "research",
+        "minimum",
+        "looks",
+        "reuse",
+        "oneshot",
+        "words",
+        "pack",
+    ]
+    params = json.loads((job_dir / "state.json").read_text())["params"]
+    assert params["place_id"] == "tt_park"
+
+
 def test_create_home_missing_fields_fails(tmp_path: Path) -> None:
     store = FakeStore()
     store.drafts["d1"] = _home_draft(cell="")
@@ -611,6 +641,109 @@ def test_improve_runs_the_touched_stages(tmp_path: Path) -> None:
     assert draft["round"] == 2
     assert draft["pack_version"] == 2
     assert "improve" not in draft
+
+
+def test_improve_home_reruns_remapped_stages_with_the_note(
+    tmp_path: Path,
+) -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _home_draft(
+        status="ready",
+        round=1,
+        improve={
+            "choices": [{"choice": "animal_looks_wrong", "species": "lynx"}],
+            "note": "rounder ears",
+        },
+    )
+    worker = _worker(tmp_path, store)
+    job_dir = tmp_path / "jobs" / "d1"
+    _seed_home(job_dir)
+    manifest_path = job_dir / "pack" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["version"] = 2
+    manifest_path.write_text(json.dumps(manifest))
+    done = [
+        "intake",
+        "research",
+        "minimum",
+        "looks",
+        "newhome",
+        "home",
+        "oneshot",
+        "words",
+        "pack",
+    ]
+    (job_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "params": {
+                    "kind": "animal_home",
+                    "species_key": 5219243,
+                    "cell": "60.1_24.9",
+                    "world": str(tmp_path / "world"),
+                },
+                "completed": done,
+                "results": {},
+                "failed": None,
+            }
+        )
+    )
+    runner = ScriptRunner()
+    worker.runner = runner
+    worker.handle_improve("d1")
+    assert runner.ran == ["oneshot", "pack"]
+    improve = json.loads((job_dir / "improve.json").read_text())
+    assert improve == {
+        "round": 2,
+        "choices": [{"choice": "animal_looks_wrong", "species": "lynx"}],
+        "note": "rounder ears",
+    }
+    draft = store.drafts["d1"]
+    assert draft["status"] == "ready"
+    assert draft["round"] == 2
+    assert draft["pack_version"] == 2
+    assert "improve" not in draft
+    completed = json.loads((job_dir / "state.json").read_text())["completed"]
+    assert completed == [
+        "intake",
+        "research",
+        "minimum",
+        "looks",
+        "newhome",
+        "home",
+        "words",
+    ]
+
+
+def test_improve_home_other_runs_home_then_oneshot(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.drafts["d1"] = _home_draft(
+        status="ready",
+        round=1,
+        improve={"choices": [{"choice": "other", "species": "lynx"}]},
+    )
+    worker = _worker(tmp_path, store)
+    job_dir = tmp_path / "jobs" / "d1"
+    _seed_home(job_dir)
+    (job_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "params": {
+                    "kind": "animal_home",
+                    "species_key": 5219243,
+                    "cell": "60.1_24.9",
+                    "world": str(tmp_path / "world"),
+                },
+                "completed": [],
+                "results": {},
+                "failed": None,
+            }
+        )
+    )
+    runner = ScriptRunner()
+    worker.runner = runner
+    worker.handle_improve("d1")
+    assert runner.ran == ["home", "oneshot", "pack"]
 
 
 def test_improve_stops_after_three_rounds(tmp_path: Path) -> None:

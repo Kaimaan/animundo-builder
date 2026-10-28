@@ -1045,6 +1045,34 @@ def test_nothing_to_make_calls_nothing(tmp_path: Path) -> None:
     assert checks == {"cost_usd": 0.0, "made": [], "unmakable": {}}
 
 
+def test_oneshot_keeps_a_reused_places_welcome(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    _inputs(
+        tmp_path,
+        minset={
+            "make_animal": False,
+            "animal_reason": "lynx is in the library",
+            "make_home": False,
+            "home_reason": "tt_park is built",
+            "home_habitat": "boreal_forest",
+            "prey": None,
+            "prey_reason": "a library prey shares its habitat",
+        },
+    )
+    brief = json.loads((tmp_path / "home.json").read_text(encoding="utf-8"))
+    brief["reuse_place_id"] = "tt_park"
+    (tmp_path / "home.json").write_text(json.dumps(brief))
+    path = next((tmp_path / "regions").glob("*.json"))
+    region = json.loads(path.read_text(encoding="utf-8"))
+    region["welcome"] = "Old words stay."
+    path.write_text(json.dumps(region), encoding="utf-8")
+    client = ScriptClient([])
+    _stage().run(_ctx(tmp_path, world, client))
+    region = json.loads(path.read_text(encoding="utf-8"))
+    assert region["welcome"] == "Old words stay."
+    assert client.prompts == []
+
+
 def test_build_with_no_output_is_blender_not_the_spec(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

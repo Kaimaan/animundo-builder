@@ -302,11 +302,11 @@ class ScriptClient:
         )
 
 
-def _recorded(lat: float, lon: float, key: int) -> bool:
+def _facets(cell: str) -> dict[int, int]:
     """The stub world's GBIF: the fox and the hare live in Finland."""
-    if lat < 0:
-        return False
-    return key in {FOX_KEY, HARE_KEY}
+    if float(cell.split("_")[0]) < 0:
+        return {}
+    return {FOX_KEY: 3, HARE_KEY: 3}
 
 
 def _adapt_sizes(
@@ -389,7 +389,7 @@ def test_fox_replays_to_its_pack(tmp_path: Path, capsys: pytest.CaptureFixture) 
         job_id=job.name, job_dir=job, client=None, tracker=tracker, world_path=world
     )
     assert MinimumStage().run(ctx)["make"] == []
-    result = HomeStage(recorded=_recorded).run(ctx)
+    result = HomeStage(facets=_facets).run(ctx)
     assert result["animal"] == "fox"
     assert (
         AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(ctx)[
@@ -419,7 +419,7 @@ def test_lynx_replays_through_oneshot_to_its_pack(
         job_id=job.name, job_dir=job, client=None, tracker=tracker, world_path=world
     )
     assert MinimumStage().run(ctx)["make"] == ["animal"]
-    result = HomeStage(recorded=_recorded).run(ctx)
+    result = HomeStage(facets=_facets).run(ctx)
     assert result["animal"] == "lynx"
     region = _region(job)
     assert "lynx" in region["animals"]["playable"]
@@ -476,7 +476,7 @@ def test_anaconda_replays_through_both_makers_to_its_pack(
     assert tried["tropical"] is True
     assert tried["land"] == "flat" and tried["water"] == "river"
     assert tried["sources"][-1] == "GBIF.org"
-    result = HomeStage(recorded=_recorded).run(ctx)
+    result = HomeStage(facets=_facets).run(ctx)
     assert result["animal"] == "anaconda"
     region = _region(job)
     assert "anaconda" in region["animals"]["playable"]
@@ -503,3 +503,221 @@ def test_anaconda_replays_through_both_makers_to_its_pack(
     assert manifest["new_species"] == ["anaconda", "capybara"]
     assert (job / "pack" / "animals" / "anaconda.json").is_file()
     assert (job / "pack" / "animals" / "capybara.json").is_file()
+
+
+def _replayed(tmp_path: Path, animal: str) -> tuple[Path, Path, BudgetTracker]:
+    """Round one of a replayed job, through the makers. For improves."""
+    world = _world(tmp_path)
+    job = _job(tmp_path, animal)
+    tracker = BudgetTracker(budget_usd=8.0)
+    _research(tmp_path, job, world, tracker)
+    ctx = JobContext(
+        job_id=job.name, job_dir=job, client=None, tracker=tracker, world_path=world
+    )
+    try:
+        MinimumStage().run(ctx)
+    except NotPossibleError:
+        pass
+    if animal == "anaconda":
+        maker = JobContext(
+            job_id=job.name,
+            job_dir=job,
+            client=ScriptClient(_answers("newhome.json", animal=animal)),
+            tracker=tracker,
+            world_path=world,
+        )
+        HomeMakerStage(adapt=_adapt_home).run(maker)
+    HomeStage(facets=_facets).run(ctx)
+    if animal == "lynx":
+        names = ["oneshot.json", "oneshot-edits.json"]
+    elif animal == "anaconda":
+        names = [
+            "oneshot-capybara.json",
+            "oneshot-capybara-edits.json",
+            "oneshot-anaconda.json",
+            "oneshot-anaconda-edits.json",
+        ]
+    else:
+        names = []
+    maker = JobContext(
+        job_id=job.name,
+        job_dir=job,
+        client=ScriptClient(_answers(*names, animal=animal)),
+        tracker=tracker,
+        world_path=world,
+    )
+    AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(maker)
+    return world, job, tracker
+
+
+def _improve(
+    job: Path,
+    choices: list[dict[str, Any]],
+    note: str | None = None,
+    round_no: int = 2,
+) -> None:
+    (job / "improve.json").write_text(
+        json.dumps({"round": round_no, "choices": choices, "note": note})
+    )
+
+
+def _maker_ctx(
+    job: Path, world: Path, tracker: BudgetTracker, client: ScriptClient
+) -> JobContext:
+    return JobContext(
+        job_id=job.name,
+        job_dir=job,
+        client=client,
+        tracker=tracker,
+        world_path=world,
+    )
+
+
+def test_improve_looks_wrong_fixes_the_made_animal(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "lynx")
+    note = "a longer tail, please"
+    _improve(job, [{"choice": "animal_looks_wrong", "species": "lynx"}], note)
+    client = ScriptClient(_answers("oneshot-edits.json", animal="lynx"))
+    result = AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(
+        _maker_ctx(job, world, tracker, client)
+    )
+    assert result["improved"] == ["lynx"]
+    assert result["summary"] == "fixed lynx"
+    assert len(client.prompts) == 1
+    prompt = client.prompts[0]
+    assert "## The previous form" in prompt
+    assert "## The grown-up's words" in prompt
+    assert note in prompt
+    assert "Writing for children" in prompt
+    previous = (job / "tries" / "lynx" / "edits" / "1" / "answer.json").read_text()
+    assert previous[:200] in prompt
+    assert (job / "tries" / "lynx" / "edits-r2" / "1" / "answer.json").is_file()
+
+
+def test_improve_library_animal_says_so(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "lynx")
+    _improve(job, [{"choice": "animal_looks_wrong", "species": "fox"}])
+    client = ScriptClient([])
+    result = AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(
+        _maker_ctx(job, world, tracker, client)
+    )
+    assert result["improved"] == []
+    assert result["summary"] == "Red fox is from the library and can't be changed here"
+    assert result["cost_usd"] == 0.0
+    assert client.prompts == []
+
+
+def test_improve_fox_reports_nothing_to_change(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "fox")
+    _improve(job, [{"choice": "animal_looks_wrong", "species": "fox"}])
+    client = ScriptClient([])
+    result = AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(
+        _maker_ctx(job, world, tracker, client)
+    )
+    assert result["improved"] == []
+    assert result["summary"] == "nothing to change here"
+    assert result["cost_usd"] == 0.0
+    assert client.prompts == []
+
+
+def test_improve_colours_runs_a_choices_fix(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "anaconda")
+    note = "bluer water"
+    _improve(job, [{"choice": "colours_off"}], note)
+    client = ScriptClient(_answers("newhome.json", animal="anaconda"))
+    ctx = _maker_ctx(job, world, tracker, client)
+    maker = HomeMakerStage(adapt=_adapt_home)
+    result = HomeStage(facets=_facets, maker=maker).run(ctx)
+    assert result["improved"] == ["home"]
+    assert result["summary"] == "fixed the home's colours"
+    assert len(client.prompts) == 1
+    prompt = client.prompts[0]
+    assert "## The previous form" in prompt
+    assert note in prompt
+    assert "Writing for children" in prompt
+    assert (job / "tries" / "rainforest" / "r2-1" / "answer.json").is_file()
+    assert (job / "tries" / "rainforest" / "1" / "answer.json").is_file()
+
+
+def test_improve_library_home_says_so(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "lynx")
+    _improve(job, [{"choice": "colours_off"}])
+    ctx = _maker_ctx(job, world, tracker, ScriptClient([]))
+    result = HomeStage(facets=_facets).run(ctx)
+    assert result["improved"] == []
+    assert result["summary"] == (
+        "the boreal_forest home is from the library and can't be changed here"
+    )
+
+
+def test_improve_too_few_raises_the_cap(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "lynx")
+    animals = world / "animals"
+    counts = {FOX_KEY: 2, HARE_KEY: 1}
+    for number in range(8):
+        key = 600000 + number
+        counts[key] = 10 - number
+        (animals / f"nx{number}.json").write_text(
+            json.dumps(
+                {
+                    "taxon": {
+                        "gbif_key": key,
+                        "rank": "SPECIES",
+                        "name": f"Extra {number}",
+                    },
+                    "latin": f"Extra {number}",
+                    "diet": ["berries"],
+                    "tags": ["mammal"],
+                    "playable": True,
+                }
+            )
+        )
+    ctx = _maker_ctx(job, world, tracker, ScriptClient([]))
+    plain = HomeStage(facets=lambda cell: dict(counts)).run(ctx)
+    assert len(plain["neighbours"]) == 8
+    assert "improved" not in plain
+    _improve(job, [{"choice": "too_few_animals"}])
+    raised = HomeStage(facets=lambda cell: dict(counts)).run(ctx)
+    assert len(raised["neighbours"]) == 10
+    assert raised["improved"] == []
+
+
+def test_improve_other_with_animal_fixes_it(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "lynx")
+    _improve(job, [{"choice": "other", "species": "lynx"}], "rounder ears")
+    client = ScriptClient(_answers("oneshot-edits.json", animal="lynx"))
+    result = AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(
+        _maker_ctx(job, world, tracker, client)
+    )
+    assert result["improved"] == ["lynx"]
+    assert "rounder ears" in client.prompts[0]
+
+
+def test_improve_other_without_animal_reruns_home(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "lynx")
+    _improve(job, [{"choice": "other"}], "whatever you think")
+    home_result = HomeStage(facets=_facets).run(
+        _maker_ctx(job, world, tracker, ScriptClient([]))
+    )
+    assert home_result["improved"] == []
+    assert "summary" not in home_result
+    client = ScriptClient([])
+    one_result = AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(
+        _maker_ctx(job, world, tracker, client)
+    )
+    assert one_result["improved"] == []
+    assert "summary" not in one_result
+    assert client.prompts == []
+
+
+def test_improve_note_cut_to_300_in_prompt(tmp_path: Path) -> None:
+    world, job, tracker = _replayed(tmp_path, "lynx")
+    note = "y" * 400
+    _improve(job, [{"choice": "animal_looks_wrong", "species": "lynx"}], note)
+    client = ScriptClient(_answers("oneshot-edits.json", animal="lynx"))
+    AnimalMakerStage(build=_build_animal, adapt=_adapt_sizes).run(
+        _maker_ctx(job, world, tracker, client)
+    )
+    prompt = client.prompts[0]
+    assert "y" * 300 in prompt
+    assert "y" * 400 not in prompt

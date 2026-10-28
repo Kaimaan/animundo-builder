@@ -28,12 +28,14 @@ service cloud.firestore {
             && (!('first_explorer_species' in request.resource.data)
               || request.resource.data.first_explorer_species is string)
           )
-          // Animal first: one animal in its home, no area. The
-          // worker writes the name and the country from the cell.
+          // Animal first: one animal in its home, no area. The card
+          // titles from the request (#82.5), so the grown-up names the
+          // built place (or the country) and the worker replaces it with
+          // the region's name when the round lands.
           || (
             request.resource.data.kind == 'animal_home'
             && request.resource.data.keys().hasOnly(
-              ['kind', 'species_key', 'cell',
+              ['kind', 'species_key', 'cell', 'place_id', 'place_name',
                'owner_uid', 'family_uids', 'status', 'created_at'])
             && request.resource.data.keys().hasAll(
               ['kind', 'species_key', 'cell',
@@ -42,6 +44,10 @@ service cloud.firestore {
             && request.resource.data.species_key > 0
             && request.resource.data.cell is string
             && request.resource.data.cell.matches('^-?[0-9]+\\.[0-9]_-?[0-9]+\\.[0-9]$')
+            && (!('place_id' in request.resource.data)
+              || request.resource.data.place_id is string)
+            && (!('place_name' in request.resource.data)
+              || request.resource.data.place_name is string)
           )
         )
         && (!('created_at' in request.resource.data)
@@ -88,6 +94,11 @@ service cloud.firestore {
                     ? 'species' in request.resource.data.improve.choices[0]
                       && request.resource.data.improve.choices[0].species
                         is string
+                    : request.resource.data.improve.choices[0].choice
+                      == 'other'
+                    ? !('species' in request.resource.data.improve.choices[0])
+                      || request.resource.data.improve.choices[0].species
+                        is string
                     : !('species' in request.resource.data.improve.choices[0])
                   )
                 ))
@@ -104,6 +115,11 @@ service cloud.firestore {
                       == 'animal_looks_wrong'
                     ? 'species' in request.resource.data.improve.choices[1]
                       && request.resource.data.improve.choices[1].species
+                        is string
+                    : request.resource.data.improve.choices[1].choice
+                      == 'other'
+                    ? !('species' in request.resource.data.improve.choices[1])
+                      || request.resource.data.improve.choices[1].species
                         is string
                     : !('species' in request.resource.data.improve.choices[1])
                   )
@@ -122,6 +138,11 @@ service cloud.firestore {
                     ? 'species' in request.resource.data.improve.choices[2]
                       && request.resource.data.improve.choices[2].species
                         is string
+                    : request.resource.data.improve.choices[2].choice
+                      == 'other'
+                    ? !('species' in request.resource.data.improve.choices[2])
+                      || request.resource.data.improve.choices[2].species
+                        is string
                     : !('species' in request.resource.data.improve.choices[2])
                   )
                 ))
@@ -138,6 +159,11 @@ service cloud.firestore {
                       == 'animal_looks_wrong'
                     ? 'species' in request.resource.data.improve.choices[3]
                       && request.resource.data.improve.choices[3].species
+                        is string
+                    : request.resource.data.improve.choices[3].choice
+                      == 'other'
+                    ? !('species' in request.resource.data.improve.choices[3])
+                      || request.resource.data.improve.choices[3].species
                         is string
                     : !('species' in request.resource.data.improve.choices[3])
                   )

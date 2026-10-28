@@ -52,6 +52,19 @@ IMPROVE_STAGES = {
 }
 IMPROVE_ALWAYS = ["safety", "pack"]
 
+#: The same for animal_home drafts, which run no place-first stages
+#: (#82.6). "other" runs both and each stage takes it only when the
+#: note's "which animal" names one of its own. Then pack only: a fix
+#: changes the strict D7/D8 form, never text shown in the game, so no
+#: safety review is owed.
+IMPROVE_HOME_STAGES = {
+    "animal_looks_wrong": ["oneshot"],
+    "too_few_animals": ["home"],
+    "colours_off": ["home"],
+    "other": ["home", "oneshot"],
+}
+IMPROVE_HOME_ALWAYS = ["pack"]
+
 #: A home run: research, the minimum set, the makers, then the home.
 #: Safety stays out during the event (#48); `--safety` adds it back.
 HOME_STAGES = [
@@ -65,7 +78,33 @@ HOME_STAGES = [
     "words",
     "pack",
 ]
-HOME_ONLY = {"research", "minimum", "looks", "newhome", "home", "oneshot"}
+#: The place exists: reuse its region instead of making a home (#82.3).
+REUSE_STAGES = [
+    "intake",
+    "research",
+    "minimum",
+    "looks",
+    "reuse",
+    "oneshot",
+    "words",
+    "pack",
+]
+HOME_ONLY = {"research", "minimum", "looks", "newhome", "home", "reuse", "oneshot"}
+
+
+def reset_stages(state_file: Path, names: Collection[str]) -> None:
+    """Forget these stages' completion, so a round re-runs them (#82.6).
+
+    An improve round re-runs finished stages; without this both the
+    worker and `resume` would skip them as done.
+    """
+    if not state_file.is_file():
+        return
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    state["completed"] = [
+        name for name in state.get("completed", []) if name not in set(names)
+    ]
+    state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
 def stages_for_kind(
@@ -73,16 +112,20 @@ def stages_for_kind(
     kind: str,
     choices: Collection[str] = (),
     safety: bool = False,
+    reuse: bool = False,
+    improve_home: bool = False,
 ) -> tuple[list[Stage], list[str]]:
     """Filter built stages to one job kind. Returns (run, missing).
 
     `missing` names stages the kind needs that are not built yet, so
-    the caller can say so instead of running half a job.
+    the caller can say so instead of running half a job. `reuse`
+    runs an `animal_home` job against a built place (#82.3);
+    `improve_home` remaps an improve to its home stages (#82.6).
     """
     if kind == "new_place":
         return [stage for stage in stages if stage.name not in HOME_ONLY], []
     if kind == "animal_home":
-        names = list(HOME_STAGES)
+        names = list(REUSE_STAGES if reuse else HOME_STAGES)
         if safety:
             names.insert(names.index("pack"), "safety")
         by_name = {stage.name: stage for stage in stages}
@@ -93,12 +136,14 @@ def stages_for_kind(
         return [], ["pull_request"]
     if kind != "improve":
         raise ValueError(f"unknown job kind {kind!r}")
+    table = IMPROVE_HOME_STAGES if improve_home else IMPROVE_STAGES
+    always = IMPROVE_HOME_ALWAYS if improve_home else IMPROVE_ALWAYS
     wanted: list[str] = []
     for choice in choices:
         if choice not in IMPROVE_CHOICES:
             raise ValueError(f"unknown improve choice {choice!r}")
-        wanted.extend(IMPROVE_STAGES[choice])
-    wanted.extend(IMPROVE_ALWAYS)
+        wanted.extend(table[choice])
+    wanted.extend(always)
     by_name = {stage.name: stage for stage in stages}
     run: list[Stage] = []
     missing: list[str] = []

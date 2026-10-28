@@ -21,8 +21,14 @@ $BASE
 
 Plants the game already has: $PLANTS. Pick one only if it truly grows here; otherwise none. Tree shapes the
 game draws: spruce (dark cone), pine (tall bare trunk, crown on top), birch (white trunk, small crown),
-round (broadleaf tree), rowan (small tree). Floating plants (water lilies, water lettuce) are water_life, not
-plants.
+round (broadleaf tree), rowan (small tree)$TREES. Floating plants (water lilies, water lettuce) are
+water_life, not plants.
+
+Special places: land "mountains" for high mountains (the world is twice as tall); water "sea" for a coast
+or open sea (deep water for seals, sharks and whales); seabed "sand" for warm seas and reefs; ice for cold
+places (frozen_in_winter where lakes or the sea freeze, glaciers on high mountains, polar for the Arctic and
+Antarctic coasts); caves "some" where animals den in rock caves. Leave each one at none or mud unless the
+research shows it.
 
 ## Hard rules
 
@@ -30,3 +36,4 @@ plants.
   look, in the closest shape; foods that really grow or live here.
 - The main water follows the research: a river home has water "river", not "lake".
 - No real place names, no people.
+- No trees ("none") where none grow: open tundra, sea ice, sand desert, the open sea.

@@ -35,6 +35,7 @@
    "latin": "Vulpes vulpes",
    "gbif_key": 5219243,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "grassland",
@@ -49,6 +50,7 @@
    "latin": "Alces alces",
    "gbif_key": 2440940,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "boreal_forest",
     "boreal_lake",
@@ -63,6 +65,7 @@
    "latin": "Lepus timidus",
    "gbif_key": 2436756,
    "start_from": "mountain_hare",
+   "file_from": "mountain_hare",
    "habitats": [
     "boreal_forest",
     "tundra",
@@ -77,6 +80,7 @@
    "latin": "Sciurus vulgaris",
    "gbif_key": 8211070,
    "start_from": "squirrel",
+   "file_from": "squirrel",
    "habitats": [
     "boreal_forest"
    ],
@@ -89,6 +93,7 @@
    "latin": "Pteromys volans",
    "gbif_key": 2437258,
    "start_from": "flying_squirrel",
+   "file_from": "flying_squirrel",
    "habitats": [
     "boreal_forest"
    ],
@@ -101,6 +106,7 @@
    "latin": "Myodes glareolus",
    "gbif_key": 5706764,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "boreal_forest"
    ],
@@ -113,6 +119,7 @@
    "latin": "Pusa hispida saimensis",
    "gbif_key": 5219371,
    "start_from": "saimaa_seal",
+   "file_from": "saimaa_seal",
    "habitats": [
     "boreal_lake"
    ],
@@ -125,6 +132,7 @@
    "latin": "Falco tinnunculus",
    "gbif_key": 9616058,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "grassland",
     "boreal_forest"
@@ -138,6 +146,7 @@
    "latin": "Parus major",
    "gbif_key": 9705453,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -150,6 +159,7 @@
    "latin": "Fringilla coelebs",
    "gbif_key": 2494422,
    "start_from": "chaffinch",
+   "file_from": "chaffinch",
    "habitats": [
     "boreal_forest"
    ],
@@ -162,6 +172,7 @@
    "latin": "Anas platyrhynchos",
    "gbif_key": 9761484,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake",
     "river",
@@ -176,6 +187,7 @@
    "latin": "Rana temporaria",
    "gbif_key": 2426805,
    "start_from": "frog",
+   "file_from": "frog",
    "habitats": [
     "boreal_forest",
     "boreal_lake",
@@ -190,6 +202,7 @@
    "latin": "Zootoca vivipara",
    "gbif_key": 9702100,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "boreal_forest",
     "wetland"
@@ -203,6 +216,7 @@
    "latin": "Bombus lucorum",
    "gbif_key": 1340298,
    "start_from": "bee",
+   "file_from": "bee",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -216,6 +230,7 @@
    "latin": "Perca fluviatilis",
    "gbif_key": 8140485,
    "start_from": "perch",
+   "file_from": "perch",
    "habitats": [
     "boreal_lake",
     "river"
@@ -229,6 +244,7 @@
    "latin": "Esox lucius",
    "gbif_key": 2346633,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "boreal_lake",
     "river"
@@ -242,6 +258,7 @@
    "latin": "Rutilus rutilus",
    "gbif_key": 2359706,
    "start_from": "roach",
+   "file_from": "roach",
    "habitats": [
     "boreal_lake",
     "river"
@@ -255,6 +272,7 @@
    "latin": "Abramis brama",
    "gbif_key": 9809222,
    "start_from": "bream",
+   "file_from": "bream",
    "habitats": [
     "boreal_lake",
     "river"
@@ -268,6 +286,7 @@
    "latin": "Lynx lynx",
    "gbif_key": 2435240,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "mountain"
@@ -280,6 +299,7 @@
    "latin": "Canis lupus",
    "gbif_key": 5219173,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "tundra",
@@ -293,6 +313,7 @@
    "latin": "Ursus arctos",
    "gbif_key": 2433433,
    "start_from": "brown_bear",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "mountain"
@@ -305,6 +326,7 @@
    "latin": "Gulo gulo",
    "gbif_key": 5219073,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "tundra",
@@ -318,6 +340,7 @@
    "latin": "Martes martes",
    "gbif_key": 5218878,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest"
    ],
@@ -329,6 +352,7 @@
    "latin": "Lutra lutra",
    "gbif_key": 2433753,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_lake",
     "river"
@@ -341,6 +365,7 @@
    "latin": "Meles meles",
    "gbif_key": 2433875,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -353,6 +378,7 @@
    "latin": "Mustela erminea",
    "gbif_key": 5219019,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "tundra",
@@ -366,6 +392,7 @@
    "latin": "Nyctereutes procyonoides",
    "gbif_key": 2434552,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "boreal_forest",
     "wetland"
@@ -378,6 +405,7 @@
    "latin": "Castor fiber",
    "gbif_key": 4409131,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "boreal_lake",
     "river"
@@ -390,6 +418,7 @@
    "latin": "Rangifer tarandus",
    "gbif_key": 5220114,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "tundra",
     "boreal_forest"
@@ -402,6 +431,7 @@
    "latin": "Cervus elaphus",
    "gbif_key": 2440958,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "boreal_forest",
     "grassland",
@@ -415,6 +445,7 @@
    "latin": "Capreolus capreolus",
    "gbif_key": 5220126,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -427,6 +458,7 @@
    "latin": "Odocoileus virginianus",
    "gbif_key": 2440965,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "boreal_forest"
    ],
@@ -438,6 +470,7 @@
    "latin": "Sus scrofa",
    "gbif_key": 7705930,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "boreal_forest"
    ],
@@ -449,6 +482,7 @@
    "latin": "Erinaceus europaeus",
    "gbif_key": 5219616,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -461,6 +495,7 @@
    "latin": "Lepus europaeus",
    "gbif_key": 7952072,
    "start_from": "mountain_hare",
+   "file_from": "mountain_hare",
    "habitats": [
     "grassland"
    ],
@@ -472,6 +507,7 @@
    "latin": "Oryctolagus cuniculus",
    "gbif_key": 2436940,
    "start_from": "mountain_hare",
+   "file_from": "mountain_hare",
    "habitats": [
     "grassland"
    ],
@@ -483,6 +519,7 @@
    "latin": "Lemmus lemmus",
    "gbif_key": 5219840,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "tundra",
     "mountain"
@@ -495,6 +532,7 @@
    "latin": "Sorex araneus",
    "gbif_key": 8316400,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -507,6 +545,7 @@
    "latin": "Apodemus sylvaticus",
    "gbif_key": 2437760,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -519,6 +558,7 @@
    "latin": "Ondatra zibethicus",
    "gbif_key": 5219858,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "boreal_lake",
     "wetland",
@@ -532,6 +572,7 @@
    "latin": "Halichoerus grypus",
    "gbif_key": 2434806,
    "start_from": "saimaa_seal",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -543,6 +584,7 @@
    "latin": "Phoca vitulina",
    "gbif_key": 2434793,
    "start_from": "saimaa_seal",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -554,6 +596,7 @@
    "latin": "Strix uralensis",
    "gbif_key": 2497509,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "boreal_forest"
    ],
@@ -565,6 +608,7 @@
    "latin": "Bubo scandiacus",
    "gbif_key": 5959143,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "tundra"
    ],
@@ -576,6 +620,7 @@
    "latin": "Bubo bubo",
    "gbif_key": 5959092,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "boreal_forest",
     "mountain"
@@ -588,6 +633,7 @@
    "latin": "Aquila chrysaetos",
    "gbif_key": 2480506,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "mountain",
     "boreal_forest"
@@ -600,6 +646,7 @@
    "latin": "Haliaeetus albicilla",
    "gbif_key": 2480449,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "boreal_lake",
     "sea"
@@ -612,6 +659,7 @@
    "latin": "Pandion haliaetus",
    "gbif_key": 2480726,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "boreal_lake",
     "river"
@@ -624,6 +672,7 @@
    "latin": "Buteo buteo",
    "gbif_key": 2480537,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -636,6 +685,7 @@
    "latin": "Accipiter gentilis",
    "gbif_key": 2480589,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "boreal_forest"
    ],
@@ -647,6 +697,7 @@
    "latin": "Falco peregrinus",
    "gbif_key": 2481047,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "mountain",
     "grassland"
@@ -659,6 +710,7 @@
    "latin": "Corvus corax",
    "gbif_key": 2482492,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest",
     "mountain"
@@ -671,6 +723,7 @@
    "latin": "Pica pica",
    "gbif_key": 5229490,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "grassland",
     "boreal_forest"
@@ -683,6 +736,7 @@
    "latin": "Garrulus glandarius",
    "gbif_key": 5229493,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -694,6 +748,7 @@
    "latin": "Erithacus rubecula",
    "gbif_key": 2492462,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -705,6 +760,7 @@
    "latin": "Cyanistes caeruleus",
    "gbif_key": 2487879,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -716,6 +772,7 @@
    "latin": "Pyrrhula pyrrhula",
    "gbif_key": 2494543,
    "start_from": "chaffinch",
+   "file_from": "chaffinch",
    "habitats": [
     "boreal_forest"
    ],
@@ -727,6 +784,7 @@
    "latin": "Turdus merula",
    "gbif_key": 2490719,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -738,6 +796,7 @@
    "latin": "Hirundo rustica",
    "gbif_key": 9515886,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "grassland",
     "boreal_lake"
@@ -750,6 +809,7 @@
    "latin": "Dendrocopos major",
    "gbif_key": 2477968,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -761,6 +821,7 @@
    "latin": "Dryocopus martius",
    "gbif_key": 2477872,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -772,6 +833,7 @@
    "latin": "Loxia curvirostra",
    "gbif_key": 9629160,
    "start_from": "chaffinch",
+   "file_from": "chaffinch",
    "habitats": [
     "boreal_forest"
    ],
@@ -783,6 +845,7 @@
    "latin": "Bombycilla garrulus",
    "gbif_key": 2484605,
    "start_from": "chaffinch",
+   "file_from": "chaffinch",
    "habitats": [
     "boreal_forest"
    ],
@@ -794,6 +857,7 @@
    "latin": "Cuculus canorus",
    "gbif_key": 5231918,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "boreal_forest"
    ],
@@ -805,6 +869,7 @@
    "latin": "Tetrao urogallus",
    "gbif_key": 2473577,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_forest"
    ],
@@ -816,6 +881,7 @@
    "latin": "Lyrurus tetrix",
    "gbif_key": 2473682,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_forest",
     "wetland"
@@ -828,6 +894,7 @@
    "latin": "Lagopus muta",
    "gbif_key": 5227679,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "tundra",
     "mountain"
@@ -840,6 +907,7 @@
    "latin": "Cygnus cygnus",
    "gbif_key": 2498347,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake",
     "wetland"
@@ -852,6 +920,7 @@
    "latin": "Cygnus olor",
    "gbif_key": 2498343,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake",
     "river"
@@ -864,6 +933,7 @@
    "latin": "Branta canadensis",
    "gbif_key": 5232437,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake",
     "grassland"
@@ -876,6 +946,7 @@
    "latin": "Bucephala clangula",
    "gbif_key": 2498326,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake"
    ],
@@ -887,6 +958,7 @@
    "latin": "Gavia arctica",
    "gbif_key": 2481959,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake"
    ],
@@ -898,6 +970,7 @@
    "latin": "Grus grus",
    "gbif_key": 2474950,
    "start_from": "common_crane",
+   "file_from": "mallard",
    "habitats": [
     "wetland",
     "grassland"
@@ -910,6 +983,7 @@
    "latin": "Ardea cinerea",
    "gbif_key": 9797180,
    "start_from": "common_crane",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake",
     "river",
@@ -923,6 +997,7 @@
    "latin": "Ciconia ciconia",
    "gbif_key": 2481912,
    "start_from": "common_crane",
+   "file_from": "mallard",
    "habitats": [
     "wetland",
     "grassland"
@@ -935,6 +1010,7 @@
    "latin": "Sterna hirundo",
    "gbif_key": 9367409,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "boreal_lake",
     "sea"
@@ -947,6 +1023,7 @@
    "latin": "Larus argentatus",
    "gbif_key": 2481139,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "sea",
     "boreal_lake"
@@ -959,6 +1036,7 @@
    "latin": "Alcedo atthis",
    "gbif_key": 2475532,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "river",
     "boreal_lake"
@@ -971,6 +1049,7 @@
    "latin": "Cinclus cinclus",
    "gbif_key": 2495093,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "river",
     "mountain"
@@ -983,6 +1062,7 @@
    "latin": "Salmo salar",
    "gbif_key": 7595433,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "river",
     "sea"
@@ -995,6 +1075,7 @@
    "latin": "Salmo trutta",
    "gbif_key": 8215487,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "river",
     "boreal_lake"
@@ -1007,6 +1088,7 @@
    "latin": "Salvelinus alpinus",
    "gbif_key": 4284021,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "boreal_lake"
    ],
@@ -1018,6 +1100,7 @@
    "latin": "Sander lucioperca",
    "gbif_key": 2382155,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "boreal_lake"
    ],
@@ -1029,6 +1112,7 @@
    "latin": "Lota lota",
    "gbif_key": 2415460,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "boreal_lake",
     "river"
@@ -1041,6 +1125,7 @@
    "latin": "Anguilla anguilla",
    "gbif_key": 5212973,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "river",
     "boreal_lake",
@@ -1054,6 +1139,7 @@
    "latin": "Bufo bufo",
    "gbif_key": 5217160,
    "start_from": "frog",
+   "file_from": "frog",
    "habitats": [
     "boreal_forest",
     "wetland"
@@ -1066,6 +1152,7 @@
    "latin": "Rana arvalis",
    "gbif_key": 2426789,
    "start_from": "frog",
+   "file_from": "frog",
    "habitats": [
     "wetland",
     "boreal_lake"
@@ -1078,6 +1165,7 @@
    "latin": "Lissotriton vulgaris",
    "gbif_key": 5218405,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "boreal_lake",
     "wetland"
@@ -1090,6 +1178,7 @@
    "latin": "Vipera berus",
    "gbif_key": 5960862,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "boreal_forest",
     "wetland"
@@ -1102,6 +1191,7 @@
    "latin": "Natrix natrix",
    "gbif_key": 6161347,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "boreal_lake",
     "wetland"
@@ -1114,6 +1204,7 @@
    "latin": "Anguis fragilis",
    "gbif_key": 2468095,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -1126,6 +1217,7 @@
    "latin": "Lacerta agilis",
    "gbif_key": 6159223,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "grassland"
    ],
@@ -1137,6 +1229,7 @@
    "latin": "Apis mellifera",
    "gbif_key": 1341976,
    "start_from": "bee",
+   "file_from": "bee",
    "habitats": [
     "grassland",
     "boreal_forest"
@@ -1149,6 +1242,7 @@
    "latin": "Vespula vulgaris",
    "gbif_key": 1311671,
    "start_from": "bee",
+   "file_from": "bee",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -1161,6 +1255,7 @@
    "latin": "Aglais io",
    "gbif_key": 4535827,
    "start_from": "peacock_butterfly",
+   "file_from": "bee",
    "habitats": [
     "grassland",
     "boreal_forest"
@@ -1173,6 +1268,7 @@
    "latin": "Gonepteryx rhamni",
    "gbif_key": 1920712,
    "start_from": "peacock_butterfly",
+   "file_from": "bee",
    "habitats": [
     "boreal_forest",
     "grassland"
@@ -1185,6 +1281,7 @@
    "latin": "Papilio machaon",
    "gbif_key": 8225376,
    "start_from": "peacock_butterfly",
+   "file_from": "bee",
    "habitats": [
     "grassland"
    ],
@@ -1196,6 +1293,7 @@
    "latin": "Aglais urticae",
    "gbif_key": 1894840,
    "start_from": "peacock_butterfly",
+   "file_from": "bee",
    "habitats": [
     "grassland"
    ],
@@ -1207,6 +1305,7 @@
    "latin": "Vulpes lagopus",
    "gbif_key": 5219303,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "tundra",
     "ice"
@@ -1219,6 +1318,7 @@
    "latin": "Ursus maritimus",
    "gbif_key": 2433451,
    "start_from": "brown_bear",
+   "file_from": "fox",
    "habitats": [
     "ice",
     "sea"
@@ -1231,6 +1331,7 @@
    "latin": "Ovibos moschatus",
    "gbif_key": 2441108,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "tundra"
    ],
@@ -1242,6 +1343,7 @@
    "latin": "Capra ibex",
    "gbif_key": 2441055,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "mountain"
    ],
@@ -1253,6 +1355,7 @@
    "latin": "Rupicapra rupicapra",
    "gbif_key": 5220170,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "mountain"
    ],
@@ -1264,6 +1367,7 @@
    "latin": "Oreamnos americanus",
    "gbif_key": 2441151,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "mountain"
    ],
@@ -1275,6 +1379,7 @@
    "latin": "Ovis canadensis",
    "gbif_key": 2441119,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "mountain"
    ],
@@ -1286,6 +1391,7 @@
    "latin": "Panthera uncia",
    "gbif_key": 2435238,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "mountain"
    ],
@@ -1297,6 +1403,7 @@
    "latin": "Marmota marmota",
    "gbif_key": 2437377,
    "start_from": "squirrel",
+   "file_from": "squirrel",
    "habitats": [
     "mountain"
    ],
@@ -1308,6 +1415,7 @@
    "latin": "Ochotona princeps",
    "gbif_key": 2436982,
    "start_from": "mountain_hare",
+   "file_from": "mountain_hare",
    "habitats": [
     "mountain"
    ],
@@ -1319,6 +1427,7 @@
    "latin": "Odobenus rosmarus",
    "gbif_key": 5218819,
    "start_from": "saimaa_seal",
+   "file_from": "saimaa_seal",
    "habitats": [
     "ice",
     "sea"
@@ -1331,6 +1440,7 @@
    "latin": "Pusa hispida",
    "gbif_key": 5219369,
    "start_from": "saimaa_seal",
+   "file_from": "saimaa_seal",
    "habitats": [
     "ice",
     "sea"
@@ -1343,6 +1453,7 @@
    "latin": "Pagophilus groenlandicus",
    "gbif_key": 2434801,
    "start_from": "saimaa_seal",
+   "file_from": "saimaa_seal",
    "habitats": [
     "ice",
     "sea"
@@ -1355,6 +1466,7 @@
    "latin": "Aptenodytes forsteri",
    "gbif_key": 2481661,
    "start_from": "emperor_penguin",
+   "file_from": "mallard",
    "habitats": [
     "ice",
     "sea"
@@ -1367,6 +1479,7 @@
    "latin": "Aptenodytes patagonicus",
    "gbif_key": 2481660,
    "start_from": "emperor_penguin",
+   "file_from": "mallard",
    "habitats": [
     "ice",
     "sea"
@@ -1379,6 +1492,7 @@
    "latin": "Fratercula arctica",
    "gbif_key": 2481353,
    "start_from": "emperor_penguin",
+   "file_from": "mallard",
    "habitats": [
     "sea"
    ],
@@ -1390,6 +1504,7 @@
    "latin": "Plectrophenax nivalis",
    "gbif_key": 2491719,
    "start_from": "chaffinch",
+   "file_from": "chaffinch",
    "habitats": [
     "tundra"
    ],
@@ -1401,6 +1516,7 @@
    "latin": "Sterna paradisaea",
    "gbif_key": 5229230,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "sea",
     "tundra"
@@ -1413,6 +1529,7 @@
    "latin": "Lepus americanus",
    "gbif_key": 2436794,
    "start_from": "mountain_hare",
+   "file_from": "mountain_hare",
    "habitats": [
     "boreal_forest"
    ],
@@ -1424,6 +1541,7 @@
    "latin": "Phocoena phocoena",
    "gbif_key": 2440669,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -1435,6 +1553,7 @@
    "latin": "Tursiops truncatus",
    "gbif_key": 2440447,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -1446,6 +1565,7 @@
    "latin": "Orcinus orca",
    "gbif_key": 2440483,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -1457,6 +1577,7 @@
    "latin": "Delphinapterus leucas",
    "gbif_key": 5220003,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea",
     "ice"
@@ -1469,6 +1590,7 @@
    "latin": "Monodon monoceros",
    "gbif_key": 5220008,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea",
     "ice"
@@ -1481,6 +1603,7 @@
    "latin": "Balaenoptera musculus",
    "gbif_key": 2440735,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -1493,6 +1616,7 @@
    "latin": "Megaptera novaeangliae",
    "gbif_key": 5220086,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -1505,6 +1629,7 @@
    "latin": "Physeter macrocephalus",
    "gbif_key": 8123917,
    "start_from": "harbour_porpoise",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -1517,6 +1642,7 @@
    "latin": "Enhydra lutris",
    "gbif_key": 2433670,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "sea"
    ],
@@ -1528,6 +1654,7 @@
    "latin": "Zalophus californianus",
    "gbif_key": 2433458,
    "start_from": "saimaa_seal",
+   "file_from": "saimaa_seal",
    "habitats": [
     "sea"
    ],
@@ -1539,6 +1666,7 @@
    "latin": "Carcharodon carcharias",
    "gbif_key": 2420694,
    "start_from": "reef_shark",
+   "file_from": "pike",
    "habitats": [
     "sea"
    ],
@@ -1550,6 +1678,7 @@
    "latin": "Sphyrna lewini",
    "gbif_key": 2418789,
    "start_from": "reef_shark",
+   "file_from": "pike",
    "habitats": [
     "sea",
     "reef"
@@ -1562,6 +1691,7 @@
    "latin": "Rhincodon typus",
    "gbif_key": 2417522,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "sea"
    ],
@@ -1574,6 +1704,7 @@
    "latin": "Mobula birostris",
    "gbif_key": 9548142,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea",
     "reef"
@@ -1587,6 +1718,7 @@
    "latin": "Gadus morhua",
    "gbif_key": 8084280,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "sea"
    ],
@@ -1598,6 +1730,7 @@
    "latin": "Clupea harengus",
    "gbif_key": 8351946,
    "start_from": "roach",
+   "file_from": "roach",
    "habitats": [
     "sea"
    ],
@@ -1609,6 +1742,7 @@
    "latin": "Scomber scombrus",
    "gbif_key": 2374149,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "sea"
    ],
@@ -1620,6 +1754,7 @@
    "latin": "Thunnus thynnus",
    "gbif_key": 2373980,
    "start_from": "perch",
+   "file_from": "perch",
    "habitats": [
     "sea"
    ],
@@ -1631,6 +1766,7 @@
    "latin": "Xiphias gladius",
    "gbif_key": 2397850,
    "start_from": "pike",
+   "file_from": "pike",
    "habitats": [
     "sea"
    ],
@@ -1642,6 +1778,7 @@
    "latin": "Gymnothorax funebris",
    "gbif_key": 2403964,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "reef"
    ],
@@ -1653,6 +1790,7 @@
    "latin": "Octopus vulgaris",
    "gbif_key": 2289671,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea",
     "reef"
@@ -1666,6 +1804,7 @@
    "latin": "Aurelia aurita",
    "gbif_key": 2264442,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea"
    ],
@@ -1678,6 +1817,7 @@
    "latin": "Asterias rubens",
    "gbif_key": 7765831,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea"
    ],
@@ -1690,6 +1830,7 @@
    "latin": "Carcinus maenas",
    "gbif_key": 5178595,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea"
    ],
@@ -1702,6 +1843,7 @@
    "latin": "Homarus gammarus",
    "gbif_key": 5972003,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea"
    ],
@@ -1714,6 +1856,7 @@
    "latin": "Hippocampus guttulatus",
    "gbif_key": 5201064,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea",
     "reef"
@@ -1727,6 +1870,7 @@
    "latin": "Chelonia mydas",
    "gbif_key": 2442225,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "sea",
     "reef"
@@ -1740,6 +1884,7 @@
    "latin": "Amphiprion percula",
    "gbif_key": 5212094,
    "start_from": "perch",
+   "file_from": "perch",
    "habitats": [
     "reef"
    ],
@@ -1751,6 +1896,7 @@
    "latin": "Paracanthurus hepatus",
    "gbif_key": 2379534,
    "start_from": "bream",
+   "file_from": "bream",
    "habitats": [
     "reef"
    ],
@@ -1762,6 +1908,7 @@
    "latin": "Sparisoma viride",
    "gbif_key": 2393894,
    "start_from": "perch",
+   "file_from": "perch",
    "habitats": [
     "reef"
    ],
@@ -1773,6 +1920,7 @@
    "latin": "Chaetodon auriga",
    "gbif_key": 2385390,
    "start_from": "bream",
+   "file_from": "bream",
    "habitats": [
     "reef"
    ],
@@ -1784,6 +1932,7 @@
    "latin": "Pterois volitans",
    "gbif_key": 2334438,
    "start_from": "perch",
+   "file_from": "perch",
    "habitats": [
     "reef"
    ],
@@ -1795,6 +1944,7 @@
    "latin": "Carcharhinus melanopterus",
    "gbif_key": 2417981,
    "start_from": "reef_shark",
+   "file_from": "pike",
    "habitats": [
     "reef"
    ],
@@ -1806,6 +1956,7 @@
    "latin": "Panthera leo",
    "gbif_key": 5219404,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "savanna",
     "grassland"
@@ -1818,6 +1969,7 @@
    "latin": "Acinonyx jubatus",
    "gbif_key": 2435270,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "savanna",
     "grassland"
@@ -1830,6 +1982,7 @@
    "latin": "Panthera pardus",
    "gbif_key": 5219436,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "savanna",
     "forest",
@@ -1843,6 +1996,7 @@
    "latin": "Crocuta crocuta",
    "gbif_key": 5218781,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "savanna"
    ],
@@ -1854,6 +2008,7 @@
    "latin": "Lycaon pictus",
    "gbif_key": 5219317,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "savanna"
    ],
@@ -1865,6 +2020,7 @@
    "latin": "Equus quagga",
    "gbif_key": 2440892,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "savanna",
     "grassland"
@@ -1877,6 +2033,7 @@
    "latin": "Giraffa camelopardalis",
    "gbif_key": 2441205,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "savanna"
    ],
@@ -1888,6 +2045,7 @@
    "latin": "Loxodonta africana",
    "gbif_key": 2435350,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "savanna"
    ],
@@ -1900,6 +2058,7 @@
    "latin": "Elephas maximus",
    "gbif_key": 5219461,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest",
     "rainforest"
@@ -1913,6 +2072,7 @@
    "latin": "Ceratotherium simum",
    "gbif_key": 2440880,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "savanna"
    ],
@@ -1924,6 +2084,7 @@
    "latin": "Hippopotamus amphibius",
    "gbif_key": 2441247,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "river",
     "savanna"
@@ -1936,6 +2097,7 @@
    "latin": "Connochaetes taurinus",
    "gbif_key": 2441105,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "savanna"
    ],
@@ -1947,6 +2109,7 @@
    "latin": "Eudorcas thomsonii",
    "gbif_key": 7261427,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "savanna"
    ],
@@ -1958,6 +2121,7 @@
    "latin": "Aepyceros melampus",
    "gbif_key": 2441144,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "savanna"
    ],
@@ -1969,6 +2133,7 @@
    "latin": "Phacochoerus africanus",
    "gbif_key": 2441212,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "savanna"
    ],
@@ -1980,6 +2145,7 @@
    "latin": "Suricata suricatta",
    "gbif_key": 2434126,
    "start_from": "squirrel",
+   "file_from": "squirrel",
    "habitats": [
     "desert",
     "savanna"
@@ -1992,6 +2158,7 @@
    "latin": "Struthio camelus",
    "gbif_key": 2495150,
    "start_from": "common_crane",
+   "file_from": "mallard",
    "habitats": [
     "savanna",
     "desert"
@@ -2004,6 +2171,7 @@
    "latin": "Bison bison",
    "gbif_key": 2441176,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "grassland"
    ],
@@ -2015,6 +2183,7 @@
    "latin": "Antilocapra americana",
    "gbif_key": 2440902,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "grassland"
    ],
@@ -2026,6 +2195,7 @@
    "latin": "Cynomys ludovicianus",
    "gbif_key": 2437232,
    "start_from": "squirrel",
+   "file_from": "squirrel",
    "habitats": [
     "grassland"
    ],
@@ -2037,6 +2207,7 @@
    "latin": "Canis latrans",
    "gbif_key": 5219153,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "grassland",
     "desert",
@@ -2050,6 +2221,7 @@
    "latin": "Osphranter rufus",
    "gbif_key": 5219963,
    "start_from": "mountain_hare",
+   "file_from": "mountain_hare",
    "habitats": [
     "grassland",
     "desert"
@@ -2062,6 +2234,7 @@
    "latin": "Vombatus ursinus",
    "gbif_key": 2440301,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "forest",
     "grassland"
@@ -2074,6 +2247,7 @@
    "latin": "Dromaius novaehollandiae",
    "gbif_key": 2495134,
    "start_from": "common_crane",
+   "file_from": "mallard",
    "habitats": [
     "grassland"
    ],
@@ -2085,6 +2259,7 @@
    "latin": "Equus ferus",
    "gbif_key": 4409270,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "grassland"
    ],
@@ -2096,6 +2271,7 @@
    "latin": "Camelus dromedarius",
    "gbif_key": 9055455,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "desert"
    ],
@@ -2107,6 +2283,7 @@
    "latin": "Vulpes zerda",
    "gbif_key": 5219310,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "desert"
    ],
@@ -2118,6 +2295,7 @@
    "latin": "Jaculus jaculus",
    "gbif_key": 5219895,
    "start_from": "mountain_hare",
+   "file_from": "mountain_hare",
    "habitats": [
     "desert"
    ],
@@ -2129,6 +2307,7 @@
    "latin": "Geococcyx californianus",
    "gbif_key": 2496459,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "desert"
    ],
@@ -2140,6 +2319,7 @@
    "latin": "Crotalus atrox",
    "gbif_key": 2444356,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "desert"
    ],
@@ -2151,6 +2331,7 @@
    "latin": "Heloderma suspectum",
    "gbif_key": 2460817,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "desert"
    ],
@@ -2162,6 +2343,7 @@
    "latin": "Moloch horridus",
    "gbif_key": 2466435,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "desert"
    ],
@@ -2173,6 +2355,7 @@
    "latin": "Panthera onca",
    "gbif_key": 5219426,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "rainforest"
    ],
@@ -2184,6 +2367,7 @@
    "latin": "Panthera tigris",
    "gbif_key": 5219416,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "forest",
     "rainforest",
@@ -2197,6 +2381,7 @@
    "latin": "Tapirus terrestris",
    "gbif_key": 2440898,
    "start_from": "moose",
+   "file_from": "moose",
    "habitats": [
     "rainforest"
    ],
@@ -2208,6 +2393,7 @@
    "latin": "Hydrochoerus hydrochaeris",
    "gbif_key": 5786666,
    "start_from": "vole",
+   "file_from": "vole",
    "habitats": [
     "rainforest",
     "wetland",
@@ -2221,6 +2407,7 @@
    "latin": "Myrmecophaga tridactyla",
    "gbif_key": 2436346,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "grassland",
     "rainforest"
@@ -2233,6 +2420,7 @@
    "latin": "Okapia johnstoni",
    "gbif_key": 2441207,
    "start_from": "horse",
+   "file_from": "moose",
    "habitats": [
     "rainforest"
    ],
@@ -2244,6 +2432,7 @@
    "latin": "Ailurus fulgens",
    "gbif_key": 5219446,
    "start_from": "fox",
+   "file_from": "fox",
    "habitats": [
     "forest",
     "mountain"
@@ -2256,6 +2445,7 @@
    "latin": "Ailuropoda melanoleuca",
    "gbif_key": 2433399,
    "start_from": "brown_bear",
+   "file_from": "fox",
    "habitats": [
     "forest",
     "mountain"
@@ -2268,6 +2458,7 @@
    "latin": "Helarctos malayanus",
    "gbif_key": 2433403,
    "start_from": "brown_bear",
+   "file_from": "fox",
    "habitats": [
     "rainforest"
    ],
@@ -2279,6 +2470,7 @@
    "latin": "Pongo pygmaeus",
    "gbif_key": 5219532,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "rainforest"
    ],
@@ -2291,6 +2483,7 @@
    "latin": "Pan troglodytes",
    "gbif_key": 5219534,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "rainforest"
    ],
@@ -2303,6 +2496,7 @@
    "latin": "Gorilla gorilla",
    "gbif_key": 2436441,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "rainforest"
    ],
@@ -2315,6 +2509,7 @@
    "latin": "Lemur catta",
    "gbif_key": 2436412,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest"
    ],
@@ -2327,6 +2522,7 @@
    "latin": "Bradypus variegatus",
    "gbif_key": 2436353,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "rainforest"
    ],
@@ -2339,6 +2535,7 @@
    "latin": "Phascolarctos cinereus",
    "gbif_key": 2440012,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest"
    ],
@@ -2351,6 +2548,7 @@
    "latin": "Ramphastos toco",
    "gbif_key": 2478765,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "rainforest"
    ],
@@ -2362,6 +2560,7 @@
    "latin": "Ara macao",
    "gbif_key": 5959227,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "rainforest"
    ],
@@ -2373,6 +2572,7 @@
    "latin": "Archilochus colubris",
    "gbif_key": 5228514,
    "start_from": "great_tit",
+   "file_from": "great_tit",
    "habitats": [
     "forest"
    ],
@@ -2384,6 +2584,7 @@
    "latin": "Phoenicopterus roseus",
    "gbif_key": 4352332,
    "start_from": "common_crane",
+   "file_from": "mallard",
    "habitats": [
     "wetland",
     "lake"
@@ -2396,6 +2597,7 @@
    "latin": "Pavo cristatus",
    "gbif_key": 9451184,
    "start_from": "mallard",
+   "file_from": "mallard",
    "habitats": [
     "forest"
    ],
@@ -2407,6 +2609,7 @@
    "latin": "Harpia harpyja",
    "gbif_key": 2480516,
    "start_from": "kestrel",
+   "file_from": "kestrel",
    "habitats": [
     "rainforest"
    ],
@@ -2418,6 +2621,7 @@
    "latin": "Oophaga pumilio",
    "gbif_key": 2429135,
    "start_from": "frog",
+   "file_from": "frog",
    "habitats": [
     "rainforest"
    ],
@@ -2429,6 +2633,7 @@
    "latin": "Agalychnis callidryas",
    "gbif_key": 2428197,
    "start_from": "frog",
+   "file_from": "frog",
    "habitats": [
     "rainforest"
    ],
@@ -2440,6 +2645,7 @@
    "latin": "Iguana iguana",
    "gbif_key": 2459658,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "rainforest"
    ],
@@ -2451,6 +2657,7 @@
    "latin": "Chamaeleo calyptratus",
    "gbif_key": 2449133,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "forest"
    ],
@@ -2462,6 +2669,7 @@
    "latin": "Varanus komodoensis",
    "gbif_key": 2470854,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "grassland",
     "forest"
@@ -2474,6 +2682,7 @@
    "latin": "Eunectes murinus",
    "gbif_key": 5225712,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "rainforest",
     "wetland",
@@ -2487,6 +2696,7 @@
    "latin": "Python bivittatus",
    "gbif_key": 4820533,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "rainforest",
     "wetland"
@@ -2499,6 +2709,7 @@
    "latin": "Ophiophagus hannah",
    "gbif_key": 2469850,
    "start_from": "grass_snake",
+   "file_from": "lizard",
    "habitats": [
     "rainforest"
    ],
@@ -2510,6 +2721,7 @@
    "latin": "Crocodylus porosus",
    "gbif_key": 2441333,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "mangrove",
     "river",
@@ -2523,6 +2735,7 @@
    "latin": "Alligator mississippiensis",
    "gbif_key": 2441370,
    "start_from": "lizard",
+   "file_from": "lizard",
    "habitats": [
     "wetland",
     "river"
@@ -2535,6 +2748,7 @@
    "latin": "Pygocentrus nattereri",
    "gbif_key": 2352479,
    "start_from": "bream",
+   "file_from": "bream",
    "habitats": [
     "river"
    ],
@@ -2546,6 +2760,7 @@
    "latin": "Morpho peleides",
    "gbif_key": 5133433,
    "start_from": "peacock_butterfly",
+   "file_from": "bee",
    "habitats": [
     "rainforest"
    ],
@@ -2557,6 +2772,7 @@
    "latin": "Danaus plexippus",
    "gbif_key": 5133088,
    "start_from": "peacock_butterfly",
+   "file_from": "bee",
    "habitats": [
     "grassland",
     "forest"
@@ -2569,6 +2785,7 @@
    "latin": "Periophthalmus barbarus",
    "gbif_key": 2376966,
    "start_from": "perch",
+   "file_from": "perch",
    "habitats": [
     "mangrove"
    ],
@@ -2580,6 +2797,7 @@
    "latin": "Nasalis larvatus",
    "gbif_key": 2436525,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "mangrove",
     "rainforest"
@@ -2593,6 +2811,7 @@
    "latin": "Uca pugnax",
    "gbif_key": 9444500,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "mangrove"
    ],
@@ -2605,6 +2824,7 @@
    "latin": "Pipistrellus pipistrellus",
    "gbif_key": 5218465,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest"
    ],
@@ -2617,6 +2837,7 @@
    "latin": "Pteropus medius",
    "gbif_key": 5787518,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest",
     "rainforest"
@@ -2630,6 +2851,7 @@
    "latin": "Anax imperator",
    "gbif_key": 5051775,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "lake",
     "wetland"
@@ -2643,6 +2865,7 @@
    "latin": "Chelonoidis niger",
    "gbif_key": 9527499,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "grassland"
    ],
@@ -2655,6 +2878,7 @@
    "latin": "Ornithorhynchus anatinus",
    "gbif_key": 2433376,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "river"
    ],
@@ -2667,6 +2891,7 @@
    "latin": "Coccinella septempunctata",
    "gbif_key": 4990191,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "grassland",
     "forest"
@@ -2680,6 +2905,7 @@
    "latin": "Formica rufa",
    "gbif_key": 1315132,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest"
    ],
@@ -2692,6 +2918,7 @@
    "latin": "Araneus diadematus",
    "gbif_key": 2160133,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest",
     "grassland"
@@ -2705,6 +2932,7 @@
    "latin": "Helix pomatia",
    "gbif_key": 2294287,
    "start_from": null,
+   "file_from": null,
    "habitats": [
     "forest",
     "grassland"

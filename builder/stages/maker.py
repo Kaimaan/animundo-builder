@@ -72,12 +72,15 @@ CHOICE_FOOD_KINDS = [
     "carrot",
 ]
 CHOICE_LEVELS = {
-    "land": ["flat", "rolling", "hilly"],
+    "land": ["flat", "rolling", "hilly", "mountains"],
     "water": ["river", "lake", "pools", "sea", "none"],
     "wetness": ["dry", "wet", "very_wet"],
     "density": ["none", "sparse", "medium", "dense"],
     "grass": ["none", "some", "lush"],
     "life": ["none", "some", "many"],
+    "ice": ["none", "frozen_in_winter", "glaciers", "polar"],
+    "caves": ["none", "some"],
+    "seabed": ["mud", "sand"],
 }
 CHOICE_PALETTE = [
     "ground_lush",
@@ -1488,13 +1491,14 @@ class HomeMakerStage:
         plants = sorted(
             path.stem for path in (world / "models" / "plants").glob("*.json")
         )
+        trees = _library_trees(world)
         looks_path = ctx.job_dir / "looks.json"
         looks: dict[str, Any] = (
             json.loads(looks_path.read_text(encoding="utf-8"))
             if looks_path.is_file()
             else {}
         )
-        self._make(ctx, world, brief, research, habitat, base, plants, looks)
+        self._make(ctx, world, brief, research, habitat, base, plants, trees, looks)
         cost = round(ctx.tracker.spent_usd - before, 6)
         checks = ctx.job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
@@ -1517,15 +1521,16 @@ class HomeMakerStage:
         habitat: str,
         base: Path,
         plants: list[str],
+        trees: list[str],
         looks: dict[str, Any],
     ) -> None:
         """One home: a choices call, then the adapt tool, plus one fix round."""
-        prompt = self._prompt(brief, research, habitat, base, plants, looks)
+        prompt = self._prompt(brief, research, habitat, base, plants, trees, looks)
         request = {
             "type": "json_schema",
             "json_schema": {
                 "name": "HomeChoices",
-                "schema": _home_choices_schema(plants),
+                "schema": _home_choices_schema(plants, trees),
                 "strict": True,
             },
         }
@@ -1607,6 +1612,7 @@ class HomeMakerStage:
         habitat: str,
         base: Path,
         plants: list[str],
+        trees: list[str],
         looks: dict[str, Any],
     ) -> str:
         template = (PROMPTS_DIR / "home_choices.md").read_text(encoding="utf-8")
@@ -1626,8 +1632,14 @@ class HomeMakerStage:
                 "FOODS": _foods_text(research),
                 "BASE": json.dumps(excerpt, indent=1).replace("$", "$$"),
                 "PLANTS": ", ".join(plants),
+                "TREES": "".join(f", {tree}" for tree in trees),
             }
         )
+
+
+def _library_trees(world: Path) -> list[str]:
+    """Tree spec ids the game draws: the shipped library only (#69.1)."""
+    return sorted(path.stem for path in (world / "models" / "trees").glob("*.json"))
 
 
 def _closest_home(world: Path, habitat: str) -> Path:
@@ -1660,7 +1672,7 @@ def _foods_text(research: dict[str, Any]) -> str:
     return ", ".join(f"{food['name']} ({food['kind']})" for food in foods)
 
 
-def _home_choices_schema(plants: list[str]) -> dict[str, Any]:
+def _home_choices_schema(plants: list[str], trees: list[str]) -> dict[str, Any]:
     """The choices form, strict: words, enums and hex colours only (#65.1)."""
 
     def obj(props: dict[str, Any], req: list[str] | None = None) -> dict[str, Any]:
@@ -1683,13 +1695,19 @@ def _home_choices_schema(plants: list[str]) -> dict[str, Any]:
                     "the land, the trees, the water"
                 ),
             },
-            "land": enum(CHOICE_LEVELS["land"], "how the ground rises"),
+            "land": enum(
+                CHOICE_LEVELS["land"],
+                (
+                    "how the ground rises; mountains: high peaks "
+                    "with bare rock above the trees"
+                ),
+            ),
             "water": enum(
                 CHOICE_LEVELS["water"],
                 (
                     "the main water: river (runs through the land), "
                     "lake (a big lake, the land around it), pools, "
-                    "sea (a shore), none"
+                    "sea (a coast: a deep bay and the sea all round), none"
                 ),
             ),
             "wetness": enum(
@@ -1703,6 +1721,29 @@ def _home_choices_schema(plants: list[str]) -> dict[str, Any]:
                     "no real place names"
                 ),
             },
+            "ice": enum(
+                CHOICE_LEVELS["ice"],
+                (
+                    "none; frozen_in_winter (lakes or sea freeze in "
+                    "winter); glaciers (ice on the mountain tops); polar "
+                    "(ice over much of the land, icebergs, the water "
+                    "frozen most of the year)"
+                ),
+            ),
+            "caves": enum(
+                CHOICE_LEVELS["caves"],
+                (
+                    "some: caves in the hills, only where the research "
+                    "finds caves or dens in rock"
+                ),
+            ),
+            "seabed": enum(
+                CHOICE_LEVELS["seabed"],
+                (
+                    "the floor of the deep water: sand for warm seas "
+                    "and reefs, mud otherwise"
+                ),
+            ),
             "palette": obj({key: _CHOICE_HEX for key in CHOICE_PALETTE}),
             "trees": obj(
                 {
@@ -1713,7 +1754,7 @@ def _home_choices_schema(plants: list[str]) -> dict[str, Any]:
                         "items": obj(
                             {
                                 "shape": enum(
-                                    list(TREE_SHAPES),
+                                    [*TREE_SHAPES, *trees],
                                     "the closest of the game's tree shapes",
                                 ),
                                 "leaves": _CHOICE_HEX,
@@ -1769,7 +1810,11 @@ def _home_choices_schema(plants: list[str]) -> dict[str, Any]:
                                 "a plant the game already has; "
                                 "only one that truly grows here"
                             ),
-                        )
+                        ),
+                        "on": enum(
+                            ["ground", "seabed"],
+                            "seabed: corals and sea grass, under the water",
+                        ),
                     }
                 ),
             },
@@ -1812,6 +1857,9 @@ def _choices_files(answer: str) -> tuple[dict[str, Any] | None, list[str]]:
             for plant in choices["plants"]
             if not (isinstance(plant, dict) and plant.get("model") == "none")
         ]
+        for plant in choices["plants"]:
+            if isinstance(plant, dict) and plant.get("on") == "ground":
+                del plant["on"]
     return choices, []
 
 
@@ -1823,13 +1871,17 @@ def _code_choices(
 ) -> None:
     """Code's part of the choices: the id, the tropics, the sources (#65.2)."""
     lat = float((brief.get("center") or {}).get("lat", 0.0))
+    tropical = abs(lat) < 23
     choices.update(
         {
             "id": habitat,
-            "tropical": abs(lat) < 23,
+            "tropical": tropical,
             "sources": [*research["sources"], "GBIF.org"],
         }
     )
+    if tropical:
+        # No ice in the tropics: no seasons there (#69.3).
+        choices["ice"] = "none"
 
 
 def _place_home(ctx: Any, habitat: str, attempt: int) -> None:

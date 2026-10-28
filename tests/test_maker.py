@@ -875,6 +875,9 @@ def _choices_answer(**over: Any) -> str:
         "water": "river",
         "wetness": "very_wet",
         "water_name": "Slow river",
+        "ice": "none",
+        "caves": "none",
+        "seabed": "mud",
         "palette": {
             "ground_lush": "#2f7d2c",
             "ground_dry": "#6f9a3f",
@@ -1353,20 +1356,39 @@ def test_closest_home_missing_template_stops(tmp_path: Path) -> None:
 
 
 def test_home_choices_schema_is_strict() -> None:
-    schema = _home_choices_schema(["bilberry", "bracken"])
+    schema = _home_choices_schema(["bilberry", "bracken"], ["oak"])
     assert_strict_subset(schema)
     assert sorted(schema["required"]) == sorted(schema["properties"])
-    plants = schema["properties"]["plants"]["items"]["properties"]["model"]
-    assert plants["enum"] == ["bilberry", "bracken"]
+    assert schema["properties"]["land"]["enum"][-1] == "mountains"
+    assert schema["properties"]["ice"]["enum"] == [
+        "none",
+        "frozen_in_winter",
+        "glaciers",
+        "polar",
+    ]
+    assert schema["properties"]["caves"]["enum"] == ["none", "some"]
+    assert schema["properties"]["seabed"]["enum"] == ["mud", "sand"]
+    assert "icebergs" in schema["properties"]["ice"]["description"]
+    assert "dens in rock" in schema["properties"]["caves"]["description"]
+    assert "mud otherwise" in schema["properties"]["seabed"]["description"]
+    plants = schema["properties"]["plants"]["items"]["properties"]
+    assert plants["model"]["enum"] == ["bilberry", "bracken"]
+    assert plants["on"]["enum"] == ["ground", "seabed"]
+    assert sorted(schema["properties"]["plants"]["items"]["required"]) == [
+        "model",
+        "on",
+    ]
     shapes = schema["properties"]["trees"]["properties"]["mix"]["items"]["properties"][
         "shape"
     ]
-    assert shapes["enum"] == ["spruce", "pine", "birch", "round", "rowan"]
+    assert shapes["enum"] == ["spruce", "pine", "birch", "round", "rowan", "oak"]
     assert schema["properties"]["trees"]["properties"]["mix"]["maxItems"] == 4
-    none = _home_choices_schema([])
-    assert none["properties"]["plants"]["items"]["properties"]["model"]["enum"] == [
-        "none"
-    ]
+    bare = _home_choices_schema([], [])
+    props = bare["properties"]
+    assert props["plants"]["items"]["properties"]["model"]["enum"] == ["none"]
+    assert props["trees"]["properties"]["mix"]["items"]["properties"]["shape"][
+        "enum"
+    ] == ["spruce", "pine", "birch", "round", "rowan"]
 
 
 def test_choices_files_drops_none_plants() -> None:
@@ -1377,6 +1399,23 @@ def test_choices_files_drops_none_plants() -> None:
     assert choices == {"plants": [{"model": "bilberry"}]}
     assert _choices_files("not json")[0] is None
     assert _choices_files("[]")[0] is None
+
+
+def test_choices_files_drops_ground_but_keeps_seabed() -> None:
+    choices, errors = _choices_files(
+        json.dumps(
+            {
+                "plants": [
+                    {"model": "bilberry", "on": "ground"},
+                    {"model": "seaweed", "on": "seabed"},
+                ]
+            }
+        )
+    )
+    assert errors == []
+    assert choices == {
+        "plants": [{"model": "bilberry"}, {"model": "seaweed", "on": "seabed"}]
+    }
 
 
 def test_code_choices_adds_id_tropics_sources() -> None:
@@ -1391,6 +1430,7 @@ def test_code_choices_adds_id_tropics_sources() -> None:
         "id": "rainforest",
         "tropical": True,
         "sources": ["https://example.org/a", "GBIF.org"],
+        "ice": "none",
     }
     north: dict[str, Any] = {}
     _code_choices(north, "taiga", {"center": {"lat": 61.0}}, {"sources": []})
@@ -1398,6 +1438,17 @@ def test_code_choices_adds_id_tropics_sources() -> None:
     edge: dict[str, Any] = {}
     _code_choices(edge, "edge", {"center": {"lat": 23.0}}, {"sources": []})
     assert edge["tropical"] is False
+    assert "ice" not in edge
+
+
+def test_code_choices_clears_ice_in_the_tropics() -> None:
+    choices: dict[str, Any] = {"ice": "glaciers"}
+    _code_choices(choices, "rainforest", {"center": {"lat": -3.45}}, {"sources": []})
+    assert choices["tropical"] is True
+    assert choices["ice"] == "none"
+    cold: dict[str, Any] = {"ice": "polar"}
+    _code_choices(cold, "ice", {"center": {"lat": 78.25}}, {"sources": []})
+    assert cold["ice"] == "polar"
 
 
 def test_surroundings_text_lists_food_and_looks() -> None:
@@ -1475,6 +1526,79 @@ def test_home_prompt_asks_for_words_not_numbers() -> None:
     assert "You choose words and colours only" in flat
     assert 'water "river", not "lake"' in flat
     assert "No real place names, no people" in flat
+    assert "Special places:" in flat
+    assert 'No trees ("none") where none grow' in flat
+    assert "rowan (small tree)$TREES" in prompt
+
+
+def test_home_prompt_appends_library_tree_ids(tmp_path: Path) -> None:
+    world = _home_world(tmp_path)
+    base = world / "homes" / "boreal_forest.json"
+    brief = {"name": "Ibex", "center": {"lat": 46.5, "lon": 7.5}}
+    research = {
+        "surroundings": [],
+        "main_food": {"name": "grass", "kind": "grass"},
+        "other_foods": [],
+    }
+    prompt = HomeMakerStage()._prompt(
+        brief, research, "mountain", base, [], ["oak"], {}
+    )
+    assert "rowan (small tree), oak. Floating" in " ".join(prompt.split())
+
+
+_LAB_JOBS = {"ice": "lab-ice-polar-bear", "mountain": "lab-mountain-ibex"}
+
+
+def _lab_job(habitat: str) -> tuple[Path, Path]:
+    """A lab job's inputs plus the real world, or a skip without them."""
+    world = ROOT.parent / "animundo-world"
+    job = ROOT / "jobs" / _LAB_JOBS[habitat]
+    needed = [
+        job / "research.json",
+        job / "home.json",
+        world / "homes" / "examples" / f"{habitat}.json",
+        world / "homes" / "boreal_forest.json",
+    ]
+    if not all(path.is_file() for path in needed):
+        pytest.skip("needs the lab jobs and a real world checkout")
+    return job, world
+
+
+def _replay_lab_home(tmp_path: Path, habitat: str, height: int) -> None:
+    """The lab's research and tested choices through the real adapt tool."""
+    job, world = _lab_job(habitat)
+    (tmp_path / "research.json").write_bytes((job / "research.json").read_bytes())
+    (tmp_path / "home.json").write_bytes((job / "home.json").read_bytes())
+    (tmp_path / "minset.json").write_text(
+        json.dumps(
+            {
+                "make_animal": False,
+                "make_home": True,
+                "home_habitat": habitat,
+                "prey": None,
+            }
+        )
+    )
+    example = json.loads((world / "homes" / "examples" / f"{habitat}.json").read_text())
+    answer = {
+        key: value
+        for key, value in example.items()
+        if key not in ("id", "tropical", "sources", "base")
+    }
+    client = ScriptClient([json.dumps(answer)])
+    result = HomeMakerStage().run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == [f"homes/{habitat}.json"]
+    assert len(client.prompts) == 1
+    home = json.loads((tmp_path / "homes" / f"{habitat}.json").read_text())
+    assert home["terrain"]["height"] == height
+
+
+def test_newhome_replays_lab_ice(tmp_path: Path) -> None:
+    _replay_lab_home(tmp_path, "ice", 40)
+
+
+def test_newhome_replays_lab_mountain(tmp_path: Path) -> None:
+    _replay_lab_home(tmp_path, "mountain", 64)
 
 
 def _write_looks_research(tmp_path: Path) -> None:

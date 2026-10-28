@@ -3,6 +3,33 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-28: inbox #69 (homes for every habitat)
+
+- #69.1: the choices schema matches the lab's as it is now —
+  `land` gains `mountains`, the sea description, required `ice`,
+  `caves` and `seabed` enums with the lab's word-for-word
+  descriptions, tree shapes plus the shipped library's spec ids,
+  and a required `on` (`ground`/`seabed`) per plant. Schema is
+  JSON-identical to the lab's `schema(plants, trees)`.
+- #69.2: the prompt appends the library tree ids, adds the
+  "Special places" paragraph and the no-trees hard rule. Rendered
+  ice prompt diffs clean against the lab's (only the real animal
+  name, the exact center, and the live plant library differ).
+- #69.3: code drops `"on": "ground"` (keeps `"seabed"`) and sets
+  `ice` to `"none"` in the tropics. Everything else rides with
+  the choices to `adapt_home.py`.
+- #69.4: closest home unchanged (`boreal_forest` land,
+  `boreal_lake` lake/sea) — the adapt tool replaces what matters.
+- #69.5: intake, minimum and newhome put no limits on habitats
+  (intake already resolved ice and mountain in the lab jobs).
+- #69.6: schema test for the new enums, plus `newhome` replays on
+  `jobs/lab-ice-polar-bear` and `jobs/lab-mountain-ibex` (lab
+  research + the world's tested example choices through the real
+  `adapt_home.py --check`): first-try passes with `terrain.height`
+  40 and 64.
+- Synced `web/build/animal-list.json` (new `file_from` key).
+- Suite: 580 passed, 12 skipped; ruff check + format clean.
+
 ## 2026-10-28: inbox #68 (Builder mode never boots in export, v0.2.1)
 
 - #68.1: the boot gate used `FileAccess.file_exists` on

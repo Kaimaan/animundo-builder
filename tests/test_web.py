@@ -29,13 +29,42 @@ def test_all_web_json_parses() -> None:
 
 
 def test_english_only() -> None:
-    assert [path.name for path in sorted((WEB / "i18n").glob("*.json"))] == ["en.json"]
+    assert [path.name for path in sorted((WEB / "i18n").glob("*.json"))] == [
+        "en.json",
+        "fi.json",
+    ]
     en = _json(WEB / "i18n" / "en.json")
     assert all(isinstance(text, str) and text for text in en.values())
+    # The Finnish file is only the judge sign-in (#104); everything
+    # else falls back to English.
+    fi = _json(WEB / "i18n" / "fi.json")
+    assert set(fi) == {
+        "auth.judge_line",
+        "auth.judge_password_ph",
+        "auth.judge_signin",
+        "auth.judge_error",
+    }
+    assert all(isinstance(text, str) and text for text in fi.values())
+    assert set(fi) <= set(en)
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert "lang-fi" not in html and "animundoBuildLang" not in (
         WEB / "app.js"
     ).read_text(encoding="utf-8")
+
+
+def test_judge_sign_in() -> None:
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    en = _json(WEB / "i18n" / "en.json")
+    fi = _json(WEB / "i18n" / "fi.json")
+    assert 'id="auth-judge" hidden' in html
+    assert 'id="auth-judge-password" type="password"' in html
+    assert "judgeMode()" in app and "signInWithEmailAndPassword" in app
+    assert "createUserWithEmailAndPassword" not in app
+    assert "sendPasswordResetEmail" not in app
+    assert en["auth.judge_error"] == "That email or password isn't right"
+    assert fi["auth.judge_error"] != en["auth.judge_error"]
+    assert "auth/wrong-password" not in app
 
 
 def test_html_strings_exist() -> None:

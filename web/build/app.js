@@ -131,12 +131,26 @@ function clearError() {
   $("app-error").hidden = true;
 }
 
-/* -- language: English only during the event ------------------- */
+/* -- language: English, with a Finnish judge overlay -------------- */
+// English only during the event, except the judge sign-in (#104): a
+// Finnish browser loads i18n/fi.json over the English strings, so
+// every other string still falls back to English.
 
 async function loadStrings() {
   const response = await fetch("i18n/en.json");
   state.strings = await response.json();
+  state.lang = "en";
   document.documentElement.lang = "en";
+  try {
+    if ((navigator.language || "").toLowerCase().startsWith("fi")) {
+      const overlay = await (await fetch("i18n/fi.json")).json();
+      state.strings = { ...state.strings, ...overlay };
+      state.lang = "fi";
+      document.documentElement.lang = "fi";
+    }
+  } catch (_) {
+    /* English it is */
+  }
 }
 
 function applyStaticStrings() {
@@ -174,7 +188,47 @@ async function signInTestGrownUp() {
 function returnUrl() {
   const url = new URL(window.location.href);
   const clean = `${url.origin}${url.pathname}`;
-  return url.searchParams.has("emulator") ? `${clean}?emulator=1` : clean;
+  const params = new URLSearchParams();
+  if (url.searchParams.has("emulator")) {
+    params.set("emulator", "1");
+  }
+  // A judge who signs out lands back on the judge form (#104.2).
+  if (url.searchParams.get("judge") === "1") {
+    params.set("judge", "1");
+  }
+  const query = params.toString();
+  return query ? `${clean}?${query}` : clean;
+}
+
+function judgeMode() {
+  return new URLSearchParams(window.location.search).get("judge") === "1";
+}
+
+function applyJudgeMode() {
+  $("auth-judge").hidden = !judgeMode();
+}
+
+// The judges' way in (#104): a password account from the submission's
+// instructions. A failure says only that the pair isn't right — never
+// Firebase's reason, and the password is never stored or logged.
+async function signInJudge() {
+  clearError();
+  const box = $("auth-judge-error");
+  box.hidden = true;
+  const email = $("auth-judge-email").value.trim();
+  const password = $("auth-judge-password").value;
+  if (!email || !password) {
+    return;
+  }
+  try {
+    await firebaseAuth().signInWithEmailAndPassword(email, password);
+    $("auth-judge-password").value = "";
+  } catch (error) {
+    console.error("judge sign-in failed");
+    $("auth-judge-password").value = "";
+    box.textContent = t("auth.judge_error");
+    box.hidden = false;
+  }
 }
 
 async function sendLink() {
@@ -1356,8 +1410,10 @@ async function start() {
   }
   await loadStrings();
   applyStaticStrings();
+  applyJudgeMode();
   $("auth-send").addEventListener("click", sendLink);
   $("auth-test").addEventListener("click", signInTestGrownUp);
+  $("auth-judge-signin").addEventListener("click", signInJudge);
   $("auth-out").addEventListener("click", () => firebaseAuth().signOut());
   $("animal-q").addEventListener("input", renderSuggestions);
   $("back-animals").addEventListener("click", () => showView("animals"));

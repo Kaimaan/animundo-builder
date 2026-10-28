@@ -265,9 +265,10 @@ def test_open_weights_unknown_model_still_refused() -> None:
         MetaClient.for_open_weights(config)
 
 
-def test_open_weights_fireworks_still_needs_url() -> None:
-    config = Config(open_model_host="fireworks", fireworks_api_key="f-key")
-    with pytest.raises(ValueError, match="BUILDER_OPEN_BASE_URL"):
+def test_open_weights_unknown_host_refused() -> None:
+    """Inbox 2026-10-28 #103: no host reaches a non-Meta model."""
+    config = Config(open_model_host="fireworks")
+    with pytest.raises(ValueError, match="unknown open-weights host"):
         MetaClient.for_open_weights(config)
 
 

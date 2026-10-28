@@ -177,9 +177,9 @@ class MetaClient:
         Default host `meta` runs them on Muse Spark. Baseten is
         confirmed (T33): its URL is built in, its key travels as
         `Api-Key`, and the token default leaves room for the model's
-        reasoning, which counts against `max_tokens`. Other partner
-        hosts still need an explicit `BUILDER_OPEN_BASE_URL`. Anything
-        missing fails clearly here, never mid-job.
+        reasoning, which counts against `max_tokens`. No host takes
+        a configured URL, so every call is Meta-only (#103).
+        Anything missing fails clearly here, never mid-job.
         """
         host = config.open_model_host
         if host == "meta":
@@ -195,38 +195,24 @@ class MetaClient:
             )
         if host == "modal-glimmer":
             raise ValueError("the modal-glimmer host is not confirmed yet (see T33)")
+        if host != "baseten":
+            raise ValueError(f"unknown open-weights host {host!r}")
         key = config.open_api_key()
-        env_var = {"baseten": "BASETEN_API_KEY", "fireworks": "FIREWORKS_API_KEY"}[host]
         if not key:
-            raise MetaAuthError(f"{env_var} is not set")
-        if host == "baseten":
-            if http_client is None:
-                http_client = httpx2.Client(auth=_ApiKeyAuth(key))
-            return cls(
-                api_key=key,
-                model=config.open_model_id(),
-                logger=logger,
-                http_client=http_client,
-                base_url=config.open_base_url or BASETEN_BASE_URL,
-                ledger=ledger,
-                job_id=job_id,
-                caps=caps,
-                default_max_tokens=OPEN_DEFAULT_MAX_TOKENS,
-                host="baseten",
-            )
-        if not config.open_base_url:
-            raise ValueError(f"set BUILDER_OPEN_BASE_URL for host {host!r}")
+            raise MetaAuthError("BASETEN_API_KEY is not set")
+        if http_client is None:
+            http_client = httpx2.Client(auth=_ApiKeyAuth(key))
         return cls(
             api_key=key,
             model=config.open_model_id(),
             logger=logger,
             http_client=http_client,
-            base_url=config.open_base_url,
+            base_url=BASETEN_BASE_URL,
             ledger=ledger,
             job_id=job_id,
             caps=caps,
             default_max_tokens=OPEN_DEFAULT_MAX_TOKENS,
-            host=host,
+            host="baseten",
         )
 
     def ensure_model(self) -> None:

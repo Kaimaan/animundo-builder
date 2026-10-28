@@ -22,6 +22,13 @@
         <button id="auth-send" type="button" data-i18n="auth.send">Send sign-in link</button>
         <button id="auth-test" type="button" data-i18n="auth.test" hidden>Use the test grown-up</button>
         <p id="auth-note" class="muted" data-i18n="auth.note">Grown-ups only: sign in with an email link.</p>
+        <div id="auth-judge" hidden>
+          <p class="muted" data-i18n="auth.judge_line">Judges: sign in with the account from the instructions</p>
+          <input id="auth-judge-email" type="email" data-i18n-ph="auth.email_ph" placeholder="grown-up@example.org" autocomplete="username">
+          <input id="auth-judge-password" type="password" data-i18n-ph="auth.judge_password_ph" placeholder="Password" autocomplete="current-password">
+          <button id="auth-judge-signin" type="button" data-i18n="auth.judge_signin">Sign in</button>
+          <p id="auth-judge-error" class="error" hidden></p>
+        </div>
       </div>
       <div id="auth-signed-in" hidden>
         <span id="auth-who"></span>

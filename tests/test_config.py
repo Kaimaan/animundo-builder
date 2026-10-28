@@ -79,29 +79,24 @@ def test_bad_open_host_rejected(monkeypatch) -> None:
 def test_open_model_hosts() -> None:
     assert Config(open_model_host="baseten").open_model_id() == BASETEN_OPEN_MODEL
     assert Config(open_model_host="meta").open_model_id() == DEFAULT_MODEL
-    custom = Config(open_model_host="fireworks", open_model="my-glimmer-tune")
+    custom = Config(open_model_host="baseten", open_model="my-glimmer-tune")
     assert custom.open_model_id() == "my-glimmer-tune"
     with pytest.raises(ValueError, match="BUILDER_OPEN_MODEL"):
-        Config(open_model_host="fireworks").open_model_id()
+        Config(open_model_host="modal-glimmer").open_model_id()
 
 
 def test_open_api_keys() -> None:
     assert Config(open_model_host="meta", model_api_key="m").open_api_key() == "m"
     assert Config(open_model_host="baseten", baseten_api_key="b").open_api_key() == "b"
-    assert (
-        Config(open_model_host="fireworks", fireworks_api_key="f").open_api_key() == "f"
-    )
     assert Config(open_model_host="modal-glimmer").open_api_key() is None
 
 
 def test_open_settings_from_env(monkeypatch) -> None:
     monkeypatch.setenv("BUILDER_OPEN_MODEL_HOST", "baseten")
-    monkeypatch.setenv("BUILDER_OPEN_BASE_URL", "https://example.org/v1")
-    monkeypatch.setenv("FIREWORKS_API_KEY", "fw-key")
+    monkeypatch.setenv("BASETEN_API_KEY", "bt-key")
     config = load()
     assert config.open_model_host == "baseten"
-    assert config.open_base_url == "https://example.org/v1"
-    assert config.fireworks_api_key == "fw-key"
+    assert config.baseten_api_key == "bt-key"
 
 
 def test_price_overrides() -> None:

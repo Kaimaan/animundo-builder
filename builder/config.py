@@ -17,7 +17,7 @@ from .prices import Prices
 
 DEFAULT_MODEL = "muse-spark-1.3"
 BASETEN_OPEN_MODEL = "meta-models/muse-spark-open-1026"
-OPEN_HOSTS = ("meta", "baseten", "fireworks", "modal-glimmer")
+OPEN_HOSTS = ("meta", "baseten", "modal-glimmer")
 
 ENV_PREFIX = "BUILDER_"
 
@@ -29,7 +29,6 @@ class Config:
     model: str = DEFAULT_MODEL
     open_model_host: str = "meta"
     open_model: str | None = None
-    open_base_url: str | None = None
     reference: str = "sheet"
     safety: bool = False
     world_path: str | None = None
@@ -42,7 +41,6 @@ class Config:
     max_new_plants: int = 3
     model_api_key: str | None = field(default=None, repr=False)
     baseten_api_key: str | None = field(default=None, repr=False)
-    fireworks_api_key: str | None = field(default=None, repr=False)
     prices: Prices = field(default_factory=Prices)
 
     def open_model_id(self) -> str:
@@ -59,8 +57,6 @@ class Config:
         """The key for the chosen open-weights host, if it needs one."""
         if self.open_model_host == "baseten":
             return self.baseten_api_key
-        if self.open_model_host == "fireworks":
-            return self.fireworks_api_key
         if self.open_model_host == "modal-glimmer":
             return None
         return self.model_api_key
@@ -76,7 +72,6 @@ def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
         "MODEL",
         "OPEN_MODEL_HOST",
         "OPEN_MODEL",
-        "OPEN_BASE_URL",
         "REFERENCE",
         "SAFETY",
         "WORLD_PATH",
@@ -133,6 +128,5 @@ def load(path: str | Path | None = None) -> Config:
     return Config(
         model_api_key=os.environ.get("MODEL_API_KEY"),
         baseten_api_key=os.environ.get("BASETEN_API_KEY"),
-        fireworks_api_key=os.environ.get("FIREWORKS_API_KEY"),
         **values,  # type: ignore[arg-type]
     )

@@ -226,9 +226,8 @@ on Meta. Tool calling and JSON-schema output were tried there and work.
   Baseten refuses, the call falls back to the Meta Model API inside
   the Meta caps ($8 a job, $20 a day, $80 total); past those, builds
   wait. Every log line records which host ran it.
-- **Fireworks:** Muse Glimmer, model id from `BUILDER_OPEN_MODEL`.
-  **To confirm** at T43: that a LoRA fine-tune of it is served
-  serverless.
+- **Dropped (#103):** the Fireworks host is gone; no host takes a
+  configured URL, so every model call is Meta-only.
 - **Modal:** refused until the model names are confirmed.
 
 ## Verified with live calls

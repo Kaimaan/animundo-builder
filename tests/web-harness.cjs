@@ -96,6 +96,13 @@ const fakeAuth = {
   isSignInWithEmailLink: () => false,
   signOut: async () => {},
   useEmulator() {},
+  signInWithEmailAndPassword: async () => {
+    if (global.__judgeFails) {
+      throw new Error("auth/wrong-password");
+    }
+    global.__judgeSignedIn = true;
+    return {};
+  },
 };
 const addedDocs = [];
 let grownupsCountry = null;
@@ -151,7 +158,7 @@ function primaryActs(html) {
 
 async function main() {
   global.__fetchImpl = bootFetch;
-  eval(src + "\n;globalThis.__app = { state, t, dayLabel, bothExist, draftTitle, draftState, draftActions, playUrl, playPlaceAnimal, suggestFor, builtFor, pickPlace, makeHome, renderAnimals, renderPlaceCards, renderPlaceSearch, pickerCountry, countryFromTimeZone, cardFacts, countryLabel, showView };");
+  eval(src + "\n;globalThis.__app = { state, t, dayLabel, bothExist, draftTitle, draftState, draftActions, playUrl, playPlaceAnimal, suggestFor, builtFor, pickPlace, makeHome, renderAnimals, renderPlaceCards, renderPlaceSearch, pickerCountry, countryFromTimeZone, cardFacts, countryLabel, showView, judgeMode, applyJudgeMode, signInJudge, returnUrl };");
   const app = globalThis.__app;
   // Let start() settle; it only wires listeners with these stubs.
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -416,6 +423,42 @@ async function main() {
   );
   check("emulator opened once", opened.length, openedBefore + 1);
   global.window.location.search = "";
+
+  // The judge sign-in (#104): hidden without ?judge=1, one error only.
+  check("judge form hidden by default", elements.get("auth-judge").hidden, true);
+  check("judge mode off by default", app.judgeMode(), false);
+  global.window.location.search = "?judge=1";
+  global.window.location.href = "http://localhost:8080/?judge=1";
+  check("judge mode on with the flag", app.judgeMode(), true);
+  app.applyJudgeMode();
+  check("judge form shown with the flag", elements.get("auth-judge").hidden, false);
+  check(
+    "judge kept through sign-out",
+    app.returnUrl(),
+    "http://localhost:8080/?judge=1",
+  );
+  global.__judgeFails = true;
+  for (const id of ["auth-judge-email", "auth-judge-password", "auth-judge-error"]) {
+    document.getElementById(id);
+  }
+  elements.get("auth-judge-email").value = "judge-a@judges.animundo.app";
+  elements.get("auth-judge-password").value = "wrong";
+  await app.signInJudge();
+  check(
+    "wrong password says only this",
+    elements.get("auth-judge-error").textContent,
+    "That email or password isn't right",
+  );
+  check("wrong password shows the error", elements.get("auth-judge-error").hidden, false);
+  check("wrong password clears the field", elements.get("auth-judge-password").value, "");
+  global.__judgeFails = false;
+  elements.get("auth-judge-password").value = "right";
+  await app.signInJudge();
+  check("right password signs in", global.__judgeSignedIn, true);
+  check("right password clears the field", elements.get("auth-judge-password").value, "");
+  check("right password shows no error", elements.get("auth-judge-error").hidden, true);
+  global.window.location.search = "";
+  global.window.location.href = "http://localhost/";
 
   // A fresh build ends back on Your animals with its card on top (#92.4).
   app.state.picked = moose;

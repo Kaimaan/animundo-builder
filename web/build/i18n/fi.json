@@ -1,0 +1,6 @@
+{
+  "auth.judge_line": "Tuomarit: kirjaudu sisään ohjeissa annetuilla tunnuksilla",
+  "auth.judge_password_ph": "Salasana",
+  "auth.judge_signin": "Kirjaudu sisään",
+  "auth.judge_error": "Sähköposti tai salasana on väärin"
+}

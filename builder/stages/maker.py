@@ -959,9 +959,7 @@ class AnimalMakerStage:
         )
         return errors
 
-    def _write_measured_length(
-        self, ctx: Any, animal_id: str, log: str
-    ) -> None:
+    def _write_measured_length(self, ctx: Any, animal_id: str, log: str) -> None:
         """The file's game length, from the build's measurement (#140.3).
 
         The build prints what `animals/{id}.json` carries; the
@@ -972,8 +970,7 @@ class AnimalMakerStage:
         measured = _measured_length(log, animal_id)
         if measured is None:
             raise _Stopped(
-                f"{animal_id}: the build printed no measured length; "
-                "a person looks"
+                f"{animal_id}: the build printed no measured length; a person looks"
             )
         path = ctx.job_dir / "animals" / f"{animal_id}.json"
         try:

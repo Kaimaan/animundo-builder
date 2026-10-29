@@ -1063,9 +1063,7 @@ def test_diet_comes_from_the_research(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     _gull_research(tmp_path)
-    client = ScriptClient(
-        [_animal_answer("lynx", diet=["berries"]), _edits_answer()]
-    )
+    client = ScriptClient([_animal_answer("lynx", diet=["berries"]), _edits_answer()])
     _stage().run(_ctx(tmp_path, world, client))
     made = json.loads((tmp_path / "animals" / "lynx.json").read_text())
     assert made["diet"] == ["bottom_bugs"]

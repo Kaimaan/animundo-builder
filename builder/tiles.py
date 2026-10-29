@@ -101,17 +101,24 @@ def home_for_cell(
 ) -> str | None:
     """The home covering this ecoregion and habitat, or None.
 
-    Sea and open ocean both build from sea. Boreal water picks the
-    lake home through the tile's habitat: a boreal_lake cell builds
-    from boreal_lake, a boreal_forest cell from boreal_forest.
+    Sea and open ocean build from a home of habitat `sea` that
+    lists the cell's ecoregion, else the generic `sea` (#140.1).
+    Boreal water picks the lake home through the tile's habitat:
+    a boreal_lake cell builds from boreal_lake, a boreal_forest
+    cell from boreal_forest.
     """
     if eco is None:
         return None
     if habitat in ("sea", "open_ocean"):
-        for home_id in sorted(homes):
-            data = homes[home_id]
-            if home_id == "sea" and eco in (data.get("ecoregions") or []):
-                return home_id
+        listed = sorted(
+            home_id
+            for home_id, data in homes.items()
+            if data.get("habitat") == "sea" and eco in (data.get("ecoregions") or [])
+        )
+        if listed:
+            return listed[0]
+        if "sea" in homes:
+            return "sea"
         return None
     for home_id in sorted(homes):
         data = homes[home_id]

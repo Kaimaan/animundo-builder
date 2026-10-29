@@ -3,6 +3,17 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #140, the tile maker takes the reviewed sea home (1)
+
+- `home_for_cell` took only the home literally named `sea`
+  for sea cells, so `sea_717` never applied and the tile
+  stayed `no_home`. It now takes any home of habitat
+  `sea` listing the cell's ecoregion, preferring one that
+  lists it over the generic `sea`.
+- Evidence: with world `d009df2`, `n_415_479` makes a
+  ready tile from `sea_717` with the herring gull
+  playable; suite, ruff, gitleaks.
+
 ## 2026-10-29: inbox #135, the species call names the square (5)
 
 - The species call now answers a short child-friendly name

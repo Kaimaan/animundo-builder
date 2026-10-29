@@ -418,6 +418,50 @@ def _sea_3x3(col: int, row: int) -> dict[str, list]:
     }
 
 
+def test_home_for_cell_prefers_the_sea_home_listing_the_cell() -> None:
+    """#140.1: a sea home naming the ecoregion beats the generic sea."""
+    homes = {
+        "sea": {"habitat": "sea", "ecoregions": [651]},
+        "sea_717": {"habitat": "sea", "ecoregions": [717]},
+    }
+    assert home_for_cell(717, "sea", homes) == "sea_717"
+    assert home_for_cell(651, "sea", homes) == "sea"
+    assert home_for_cell(999, "sea", homes) == "sea"
+    assert home_for_cell(None, "sea", homes) is None
+    assert home_for_cell(717, "sea", {}) is None
+
+
+def test_make_tile_builds_the_reviewed_sea_border() -> None:
+    """#140.1: with world d009df2, n_415_479 is ready from sea_717."""
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "homes" / "sea_717.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed sea home")
+    if not (world / "animals" / "herring_gull.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed gull")
+    grid_dir = ROOT / "data" / "habitat-grid"
+    grids = {
+        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
+        for name in ("ease2_n25", "ease2_s25")
+    }
+    made, blocked = make_tile(
+        "n_415_479",
+        grids,  # type: ignore[arg-type]
+        world,
+        species={
+            "place": "Gulf of Finland off Helsinki",
+            "present": ["herring_gull"],
+            "name_en": "Helsinki shore",
+            "name_fi": "Helsingin ranta",
+        },
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["home"] == "sea_717"
+    assert "herring_gull" in made["species"]["playable"]
+
+
 def test_make_tile_uses_sea_home_for_sea(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (world / "animals" / "herring.json").write_text(

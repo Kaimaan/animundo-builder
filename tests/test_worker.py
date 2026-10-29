@@ -387,6 +387,58 @@ def test_plant_item_builds_through_stages(tmp_path: Path, monkeypatch: Any) -> N
     )
 
 
+def test_private_job_writes_judge_preview(tmp_path: Path, monkeypatch: Any) -> None:
+    """T84: a private job's checked items become its judge's pack."""
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [
+        {
+            "id": "animal_lion",
+            "kind": "animal",
+            "what": "lion",
+            "from": "fox",
+            "estimate_usd": 0.15,
+        }
+    ]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "tile": "n_413_478",
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "queued",
+        "items": ["animal_lion"],
+        "visibility": "private",
+        "created_by": "policy",
+        "progress": [],
+        "cost_usd": 0.0,
+        "private_to": "judge1",
+    }
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+    ) -> None:
+        folder = item_dir / "animals"
+        folder.mkdir(parents=True)
+        (folder / "lion.json").write_bytes(b'{"id": "lion"}')
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"
+    assert job["preview"] == {"pack": "previews/j1/1/"}
+    assert "previews/j1/1/manifest.json" in store.blobs
+    assert "previews/j1/1/animals/lion.json" in store.blobs
+
+
 def test_build_job_fails_without_its_tile(tmp_path: Path) -> None:
     store = FakeStore()
     store.plans["n_413_478"] = _code_plan("n_413_478")

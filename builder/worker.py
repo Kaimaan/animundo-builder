@@ -3,7 +3,7 @@
 The builder is a factory (D17): the game runs the world, the worker
 plans every new or changed border request and builds only the build
 jobs the game creates. Planning (T74) and building (T76) are
-live; previews (T84) and Modal (T77) land next.
+live; Modal (T77) lands next.
 """
 
 from __future__ import annotations
@@ -243,6 +243,8 @@ class Worker:
             self._fail(job_id, stopped)
             return
         self._set_status(job_id, "checking")
+        if job.get("visibility") == "private":
+            self.write_preview(job_id, job, tile)
 
     def run_item(
         self,
@@ -329,6 +331,8 @@ class Worker:
             self.store.update_build_job(
                 job_id, {"progress": progress, "updated_at": now_iso()}
             )
+        if job.get("visibility") == "private":
+            self.write_preview(job_id, job, tile)
         if progress:
             return
         if not shipped_any:
@@ -534,6 +538,59 @@ class Worker:
             path.stem.endswith(f"_{item['what']}")
             for path in (self.world / "homes").glob("*.json")
         )
+
+    def write_preview(self, job_id: str, job: dict[str, Any], tile: str) -> None:
+        """A private job's preview pack, only its judge opens (T84)."""
+        from . import build as build_mod
+
+        bundles: dict[str, dict[str, bytes]] = {}
+        for entry in job.get("progress", []):
+            if entry.get("status") != "checking":
+                continue
+            bundle: dict[str, bytes] = {}
+            item_dir = self.jobs_dir / job_id / entry["id"]
+            if item_dir.is_dir():
+                for name in build_mod.TAKE_DIRS:
+                    folder = item_dir / name
+                    if folder.is_dir():
+                        for path in sorted(folder.rglob("*")):
+                            if path.is_file():
+                                bundle[path.relative_to(item_dir).as_posix()] = (
+                                    path.read_bytes()
+                                )
+            else:
+                prefix = f"review/{job_id}/{entry['id']}/"
+                for blob in self.store.list_blobs(prefix):
+                    data = self.store.read_blob(blob)
+                    if data is not None:
+                        bundle[blob.removeprefix(prefix)] = data
+            if bundle:
+                bundles[entry["id"]] = bundle
+        if not bundles:
+            return
+        version = build_mod.next_preview_version(self.store, job_id)
+        try:
+            pack = build_mod.assemble_preview(job_id, tile, version, bundles)
+        except ValueError as error:
+            print(f"build job {job_id}: no preview: {error}", file=sys.stderr)
+            return
+        for rel, data in pack.items():
+            content_type = (
+                "application/json"
+                if rel.endswith(".json")
+                else "application/octet-stream"
+            )
+            self.store.write_blob(
+                f"previews/{job_id}/{version}/{rel}", data, content_type
+            )
+        self.store.update_build_job(
+            job_id,
+            {
+                "preview": {"pack": f"previews/{job_id}/{version}/"},
+                "updated_at": now_iso(),
+            },
+        )
+        print(f"build job {job_id}: preview {version} for its judge")
 
     def pull_world(self) -> bool:
         """Pull the world checkout fast-forward; True when it moved."""

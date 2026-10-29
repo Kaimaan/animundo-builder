@@ -1,16 +1,17 @@
-"""Item builds, tile publishing and take (T76, #101).
+"""Item builds, tile publishing, previews and take (T76, T84, #101).
 
 The worker orchestrates; this module does the honest work. A build
 item runs the kept stages in its own job folder
 (`jobs/<job>/<item>/`): research, minimum, looks, newhome,
 oneshot. A new home first, then food, then the animal. Food items
 are code-only. Publishing writes one group file and the tile index,
-both to Storage; take lays a job's checked items out like
-animundo-world. Previews (T84) land next.
+both to Storage; previews are merged manifests only their judge
+opens; take lays a job's checked items out like animundo-world.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -34,7 +35,7 @@ from .stages.research import ResearchStage
 #: animal and plant items share this list.
 ITEM_STAGES = ("research", "minimum", "looks", "newhome", "oneshot", "plants")
 
-#: What take downloads, laid out like the world.
+#: What take downloads and previews carry, laid out like the world.
 TAKE_DIRS = ("homes", "animals", "models", "plants", "locale")
 
 
@@ -309,6 +310,63 @@ def _update_index(
     index["world"] = world_commit
     validate("tile-index", index)
     store.write_blob("tiles/v1/index.json", json.dumps(index).encode("utf-8"))
+
+
+def assemble_preview(
+    job_id: str,
+    tile: str,
+    version: int,
+    bundles: dict[str, dict[str, bytes]],
+) -> dict[str, bytes]:
+    """A judge's preview pack: every built item's files plus its manifest.
+
+    Only world-shaped content files travel, never job working
+    files: homes, animals, models, plants, locale.
+    """
+    files: dict[str, bytes] = {}
+    for _item_id, bundle in sorted(bundles.items()):
+        for rel, data in bundle.items():
+            first = rel.split("/", 1)[0]
+            if first in TAKE_DIRS:
+                files[rel] = data
+    if not files:
+        raise ValueError("a preview needs at least one file")
+    manifest = {
+        "draft_id": job_id,
+        "draft_place_id": f"draft_{job_id}",
+        "place_id": tile,
+        "version": version,
+        "format": 1,
+        "files": [
+            {
+                "path": rel,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "bytes": len(data),
+            }
+            for rel, data in sorted(files.items())
+        ],
+        "new_species": sorted(
+            {
+                rel.split("/")[1].removesuffix(".json")
+                for rel in files
+                if rel.startswith("animals/") and rel.endswith(".json")
+            }
+        ),
+        "reused_species": [],
+    }
+    validate("pack-manifest", manifest)
+    return {**files, "manifest.json": json.dumps(manifest, indent=2).encode("utf-8")}
+
+
+def next_preview_version(store: Any, job_id: str) -> int:
+    """One past the newest preview version, or 1 when there is none."""
+    versions = []
+    for name in store.list_blobs(f"previews/{job_id}/"):
+        rest = name.removeprefix(f"previews/{job_id}/")
+        head = rest.split("/", 1)[0]
+        if head.isdigit():
+            versions.append(int(head))
+    return max(versions, default=0) + 1
 
 
 def take_bundle(store: Any, job_id: str, out_dir: Path) -> Path:

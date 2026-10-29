@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #118 (phase 2, T84 the preview pack)
+
+- T84: a `private` job's versioned preview pack under
+  `previews/<job>/<version>/`, only its judge opens it. The
+  job's own `visibility` drives the worker; the pack is written
+  when items check and rewritten as reviews land.
+- Evidence: `uv run pytest -q` → 640 passed, 12 skipped;
+  `ruff check` + `format --check` clean.
+
 ## 2026-10-29: inbox #118 (phase 2, T76 finished: plant builds)
 
 - Plant items build through the plants step: the brief carries

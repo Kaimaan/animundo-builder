@@ -268,6 +268,42 @@ def test_publish_group_moves_counts_by_delta() -> None:
     assert index["counts"] == {"ready": 5, "blocked": {"no_home": 1}}
 
 
+def test_assemble_preview_validates_and_hashes() -> None:
+    home = b'{"id": "tundra_774"}'
+    pack = build_mod.assemble_preview(
+        "j1",
+        "n_401_434",
+        2,
+        {"home_774": {"homes/tundra_774.json": home, "tries/x": b"no"}},
+    )
+    assert sorted(pack) == ["homes/tundra_774.json", "manifest.json"]
+    manifest = json.loads(pack["manifest.json"].decode("utf-8"))
+    validate("pack-manifest", manifest)
+    assert manifest["draft_id"] == "j1"
+    assert manifest["place_id"] == "n_401_434"
+    assert manifest["version"] == 2
+    assert manifest["files"] == [
+        {
+            "path": "homes/tundra_774.json",
+            "sha256": __import__("hashlib").sha256(home).hexdigest(),
+            "bytes": len(home),
+        }
+    ]
+
+
+def test_assemble_preview_needs_a_file() -> None:
+    with pytest.raises(ValueError, match="at least one file"):
+        build_mod.assemble_preview("j1", "n_401_434", 1, {"home_774": {}})
+
+
+def test_next_preview_version_bumps() -> None:
+    store = FakeStore()
+    assert build_mod.next_preview_version(store, "j1") == 1
+    store.write_blob("previews/j1/1/manifest.json", b"{}")
+    store.write_blob("previews/j1/2/manifest.json", b"{}")
+    assert build_mod.next_preview_version(store, "j1") == 3
+
+
 def test_take_bundle_lays_out_world_shape(tmp_path: Path) -> None:
     store = FakeStore()
     store.write_blob("review/j1/home_1/homes/t.json", b"{}")

@@ -23,7 +23,13 @@ from .habitats import HabitatGrid
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
 from .prices import ITEM_ESTIMATES
 from .schemas import validate
-from .tiles import available_homes, home_for_cell, make_tile, pick_species
+from .tiles import (
+    available_homes,
+    excluded_tiles,
+    home_for_cell,
+    make_tile,
+    pick_species,
+)
 
 #: Hand-made places the plan name points from: id, English and
 #: genitive Finnish names, and the region centre.
@@ -153,9 +159,12 @@ def _pick_animal(
 
     When the explorer plays an animal the library lacks and GBIF
     recorded it near the cell, that animal serves them directly.
-    Otherwise the most recorded one; ties break by id.
+    Otherwise the most recorded one; ties break by id. Animals
+    without a `start_from` are left out: the one-shot maker cannot
+    adapt from a home, so they get no item until D19's `newshape`.
     """
-    recorded = {e["id"]: counts.get(e["id"], 0.0) for e in unfiled}
+    buildable = [e for e in unfiled if e.get("start_from")]
+    recorded = {e["id"]: counts.get(e["id"], 0.0) for e in buildable}
     recorded = {s: n for s, n in recorded.items() if n > 0}
     if not recorded:
         return None
@@ -163,9 +172,9 @@ def _pick_animal(
     ranked_played = sorted(played, key=lambda s: (-played[s], s))
     for species in ranked_played:
         if species in recorded:
-            return next(e for e in unfiled if e["id"] == species)
+            return next(e for e in buildable if e["id"] == species)
     winner = sorted(recorded, key=lambda s: (-recorded[s], s))[0]
-    return next(e for e in unfiled if e["id"] == winner)
+    return next(e for e in buildable if e["id"] == winner)
 
 
 def _missing_food(
@@ -198,8 +207,9 @@ def _missing_find(world: Path, home: dict[str, Any]) -> tuple[str, str] | None:
 
     Homes name the plants children find (`food[].names`, say
     "arctic willow"); the first name with no `models/plants/` file
-    becomes the plan's thing to find, adapted from the first
-    plant there is. A home naming nothing unfiled needs nothing.
+    becomes the plan's thing to find, adapted from a filed plant of
+    the same food kind, else the first plant there is. A home
+    naming nothing unfiled needs nothing.
     """
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
     for entry in home.get("food", []) or []:
@@ -208,8 +218,20 @@ def _missing_find(world: Path, home: dict[str, Any]) -> tuple[str, str] | None:
             if slug and slug not in have:
                 if not have:
                     raise ValueError("the world has no plants to adapt from")
-                return slug, have[0]
+                return slug, _plant_ref(home, entry.get("kind"), have)
     return None
+
+
+def _plant_ref(home: dict[str, Any], kind: str | None, have: list[str]) -> str:
+    """A filed plant named under the same food kind, else the first filed."""
+    filed = set(have)
+    for entry in home.get("food", []) or []:
+        if entry.get("kind") != kind:
+            continue
+        for name in entry.get("names", []) or []:
+            if plant_slug(name) in filed:
+                return plant_slug(name)
+    return have[0]
 
 
 def plan_tile(
@@ -220,18 +242,24 @@ def plan_tile(
     world_commit: str,
     presence: dict[str, float] | None = None,
     unfiled_presence: dict[str, float] | None = None,
+    builder_root: Path | None = None,
 ) -> dict[str, Any]:
     """The border plan for one tile, valid against the plan contract.
 
     `presence` and `unfiled_presence` override the live GBIF fetch
     (tests and replays). The plan is made again when the world
     commit moves; a new home can turn an AI plan into `code_only`.
+    An excluded cell gets no items: it is never built.
     """
     grid, col, row = parse_tile(tile)
     habitat_grid = grids[grid]
     eco1 = habitat_grid.cell_data(col, row)[0]
     habitat = habitat_grid.habitat(col, row)
     lat, lon = center(tile)
+    if tile in excluded_tiles(builder_root):
+        return _finish(
+            tile, False, [], [], {}, request, habitat, lat, lon, world_commit
+        )
     homes = available_homes(world)
     home = home_for_cell(eco1, habitat, homes)
     entries = library_animals(world)
@@ -272,7 +300,9 @@ def plan_tile(
         )
     else:
         home_id = home
-        made, _blocked = make_tile(tile, grids, world, presence=presence)
+        made, _blocked = make_tile(
+            tile, grids, world, presence=presence, builder_root=builder_root
+        )
         if made is not None:
             return _finish(
                 tile,
@@ -285,7 +315,6 @@ def plan_tile(
                 lat,
                 lon,
                 world_commit,
-                home,
             )
     # Expanding: each missing thing on its own (spec 04, minimum).
     # The home below is real, or the one the new home adapts from.
@@ -321,7 +350,7 @@ def plan_tile(
                     "id": f"animal_{picked['id']}",
                     "kind": "animal",
                     "what": picked["id"],
-                    "from": picked.get("start_from") or home_id,
+                    "from": picked["start_from"],
                     "estimate_usd": ITEM_ESTIMATES["animal"],
                 }
             )
@@ -348,7 +377,6 @@ def plan_tile(
         lat,
         lon,
         world_commit,
-        home_id,
     )
 
 
@@ -363,7 +391,6 @@ def _finish(
     lat: float,
     lon: float,
     world_commit: str,
-    home_id: str | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items."""
     picked_ids = {i["what"] for i in items if i["kind"] == "animal"}
@@ -373,18 +400,20 @@ def _finish(
         if species in picked_ids or species not in by_id:
             continue
         entry = by_id[species]
+        if not entry.get("start_from"):
+            continue
         improve.append(
             {
                 "id": f"improve_{species}",
                 "kind": "animal",
                 "what": species,
-                "from": entry.get("start_from") or home_id or "boreal_forest",
+                "from": entry["start_from"],
                 "estimate_usd": ITEM_ESTIMATES["animal"],
             }
         )
         if len(improve) >= 2:
             break
-    coming = [item["id"] for item in [*items, *improve] if item["kind"] == "animal"]
+    coming = [item["what"] for item in [*items, *improve] if item["kind"] == "animal"]
     plan = {
         "format": 1,
         "tile": tile,

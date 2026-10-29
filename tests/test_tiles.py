@@ -344,6 +344,24 @@ def test_make_tile_blocks_without_animals(tmp_path: Path) -> None:
     assert blocked == {"reason": "no_animal", "habitat": "boreal_forest"}
 
 
+def test_make_tile_blocks_excluded_cells(tmp_path: Path) -> None:
+    """#133.7: a cell in exclusions.json blocks with `excluded`."""
+    import json
+
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _boreal_3x3(413, 478))
+    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["n_413_478"]}))
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,
+        world,
+        presence={"fox": 5.0, "mountain_hare": 9.0, "vole": 20.0},
+        builder_root=tmp_path,  # type: ignore[arg-type]
+    )
+    assert made is None
+    assert blocked == {"reason": "excluded", "habitat": "boreal_forest"}
+
+
 def test_edges_agree_at_corners(tmp_path: Path) -> None:
     grids = _grids(tmp_path, _boreal_3x3(413, 478))
     edges = tile_edges("n_413_478", grids)  # type: ignore[arg-type]

@@ -3,6 +3,53 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #133, review of phase 2's first commits
+
+- Point 1: the Modal image sets `BUILDER_OPEN_MODEL_HOST=baseten`
+  and `BUILDER_LEDGER_PATH=/jobs/spend-ledger.json` (`WORKER_ENV`
+  in `deploy/modal_worker.py`). `docs/worker.md` says which calls
+  prefer the open host (`ctx.chat`: the D7 edits and D8 choices
+  forms, words, reviews, file writing) and which stay on Meta
+  (search grounding, images, SAM), with the Meta fallback.
+- Point 2: the Volume commits every few minutes while the worker
+  runs (`supervise`), and `builder worker --listen` opens with one
+  start line (open host, ledger path and both totals, world commit,
+  the off switch). The ledger seeding stays Kai's manual step.
+- Found with point 2: the image's `pip install` builds a wheel,
+  which ships only `builder/` (no contracts, schemas, prompts or
+  `exclusions.json`), so every plan and build would fail on a
+  missing schema. The image installs editable instead (one flag,
+  tested, in the same file).
+- Point 3: each item gets what's left of `budget_usd`, and the job
+  stops cleanly at it; `cost_usd` never goes over.
+- Point 4: shipped plants check `models/plants/<what>.json` in the
+  world (the .glb and preview .png are optional extras).
+- Point 5: claiming a job snapshots the approved items to
+  `jobs/<job>/plan.json` (first write wins); build, ship and
+  preview read the snapshot, so a re-plan strands nothing. Jobs
+  claimed before this fall back to the live plan.
+- Point 6: the ship path is tested at last: reviewed to published,
+  `not_accepted` dropped while the rest ship, a private preview
+  rewritten after a review.
+- Point 7: `make_tile` blocks excluded cells with `excluded`, and
+  the planner writes no items for them. The core team lists tile
+  ids under a `tiles` key in `exclusions.json` (left untouched:
+  agents never add to it); a corrupt file fails loudly.
+- Point 8: `coming` holds species ids; shipped entries keep their
+  progress rows and the game's `review` says what shipped; animals
+  without a `start_from` get no item until D19's `newshape`; a
+  find adapts from a filed plant of its food kind, else the first
+  filed. After a ship only the border tile is made again: the
+  tiles-near-the-area re-run waits for phase 3's bulk run, which
+  is where `--near` lives.
+- Point 9: the README needs nothing yet (no sheets or SAM claims
+  in it; the animals line changes with #131; the `[TO FILL]`s wait
+  for measured Modal runs). The logs rule is now in `AGENTS.md`:
+  release assets after Kai's review, never in git.
+- Evidence: `uv run pytest -q` → 661 passed, 12 skipped;
+  `ruff check` + `format --check` clean; `gitleaks git` clean;
+  `builder check --world` skeleton on.
+
 ## 2026-10-29: inbox #102/T30, the README for judges
 
 - T30: `README.md` rewritten for 0038 (the grown-up draft stays

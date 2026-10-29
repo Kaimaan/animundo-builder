@@ -9,8 +9,9 @@ through the same code as on a laptop. A daily restart covers Modal's
 The world is cloned fresh at container start (it is public, so no
 key), and the worker pulls it before every tile it makes (#99.4):
 a merged world change reaches the next tile within one pull.
-Baked habitat grids ride in the image; job folders live on the
-`animundo-jobs` Volume, committed after each round.
+Baked habitat grids ride in the image; job folders and the spend
+ledger live on the `animundo-jobs` Volume, committed every few
+minutes while the worker runs.
 
 Kai deploys (the Modal account and secrets are his)::
 
@@ -22,6 +23,7 @@ from __future__ import annotations
 import os
 import pathlib
 import subprocess
+from typing import Any
 
 import modal
 
@@ -29,6 +31,25 @@ BUILDER = pathlib.Path(__file__).resolve().parent.parent
 WORLD_URL = "https://github.com/Kaimaan/animundo-world.git"
 PROJECT = "animundo-dev"
 BUCKET = "animundo-dev.firebasestorage.app"
+
+#: The live worker's environment, baked into the image: open-weights
+#: calls go to Baseten (its $100 pool, not the Meta credit), and the
+#: spend ledger sits on the jobs Volume so it survives restarts.
+WORKER_ENV = {
+    "BUILDER_OPEN_MODEL_HOST": "baseten",
+    "BUILDER_LEDGER_PATH": "/jobs/spend-ledger.json",
+}
+
+#: The builder installs editable, not as a wheel: the wheel ships
+#: only the `builder/` package, but the worker reads the contracts,
+#: schemas, prompts and `exclusions.json` from the checkout next to
+#: it. The image is immutable, so editable changes nothing at run
+#: time; without it every plan and build fails on a missing schema.
+PIP_INSTALL_CMD = "pip install --no-cache-dir -e /src/builder"
+
+#: Volume commits while the worker runs: the ledger and job folders
+#: stay durable between daily restarts, not only at the very end.
+COMMIT_EVERY_SECONDS = 300
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -82,7 +103,7 @@ image = (
             "**/node_modules",
         ],
     )
-    .run_commands("pip install --no-cache-dir /src/builder")
+    .run_commands(PIP_INSTALL_CMD)
     .add_local_file(
         BUILDER / "data" / "habitat-grid" / "ease2_n25.json.gz",
         "/grids/ease2_n25.json.gz",
@@ -91,6 +112,7 @@ image = (
         BUILDER / "data" / "habitat-grid" / "ease2_s25.json.gz",
         "/grids/ease2_s25.json.gz",
     )
+    .env(WORKER_ENV)
 )
 
 app = modal.App("animundo-worker")
@@ -145,6 +167,21 @@ def _world() -> str:
     return target
 
 
+def supervise(proc: subprocess.Popen, commit: Any, every: int, sleep: Any) -> None:
+    """Commit the Volume while the worker runs, and once at the end.
+
+    `proc` is the running worker, `commit` the Volume's commit,
+    `sleep` a seconds-sleeper. A crash still commits on the way out.
+    """
+    try:
+        while proc.poll() is None:
+            sleep(every)
+            commit()
+    finally:
+        proc.wait()
+        commit()
+
+
 @app.function(
     image=image,
     secrets=secrets,
@@ -156,6 +193,8 @@ def _world() -> str:
     max_containers=1,
 )
 def listen() -> None:
+    import time
+
     _credentials()
-    subprocess.run(worker_command(_world()), check=False)
-    jobs.commit()
+    proc = subprocess.Popen(worker_command(_world()))
+    supervise(proc, jobs.commit, COMMIT_EVERY_SECONDS, time.sleep)

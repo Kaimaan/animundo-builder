@@ -101,6 +101,7 @@ class Worker:
     in_flight: set[tuple[str, str]] = field(default_factory=set)
     grid_dir: Path | None = None
     world_commit: str | None = None
+    builder_root: Path | None = None
     chat: Any | None = None
     adapt: Any | None = None
     build: Any | None = None
@@ -143,6 +144,7 @@ class Worker:
                 self._grids(),
                 self.world,
                 self.world_commit or "unknown",
+                builder_root=self.builder_root,
             )
         except (ValueError, RuntimeError, FileNotFoundError, ConnectionError) as error:
             print(f"request {tile}: cannot plan: {error}", file=sys.stderr)
@@ -185,10 +187,13 @@ class Worker:
         tile = self._job_tile(job_id, job)
         if tile is None:
             return
+        self._snapshot_plan(job_id, job, tile)
         if job.get("kind") == "code":
             if self.pull_world():  # a merged change reaches this tile (#99.4)
                 self.world_commit = git_commit(self.world)
-            made, blocked = make_tile(tile, self._grids(), self.world)
+            made, blocked = make_tile(
+                tile, self._grids(), self.world, builder_root=self.builder_root
+            )
             if made is None:
                 reason = (blocked or {}).get("reason", "no_home")
                 self._fail(job_id, reason)
@@ -199,17 +204,59 @@ class Worker:
             return
         self.build_items(job_id, job, tile)
 
+    def _snapshot_plan(self, job_id: str, job: dict[str, Any], tile: str) -> None:
+        """Freeze the plan's approved items into the job folder.
+
+        A re-plan (the world moved, the home shipped) must never
+        strand a claimed job, so the claim's snapshot stands: the
+        first write wins, and build, ship and preview read it.
+        """
+        import json
+
+        path = self.jobs_dir / job_id / "plan.json"
+        if path.is_file():
+            return
+        plan = self.store.get_plan(tile) or {}
+        wanted = set(job.get("items", []))
+        snapshot = {
+            "tile": tile,
+            "items": [i for i in plan.get("items", []) if i["id"] in wanted],
+            "improve": [i for i in plan.get("improve", []) if i["id"] in wanted],
+            "world": plan.get("world", "unknown"),
+            "snapshot_at": now_iso(),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(snapshot, indent=1), encoding="utf-8")
+
+    def _job_plan(self, job_id: str, job: dict[str, Any], tile: str) -> dict[str, Any]:
+        """The job's plan: the claim snapshot, else the live plan filtered.
+
+        Jobs claimed before the snapshot landed fall back to the live
+        plan; everything claimed since reads its frozen items.
+        """
+        import json
+
+        path = self.jobs_dir / job_id / "plan.json"
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+        plan = self.store.get_plan(tile) or {}
+        wanted = set(job.get("items", []))
+        return {
+            "tile": tile,
+            "items": [i for i in plan.get("items", []) if i["id"] in wanted],
+            "improve": [i for i in plan.get("improve", []) if i["id"] in wanted],
+            "world": plan.get("world", "unknown"),
+            "snapshot_at": None,
+        }
+
     def build_items(self, job_id: str, job: dict[str, Any], tile: str) -> None:
         """Each approved item through the kept steps, within budget."""
         from . import build as build_mod
 
         assert self.world is not None
-        plan = self.store.get_plan(tile) or {}
-        wanted = set(job.get("items", []))
-        expand = build_mod.order_items(
-            [i for i in plan.get("items", []) if i["id"] in wanted]
-        )
-        improve = [i for i in plan.get("improve", []) if i["id"] in wanted]
+        plan = self._job_plan(job_id, job, tile)
+        expand = build_mod.order_items(plan.get("items", []))
+        improve = plan.get("improve", [])
         if not expand and not improve:
             self._fail(job_id, "no_items")
             return
@@ -270,7 +317,8 @@ class Worker:
         item_dir = self.jobs_dir / job_id / item["id"]
         item_dir.mkdir(parents=True, exist_ok=True)
         before = float((self.store.get_build_job(job_id) or {}).get("cost_usd", 0.0))
-        config = dataclasses.replace(self.config, job_budget_usd=budget)
+        left = max(0.0, budget - before)
+        config = dataclasses.replace(self.config, job_budget_usd=left)
         ctx = make_context(config, f"{job_id}/{item['id']}", item_dir, self.world)
         if self.chat is not None:
             ctx.client = self.chat
@@ -301,7 +349,13 @@ class Worker:
         self._close_item(job_id, item, item_dir, ctx, start, before, budget, None)
 
     def review_job(self, job_id: str, job: dict[str, Any]) -> None:
-        """Ship or drop reviewed items; publish the tile; finish (T76)."""
+        """Ship or drop reviewed items; publish the tile; finish (T76).
+
+        Progress entries stay put, shipped or not: their report links
+        belong to the admin console, and the game's `review` says what
+        shipped. Items resolve against the claim snapshot, never the
+        live plan, so a re-plan cannot strand the job.
+        """
         from .build import publish_group
         from .tiles import make_tile
 
@@ -312,37 +366,37 @@ class Worker:
         tile = self._job_tile(job_id, job)
         if tile is None:
             return
-        plan = self.store.get_plan(tile) or {}
+        plan = self._job_plan(job_id, job, tile)
         by_id = {i["id"]: i for i in [*plan.get("items", []), *plan.get("improve", [])]}
         if self.pull_world():  # a merged change reaches this tile (#99.4)
             self.world_commit = git_commit(self.world)
-        progress = list(job.get("progress", []))
+        progress = job.get("progress", [])
+        pending = False
         shipped_any = False
-        for entry in list(progress):
+        for entry in progress:
             verdict = (review.get(entry["id"]) or {}).get("result")
             if verdict == "not_accepted":
-                progress.remove(entry)
                 print(f"build job {job_id}: dropped {entry['id']}")
             elif verdict == "shipped":
                 item = by_id.get(entry["id"])
                 if item is not None and self._world_has(item, plan):
-                    progress.remove(entry)
                     shipped_any = True
                     print(f"build job {job_id}: shipped {entry['id']}")
                 else:
+                    pending = True
                     print(f"build job {job_id}: {entry['id']} waits for the world")
-        if progress != job.get("progress", []):
-            self.store.update_build_job(
-                job_id, {"progress": progress, "updated_at": now_iso()}
-            )
+            else:
+                pending = True
         if job.get("visibility") == "private":
             self.write_preview(job_id, job, tile)
-        if progress:
+        if pending:
             return
         if not shipped_any:
             self._fail(job_id, "nothing_shipped")
             return
-        made, blocked = make_tile(tile, self._grids(), self.world)
+        made, blocked = make_tile(
+            tile, self._grids(), self.world, builder_root=self.builder_root
+        )
         if made is None:
             self._fail(job_id, (blocked or {}).get("reason", "no_home"))
             return
@@ -383,7 +437,7 @@ class Worker:
     def _fits_budget(
         self, item: dict[str, Any], job: dict[str, Any], budget: float
     ) -> bool:
-        """An item starts only below the cap; code-only food always fits."""
+        """An item starts only with money left; code-only food always fits."""
         if item.get("kind") == "food":
             return True
         return float(job.get("cost_usd", 0.0)) < budget
@@ -522,6 +576,10 @@ class Worker:
             return self._home_id_files(item)
         if item["kind"] == "animal":
             return (self.world / "animals" / f"{item['what']}.json").is_file()
+        if item["kind"] == "plant":
+            # The reviewed deliverable is the plant file; the built
+            # .glb and preview .png are optional extras.
+            return (self.world / "models" / "plants" / f"{item['what']}.json").is_file()
         home_path = self.world / "homes" / f"{item['from']}.json"
         if not home_path.is_file():
             return False
@@ -750,6 +808,34 @@ class Listener:
             self.worker.in_flight.discard(key)
 
 
+def start_line(config: Config, store: Store, world: Path | None) -> str:
+    """One line for the deploy logs: host, ledger, world, off switch.
+
+    A `modal deploy` is checked from this line: the open-weights
+    host, the ledger path with both pools' totals, the world commit
+    and `config/builder.enabled`. An unreadable ledger reads
+    `unknown` here; the calls it guards still refuse.
+    """
+    from .ledger import FileLedger, LedgerError
+
+    try:
+        meta_total = f"${FileLedger(config.ledger_path).total_spent():.2f}"
+    except LedgerError:
+        meta_total = "unknown"
+    try:
+        spent = FileLedger(config.baseten_ledger_path()).total_spent()
+        baseten_total = f"${spent:.2f}"
+    except LedgerError:
+        baseten_total = "unknown"
+    enabled = store.get_enabled()
+    return (
+        f"worker start: open_host={config.open_model_host}"
+        f" ledger={config.ledger_path}"
+        f" meta_total={meta_total} baseten_total={baseten_total}"
+        f" world={git_commit(world)} enabled={str(enabled).lower()}"
+    )
+
+
 def listen(
     config: Config,
     jobs_dir: Path,
@@ -773,5 +859,6 @@ def listen(
         config=config,
         grid_dir=grid_dir,
     )
+    print(start_line(config, store, world))
     Listener(worker=worker, store=store, poll_seconds=300).start()
     return 0

@@ -95,6 +95,12 @@ def _world(tmp_path: Path) -> Path:
                         "habitats": ["boreal_forest"],
                         "can_make": False,
                     },
+                    {
+                        "id": "octopus",
+                        "gbif_key": 447,
+                        "habitats": ["boreal_forest"],
+                        "can_make": True,
+                    },
                 ],
             }
         )
@@ -204,7 +210,7 @@ def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:
         }
     ]
     assert [i["id"] for i in plan["improve"]] == ["improve_lion", "improve_okapi"]
-    assert plan["coming"] == ["animal_zebra", "improve_lion", "improve_okapi"]
+    assert plan["coming"] == ["zebra", "lion", "okapi"]
     assert plan["estimate_usd"] == 0.45
 
 
@@ -372,6 +378,105 @@ def test_plan_lists_one_thing_to_find(tmp_path: Path) -> None:
             "id": "plant_arctic_willow",
             "kind": "plant",
             "what": "arctic_willow",
+            "from": "bilberry",
+            "estimate_usd": 0.02,
+        }
+    ]
+
+
+def test_plan_writes_no_items_for_excluded_cells(tmp_path: Path) -> None:
+    """#133.7: an excluded cell is never planned and never built."""
+    world = _world(tmp_path)
+    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["n_413_478"]}))
+    grids = _grids(tmp_path, _boreal())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={"fox": 5.0, "vole": 20.0},
+        unfiled_presence={"lion": 50.0},
+        builder_root=tmp_path,
+    )
+    validate("plan", plan)
+    assert plan["code_only"] is False
+    assert plan["items"] == []
+    assert plan["improve"] == []
+    assert plan["coming"] == []
+
+
+def test_plan_leaves_out_animals_without_start_from(tmp_path: Path) -> None:
+    """#133.8: no reference on the list means no item, not a home `from`."""
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _boreal())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={"octopus": 99.0},
+    )
+    assert plan["items"] == []
+    assert plan["improve"] == []
+    assert plan["coming"] == []
+
+
+def test_plan_prefers_a_buildable_animal_over_an_unbuildable_one(
+    tmp_path: Path,
+) -> None:
+    """#133.8: the most recorded animal with a reference wins."""
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _boreal())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={"octopus": 99.0, "lion": 5.0},
+    )
+    assert [i["id"] for i in plan["items"]] == ["animal_lion"]
+    assert plan["items"][0]["from"] == "fox"
+    assert plan["coming"] == ["lion"]
+
+
+def test_plan_adapts_a_find_from_the_same_food_kind(tmp_path: Path) -> None:
+    """#133.8: a find's reference is a filed plant of its food kind."""
+    world = _world(tmp_path)
+    plants = world / "models" / "plants"
+    plants.mkdir(parents=True)
+    (plants / "amanita.json").write_text(json.dumps({"id": "amanita"}))
+    (plants / "bilberry.json").write_text(json.dumps({"id": "bilberry"}))
+    (world / "homes" / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "boreal_forest",
+                "ecoregions": [717],
+                "food": [
+                    {"kind": "berries", "names": ["bilberry", "cloudberry"]},
+                ],
+            }
+        )
+    )
+    grids = _grids(tmp_path, _boreal())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    assert plan["items"] == [
+        {
+            "id": "plant_cloudberry",
+            "kind": "plant",
+            "what": "cloudberry",
             "from": "bilberry",
             "estimate_usd": 0.02,
         }

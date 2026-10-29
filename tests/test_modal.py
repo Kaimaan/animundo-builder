@@ -82,3 +82,42 @@ def test_code_job_pulls_before_its_tile(tmp_path: Path, monkeypatch: Any) -> Non
     flow.handle_build_job("j1")
     assert order == ["pull", "tile"]
     assert store.build_jobs["j1"]["status"] == "published"
+
+
+def test_deploy_sends_open_weights_to_baseten(monkeypatch: Any) -> None:
+    """#133.1: the live worker spends Baseten's pool, not Meta's."""
+    module = _load(monkeypatch)
+    assert module.WORKER_ENV["BUILDER_OPEN_MODEL_HOST"] == "baseten"
+
+
+def test_deploy_keeps_the_ledger_on_the_volume(monkeypatch: Any) -> None:
+    """#133.2: the spend ledger sits on the jobs Volume."""
+    module = _load(monkeypatch)
+    assert module.WORKER_ENV["BUILDER_LEDGER_PATH"] == "/jobs/spend-ledger.json"
+
+
+def test_deploy_installs_editable_for_its_data(monkeypatch: Any) -> None:
+    """#133: a wheel ships no contracts, so the image installs editable."""
+    module = _load(monkeypatch)
+    assert "-e" in module.PIP_INSTALL_CMD.split()
+
+
+def test_supervise_commits_while_the_worker_runs(monkeypatch: Any) -> None:
+    """#133.2: the Volume commits during the run, and once at the end."""
+    module = _load(monkeypatch)
+    commits: list[str] = []
+    sleeps: list[int] = []
+
+    class Proc:
+        polls = 0
+
+        def poll(self) -> int | None:
+            self.polls += 1
+            return None if self.polls < 3 else 0
+
+        def wait(self) -> int:
+            return 0
+
+    module.supervise(Proc(), lambda: commits.append("commit"), 300, sleeps.append)
+    assert sleeps == [300, 300]
+    assert commits == ["commit", "commit", "commit"]

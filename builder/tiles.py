@@ -3,7 +3,8 @@
 `make_tile()` reads the habitat grid, the world's homes and animals,
 and GBIF presence, and returns either a tile or a blocked reason. A
 cell the maker can't make honestly is blocked (`no_home`,
-`no_animal`), never filled with the wrong land or animals.
+`no_animal`, `excluded`), never filled with the wrong land or
+animals.
 """
 
 from __future__ import annotations
@@ -58,6 +59,28 @@ def available_homes(world: Path) -> dict[str, dict[str, Any]]:
         except (OSError, ValueError):
             continue
     return homes
+
+
+def excluded_tiles(builder_root: Path | None = None) -> set[str]:
+    """Tile ids the core team blocked in `exclusions.json` (safety spec).
+
+    The core team maintains that file by hand; agents never add to or
+    remove from it. A missing file blocks nothing; a corrupt one fails
+    loudly, so a broken safety file never silently unblocks a cell.
+    """
+    from .schemas import ROOT as BUILDER_ROOT
+
+    path = (builder_root or BUILDER_ROOT) / "exclusions.json"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    try:
+        data = json.loads(text)
+    except ValueError as error:
+        raise ValueError(f"cannot read {path}: {error}") from error
+    tiles = data.get("tiles", [])
+    return {t for t in tiles if isinstance(t, str)}
 
 
 def home_for_cell(
@@ -407,6 +430,8 @@ def make_tile(
         col, row
     )
     habitat = habitat_grid.habitat(col, row)
+    if tile in excluded_tiles(builder_root):
+        return None, {"reason": "excluded", "habitat": habitat}
     homes = available_homes(world)
     home = home_for_cell(eco1, habitat, homes)
     if home is None:

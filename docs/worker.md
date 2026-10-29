@@ -34,17 +34,43 @@ and publish it.
 Crashes and restarts are safe: every status is a guard, so only
 events still waiting are replayed.
 
+## Model hosts
+
+Every `ctx.chat` call prefers the open-weights host when one is
+set: the D7 edits and D8 choices forms, words, reviews and file
+writing. What stays on the Meta Model API is search grounding
+(`respond`), image drawing (`draw`) and SAM, which use other
+methods. When the open host refuses a call (auth, spent credit,
+throttle) or its caps stop it, the call falls back to Muse
+Spark inside the Meta caps; the usage log's host field shows
+which host ran it.
+
 ## On Modal (T77)
 
 `deploy/modal_worker.py` runs the same listener in one always-on
 container (`modal deploy deploy/modal_worker.py`; Kai's account,
 Kai runs it). The image is Debian slim with Python 3.12, the
 world CI's Blender libraries and Blender 5.2.2, the builder
-installed from the repo, and the baked habitat grids; no keys
-and no job folders. Job folders live on the `animundo-jobs`
-Volume. Secrets are the Modal secrets `animundo-builder` (the
+installed editable from the repo copy (so the contracts,
+schemas, prompts and `exclusions.json` next to it are found),
+and the baked habitat grids; no keys and no job folders. Its
+environment sets `BUILDER_OPEN_MODEL_HOST=baseten`, so the
+live worker spends Baseten's $100 pool, and
+`BUILDER_LEDGER_PATH=/jobs/spend-ledger.json`, so the spend
+ledger sits on the `animundo-jobs` Volume with the job folders
+and survives the daily restart. Seed that ledger once from the
+current total before the first live run (Kai's go): a JSON file
+with the spent total, `{"jobs": {}, "days": {}, "total":
+<spent so far>}`. The Volume is committed every few minutes
+while the worker runs, not only when it stops.
+
+Secrets are the Modal secrets `animundo-builder` (the
 model keys) and `animundo-firebase`
 (`FIREBASE_SERVICE_ACCOUNT_JSON`, written to a file only the
 worker reads). The world is cloned fresh at container start,
 and the worker pulls it before every tile it makes, so a merged
 world change reaches the next tile within one pull.
+
+At start the worker prints one line with the open host, the
+ledger path and both pools' totals, the world commit and the
+off switch, so a deploy is checked from the logs.

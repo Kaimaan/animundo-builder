@@ -643,6 +643,323 @@ def test_guard_stops_pipeline_at_next_stage(tmp_path: Path) -> None:
     assert ran == ["a"]
 
 
+def _build_job(tile: str, items: list[str], **over: Any) -> dict[str, Any]:
+    job = {
+        "format": 1,
+        "tile": tile,
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "queued",
+        "items": items,
+        "visibility": "public",
+        "created_by": "admin",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    job.update(over)
+    return job
+
+
+def _file_item(item_id: str, kind: str, what: str, ref: str) -> dict[str, Any]:
+    return {
+        "id": item_id,
+        "kind": kind,
+        "what": what,
+        "from": ref,
+        "estimate_usd": 0.15,
+    }
+
+
+def test_build_job_stops_second_item_at_remaining_budget(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#133.3: each item gets what's left; the job never overspends."""
+    from builder.pipeline import BudgetExceeded
+
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [
+        _file_item("animal_lion", "animal", "lion", "fox"),
+        _file_item("animal_tiger", "animal", "tiger", "fox"),
+    ]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = _build_job(
+        "n_413_478", ["animal_lion", "animal_tiger"], budget_usd=1.0
+    )
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+
+    def pricey(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+    ) -> None:
+        # One $0.60 call, reserved the way MetaClient reserves it:
+        # refused when the worst case no longer fits what's left.
+        if ctx.tracker.spent_usd + 0.6 > ctx.tracker.budget_usd:
+            raise BudgetExceeded("a $0.60 call no longer fits")
+        ctx.tracker.spent_usd += 0.6
+
+    monkeypatch.setattr(worker, "_run_stages", pricey)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["cost_usd"] == 0.6
+    assert job["cost_usd"] <= job["budget_usd"]
+    assert job["error"] == "budget"
+    by_id = {e["id"]: e["status"] for e in job["progress"]}
+    assert by_id == {"animal_lion": "checking", "animal_tiger": "failed"}
+
+
+def _fake_animal_stages(worker: Worker, monkeypatch: Any, tmp_path: Path) -> None:
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+    ) -> None:
+        folder = item_dir / "animals"
+        folder.mkdir(parents=True)
+        (folder / f"{item['what']}.json").write_bytes(
+            b'{"id": "' + item["what"].encode() + b'"}'
+        )
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+
+
+def test_review_job_publishes_shipped_items(tmp_path: Path, monkeypatch: Any) -> None:
+    """#133.6: a reviewed job ships its items and publishes the tile."""
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [_file_item("animal_lion", "animal", "lion", "fox")]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion"])
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    _fake_animal_stages(worker, monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "checking"
+    (worker.world / "animals" / "lion.json").write_text('{"id": "lion"}')
+    store.build_jobs["j1"]["review"] = {"animal_lion": {"result": "shipped"}}
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert [e["id"] for e in job["progress"]] == ["animal_lion"]
+    assert "tiles/v1/ease2_n25/51_59.json" in store.blobs
+
+
+def test_review_job_drops_not_accepted_and_ships_the_rest(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#133.6: a turned-down item drops while the others ship."""
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [
+        _file_item("animal_lion", "animal", "lion", "fox"),
+        _file_item("animal_tiger", "animal", "tiger", "fox"),
+    ]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion", "animal_tiger"])
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    _fake_animal_stages(worker, monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    worker.handle_build_job("j1")
+    (worker.world / "animals" / "lion.json").write_text('{"id": "lion"}')
+    store.build_jobs["j1"]["review"] = {
+        "animal_lion": {"result": "shipped"},
+        "animal_tiger": {"result": "not_accepted"},
+    }
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert [e["id"] for e in job["progress"]] == ["animal_lion", "animal_tiger"]
+
+
+def test_private_preview_is_rewritten_after_a_review(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#133.6: a private job's preview moves on as reviews land."""
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [_file_item("animal_lion", "animal", "lion", "fox")]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = _build_job(
+        "n_413_478",
+        ["animal_lion"],
+        visibility="private",
+        private_to="judge1",
+    )
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    _fake_animal_stages(worker, monkeypatch, tmp_path)
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["preview"] == {"pack": "previews/j1/1/"}
+    store.build_jobs["j1"]["review"] = {"animal_lion": {"result": "shipped"}}
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"  # the world lacks lion.json yet
+    assert job["preview"] == {"pack": "previews/j1/2/"}
+    assert "previews/j1/2/manifest.json" in store.blobs
+
+
+def test_claim_snapshot_survives_a_replan(tmp_path: Path, monkeypatch: Any) -> None:
+    """#133.5: a re-plan to code_only strands no claimed job."""
+    import json
+
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [_file_item("animal_lion", "animal", "lion", "fox")]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion"])
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    _fake_animal_stages(worker, monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    worker.handle_build_job("j1")
+    snapshot = json.loads((tmp_path / "jobs" / "j1" / "plan.json").read_text())
+    assert [i["id"] for i in snapshot["items"]] == ["animal_lion"]
+    store.plans["n_413_478"] = _code_plan("n_413_478")  # the world moved on
+    (worker.world / "animals" / "lion.json").write_text('{"id": "lion"}')
+    store.build_jobs["j1"]["review"] = {"animal_lion": {"result": "shipped"}}
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "published"
+
+
+def test_plant_item_ships_and_publishes(tmp_path: Path, monkeypatch: Any) -> None:
+    """#133.4: a shipped plant's file in the world publishes the tile."""
+    import json
+
+    from builder import build as build_mod
+
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [
+        {
+            "id": "plant_cloudberry",
+            "kind": "plant",
+            "what": "cloudberry",
+            "from": "bilberry",
+            "estimate_usd": 0.02,
+        }
+    ]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = _build_job("n_413_478", ["plant_cloudberry"])
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    home_path = worker.world / "homes" / "boreal_forest.json"
+    home = json.loads(home_path.read_text())
+    home["food"] = [{"kind": "grass"}, {"kind": "berries", "names": ["cloudberry"]}]
+    home_path.write_text(json.dumps(home))
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+
+    class Pipe:
+        def run(self, ctx: Any) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.setattr(build_mod, "item_pipeline", lambda **k: Pipe())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "checking"
+    (worker.world / "models" / "plants" / "cloudberry.json").write_text(
+        '{"id": "cloudberry"}'
+    )
+    store.build_jobs["j1"]["review"] = {"plant_cloudberry": {"result": "shipped"}}
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "published"
+
+
+def test_code_job_fails_on_excluded_tile(tmp_path: Path, monkeypatch: Any) -> None:
+    """#133.7: a code job on an excluded cell fails, never publishes."""
+    import json
+
+    store = FakeStore()
+    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.build_jobs["j1"] = _code_job()
+    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["n_413_478"]}))
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.builder_root = tmp_path
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "excluded"
+    assert store.alerts[-1]["kind"] == "job_failed"
+
+
+def test_start_line_reports_deploy_facts(tmp_path: Path) -> None:
+    """#133.2: the start log names the host, ledger, world and switch."""
+    import json
+
+    from builder.worker import start_line
+
+    store = FakeStore()
+    ledger = tmp_path / "ledger.json"
+    ledger.write_text(json.dumps({"jobs": {}, "days": {}, "total": 14.5}))
+    (tmp_path / "ledger-baseten.json").write_text(
+        json.dumps({"jobs": {}, "days": {}, "total": 3.25})
+    )
+    config = Config(open_model_host="baseten", ledger_path=str(ledger))
+    line = start_line(config, store, tmp_path / "world")
+    assert "\n" not in line
+    assert "open_host=baseten" in line
+    assert f"ledger={ledger}" in line
+    assert "meta_total=$14.50" in line
+    assert "baseten_total=$3.25" in line
+    assert "world=unknown" in line
+    assert "enabled=true" in line
+
+
+def test_listen_prints_the_start_line(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    """#133.2: `builder worker --listen` opens with the start line."""
+    from builder import worker as worker_mod
+    from builder import worker_store
+    from builder.worker import listen
+
+    started: list[str] = []
+
+    class QuietListener:
+        def __init__(self, worker: Any, store: Any, poll_seconds: float = 0) -> None:
+            started.append("listening")
+
+        def start(self) -> None:
+            pass
+
+    monkeypatch.setattr(worker_store, "FirebaseStore", lambda *a, **k: FakeStore())
+    monkeypatch.setattr(worker_mod, "Listener", QuietListener)
+    code = listen(
+        Config(ledger_path=str(tmp_path / "ledger.json")),
+        tmp_path / "jobs",
+        tmp_path / "world",
+        "demo",
+    )
+    assert code == 0
+    assert started == ["listening"]
+    assert "worker start:" in capsys.readouterr().out
+
+
 def test_no_player_field_anywhere(tmp_path: Path, monkeypatch: Any) -> None:
     """#118.10: no player field anywhere the worker writes."""
     import json

@@ -3,6 +3,22 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #135, first production round trip (1-3)
+
+- The sea tile's home failed on a stray space ("not
+  ' #5a4433'"): choices strings are stripped before the
+  checks now, so no fix round is spent on whitespace.
+- The fix round came back cut off mid-JSON: maker asks
+  retry once with doubled room on an explicit length
+  signal instead of failing the item.
+- The gull and the grass failed at $0 without starting:
+  they needed the failed home, so they report `skipped`
+  with "needs home_717" in their reports; `failed` is for
+  items that ran. A job of only failed and skipped still
+  fails, naming the failed cause.
+- Evidence: strip, retry and truncated-recording tests;
+  a skipped-item worker test; suite, ruff, gitleaks.
+
 ## 2026-10-29: T39, a recorded border request replays with no key
 
 - `builder request build <tile> --replay <dir>` rebuilds a

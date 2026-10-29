@@ -173,6 +173,23 @@ def test_report_tells_the_whole_story(tmp_path: Path) -> None:
     assert "the bar: the game&#x27;s own moose" in text
 
 
+def test_report_names_the_skipped_need(tmp_path: Path) -> None:
+    """#135.3: a skipped item's report says what it needed."""
+    (tmp_path / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": [],
+                "results": {},
+                "failed": None,
+                "skipped": "needs home_717",
+            }
+        )
+    )
+    text = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "Skipped:" in text
+    assert "needs home_717" in text
+
+
 def test_report_lists_new_things(tmp_path: Path) -> None:
     (tmp_path / "state.json").write_text(
         json.dumps({"params": {"kind": "animal_home"}, "completed": []})

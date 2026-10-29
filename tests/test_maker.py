@@ -18,6 +18,7 @@ from builder.stages.maker import (
     NEWSHAPE_ROUNDS,
     AnimalMakerStage,
     HomeMakerStage,
+    _ask_with_room,
     _choices_files,
     _closest_home,
     _code_choices,
@@ -1768,6 +1769,97 @@ def test_choices_files_drops_none_plants() -> None:
     assert choices == {"plants": [{"model": "bilberry"}]}
     assert _choices_files("not json")[0] is None
     assert _choices_files("[]")[0] is None
+
+
+def test_choices_files_strips_stray_spaces() -> None:
+    """#135.1: a stray space fails no colour, enum or id."""
+    choices, errors = _choices_files(
+        json.dumps(
+            {
+                "palette": {"trunk": " #5a4433 "},
+                "ice": " none ",
+                "plants": [{"model": " bilberry ", "on": " ground "}],
+            }
+        )
+    )
+    assert errors == []
+    assert choices == {
+        "palette": {"trunk": "#5a4433"},
+        "ice": "none",
+        "plants": [{"model": "bilberry"}],
+    }
+
+
+def _cut_response(content: str, out_tokens: int = 8000) -> SimpleNamespace:
+    return SimpleNamespace(
+        model="fake-test-model",
+        choices=[
+            SimpleNamespace(
+                finish_reason="length",
+                message=SimpleNamespace(content=content, tool_calls=None),
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=100, output_tokens=out_tokens, completion_tokens=0
+        ),
+    )
+
+
+def _whole_response(content: str) -> SimpleNamespace:
+    cut = _cut_response(content)
+    cut.choices[0].finish_reason = "stop"
+    return cut
+
+
+def test_ask_with_room_retries_a_cut_answer() -> None:
+    """#135.2: a length stop retries once with more tokens."""
+    calls: list[dict[str, Any]] = []
+    answers = [_cut_response('{"palette": {"tr'), _whole_response('{"palette": {}}')]
+
+    def chat(messages: list[dict[str, Any]], **kwargs: Any) -> SimpleNamespace:
+        calls.append(kwargs)
+        return answers.pop(0)
+
+    request = {"type": "json_schema", "json_schema": {"name": "HomeChoices"}}
+    response = _ask_with_room(
+        chat, [{"role": "user", "content": "hi"}], response_format=request
+    )
+    assert response.choices[0].message.content == '{"palette": {}}'
+    assert calls[0] == {"response_format": request}
+    assert calls[1] == {"response_format": request, "max_tokens": 16384}
+
+
+def test_ask_with_room_plays_a_truncated_recording(tmp_path: Path) -> None:
+    """#135.2: the cut answer and its retry record and replay."""
+    from builder.records import RecordingClient, ReplayClient
+
+    records = tmp_path / "records"
+
+    class Scripted:
+        model = "fake-test-model"
+
+        def __init__(self, answers: list[SimpleNamespace]) -> None:
+            self.answers = answers
+
+        def chat(
+            self, messages: list[dict[str, Any]], **kwargs: Any
+        ) -> SimpleNamespace:
+            return self.answers.pop(0)
+
+    messages = [{"role": "user", "content": "hi"}]
+    recorded = RecordingClient(
+        Scripted([_cut_response('{"a": 1'), _whole_response('{"a": 2}')]),
+        records,
+        "newhome",
+    )
+    assert (
+        _ask_with_room(recorded.chat, messages).choices[0].message.content == '{"a": 2}'
+    )
+    replay = ReplayClient(records, "newhome")
+    assert (
+        _ask_with_room(replay.chat, messages).choices[0].message.content == '{"a": 2}'
+    )
+    replay.verify_consumed()
 
 
 def test_choices_files_drops_ground_but_keeps_seabed() -> None:

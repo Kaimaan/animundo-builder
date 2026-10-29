@@ -31,6 +31,7 @@ import jsonschema
 
 from ..animal_list import find_entry, load_list, match_by_name
 from ..animal_list import find_list as find_animal_list
+from ..meta import DEFAULT_MAX_TOKENS, is_cut_off
 from ..prompts import (
     PROMPTS_DIR,
     fix_messages,
@@ -504,7 +505,7 @@ class AnimalMakerStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = chat(messages)
+        response = _ask_with_room(chat, messages)
         return (response.choices[0].message.content or "").strip()
 
     def _ask_edits(
@@ -522,7 +523,7 @@ class AnimalMakerStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = chat(messages, response_format=request)
+        response = _ask_with_room(chat, messages, response_format=request)
         return (response.choices[0].message.content or "").strip()
 
     def _animal_files(
@@ -2374,7 +2375,7 @@ class HomeMakerStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = chat(messages, response_format=request)
+        response = _ask_with_room(chat, messages, response_format=request)
         return (response.choices[0].message.content or "").strip()
 
     def _adapt_try(
@@ -2649,6 +2650,40 @@ def _home_choices_schema(plants: list[str], trees: list[str]) -> dict[str, Any]:
     )
 
 
+def _stripped(value: Any) -> Any:
+    """Every string stripped: a stray space must not fail a colour,
+    an enum or an id (#135.1)."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return [_stripped(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _stripped(item) for key, item in value.items()}
+    return value
+
+
+def _ask_with_room(chat: Any, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+    """One chat call, retried once with more tokens when cut off (#135.2).
+
+    Reasoning counts against the open host's cap, so an answer can
+    stop mid-JSON; the retry doubles the room instead of spending a
+    fix round on the truncation. Only an explicit length signal
+    retries, never a guess from usage.
+    """
+    response = chat(messages, **kwargs)
+    if not is_cut_off(response, 0):
+        return response
+    usage = getattr(response, "usage", None)
+    used = 0
+    if usage is not None:
+        used = (
+            getattr(usage, "output_tokens", 0)
+            or getattr(usage, "completion_tokens", 0)
+            or 0
+        )
+    return chat(messages, **{**kwargs, "max_tokens": max(DEFAULT_MAX_TOKENS, used * 2)})
+
+
 def _choices_files(answer: str) -> tuple[dict[str, Any] | None, list[str]]:
     """The try's choices, without the shape's `none` plants."""
     try:
@@ -2657,6 +2692,7 @@ def _choices_files(answer: str) -> tuple[dict[str, Any] | None, list[str]]:
         return None, [f"not JSON: {error}"]
     if not isinstance(choices, dict):
         return None, ["reply with one choices object, nothing else"]
+    choices = _stripped(choices)
     if isinstance(choices.get("plants"), list):
         choices["plants"] = [
             plant

@@ -562,6 +562,70 @@ def test_failed_item_does_not_stop_others(tmp_path: Path, monkeypatch: Any) -> N
     assert by_id == {"home_774": "failed", "animal_lion": "checking"}
 
 
+def test_item_needing_a_failed_home_is_skipped(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#135.3: no home, no start: skipped with needs, job names the home."""
+    store = FakeStore()
+    plan = _code_plan("n_401_434")
+    plan["code_only"] = False
+    plan["items"] = [
+        {
+            "id": "home_774",
+            "kind": "home",
+            "what": "774",
+            "from": "tundra",
+            "estimate_usd": 0.02,
+        },
+        {
+            "id": "animal_fox",
+            "kind": "animal",
+            "what": "fox",
+            "from": "fox",
+            "estimate_usd": 0.15,
+        },
+    ]
+    plan["improve"] = []
+    store.plans["n_401_434"] = plan
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "tile": "n_401_434",
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "queued",
+        "items": ["home_774", "animal_fox"],
+        "visibility": "public",
+        "created_by": "admin",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    worker = _flow_worker(
+        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
+    )
+    real_run_stages = worker._run_stages
+
+    def flaky(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+    ) -> None:
+        if item["id"] == "home_774":
+            raise RuntimeError("boom")
+        return real_run_stages(ctx, job_id, tile, plan, item, item_dir)
+
+    monkeypatch.setattr(worker, "_run_stages", flaky)
+    worker.handle_build_job("j1")
+    by_id = {e["id"]: e["status"] for e in store.build_jobs["j1"]["progress"]}
+    assert by_id == {"home_774": "failed", "animal_fox": "skipped"}
+    report = (tmp_path / "jobs" / "j1" / "animal_fox" / "report.html").read_text()
+    assert "needs home_774" in report
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "home_774"
+
+
 def test_close_item_alerts_on_spending_crossings(tmp_path: Path) -> None:
     from types import SimpleNamespace
 

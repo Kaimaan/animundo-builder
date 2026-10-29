@@ -225,9 +225,12 @@ def _head(params: dict[str, Any], job_id: str) -> str:
 def _stages(state: dict[str, Any]) -> str:
     done = state.get("completed", [])
     failed = state.get("failed")
+    skipped = state.get("skipped")
     items = "".join(f"<li>{html.escape(str(name))}</li>" for name in done)
     verdict = "finished every built stage" if not failed else "stopped"
     text = f"<h2>Stages</h2>\n<p>Done: {html.escape(verdict)}.</p>\n<ul>{items}</ul>"
+    if skipped:
+        text += f"<p><strong>Skipped:</strong> {html.escape(str(skipped))}</p>"
     if failed:
         text += f"<p><strong>Failed:</strong> {html.escape(str(failed))}</p>"
     return text

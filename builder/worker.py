@@ -71,6 +71,10 @@ class _BudgetOut(Exception):
         self.code = code
 
 
+class _NoHome(ValueError):
+    """The tile has no home in this checkout; a made one may follow."""
+
+
 def git_commit(world: Path | None) -> str:
     """The world checkout's short commit, or "unknown" without git."""
     if world is None:
@@ -293,8 +297,12 @@ class Worker:
         expand_failed = [
             e for e in progress if e["id"] in expand_ids and e["status"] == "failed"
         ]
-        if expand and len(expand_failed) == len(expand):
-            self._fail(job_id, stopped or expand_failed[0]["id"])
+        expand_skipped = [
+            e for e in progress if e["id"] in expand_ids and e["status"] == "skipped"
+        ]
+        if expand and len(expand_failed) + len(expand_skipped) == len(expand):
+            cause = (expand_failed or expand_skipped)[0]["id"]
+            self._fail(job_id, stopped or cause)
             return
         if stopped and not any(e["status"] == "checking" for e in progress):
             self._fail(job_id, stopped)
@@ -351,6 +359,29 @@ class Worker:
             )
             raise _Off()
         except Exception as error:  # noqa: BLE001 - one item never stops the rest
+            need = (
+                self._failed_home_item(plan, job_id)
+                if isinstance(error, _NoHome)
+                else None
+            )
+            if need is not None:
+                print(
+                    f"build job {job_id}: {item['id']} skipped: needs {need}",
+                    file=sys.stderr,
+                )
+                self._close_item(
+                    job_id,
+                    item,
+                    item_dir,
+                    ctx,
+                    start,
+                    before,
+                    budget,
+                    error,
+                    status="skipped",
+                    note=f"needs {need}",
+                )
+                return
             print(f"build job {job_id}: {item['id']} failed: {error}", file=sys.stderr)
             self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
             return
@@ -443,7 +474,7 @@ class Worker:
     def _item_done(self, job: dict[str, Any], item_id: str) -> bool:
         """An item with a finished progress entry builds no more."""
         return any(
-            e["id"] == item_id and e["status"] in ("checking", "failed")
+            e["id"] == item_id and e["status"] in ("checking", "failed", "skipped")
             for e in job.get("progress", [])
         )
 
@@ -513,13 +544,27 @@ class Worker:
         before: float,
         budget: float,
         error: Exception | None,
+        status: str | None = None,
+        note: str | None = None,
     ) -> None:
         """Report, upload, charge and alert one finished item."""
         from . import build as build_mod
         from .report import build_report
 
         cost = round(ctx.tracker.spent_usd - start, 6)
-        status = "failed" if error is not None else "checking"
+        status = status or ("failed" if error is not None else "checking")
+        if note is not None:
+            import json
+
+            state_path = item_dir / "state.json"
+            state = {"completed": [], "results": {}, "failed": None}
+            if state_path.is_file():
+                try:
+                    state.update(json.loads(state_path.read_text(encoding="utf-8")))
+                except ValueError:
+                    pass
+            state["skipped"] = note
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
         build_report(item_dir)
         report = build_mod.upload_bundle(
             self.store, f"review/{job_id}/{item['id']}", item_dir
@@ -570,8 +615,26 @@ class Worker:
             cells.cell_data(col, row)[0], cells.habitat(col, row), homes
         )
         if found is None:
-            raise ValueError(f"tile {tile} has no home in this checkout")
+            raise _NoHome(f"tile {tile} has no home in this checkout")
         return homes[found]
+
+    def _failed_home_item(self, plan: dict[str, Any], job_id: str) -> str | None:
+        """A failed home item the tile's home was to come from (#135.3).
+
+        An item that needs the made home says `skipped`, not
+        `failed`: it never started, the home did and broke.
+        """
+        if self.store is None:
+            return None
+        progress = {
+            e["id"]: e["status"]
+            for e in (self.store.get_build_job(job_id) or {}).get("progress", [])
+            if isinstance(e, dict)
+        }
+        for item in plan.get("items", []):
+            if item.get("kind") == "home" and progress.get(item["id"]) == "failed":
+                return item["id"]
+        return None
 
     def _world_has(self, item: dict[str, Any], plan: dict[str, Any]) -> bool:
         """The shipped item's files reached this checkout."""

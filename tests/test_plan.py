@@ -594,6 +594,36 @@ def test_plan_marks_open_water_blocked(tmp_path: Path) -> None:
     assert plan["code_only"] is False
 
 
+def test_plan_makes_no_species_call_for_open_water(tmp_path: Path) -> None:
+    """#141.3: a tile nobody will open gets the compass, free."""
+    from builder.species import Source
+
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _open_water())
+    calls: list[str] = []
+
+    class SpyClient:
+        def chat(self, **kwargs: Any) -> Any:
+            calls.append("chat")
+            raise RuntimeError("no species call for open water")
+
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+        species_source=Source(client=SpyClient(), cache_dir=tmp_path / "sp"),
+    )
+    assert calls == []
+    assert plan["blocked"] == "open_water"
+    from builder.grid import center
+
+    assert plan["name"] == plan_name("open_ocean", *center("n_413_478"))
+
+
 def test_finish_blocked_carries_no_improve() -> None:
     """#141.2: a blocked plan keeps no improve species."""
     from builder.plan import _finish

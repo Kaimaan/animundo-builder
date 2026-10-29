@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #141, no species call for open water (3)
+
+- The species answer resolved before the open-water
+  return, spending a call on tiles nobody will open. It
+  resolves after it now; blocked plans take the compass
+  name, free.
+- Evidence: an open-water plan with a spying client makes
+  no call; suite, ruff, gitleaks.
+
 ## 2026-10-29: inbox #141, open water plans as blocked (2)
 
 - Open-water borders planned with no items and terns in

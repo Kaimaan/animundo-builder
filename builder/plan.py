@@ -299,14 +299,12 @@ def plan_tile(
         unfiled_counts = {s: n for s, n in fetched.items() if n > 0}
     else:
         unfiled_counts = {s: n for s, n in unfiled_presence.items() if n > 0}
-    probe_species, answer, place_blocked = _resolve_species(
-        tile, world, habitat, lat, lon, builder_root, species, species_source
-    )
-
     items: list[dict[str, Any]] = []
     if home is None and eco1 is None:
         # Open water has no ecoregion and no home to plan: nobody
-        # can go there yet, said plainly, not an empty AI plan.
+        # can go there yet, said plainly, not an empty AI plan. No
+        # species call either: the compass name is enough where
+        # nobody will open (#141.3).
         return _finish(
             tile,
             False,
@@ -318,9 +316,12 @@ def plan_tile(
             lat,
             lon,
             world_commit,
-            answer,
+            None,
             "open_water",
         )
+    probe_species, answer, place_blocked = _resolve_species(
+        tile, world, habitat, lat, lon, builder_root, species, species_source
+    )
     if home is None:
         assert eco1 is not None  # narrowed above; mypy can't see it
         home_id = nearest_home(tile, grids, homes, habitat)

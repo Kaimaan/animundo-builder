@@ -470,6 +470,28 @@ def test_build_job_fails_without_its_plan(tmp_path: Path) -> None:
     assert store.build_jobs["j1"]["error"] == "no_plan"
 
 
+def test_build_job_refuses_a_blocked_plan(tmp_path: Path) -> None:
+    """#141.2: a blocked plan fails with its reason, not no_items."""
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "tile": "n_401_434",
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "queued",
+        "items": [],
+        "visibility": "public",
+        "created_by": "admin",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    store.plans["n_401_434"] = {"blocked": "open_water", "items": []}
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "open_water"
+
+
 def test_build_job_stops_at_zero_budget(tmp_path: Path) -> None:
     """#118.10: a judge build stops at its cap."""
     store = FakeStore()

@@ -66,6 +66,11 @@
       "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
     },
     "world": {"type": "string", "minLength": 1},
-    "planned_at": {"type": "string", "minLength": 1}
+    "planned_at": {"type": "string", "minLength": 1},
+    "blocked": {
+      "description": "Why nothing can be built here yet, for the game to show.",
+      "type": "string",
+      "minLength": 1
+    }
   }
 }

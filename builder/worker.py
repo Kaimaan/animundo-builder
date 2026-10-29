@@ -235,6 +235,7 @@ class Worker:
             "items": [i for i in plan.get("items", []) if i["id"] in wanted],
             "improve": [i for i in plan.get("improve", []) if i["id"] in wanted],
             "world": plan.get("world", "unknown"),
+            "blocked": plan.get("blocked"),
             "snapshot_at": now_iso(),
         }
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,6 +259,7 @@ class Worker:
             "items": [i for i in plan.get("items", []) if i["id"] in wanted],
             "improve": [i for i in plan.get("improve", []) if i["id"] in wanted],
             "world": plan.get("world", "unknown"),
+            "blocked": plan.get("blocked"),
             "snapshot_at": None,
         }
 
@@ -267,6 +269,9 @@ class Worker:
 
         assert self.world is not None
         plan = self._job_plan(job_id, job, tile)
+        if plan.get("blocked"):
+            self._fail(job_id, str(plan["blocked"]))
+            return
         expand = build_mod.order_items(plan.get("items", []))
         improve = plan.get("improve", [])
         if not expand and not improve:

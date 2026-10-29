@@ -3,6 +3,17 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #141, open water plans as blocked (2)
+
+- Open-water borders planned with no items and terns in
+  `coming`, and an Approve failed at once. They now plan
+  as `blocked: open_water`: nothing to build, nothing
+  coming, a field the game shows as "nobody can go there
+  yet". An approved blocked plan fails with its reason
+  instead of `no_items`.
+- Evidence: a blocked-plan test, a no-improve test, a
+  worker refusal test; suite, ruff, gitleaks.
+
 ## 2026-10-29: inbox #140, take lays the built model for the check (2)
 
 - `take` failed its own draft check on the built `.glb`:

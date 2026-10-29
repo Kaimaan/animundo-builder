@@ -305,8 +305,8 @@ def plan_tile(
 
     items: list[dict[str, Any]] = []
     if home is None and eco1 is None:
-        # Open water has no ecoregion and no home to plan: the plan
-        # carries only its name and improve species, if any.
+        # Open water has no ecoregion and no home to plan: nobody
+        # can go there yet, said plainly, not an empty AI plan.
         return _finish(
             tile,
             False,
@@ -319,6 +319,7 @@ def plan_tile(
             lon,
             world_commit,
             answer,
+            "open_water",
         )
     if home is None:
         assert eco1 is not None  # narrowed above; mypy can't see it
@@ -479,28 +480,34 @@ def _finish(
     lon: float,
     world_commit: str,
     answer: dict[str, Any] | None = None,
+    blocked: str | None = None,
 ) -> dict[str, Any]:
-    """Improve species, names, estimates: the plan around the items."""
+    """Improve species, names, estimates: the plan around the items.
+
+    A blocked plan carries nothing to build and nothing coming,
+    only the reason for the game to show (#141.2).
+    """
     picked_ids = {i["what"] for i in items if i["kind"] == "animal"}
     by_id = {e["id"]: e for e in unfiled}
     improve: list[dict[str, Any]] = []
-    for species in sorted(unfiled_counts, key=lambda s: (-unfiled_counts[s], s)):
-        if species in picked_ids or species not in by_id:
-            continue
-        entry = by_id[species]
-        if not entry.get("start_from"):
-            continue
-        improve.append(
-            {
-                "id": f"improve_{species}",
-                "kind": "animal",
-                "what": species,
-                "from": entry["start_from"],
-                "estimate_usd": ITEM_ESTIMATES["animal"],
-            }
-        )
-        if len(improve) >= 2:
-            break
+    if blocked is None:
+        for species in sorted(unfiled_counts, key=lambda s: (-unfiled_counts[s], s)):
+            if species in picked_ids or species not in by_id:
+                continue
+            entry = by_id[species]
+            if not entry.get("start_from"):
+                continue
+            improve.append(
+                {
+                    "id": f"improve_{species}",
+                    "kind": "animal",
+                    "what": species,
+                    "from": entry["start_from"],
+                    "estimate_usd": ITEM_ESTIMATES["animal"],
+                }
+            )
+            if len(improve) >= 2:
+                break
     coming = [item["what"] for item in [*items, *improve] if item["kind"] == "animal"]
     plan = {
         "format": 1,
@@ -514,5 +521,7 @@ def _finish(
         "world": world_commit,
         "planned_at": datetime.now(UTC).isoformat(),
     }
+    if blocked is not None:
+        plan["blocked"] = blocked
     validate("plan", plan)
     return plan

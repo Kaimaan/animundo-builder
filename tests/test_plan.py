@@ -567,3 +567,51 @@ def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:
     )
     assert plan["name"] == plain["name"]
     assert "Nuuksio" in plan["name"]["en"]
+
+
+def _open_water() -> dict[str, list[Any]]:
+    cell: list[Any] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
+    return {f"{c},{r}": list(cell) for r in (477, 478, 479) for c in (412, 413, 414)}
+
+
+def test_plan_marks_open_water_blocked(tmp_path: Path) -> None:
+    """#141.2: open water says nobody can go there yet, with no coming."""
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _open_water())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    assert plan["blocked"] == "open_water"
+    assert plan["items"] == []
+    assert plan["improve"] == []
+    assert plan["coming"] == []
+    assert plan["code_only"] is False
+
+
+def test_finish_blocked_carries_no_improve() -> None:
+    """#141.2: a blocked plan keeps no improve species."""
+    from builder.plan import _finish
+
+    plan = _finish(
+        "n_413_478",
+        False,
+        [],
+        [{"id": "arctic_tern", "start_from": "tern"}],
+        {"arctic_tern": 5.0},
+        None,
+        "open_ocean",
+        59.5,
+        24.0,
+        "abc123",
+        None,
+        "open_water",
+    )
+    assert plan["blocked"] == "open_water"
+    assert plan["improve"] == []
+    assert plan["coming"] == []

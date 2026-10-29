@@ -1,0 +1,84 @@
+"""The Modal deploy: imports with no credentials, runs the real CLI. No key."""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+from pathlib import Path
+from typing import Any
+
+DEPLOY = Path(__file__).resolve().parent.parent / "deploy" / "modal_worker.py"
+
+
+def _load(monkeypatch: Any) -> Any:
+    """The deploy file with every credential scrubbed from the air."""
+    for name in list(os.environ):
+        if name.startswith(
+            (
+                "MODAL_",
+                "FIREBASE_",
+                "GOOGLE_",
+                "MODEL_",
+                "BASETEN_",
+                "BUILDER_",
+            )
+        ):
+            monkeypatch.delenv(name, raising=False)
+    spec = importlib.util.spec_from_file_location("modal_worker", DEPLOY)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_deploy_imports_without_credentials(monkeypatch: Any) -> None:
+    """#99.6: the deploy file imports with no Modal credentials."""
+    module = _load(monkeypatch)
+    assert module.PROJECT == "animundo-dev"
+    assert module.BUCKET == "animundo-dev.firebasestorage.app"
+
+
+def test_deploy_worker_command_is_real_cli(monkeypatch: Any) -> None:
+    """#99.6: the deployed command line is one cli.py accepts."""
+    from builder.cli import build_parser
+
+    module = _load(monkeypatch)
+    cmd = module.worker_command("/tmp/world")
+    assert cmd[0] == "builder"
+    args = build_parser().parse_args(cmd[1:])
+    assert args.command == "worker"
+    assert args.listen is True
+    assert args.world == "/tmp/world"
+    assert args.jobs_dir == "/jobs"
+    assert args.habitat_grid == "/grids"
+    assert args.project == "animundo-dev"
+    assert args.storage_bucket == "animundo-dev.firebasestorage.app"
+
+
+def test_code_job_pulls_before_its_tile(tmp_path: Path, monkeypatch: Any) -> None:
+    """#99.4: a merged world change reaches the tile a code job makes."""
+    import fake_world
+    from fake_store import FakeStore
+    from test_worker import _code_job, _code_plan, _flow_worker
+
+    store = FakeStore()
+    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.build_jobs["j1"] = _code_job()
+    order: list[str] = []
+    flow = _flow_worker(tmp_path, store, fake_world.boreal_3x3())
+    monkeypatch.setattr(flow, "pull_world", lambda: (order.append("pull"), False)[1])
+    import builder.tiles
+
+    real_make_tile = builder.tiles.make_tile
+
+    def spying_make_tile(*args: Any, **kwargs: Any) -> Any:
+        order.append("tile")
+        return real_make_tile(*args, **kwargs)
+
+    monkeypatch.setattr(builder.tiles, "make_tile", spying_make_tile)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    flow.handle_build_job("j1")
+    assert order == ["pull", "tile"]
+    assert store.build_jobs["j1"]["status"] == "published"

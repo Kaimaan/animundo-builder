@@ -20,6 +20,7 @@ dependencies = [
     "fiona>=1.10",
     "shapely>=2.0",
     "rasterio>=1.4",
+    "modal>=1.6.3",
 ]
 
 [project.scripts]

@@ -2,8 +2,8 @@
 
 The builder is a factory (D17): the game runs the world, the worker
 plans every new or changed border request and builds only the build
-jobs the game creates. Planning (T74) and building (T76) are
-live; Modal (T77) lands next.
+jobs the game creates. Planning (T74), building (T76), previews
+(T84) and Modal (T77) are live.
 """
 
 from __future__ import annotations
@@ -186,6 +186,8 @@ class Worker:
         if tile is None:
             return
         if job.get("kind") == "code":
+            if self.pull_world():  # a merged change reaches this tile (#99.4)
+                self.world_commit = git_commit(self.world)
             made, blocked = make_tile(tile, self._grids(), self.world)
             if made is None:
                 reason = (blocked or {}).get("reason", "no_home")
@@ -312,6 +314,8 @@ class Worker:
             return
         plan = self.store.get_plan(tile) or {}
         by_id = {i["id"]: i for i in [*plan.get("items", []), *plan.get("improve", [])]}
+        if self.pull_world():  # a merged change reaches this tile (#99.4)
+            self.world_commit = git_commit(self.world)
         progress = list(job.get("progress", []))
         shipped_any = False
         for entry in list(progress):

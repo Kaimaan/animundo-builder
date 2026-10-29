@@ -33,3 +33,18 @@ and publish it.
 
 Crashes and restarts are safe: every status is a guard, so only
 events still waiting are replayed.
+
+## On Modal (T77)
+
+`deploy/modal_worker.py` runs the same listener in one always-on
+container (`modal deploy deploy/modal_worker.py`; Kai's account,
+Kai runs it). The image is Debian slim with Python 3.12, the
+world CI's Blender libraries and Blender 5.2.2, the builder
+installed from the repo, and the baked habitat grids; no keys
+and no job folders. Job folders live on the `animundo-jobs`
+Volume. Secrets are the Modal secrets `animundo-builder` (the
+model keys) and `animundo-firebase`
+(`FIREBASE_SERVICE_ACCOUNT_JSON`, written to a file only the
+worker reads). The world is cloned fresh at container start,
+and the worker pulls it before every tile it makes, so a merged
+world change reaches the next tile within one pull.

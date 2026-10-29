@@ -3,6 +3,29 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #118 (phase 2, T77 Modal)
+
+- T77: `deploy/modal_worker.py` (shape A, the unchanged listener,
+  always on): Debian slim, Python 3.12, the world CI's Blender
+  libraries and Blender 5.2.2 with mirror fallback, the builder
+  from the repo, the baked grids; no keys, no job folders. Jobs
+  on the `animundo-jobs` Volume, secrets `animundo-builder` and
+  `animundo-firebase`, daily restart, max one container. The
+  world is cloned fresh at container start, and the worker pulls
+  it before every tile it makes (#99.4). Kai runs `modal
+  deploy`. #99.5: the old replays retired with the grown-up
+  builder; the $0 end-to-end is the code route (request to
+  published tile, no model call), covered by tests. A fresh
+  recorded animal build still needs Kai's go (~$0.15).
+- T85 doesn't fit, so the README claims nothing: the queue and
+  its cards are the game's (T75 moved), and judge builds run the
+  one-shot maker, which adapts from `start_from` and never reads
+  reference sheets; wiring the sheet-plus-SAM loop in would mean
+  replacing the maker with the old grown-up loop.
+- Evidence: `uv run pytest -q` → 643 passed, 12 skipped;
+  `ruff check` + `format --check` clean; `gitleaks git` clean;
+  `builder check --world` skeleton on.
+
 ## 2026-10-29: inbox #118 (phase 2, T84 the preview pack)
 
 - T84: a `private` job's versioned preview pack under

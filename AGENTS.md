@@ -10,10 +10,10 @@ children who explore it. Animundo is a nature game where children play real
 animals in real places. The world is a grid of tiles over the real Earth;
 children start at a few hand-made places and walk outwards.
 
-- **The tile maker** makes plain land in bulk, by code with no AI: each tile's
-  habitat comes from a world habitat grid, its land from that habitat's home
-  in animundo-world, and its animals from GBIF records of the animals the
-  game has.
+- **The tile maker** makes plain land in bulk, by code plus one Muse Spark
+  call a tile: each tile's habitat comes from a world habitat grid, its land
+  from that habitat's home in animundo-world, and its animals from the
+  game's list, picked by the model and cached per tile.
 - **The request builder** works where the tile maker can't: at the border of
   the known world, where a habitat has no home yet or no animal a child can
   play lives with its food. When a player gets near such a border, the game

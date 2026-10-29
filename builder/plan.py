@@ -243,13 +243,17 @@ def plan_tile(
     presence: dict[str, float] | None = None,
     unfiled_presence: dict[str, float] | None = None,
     builder_root: Path | None = None,
+    species: dict[str, Any] | None = None,
+    species_source: Any | None = None,
 ) -> dict[str, Any]:
     """The border plan for one tile, valid against the plan contract.
 
     `presence` and `unfiled_presence` override the live GBIF fetch
     (tests and replays). The plan is made again when the world
     commit moves; a new home can turn an AI plan into `code_only`.
-    An excluded cell gets no items: it is never built.
+    An excluded cell gets no items: it is never built. The
+    code-only probe makes the tile the worker would make: a recorded
+    `species` answer, else the cache or one model call.
     """
     grid, col, row = parse_tile(tile)
     habitat_grid = grids[grid]
@@ -301,7 +305,13 @@ def plan_tile(
     else:
         home_id = home
         made, _blocked = make_tile(
-            tile, grids, world, presence=presence, builder_root=builder_root
+            tile,
+            grids,
+            world,
+            presence=presence,
+            builder_root=builder_root,
+            species=species,
+            species_source=species_source,
         )
         if made is not None:
             return _finish(

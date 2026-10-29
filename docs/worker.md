@@ -58,7 +58,9 @@ environment sets `BUILDER_OPEN_MODEL_HOST=baseten`, so the
 live worker spends Baseten's $100 pool, and
 `BUILDER_LEDGER_PATH=/jobs/spend-ledger.json`, so the spend
 ledger sits on the `animundo-jobs` Volume with the job folders
-and survives the daily restart. Seed that ledger once from the
+and survives the daily restart. `BUILDER_SPECIES_CACHE_DIR`
+keeps the tile species cache on the same Volume, so a restart
+never re-asks answered tiles. Seed that ledger once from the
 current total before the first live run (Kai's go): a JSON file
 with the spent total, `{"jobs": {}, "days": {}, "total":
 <spent so far>}`. The Volume is committed every few minutes

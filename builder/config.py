@@ -36,6 +36,7 @@ class Config:
     job_budget_usd: float = 8.0
     total_budget_usd: float = 80.0
     ledger_path: str = "spend-ledger.json"
+    species_cache_dir: str | None = None
     baseten_total_usd: float = 100.0
     max_new_species: int = 3
     max_new_plants: int = 3
@@ -79,6 +80,7 @@ def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
         "JOB_BUDGET_USD",
         "TOTAL_BUDGET_USD",
         "LEDGER_PATH",
+        "SPECIES_CACHE_DIR",
         "MAX_NEW_SPECIES",
         "MAX_NEW_PLANTS",
     )

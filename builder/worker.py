@@ -102,6 +102,7 @@ class Worker:
     grid_dir: Path | None = None
     world_commit: str | None = None
     builder_root: Path | None = None
+    species: dict[str, Any] | None = None
     chat: Any | None = None
     adapt: Any | None = None
     build: Any | None = None
@@ -145,6 +146,8 @@ class Worker:
                 self.world,
                 self.world_commit or "unknown",
                 builder_root=self.builder_root,
+                species=self.species,
+                species_source=self._species_source(),
             )
         except (ValueError, RuntimeError, FileNotFoundError, ConnectionError) as error:
             print(f"request {tile}: cannot plan: {error}", file=sys.stderr)
@@ -192,7 +195,12 @@ class Worker:
             if self.pull_world():  # a merged change reaches this tile (#99.4)
                 self.world_commit = git_commit(self.world)
             made, blocked = make_tile(
-                tile, self._grids(), self.world, builder_root=self.builder_root
+                tile,
+                self._grids(),
+                self.world,
+                builder_root=self.builder_root,
+                species=self.species,
+                species_source=self._species_source(),
             )
             if made is None:
                 reason = (blocked or {}).get("reason", "no_home")
@@ -395,7 +403,12 @@ class Worker:
             self._fail(job_id, "nothing_shipped")
             return
         made, blocked = make_tile(
-            tile, self._grids(), self.world, builder_root=self.builder_root
+            tile,
+            self._grids(),
+            self.world,
+            builder_root=self.builder_root,
+            species=self.species,
+            species_source=self._species_source(),
         )
         if made is None:
             self._fail(job_id, (blocked or {}).get("reason", "no_home"))
@@ -713,6 +726,12 @@ class Worker:
     def alert(self, item: dict[str, Any]) -> str:
         full = {"at": now_iso(), **item}
         return self.store.add_alert(full)
+
+    def _species_source(self) -> Any:
+        """Tile species: the cache, and the Meta client for misses."""
+        from .species import source_from_config
+
+        return source_from_config(self.config, self.builder_root)
 
     def _grids(self) -> dict[str, Any]:
         """Both baked habitat grids, loaded once."""

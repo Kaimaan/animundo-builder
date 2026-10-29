@@ -1,0 +1,21 @@
+{
+ "spot": "amazon-interior",
+ "tile": "s_050_202",
+ "place": "Amazon rainforest in Amazonas, Brazil",
+ "present": [
+  "anaconda",
+  "capybara",
+  "giant_anteater",
+  "green_iguana",
+  "harpy_eagle",
+  "jaguar",
+  "osprey",
+  "peregrine",
+  "piranha",
+  "scarlet_macaw",
+  "sloth",
+  "swallow",
+  "tapir",
+  "toucan"
+ ]
+}

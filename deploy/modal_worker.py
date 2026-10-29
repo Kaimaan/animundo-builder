@@ -38,6 +38,7 @@ BUCKET = "animundo-dev.firebasestorage.app"
 WORKER_ENV = {
     "BUILDER_OPEN_MODEL_HOST": "baseten",
     "BUILDER_LEDGER_PATH": "/jobs/spend-ledger.json",
+    "BUILDER_SPECIES_CACHE_DIR": "/jobs/species-cache",
 }
 
 #: The builder installs editable, not as a wheel: the wheel ships

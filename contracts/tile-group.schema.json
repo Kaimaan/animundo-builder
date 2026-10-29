@@ -28,7 +28,7 @@
         "additionalProperties": false,
         "required": ["reason", "habitat"],
         "properties": {
-          "reason": {"enum": ["no_home", "no_animal", "excluded"]},
+          "reason": {"enum": ["no_home", "no_animal", "excluded", "species_place"]},
           "habitat": {
             "enum": [
               "boreal_forest",

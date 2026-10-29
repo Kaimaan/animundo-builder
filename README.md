@@ -40,7 +40,7 @@ For each tile, the tile maker works out:
 
 - **the habitat,** from a world habitat grid (RESOLVE Ecoregions 2017, CC BY 4.0; Natural Earth land and lakes, public domain; ETOPO 2022 elevations, public domain — sources and licence in [`data/habitat-grid/README.md`](data/habitat-grid/README.md)) baked onto the tile grid by this repository's own script;
 - **the land,** from that habitat's home in [animundo-world](https://github.com/Kaimaan/animundo-world), seeded by the tile so the same spot always looks the same, with edge heights fixed in advance so neighbouring tiles always meet;
-- **the animals,** the game's animals that GBIF has recorded in or near the tile, kept only if the home has their food.
+- **the animals,** which Muse Spark picks from the game's list (one call a tile, kept only if the home has their food, GBIF kept as an eval). A border build's improve species still come from GBIF.
 
 Every piece it uses is already reviewed, and every tile passes animundo-world's checks before it's published, so a code-made tile needs no human review and costs nothing but compute. The lab run over 21 spots on Oct 28 made 2 tiles ready and blocked 19 honestly (3 with no recorded animal, 16 with no home yet); counts and the globe picture are in [`docs/tiles-lab/`](docs/tiles-lab/).
 
@@ -94,6 +94,7 @@ Every model call goes through one file, [`builder/meta.py`](builder/meta.py). It
 | Model | Model id | Where it runs | What it does |
 |---|---|---|---|
 | Muse Spark | `muse-spark-1.3` | Meta Model API | Research with web search and sources |
+| Muse Spark | `muse-spark-1.3` | Meta Model API | The tile's animals from the game's list (structured output, one call a tile, cached) |
 | Muse Spark Open | `meta-models/muse-spark-open-1026` | Baseten | The strict forms (animal edits, home choices, plants) and the words, falling back to Muse Spark inside the same caps |
 
 - The transport is the `openai` Python package pointed at Meta's endpoint, Meta's own documented pattern. No OpenAI service, key or model is used. `grep -rn "BASE_URL =" builder/meta.py` shows the only two hosts.
@@ -113,7 +114,7 @@ uv sync
 uv run pytest
 ```
 
-643 tests pass with no key and no paid call. With a checkout of [animundo-world](https://github.com/Kaimaan/animundo-world) next to it, also with no key (GBIF's free API is the only network):
+671 tests pass with no key and no paid call. With a checkout of [animundo-world](https://github.com/Kaimaan/animundo-world) next to it, and a Meta key for the tiles the cache lacks (the planner also reads GBIF's free API):
 
 ```
 uv run builder tiles make --at 60.30,24.62 --out /tmp/tile --world ../animundo-world
@@ -121,7 +122,7 @@ uv run builder request plan n_401_434 --world ../animundo-world
 uv run builder tiles lab --out /tmp/lab --world ../animundo-world
 ```
 
-The first makes one tile by code; the second plans a tundra border (home, animal, food, one thing to find, each estimated); the third repeats the 21-spot lab run with its counts and globe (add `--land` with a Natural Earth land shapefile for the globe's background, as in [`docs/tiles-lab/`](docs/tiles-lab/)).
+The first makes one tile (one Muse Spark species call unless the tile is cached); the second plans a tundra border (home, animal, food, one thing to find, each estimated); the third repeats the 21-spot lab run with its counts and globe (add `--land` with a Natural Earth land shapefile for the globe's background, as in [`docs/tiles-lab/`](docs/tiles-lab/)).
 
 ## Built during the event
 

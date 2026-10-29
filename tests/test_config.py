@@ -31,6 +31,11 @@ def test_max_new_plants_from_env(monkeypatch) -> None:
     assert load().max_new_plants == 1
 
 
+def test_species_cache_dir_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("BUILDER_SPECIES_CACHE_DIR", "/jobs/species-cache")
+    assert load().species_cache_dir == "/jobs/species-cache"
+
+
 def test_safety_from_env(monkeypatch) -> None:
     monkeypatch.setenv("BUILDER_SAFETY", "true")
     assert load().safety is True

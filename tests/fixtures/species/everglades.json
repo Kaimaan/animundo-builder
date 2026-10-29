@@ -1,0 +1,20 @@
+{
+ "spot": "everglades",
+ "tile": "n_090_403",
+ "place": "Inland Everglades, southern Florida, USA",
+ "present": [
+  "alligator",
+  "green_iguana",
+  "honey_bee",
+  "hummingbird",
+  "ladybird",
+  "mallard",
+  "monarch",
+  "osprey",
+  "peregrine",
+  "python",
+  "swallow",
+  "white_tailed_deer",
+  "wild_boar"
+ ]
+}

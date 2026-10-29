@@ -1,0 +1,33 @@
+{
+ "spot": "taymyr-tundra",
+ "tile": "n_434_346",
+ "place": "Taymyr tundra in northern Siberia",
+ "present": [
+  "arctic_char",
+  "arctic_fox",
+  "arctic_tern",
+  "bee",
+  "black_throated_loon",
+  "brown_bear",
+  "burbot",
+  "cuckoo",
+  "fox",
+  "ladybird",
+  "mountain_hare",
+  "musk_ox",
+  "muskrat",
+  "perch",
+  "peregrine",
+  "pike",
+  "ptarmigan",
+  "raven",
+  "reindeer",
+  "roach",
+  "snow_bunting",
+  "snowy_owl",
+  "stoat",
+  "whooper_swan",
+  "wolf",
+  "wolverine"
+ ]
+}

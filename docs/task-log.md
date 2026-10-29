@@ -3,6 +3,41 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #131, D18 tile species from Muse Spark
+
+- D18: `make_tile` takes its species from one Muse Spark call per
+  tile (`builder/species.py`: `muse-spark-1.3`, low effort,
+  16,000 tokens, strict `{"place", "present"}` with the list's
+  ids as the enum), not GBIF. The habitat filter and the
+  food-first picker are unchanged; with no counts the model's
+  order ranks, then the id. `sources.species` reads
+  `muse-spark-1.3:<date>`.
+- The answer's `place` is checked against the grid (sea or land,
+  and explicit continent words against coarse boxes); a mismatch
+  retries once, then blocks with `species_place` (new in the
+  tile-group contract). Checked against all 38 lab answers: the
+  only flags are the Everglades bay-wobble runs the lab itself
+  calls errors. A land-to-land flip told in local names still
+  slips through: the check is a backstop, not a gazetteer.
+- Answers cache per tile under `data/species/` (git-ignored),
+  with the animal list's fingerprint; a re-run calls again only
+  when the list changes. `BUILDER_SPECIES_CACHE_DIR` moves the
+  cache (the live worker keeps it on the jobs Volume). Without a
+  key, cached tiles still make and a miss fails clearly.
+- The planner is untouched: its food, animal and improve picks
+  stay GBIF, but its code-only probe makes the tile the worker
+  would make, so a plan never calls a tile code-only that the
+  model then blocks. `presence.py` stays for the T40 eval (not
+  built here) and improve. No live model calls were made: the
+  five lab recordings test the decode and the checks.
+- The game repo's spec lines saying species come from GBIF are
+  the reviewer's to change; the builder's README, AGENTS.md and
+  `docs/worker.md` are updated. `tiles make` now needs a Meta key
+  for uncached tiles, and the $0 path says so.
+- Evidence: `uv run pytest -q` → 671 passed, 12 skipped;
+  `ruff check` + `format --check` clean; `gitleaks git` clean;
+  `builder check --world` skeleton on.
+
 ## 2026-10-29: inbox #133, review of phase 2's first commits
 
 - Point 1: the Modal image sets `BUILDER_OPEN_MODEL_HOST=baseten`

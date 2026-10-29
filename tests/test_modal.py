@@ -76,9 +76,6 @@ def test_code_job_pulls_before_its_tile(tmp_path: Path, monkeypatch: Any) -> Non
         return real_make_tile(*args, **kwargs)
 
     monkeypatch.setattr(builder.tiles, "make_tile", spying_make_tile)
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
     flow.handle_build_job("j1")
     assert order == ["pull", "tile"]
     assert store.build_jobs["j1"]["status"] == "published"
@@ -94,6 +91,12 @@ def test_deploy_keeps_the_ledger_on_the_volume(monkeypatch: Any) -> None:
     """#133.2: the spend ledger sits on the jobs Volume."""
     module = _load(monkeypatch)
     assert module.WORKER_ENV["BUILDER_LEDGER_PATH"] == "/jobs/spend-ledger.json"
+
+
+def test_deploy_keeps_the_species_cache_on_the_volume(monkeypatch: Any) -> None:
+    """#131.4: the species cache sits on the jobs Volume."""
+    module = _load(monkeypatch)
+    assert module.WORKER_ENV["BUILDER_SPECIES_CACHE_DIR"] == "/jobs/species-cache"
 
 
 def test_deploy_installs_editable_for_its_data(monkeypatch: Any) -> None:

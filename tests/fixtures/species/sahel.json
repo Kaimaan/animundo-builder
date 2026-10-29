@@ -1,0 +1,25 @@
+{
+ "spot": "sahel",
+ "tile": "n_365_672",
+ "place": "Sahel savanna in western Niger",
+ "present": [
+  "buzzard",
+  "cuckoo",
+  "dragonfly",
+  "fennec_fox",
+  "grey_heron",
+  "honey_bee",
+  "hyena",
+  "jerboa",
+  "kestrel",
+  "kingfisher",
+  "ladybird",
+  "osprey",
+  "ostrich",
+  "peregrine",
+  "raven",
+  "swallow",
+  "warthog",
+  "white_stork"
+ ]
+}

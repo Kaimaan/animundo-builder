@@ -58,6 +58,7 @@ def run_lab(
     grids: dict[GridName, HabitatGrid],
     world: Path,
     builder_root: Path | None = None,
+    species_source: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Make every spot's tile; blocked cells carry their reason."""
     results: list[dict[str, Any]] = []
@@ -68,7 +69,13 @@ def run_lab(
             results.append({"spot": name, "status": "error", "detail": str(error)})
             continue
         try:
-            made, blocked = make_tile(tile, grids, world, builder_root=builder_root)
+            made, blocked = make_tile(
+                tile,
+                grids,
+                world,
+                builder_root=builder_root,
+                species_source=species_source,
+            )
         except RuntimeError as error:
             results.append(
                 {"spot": name, "tile": tile, "status": "error", "detail": str(error)}

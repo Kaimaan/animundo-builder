@@ -338,6 +338,10 @@
     "n_413_296": {
       "reason": "no_home",
       "habitat": "tundra"
+    },
+    "n_414_296": {
+      "reason": "species_place",
+      "habitat": "sea"
     }
   }
 }

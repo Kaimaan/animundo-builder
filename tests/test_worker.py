@@ -65,13 +65,16 @@ def _planned_worker(tmp_path: Path, store: FakeStore, monkeypatch: Any) -> Worke
         return {"fox": 5.0, "vole": 20.0}
 
     monkeypatch.setattr("builder.plan.fetch_smoothed", fake_fetch)
-    monkeypatch.setattr("builder.tiles.fetch_smoothed", fake_fetch)
     world = make_world(tmp_path)
     grid_dir = write_grids(tmp_path / "grids", boreal_3x3())
     worker = _worker(tmp_path, store)
     worker.world = world
     worker.grid_dir = grid_dir
     worker.world_commit = "abc123"
+    worker.species = {
+        "place": "Boreal forest in southern Finland",
+        "present": ["fox", "vole"],
+    }
     return worker
 
 
@@ -197,6 +200,10 @@ def _flow_worker(
     worker.world = make_world(tmp_path)
     worker.grid_dir = write_grids(tmp_path / "grids", tile_cells)
     worker.world_commit = "abc123"
+    worker.species = {
+        "place": "Boreal forest in southern Finland",
+        "present": ["fox", "vole"],
+    }
     return worker
 
 
@@ -241,16 +248,13 @@ def _code_job() -> dict[str, Any]:
 def test_code_job_publishes_with_no_model_call(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#118.10: a code request becomes ready with no model call."""
-    import builder.jobs
+    """#118.10: a code request becomes ready with no live call."""
+    import builder.species
 
     def no_model(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("a code job makes no model call")
+        raise AssertionError("a recorded answer makes no live call")
 
-    monkeypatch.setattr(builder.jobs, "MetaClient", no_model)
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
+    monkeypatch.setattr(builder.species, "ask", no_model)
     store = FakeStore()
     store.plans["n_413_478"] = _code_plan("n_413_478")
     store.build_jobs["j1"] = _code_job()
@@ -268,8 +272,8 @@ def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> No
     store = FakeStore()
     store.plans["n_413_478"] = _code_plan("n_413_478")
     store.build_jobs["j1"] = _code_job()
-    monkeypatch.setattr("builder.tiles.fetch_smoothed", lambda tile, c: {})
     worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.species = {"place": "Boreal forest in southern Finland", "present": []}
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "failed"
@@ -283,9 +287,6 @@ def test_pending_request_builds_nothing(tmp_path: Path, monkeypatch: Any) -> Non
     store.requests["n_413_478"] = {"tile": "n_413_478", "turned_down": "far"}
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     monkeypatch.setattr("builder.plan.fetch_smoothed", lambda tile, c: {})
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
     worker.handle_request("n_413_478")
     assert "n_413_478" in store.plans
     assert store.build_jobs == {}
@@ -743,9 +744,6 @@ def test_review_job_publishes_shipped_items(tmp_path: Path, monkeypatch: Any) ->
     store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion"])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     _fake_animal_stages(worker, monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
     worker.handle_build_job("j1")
     assert store.build_jobs["j1"]["status"] == "checking"
     (worker.world / "animals" / "lion.json").write_text('{"id": "lion"}')
@@ -773,9 +771,6 @@ def test_review_job_drops_not_accepted_and_ships_the_rest(
     store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion", "animal_tiger"])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     _fake_animal_stages(worker, monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
     worker.handle_build_job("j1")
     (worker.world / "animals" / "lion.json").write_text('{"id": "lion"}')
     store.build_jobs["j1"]["review"] = {
@@ -829,9 +824,6 @@ def test_claim_snapshot_survives_a_replan(tmp_path: Path, monkeypatch: Any) -> N
     store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion"])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     _fake_animal_stages(worker, monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
     worker.handle_build_job("j1")
     snapshot = json.loads((tmp_path / "jobs" / "j1" / "plan.json").read_text())
     assert [i["id"] for i in snapshot["items"]] == ["animal_lion"]
@@ -868,9 +860,6 @@ def test_plant_item_ships_and_publishes(tmp_path: Path, monkeypatch: Any) -> Non
     home = json.loads(home_path.read_text())
     home["food"] = [{"kind": "grass"}, {"kind": "berries", "names": ["cloudberry"]}]
     home_path.write_text(json.dumps(home))
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
 
     class Pipe:
         def run(self, ctx: Any) -> dict[str, Any]:
@@ -895,9 +884,6 @@ def test_code_job_fails_on_excluded_tile(tmp_path: Path, monkeypatch: Any) -> No
     store.plans["n_413_478"] = _code_plan("n_413_478")
     store.build_jobs["j1"] = _code_job()
     (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["n_413_478"]}))
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.builder_root = tmp_path
     worker.handle_build_job("j1")
@@ -975,9 +961,6 @@ def test_no_player_field_anywhere(tmp_path: Path, monkeypatch: Any) -> None:
     store.build_jobs["j1"] = _code_job()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     monkeypatch.setattr("builder.plan.fetch_smoothed", lambda tile, c: {})
-    monkeypatch.setattr(
-        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
-    )
     worker.handle_request("n_413_478")
     worker.handle_build_job("j1")
 

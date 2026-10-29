@@ -359,6 +359,7 @@ def cmd_presence_fetch(args: argparse.Namespace) -> int:
 def cmd_tiles_make(args: argparse.Namespace) -> int:
     from .grid import GridName
     from .habitats import HabitatGrid
+    from .species import source_from_config
     from .tiles import make_at
 
     try:
@@ -378,7 +379,14 @@ def cmd_tiles_make(args: argparse.Namespace) -> int:
         return 1
     grids: dict[GridName, HabitatGrid] = {name: HabitatGrid.load(path, name)}
     try:
-        tile, path, status = make_at(lat, lon, grids, world, Path(args.out))
+        tile, path, status = make_at(
+            lat,
+            lon,
+            grids,
+            world,
+            Path(args.out),
+            species_source=source_from_config(load_config()),
+        )
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -393,6 +401,7 @@ def cmd_tiles_lab(args: argparse.Namespace) -> int:
     from .grid import GridName
     from .habitats import HabitatGrid
     from .lab import run_lab, write_lab
+    from .species import source_from_config
 
     world = _world_or_error(args.world)
     if world is None:
@@ -406,7 +415,9 @@ def cmd_tiles_lab(args: argparse.Namespace) -> int:
             return 1
         grids[name] = HabitatGrid.load(path, name)  # type: ignore[arg-type]
     try:
-        results = run_lab(grids, world)
+        results = run_lab(
+            grids, world, species_source=source_from_config(load_config())
+        )
     except ConnectionError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -425,6 +436,7 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
     from .grid import GridName, parse_tile
     from .habitats import HabitatGrid
     from .plan import plan_tile
+    from .species import source_from_config
 
     world = _world_or_error(args.world)
     if world is None:
@@ -450,7 +462,14 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
     except OSError:
         commit = ""
     try:
-        plan = plan_tile(args.tile, None, grids, world, commit or "unknown")
+        plan = plan_tile(
+            args.tile,
+            None,
+            grids,
+            world,
+            commit or "unknown",
+            species_source=source_from_config(load_config()),
+        )
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

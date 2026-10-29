@@ -21,6 +21,7 @@ secrets/
 
 # Builder working state: prompts, downloads, costs, anything per-job
 jobs/
+data/species/
 recordings/raw/
 *.jsonl
 !tests/fixtures/*.jsonl

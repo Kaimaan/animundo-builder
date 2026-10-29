@@ -1,10 +1,10 @@
-"""The tile maker: one honest tile per cell, by code with no AI.
+"""The tile maker: one honest tile per cell, by code plus one AI call.
 
 `make_tile()` reads the habitat grid, the world's homes and animals,
-and GBIF presence, and returns either a tile or a blocked reason. A
-cell the maker can't make honestly is blocked (`no_home`,
-`no_animal`, `excluded`), never filled with the wrong land or
-animals.
+and Muse Spark's species for the cell, and returns either a tile or
+a blocked reason. A cell the maker can't make honestly is blocked
+(`no_home`, `no_animal`, `excluded`, `species_place`), never filled
+with the wrong land or animals.
 """
 
 from __future__ import annotations
@@ -29,8 +29,19 @@ from .grid import (
     tile_at,
 )
 from .habitats import HabitatGrid
-from .presence import animals_for_habitat, fetch_smoothed, library_animals
+from .presence import animals_for_habitat
 from .schemas import validate
+from .species import MODEL as SPECIES_MODEL
+from .species import Source as SpeciesSource
+from .species import (
+    SpeciesPlaceError,
+    check_answer,
+    check_place,
+    fetch_species,
+    list_animals,
+    list_fingerprint,
+    rank_weights,
+)
 
 #: The shared water level every home builds to.
 WATER_LEVEL = 8
@@ -416,11 +427,15 @@ def make_tile(
     world: Path,
     presence: dict[str, float] | None = None,
     builder_root: Path | None = None,
+    species: dict[str, Any] | None = None,
+    species_source: SpeciesSource | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
     """Make one tile, or the blocked reason when it can't be made.
 
     Returns (tile, None) or (None, {"reason": ..., "habitat": ...}).
-    `presence` overrides the live GBIF fetch (tests and replays).
+    `presence` overrides with GBIF-style counts (tests and replays);
+    `species` overrides with a recorded Muse Spark answer. Otherwise
+    the answer comes from the cache or one model call.
     """
     from .schemas import ROOT as BUILDER_ROOT
 
@@ -440,7 +455,8 @@ def make_tile(
     blend_home = home_for_cell(eco2, habitat, homes) if eco2 is not None else None
     if blend_home is not None and blend_home != home and share2 >= 0.1:
         blend = {"home": blend_home, "share": round(share2, 2)}
-    animals = library_animals(world)
+    lat, lon = center(tile)
+    animals = list_animals(world)
     candidates = animals_for_habitat(animals, habitat)
     # Sea tiles also take open-ocean swimmers and vice versa.
     if habitat in ("sea", "open_ocean"):
@@ -449,12 +465,41 @@ def make_tile(
         )
         seen = {a["id"] for a in candidates}
         candidates += [a for a in others if a["id"] not in seen]
-    counts = presence if presence is not None else fetch_smoothed(tile, candidates)
-    present = {s: n for s, n in counts.items() if n > 0}
+    if presence is not None:
+        present = {s: n for s, n in presence.items() if n > 0}
+        species_tag = f"gbif:search:{datetime.now(UTC).date().isoformat()}"
+    else:
+        ids = [a["id"] for a in animals]
+        if species is not None:
+            answer = check_answer(species, ids)
+            problem = check_place(answer["place"], habitat, lat, lon)
+            if problem is not None:
+                return None, {"reason": "species_place", "habitat": habitat}
+            date = datetime.now(UTC).date().isoformat()
+        else:
+            source = species_source or SpeciesSource(
+                client=None,
+                cache_dir=(builder_root or BUILDER_ROOT) / "data" / "species",
+            )
+            try:
+                answer = fetch_species(
+                    tile,
+                    animals,
+                    habitat,
+                    lat,
+                    lon,
+                    source,
+                    list_fingerprint(animals),
+                )
+            except SpeciesPlaceError:
+                return None, {"reason": "species_place", "habitat": habitat}
+            date = answer["date"]
+        ordered = [s for s in answer["present"] if s in {a["id"] for a in candidates}]
+        present = rank_weights(ordered)
+        species_tag = f"{SPECIES_MODEL}:{date}"
     playable, prey, predators = pick_species(present, world, homes[home])
     if not playable:
         return None, {"reason": "no_animal", "habitat": habitat}
-    lat, lon = center(tile)
     level = cell_level(habitat, elev)
     edges = tile_edges(tile, grids)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
@@ -483,7 +528,7 @@ def make_tile(
             "habitat": f"resolve2017:{eco1}",
             "elevation": "etopo2022:v1_60s_surface",
             "water": "naturalearth:lakes:5.0.0",
-            "species": f"gbif:search:{datetime.now(UTC).date().isoformat()}",
+            "species": species_tag,
         },
         "made": {
             "by": "tile_maker",
@@ -550,13 +595,16 @@ def make_at(
     world: Path,
     out_dir: Path,
     builder_root: Path | None = None,
+    species_source: SpeciesSource | None = None,
 ) -> tuple[str, Path, str]:
     """Make the tile at this point and write its group file.
 
     Returns (tile id, group path, "ready" or the blocked reason).
     """
     tile = tile_at(lat, lon)
-    made, blocked = make_tile(tile, grids, world, builder_root=builder_root)
+    made, blocked = make_tile(
+        tile, grids, world, builder_root=builder_root, species_source=species_source
+    )
     path = write_group(out_dir, tile, made, blocked)
     status = "ready" if made is not None else (blocked or {}).get("reason", "?")
     return tile, path, status

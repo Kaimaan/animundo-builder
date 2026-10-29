@@ -64,3 +64,16 @@ def prices_for(model: str) -> Prices:
             f"model {model!r} has no price in builder/prices.py "
             f"(checked {PRICE_CHECKED})"
         ) from None
+
+
+#: Measured build costs per plan item kind in US dollars, first
+#: guesses from the animal-first runs (spec 10): a home from the D8
+#: form is about $0.02, a new animal from the D7 edits about $0.10
+#: to $0.15 with its research call. Food is a code-only home edit.
+#: Re-measure the first border batches in phase 4 and update these.
+ITEM_ESTIMATES: dict[str, float] = {
+    "home": 0.02,
+    "animal": 0.15,
+    "plant": 0.02,
+    "food": 0.0,
+}

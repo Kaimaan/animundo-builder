@@ -94,6 +94,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="The Storage bucket (default: the project's default bucket).",
     )
+    worker.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grids (default: data/habitat-grid).",
+    )
     habitats = sub.add_parser("habitats", help="The world habitat grid.")
     habitats_sub = habitats.add_subparsers(dest="habitats_command", required=True)
     bake = habitats_sub.add_parser("bake", help="Bake the habitat grid files.")
@@ -147,6 +152,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--land",
         default=None,
         help="Natural Earth land shapefile for the globe background.",
+    )
+    request = sub.add_parser("request", help="Border requests: plan them.")
+    request_sub = request.add_subparsers(dest="request_command", required=True)
+    plan = request_sub.add_parser("plan", help="Print one tile's border plan.")
+    plan.add_argument("tile", help="The border tile id, e.g. n_413_478.")
+    plan.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    plan.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grids (default: data/habitat-grid).",
     )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
@@ -273,6 +290,7 @@ def cmd_worker(args: argparse.Namespace) -> int:
         world,
         args.project,
         args.storage_bucket,
+        Path(args.habitat_grid),
     )
 
 
@@ -369,6 +387,49 @@ def cmd_tiles_lab(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_request_plan(args: argparse.Namespace) -> int:
+    import json
+    import subprocess
+
+    from .grid import GridName, parse_tile
+    from .habitats import HabitatGrid
+    from .plan import plan_tile
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    try:
+        grid, _col, _row = parse_tile(args.tile)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    path = Path(args.habitat_grid) / f"{grid}.json.gz"
+    if not path.is_file():
+        print(f"error: no baked grid: {path}", file=sys.stderr)
+        return 1
+    grids: dict[GridName, HabitatGrid] = {grid: HabitatGrid.load(path, grid)}
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=world,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+    except OSError:
+        commit = ""
+    try:
+        plan = plan_tile(args.tile, None, grids, world, commit or "unknown")
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    except ConnectionError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(plan, indent=1))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "check":
@@ -387,6 +448,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_tiles_make(args)
     if args.command == "tiles" and args.tiles_command == "lab":
         return cmd_tiles_lab(args)
+    if args.command == "request" and args.request_command == "plan":
+        return cmd_request_plan(args)
     return cmd_not_built_yet(args.command)
 
 

@@ -18,8 +18,12 @@ uv run builder worker --listen --world ~/dev/animundo-world \
     --project animundo-dev
 ```
 
-What it does in phase 0: it listens and claims work atomically,
-but builds nothing yet. Phase 2 adds the planner and the builders.
+What it does: every new or changed border request is planned
+into `plans/{tile}` by code with no model call (T74), and again
+when the world commit moves. A failing request is reported to
+`builder_alerts`, never retried blindly. `config/builder.enabled`
+is the off switch: false starts nothing. Build jobs (T76) land
+next; until then a job is only queued.
 
 Crashes and restarts are safe: every status is a guard, so only
 events still waiting are replayed.

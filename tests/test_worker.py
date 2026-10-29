@@ -1,83 +1,16 @@
-"""The phase-0 worker: it listens, claims and logs. No Firebase."""
+"""The worker: it plans requests, queues jobs, alerts loudly. No Firebase."""
 
 from __future__ import annotations
 
-import threading
 from pathlib import Path
 from typing import Any
 
+from fake_store import FakeStore
+from fake_world import boreal_3x3, make_world, write_grids
+
 from builder.config import Config
-from builder.worker import DELETE, Listener, Worker
+from builder.worker import Listener, Worker
 from builder.worker_store import STORE_METHODS, FirebaseStore
-
-
-class FakeStore:
-    """An in-memory Firestore."""
-
-    def __init__(self) -> None:
-        self.requests: dict[str, dict[str, Any]] = {}
-        self.plans: dict[str, dict[str, Any]] = {}
-        self.build_jobs: dict[str, dict[str, Any]] = {}
-        self.alerts: list[dict[str, Any]] = []
-        self.jobs: dict[str, dict[str, Any]] = {}
-        self.watchers: list[tuple[str, Any]] = []
-        self._lock = threading.Lock()
-
-    def get_request(self, tile: str) -> dict[str, Any] | None:
-        return self.requests.get(tile)
-
-    def get_plan(self, tile: str) -> dict[str, Any] | None:
-        return self.plans.get(tile)
-
-    def set_plan(self, tile: str, doc: dict[str, Any]) -> None:
-        self.plans[tile] = doc
-
-    def get_build_job(self, job_id: str) -> dict[str, Any] | None:
-        return self.build_jobs.get(job_id)
-
-    def update_build_job(self, job_id: str, fields: dict[str, Any]) -> None:
-        doc = self.build_jobs[job_id]
-        for key, value in fields.items():
-            if value is DELETE:
-                doc.pop(key, None)
-            else:
-                doc[key] = value
-
-    def claim_build_job(self, job_id: str, worker_id: str) -> bool:
-        with self._lock:
-            doc = self.build_jobs.get(job_id)
-            if doc is None or doc.get("status") != "queued" or doc.get("worker_id"):
-                return False
-            doc["worker_id"] = worker_id
-            return True
-
-    def pending_build_jobs(self) -> list[tuple[str, dict[str, Any]]]:
-        return [
-            (job_id, doc)
-            for job_id, doc in self.build_jobs.items()
-            if doc.get("status") not in ("published", "failed")
-        ]
-
-    def add_alert(self, item: dict[str, Any]) -> str:
-        self.alerts.append(item)
-        return f"alert-{len(self.alerts)}"
-
-    def get_job(self, job_id: str) -> dict[str, Any] | None:
-        return self.jobs.get(job_id)
-
-    def set_job(self, job_id: str, doc: dict[str, Any]) -> None:
-        self.jobs[job_id] = doc
-
-    def update_job(self, job_id: str, fields: dict[str, Any]) -> None:
-        self.jobs[job_id].update(fields)
-
-    def watch_requests(self, callback: Any) -> Any:
-        self.watchers.append(("requests", callback))
-        return lambda: None
-
-    def watch_build_jobs(self, callback: Any) -> Any:
-        self.watchers.append(("build_jobs", callback))
-        return lambda: None
 
 
 def _worker(tmp_path: Path, store: FakeStore) -> Worker:
@@ -127,13 +60,74 @@ def test_claim_build_job_needs_queued() -> None:
     assert store.claim_build_job("j1", "w1") is False
 
 
-def test_handle_request_logs_and_plans_nothing(tmp_path: Path, capsys: Any) -> None:
-    store = FakeStore()
-    store.requests["n_413_296"] = {"tile": "n_413_296"}
+def _planned_worker(tmp_path: Path, store: FakeStore, monkeypatch: Any) -> Worker:
+    def fake_fetch(tile: str, candidates: list[dict[str, Any]]) -> dict[str, float]:
+        return {"fox": 5.0, "vole": 20.0}
+
+    monkeypatch.setattr("builder.plan.fetch_smoothed", fake_fetch)
+    monkeypatch.setattr("builder.tiles.fetch_smoothed", fake_fetch)
+    world = make_world(tmp_path)
+    grid_dir = write_grids(tmp_path / "grids", boreal_3x3())
     worker = _worker(tmp_path, store)
-    worker.handle_request("n_413_296")
-    assert "phase 2" in capsys.readouterr().out
-    assert "n_413_296" not in store.plans
+    worker.world = world
+    worker.grid_dir = grid_dir
+    worker.world_commit = "abc123"
+    return worker
+
+
+def test_handle_request_plans_into_store(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    store = FakeStore()
+    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.handle_request("n_413_478")
+    plan = store.plans["n_413_478"]
+    assert plan["code_only"] is True
+    assert plan["world"] == "abc123"
+    assert "planned code_only=True" in capsys.readouterr().out
+
+
+def test_handle_request_skips_when_off(tmp_path: Path, monkeypatch: Any) -> None:
+    store = FakeStore()
+    store.enabled = False
+    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.handle_request("n_413_478")
+    assert "n_413_478" not in store.plans
+
+
+def test_handle_request_alerts_when_unplannable(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    store = FakeStore()
+    store.requests["xx"] = {"tile": "xx"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.handle_request("xx")
+    assert "xx" not in store.plans
+    assert store.alerts[-1]["kind"] == "plan_failed"
+
+
+def test_sync_world_replans_on_move(tmp_path: Path, monkeypatch: Any) -> None:
+    store = FakeStore()
+    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.handle_request("n_413_478")
+    assert store.plans["n_413_478"]["world"] == "abc123"
+    worker.sync_world("def456")
+    assert worker.world_commit == "def456"
+    assert store.plans["n_413_478"]["world"] == "def456"
+
+
+def test_sync_world_ignores_same_and_unknown(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    store = FakeStore()
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.sync_world("abc123")
+    worker.sync_world("unknown")
+    assert worker.world_commit == "abc123"
+    assert "re-planning" not in capsys.readouterr().out
 
 
 def test_handle_build_job_leaves_it_queued(tmp_path: Path) -> None:

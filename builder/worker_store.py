@@ -48,12 +48,30 @@ class FirebaseStore:
         snap = self._db.collection("border_requests").document(tile).get()
         return snap.to_dict() if snap.exists else None
 
+    def list_requests(self) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (snap.id, snap.to_dict() or {})
+            for snap in self._db.collection("border_requests").stream()
+        ]
+
+    def get_enabled(self) -> bool:
+        """The off switch: `config/builder.enabled`, on when missing."""
+        snap = self._db.collection("config").document("builder").get()
+        data = snap.to_dict() if snap.exists else None
+        return bool((data or {}).get("enabled", True))
+
     def get_plan(self, tile: str) -> dict[str, Any] | None:
         snap = self._db.collection("plans").document(tile).get()
         return snap.to_dict() if snap.exists else None
 
     def set_plan(self, tile: str, doc: dict[str, Any]) -> None:
         self._db.collection("plans").document(tile).set(doc)
+
+    def list_plans(self) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (snap.id, snap.to_dict() or {})
+            for snap in self._db.collection("plans").stream()
+        ]
 
     # -- build jobs ------------------------------------------------------
 
@@ -116,9 +134,12 @@ STORE_METHODS = (
     "add_alert",
     "claim_build_job",
     "get_build_job",
+    "get_enabled",
     "get_job",
     "get_plan",
     "get_request",
+    "list_plans",
+    "list_requests",
     "pending_build_jobs",
     "set_job",
     "set_plan",

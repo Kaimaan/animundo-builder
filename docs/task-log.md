@@ -3,6 +3,40 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #118 (phase 2, T74 the planner + find item)
+
+- T74: the planner by code (`builder/plan.py`, `request plan`):
+  the home from the nearest ecoregion, one animal (none when one
+  already serves), one food, one thing to find (the home's first
+  named plant without a file, a `plant` item), at most two
+  improve items; estimates from `prices.py`, names from a
+  compass off Nuuksio and Saimaa. Requests re-plan when the
+  world commit moves. A live tundra tile plans home, animal,
+  food and find with estimates.
+- Evidence: `uv run pytest -q` → 593 passed, 12 skipped;
+  `ruff check` + `format --check` clean; `gitleaks git` clean;
+  `builder check --world` skeleton on.
+
+## 2026-10-29: inbox #117 (phase 1, one code-made tile), pushed untagged
+
+- Tile contracts require `ecoregion`/`level`/`height` plus an
+  optional `blend`; ocean tiles carry an ecoregion too. Grid
+  cells hold both ecoregions and shares, biome, land, water and
+  elevation. The picker is food-first with the world's
+  `check_tile.py` as the gate; empty tiles report `no_animal`
+  honestly instead of failing.
+- Playable is spec-literal (spec 04): every kept animal whose
+  file is playable is playable, even under prey; the Nuuksio
+  tile keeps fox, moose and mountain hare playable, Pallas the
+  fox. Test pinned on the Nuuksio tile.
+- The full bake (518,400 cells per grid) is committed under
+  `data/habitat-grid/`; the lab ran 21 spots (2 ready, 3
+  `no_animal`, 16 `no_home`) with counts and the globe in
+  `docs/tiles-lab/`.
+- Evidence: `uv run pytest -q` → 591 passed, 12 skipped; `ruff
+  check` + `format --check` clean; `gitleaks git` clean;
+  `builder check --world` skeleton on.
+
 ## 2026-10-28: inbox #115-#116 (phase 0), tagged `v0.4.0`
 
 - T47: the nine shared contracts as JSON Schemas in `contracts/`
@@ -1481,3 +1515,26 @@ reviewer runs the real step tests.
   passing the world's check.
 - ETOPO 2022 confirmed by Kai; all three grid sources
   confirmed before any tile is published.
+
+## 2026-10-29: the planner (T74, #118)
+
+- `builder/plan.py` plans a border tile by code: the tile
+  maker decides `code_only`; else one home item from the
+  nearest home's ecoregion, one animal item (the explorer's
+  own unfiled animal first, else most recorded near the
+  cell), one food item for a filed but unfed animal, and up
+  to 2 improve species. Estimates from `builder/prices.py`;
+  names from the habitat and compass direction off Nuuksio
+  or Saimaa, in English and Finnish.
+- No plant items: nothing in the world grounds a "thing to
+  find" before the build's research, and no phase-2 stage
+  builds one. Flagged for the inbox.
+- `builder request plan <tile>` prints the plan; the worker
+  writes it to `plans/{tile}` on every new or changed
+  request and again when the world commit moves, behind the
+  `config/builder.enabled` off switch, with failures in
+  `builder_alerts`.
+- Live: boreal next to Nuuksio is `code_only`; a 774
+  tundra border plans home_774 from tundra; Wales sea plans
+  herring_gull with puffin and grey seal to improve.
+- Suite: 591 passed, 12 skipped; ruff and gitleaks clean.

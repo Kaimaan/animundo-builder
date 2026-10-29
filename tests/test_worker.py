@@ -376,7 +376,7 @@ def test_plant_item_builds_through_stages(tmp_path: Path, monkeypatch: Any) -> N
     brief = json.loads((item_dir / "home.json").read_text())
     assert brief["plant"] == "cloudberry"
     assert brief["names"] == ["cloudberry"]
-    region = json.loads((item_dir / "regions" / "work.json").read_text())
+    region = json.loads((item_dir / "regions" / "zz_work.json").read_text())
     assert region["ground_cover"]["plants"] == [
         {"model": "cloudberry", "names": ["cloudberry"]}
     ]

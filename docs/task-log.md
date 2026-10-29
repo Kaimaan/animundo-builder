@@ -3,6 +3,28 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: T39, a recorded border request replays with no key
+
+- `builder request build <tile> --replay <dir>` rebuilds a
+  recorded request locally: no key, no model cost, no
+  Firestore; the job lands under `--out` laid out like a
+  worker's, report per item. `--record <dir>` plans live
+  and records the build (spends real money). Food builds
+  by code either way; the worker and the replay share the
+  intake (`prepare_item`).
+- The scaffold is a valid region now (`zz_work.json`, the
+  tile's centre, the home's sources), and a replayed fix
+  round continues its stage's answers instead of starting
+  over (the recorder appends, so must the replay).
+- `examples/n_401_434` is the recorded tundra border (home,
+  animal, food, find), scrubbed and committed; the README
+  replays it. Local Blender 5.2.3 segfaults in Metal GPU
+  detection before any script runs, so the model builds
+  were verified up to the Blender step here; a working
+  Blender completes them.
+- Evidence: the keyless replay run; 5 replay tests, 2
+  fix-round record tests; suite, ruff and gitleaks clean.
+
 ## 2026-10-29: inbox #134, the kangaroo tail within 10% (T94)
 
 - The tail was never short: the tool's T94 reach (each part's

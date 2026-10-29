@@ -80,13 +80,28 @@ def test_write_animal_brief_carries_list_entry(tmp_path: Path) -> None:
 
 
 def test_write_scaffold_uses_home_food(tmp_path: Path) -> None:
-    home = {"food": [{"kind": "grass"}], "fish": [{"kind": "roach"}]}
-    path = build_mod.write_scaffold(tmp_path, home)
+    home = {
+        "food": [{"kind": "grass"}],
+        "fish": [{"kind": "roach"}],
+        "sources": ["https://example.com/meadow"],
+    }
+    path = build_mod.write_scaffold(tmp_path, home, lat=68.4, lon=23.6)
     scaffold = json.loads(path.read_text())
     assert scaffold["food"] == home["food"]
     assert scaffold["fish"] == home["fish"]
     assert scaffold["animals"] == {"playable": [], "prey": [], "predators": []}
     assert "welcome" not in scaffold
+    assert path.name == "zz_work.json"
+    assert scaffold["id"] == "zz_work"
+    assert scaffold["center"] == {"lat": 68.4, "lon": 23.6}
+    assert scaffold["sources"] == ["https://example.com/meadow"]
+
+
+def test_write_scaffold_falls_back_to_its_own_source(tmp_path: Path) -> None:
+    home = {"food": [], "fish": []}
+    path = build_mod.write_scaffold(tmp_path, home, lat=68.4, lon=23.6)
+    scaffold = json.loads(path.read_text())
+    assert scaffold["sources"] == ["Scaffolding for one item's checks."]
 
 
 def test_write_plant_brief_carries_names(tmp_path: Path) -> None:
@@ -103,7 +118,11 @@ def test_write_plant_brief_carries_names(tmp_path: Path) -> None:
 def test_write_scaffold_names_ground_cover_plants(tmp_path: Path) -> None:
     home: dict[str, Any] = {"food": [], "fish": []}
     path = build_mod.write_scaffold(
-        tmp_path, home, [{"model": "arctic_willow", "names": ["Arctic Willow"]}]
+        tmp_path,
+        home,
+        [{"model": "arctic_willow", "names": ["Arctic Willow"]}],
+        lat=68.4,
+        lon=23.6,
     )
     scaffold = json.loads(path.read_text())
     assert scaffold["ground_cover"]["plants"] == [

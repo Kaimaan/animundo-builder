@@ -1,0 +1,63 @@
+{
+ "format": 1,
+ "tile": "n_401_434",
+ "code_only": false,
+ "items": [
+  {
+   "id": "home_774",
+   "kind": "home",
+   "what": "774",
+   "from": "tundra",
+   "estimate_usd": 0.02
+  },
+  {
+   "id": "food_clover",
+   "kind": "food",
+   "what": "clover",
+   "from": "tundra",
+   "estimate_usd": 0.0
+  },
+  {
+   "id": "animal_snow_bunting",
+   "kind": "animal",
+   "what": "snow_bunting",
+   "from": "chaffinch",
+   "estimate_usd": 0.15
+  },
+  {
+   "id": "plant_water_sedge",
+   "kind": "plant",
+   "what": "water_sedge",
+   "from": "bilberry",
+   "estimate_usd": 0.02
+  }
+ ],
+ "improve": [
+  {
+   "id": "improve_ptarmigan",
+   "kind": "animal",
+   "what": "ptarmigan",
+   "from": "mallard",
+   "estimate_usd": 0.15
+  },
+  {
+   "id": "improve_arctic_tern",
+   "kind": "animal",
+   "what": "arctic_tern",
+   "from": "mallard",
+   "estimate_usd": 0.15
+  }
+ ],
+ "estimate_usd": 0.49,
+ "name": {
+  "en": "Tundra north of Saimaa",
+  "fi": "Tundra Saimaan pohjoispuolella"
+ },
+ "coming": [
+  "snow_bunting",
+  "ptarmigan",
+  "arctic_tern"
+ ],
+ "world": "0dcf513",
+ "planned_at": "2026-10-29T10:21:50.276847+00:00"
+}

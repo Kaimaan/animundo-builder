@@ -26,6 +26,8 @@ recordings/raw/
 *.jsonl
 !tests/fixtures/*.jsonl
 !tests/fixtures/**/*.jsonl
+!examples/*.jsonl
+!examples/**/*.jsonl
 spend-ledger.json
 
 # Agent memory that must stay personal, never committed

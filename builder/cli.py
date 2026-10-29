@@ -166,7 +166,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Baked habitat grids (default: data/habitat-grid).",
     )
     build = request_sub.add_parser("build", help="Run one build round for a job.")
-    build.add_argument("job", help="The build job id.")
+    build.add_argument(
+        "job",
+        help="The build job id, or a tile id with --replay/--record.",
+    )
+    build.add_argument(
+        "--replay",
+        default=None,
+        metavar="DIR",
+        help="Rebuild a recorded request locally: no key, no model cost.",
+    )
+    build.add_argument(
+        "--record",
+        default=None,
+        metavar="DIR",
+        help="Plan live and record the build into DIR. Spends real money.",
+    )
+    build.add_argument(
+        "--out",
+        default=None,
+        help="Directory for the local job (default: replay-<tile>).",
+    )
     build.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
     )
@@ -481,12 +501,16 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_request_build(args: argparse.Namespace) -> int:
-    from .config import load_config
     from .worker import Worker
     from .worker_store import FirebaseStore, StoreError
 
     world = _world_or_error(args.world)
     if world is None:
+        return 1
+    if args.replay is not None or args.record is not None:
+        return cmd_request_build_local(args, world)
+    if args.out is not None:
+        print("error: --out needs --replay or --record", file=sys.stderr)
         return 1
     try:
         store = FirebaseStore(args.project, args.storage_bucket)
@@ -501,6 +525,46 @@ def cmd_request_build(args: argparse.Namespace) -> int:
         grid_dir=Path(args.habitat_grid),
     )
     worker.handle_build_job(args.job)
+    return 0
+
+
+def cmd_request_build_local(args: argparse.Namespace, world: Path) -> int:
+    """One border request locally: record it live, or replay it keyless."""
+    from .ledger import CapExceeded
+    from .meta import MetaAuthError
+    from .pipeline import StageFailedError
+    from .records import ReplayError
+    from .replay import record_request, replay_request
+
+    if args.replay is not None and args.record is not None:
+        print("error: --replay and --record do not mix", file=sys.stderr)
+        return 1
+    out = Path(args.out) if args.out is not None else Path(f"replay-{args.job}")
+    try:
+        if args.replay is not None:
+            reports = replay_request(
+                args.job,
+                Path(args.replay),
+                out,
+                world,
+                Path(args.habitat_grid),
+            )
+        else:
+            reports = record_request(
+                args.job,
+                Path(args.record),
+                out,
+                world,
+                Path(args.habitat_grid),
+                load_config(),
+            )
+    except (StageFailedError, CapExceeded, MetaAuthError, ReplayError) as error:
+        return _explain_stop(f"replay-{args.job}", error)
+    except (ValueError, FileNotFoundError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    for item_id, report in sorted(reports.items()):
+        print(f"{item_id}: report {report}")
     return 0
 
 

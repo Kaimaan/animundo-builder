@@ -120,26 +120,41 @@ def write_brief(
 
 
 def write_scaffold(
-    item_dir: Path, home: dict[str, Any], plants: list[dict[str, Any]] | None = None
+    item_dir: Path,
+    home: dict[str, Any],
+    plants: list[dict[str, Any]] | None = None,
+    *,
+    lat: float,
+    lon: float,
 ) -> Path:
     """A working region for the one-shot maker, from the tile's home.
 
     Real food and fish (the checks mean something), empty casts,
     no welcome: the region is scaffolding, discarded after the
     item's animals and models are made. A plant item names its
-    plant in the ground cover for the plants step.
+    plant in the ground cover for the plants step. It is a valid
+    region file (the checks also read the scaffold): `zz` marks
+    the reserved country, and the centre is the tile's.
     """
     regions = item_dir / "regions"
     regions.mkdir(parents=True, exist_ok=True)
     region: dict[str, Any] = {
-        "id": "work",
+        "id": "zz_work",
+        "name": "Work region",
+        "country": "Scaffolding",
+        "description": (
+            "Working region for one item's checks; discarded after the item is made."
+        ),
+        "author": "Animundo Builder",
+        "center": {"lat": lat, "lon": lon},
+        "sources": list(home.get("sources") or ["Scaffolding for one item's checks."]),
         "animals": {"playable": [], "prey": [], "predators": []},
         "food": home.get("food", []),
         "fish": home.get("fish", []),
     }
     if plants:
         region["ground_cover"] = {"plants": plants}
-    path = regions / "work.json"
+    path = regions / "zz_work.json"
     path.write_text(json.dumps(region, indent=2))
     return path
 
@@ -176,6 +191,37 @@ def write_flora_survey(item_dir: Path, names: list[str]) -> Path:
         )
     )
     return path
+
+
+def prepare_item(
+    item_dir: Path,
+    item: dict[str, Any],
+    habitat: str,
+    lat: float,
+    lon: float,
+    entry: dict[str, Any] | None,
+    home: dict[str, Any] | None,
+) -> None:
+    """Brief and scaffold for one item's stages (the intake).
+
+    A plant item carries its names, scaffold and flora survey; an
+    animal item its entry and a scaffold from the tile's home; a
+    home item only its brief. The worker and the local replay run
+    the same intake.
+    """
+    if item["kind"] == "plant":
+        assert home is not None
+        names = find_plant_names(home, item["what"])
+        write_brief(item_dir, item, habitat, lat, lon, None, names)
+        write_scaffold(
+            item_dir, home, [{"model": item["what"], "names": names}], lat=lat, lon=lon
+        )
+        write_flora_survey(item_dir, names)
+    else:
+        write_brief(item_dir, item, habitat, lat, lon, entry)
+        if item["kind"] == "animal":
+            assert home is not None
+            write_scaffold(item_dir, home, lat=lat, lon=lon)
 
 
 def run_item_stages(ctx: Any, item_dir: Path, pipeline: Pipeline) -> dict[str, Any]:

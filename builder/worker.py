@@ -482,18 +482,11 @@ class Worker:
                 raise ValueError(
                     f"item {item['id']} names {item['what']}, off the list"
                 )
-        if item["kind"] == "plant":
-            home = self._tile_home(tile, plan, job_id)
-            names = build_mod.find_plant_names(home, item["what"])
-            build_mod.write_brief(item_dir, item, habitat, lat, lon, None, names)
-            build_mod.write_scaffold(
-                item_dir, home, [{"model": item["what"], "names": names}]
-            )
-            build_mod.write_flora_survey(item_dir, names)
+        if item["kind"] in ("plant", "animal"):
+            home: dict[str, Any] | None = self._tile_home(tile, plan, job_id)
         else:
-            build_mod.write_brief(item_dir, item, habitat, lat, lon, entry)
-            if item["kind"] == "animal":
-                build_mod.write_scaffold(item_dir, self._tile_home(tile, plan, job_id))
+            home = None
+        build_mod.prepare_item(item_dir, item, habitat, lat, lon, entry, home)
         pipeline = build_mod.item_pipeline(
             chat=self.chat,
             build=self.build,

@@ -224,6 +224,11 @@ class ReplayClient:
         return "replay"
 
     def set_stage(self, stage: str) -> None:
+        if stage == self._stage:
+            # A fix round re-runs the failed stage: its answers
+            # continue where the try left off, never from the
+            # top (the recorder appends, so must the replay).
+            return
         self._flush()
         self._stage = stage
         path = self._records_dir / f"{stage}.jsonl"

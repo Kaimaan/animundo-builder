@@ -105,16 +105,17 @@ Every model call goes through one file, [`builder/meta.py`](builder/meta.py). It
 
 ## Run the $0 path with no key
 
-Recorded replays retired with the grown-up builder; what a judge can run with no account and no cost is the code path itself:
+Recorded replays retired with the grown-up builder, then came back for border requests: `examples/n_401_434` holds a recorded tundra-border build (the plan plus every model answer), and this rebuilds it locally with no key and no model cost:
 
 ```
 git clone https://github.com/Kaimaan/animundo-builder
 cd animundo-builder
 uv sync
 uv run pytest
+uv run builder request build n_401_434 --replay examples/n_401_434 --world ../animundo-world --out /tmp/replay
 ```
 
-671 tests pass with no key and no paid call. With a checkout of [animundo-world](https://github.com/Kaimaan/animundo-world) next to it, and a Meta key for the tiles the cache lacks (the planner also reads GBIF's free API):
+690 tests pass with no key and no paid call. The replay needs a checkout of [animundo-world](https://github.com/Kaimaan/animundo-world) next to it and Blender installed (it still builds the models); each item lands under `/tmp/replay/replay/<item>` with its report, laid out like a worker's job. A replay always runs clean and fails loudly when the recording no longer matches the code. Recording a new one spends real money: the same command with `--record <dir>`. With a Meta key for the tiles the cache lacks (the planner also reads GBIF's free API):
 
 ```
 uv run builder tiles make --at 60.30,24.62 --out /tmp/tile --world ../animundo-world

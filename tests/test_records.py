@@ -180,6 +180,33 @@ def test_replay_leftover_raises(tmp_path: Path) -> None:
         replay.verify_consumed()
 
 
+def test_replay_fix_round_continues_the_stage(tmp_path: Path) -> None:
+    """#T39: a re-run stage plays on, it does not start over."""
+    records = tmp_path / "records"
+    client = RecordingClient(ScriptClient(), records, "words")
+    client.chat("one")
+    client.set_stage("words")
+    client.chat("two")
+    replay = ReplayClient(records, "words")
+    replay.chat("one")
+    replay.set_stage("words")
+    replay.chat("two")
+    replay.verify_consumed()
+
+
+def test_replay_fix_round_needing_nothing_stays_clean(
+    tmp_path: Path,
+) -> None:
+    """#T39: a healed re-run with no new calls verifies."""
+    records = tmp_path / "records"
+    client = RecordingClient(ScriptClient(), records, "words")
+    client.chat("one")
+    replay = ReplayClient(records, "words")
+    replay.chat("one")
+    replay.set_stage("words")
+    replay.verify_consumed()
+
+
 def test_replay_changed_request_warns_but_plays(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:

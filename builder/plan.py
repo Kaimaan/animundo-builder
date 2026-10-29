@@ -22,7 +22,12 @@ from .grid import CELLS, GridName, center, parse_tile
 from .habitats import HabitatGrid
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
 from .prices import ITEM_ESTIMATES
+from .schemas import ROOT as BUILDER_ROOT
 from .schemas import validate
+from .species import (
+    Source as SpeciesSource,
+)
+from .species import SpeciesPlaceError, fetch_species, list_animals, list_fingerprint
 from .tiles import (
     available_homes,
     excluded_tiles,
@@ -74,12 +79,19 @@ HABITATS: dict[str, tuple[str, str]] = {
 }
 
 
-def plan_name(habitat: str, lat: float, lon: float) -> dict[str, str]:
-    """The area name from its habitat and nearest hand-made place.
+def plan_name(
+    habitat: str, lat: float, lon: float, species: dict[str, Any] | None = None
+) -> dict[str, str]:
+    """The area name: the species call's own, else the compass (#135.5).
 
-    "Forest north of Nuuksio" / "Metsä Nuuksion pohjoispuolella",
-    by code: the nearest place, the 8-wind compass, both languages.
+    "Helsinki shore" / "Helsingin ranta" when the answer names the
+    square; without names, "Forest north of Nuuksio" / "Metsä
+    Nuuksion pohjoispuolella" by code as before.
     """
+    if species is not None:
+        en, fi = species.get("name_en"), species.get("name_fi")
+        if isinstance(en, str) and en.strip() and isinstance(fi, str) and fi.strip():
+            return {"en": en.strip(), "fi": fi.strip()}
     words = HABITATS.get(habitat, (habitat.replace("_", " ").title(), habitat))
     scored = []
     for _pid, en, gen, plat, plon in PLACES:
@@ -287,6 +299,9 @@ def plan_tile(
         unfiled_counts = {s: n for s, n in fetched.items() if n > 0}
     else:
         unfiled_counts = {s: n for s, n in unfiled_presence.items() if n > 0}
+    probe_species, answer, place_blocked = _resolve_species(
+        tile, world, habitat, lat, lon, builder_root, species, species_source
+    )
 
     items: list[dict[str, Any]] = []
     if home is None and eco1 is None:
@@ -303,6 +318,7 @@ def plan_tile(
             lat,
             lon,
             world_commit,
+            answer,
         )
     if home is None:
         assert eco1 is not None  # narrowed above; mypy can't see it
@@ -318,15 +334,18 @@ def plan_tile(
         )
     else:
         home_id = home
-        made, _blocked = make_tile(
-            tile,
-            grids,
-            world,
-            presence=presence,
-            builder_root=builder_root,
-            species=species,
-            species_source=species_source,
-        )
+        if place_blocked:
+            made = None
+        else:
+            made, _blocked = make_tile(
+                tile,
+                grids,
+                world,
+                presence=presence,
+                builder_root=builder_root,
+                species=probe_species,
+                species_source=species_source,
+            )
         if made is not None:
             return _finish(
                 tile,
@@ -339,6 +358,7 @@ def plan_tile(
                 lat,
                 lon,
                 world_commit,
+                answer,
             )
     # Expanding: each missing thing on its own (spec 04, minimum).
     # The home below is real, or the one the new home adapts from.
@@ -401,7 +421,50 @@ def plan_tile(
         lat,
         lon,
         world_commit,
+        answer,
     )
+
+
+def _resolve_species(
+    tile: str,
+    world: Path,
+    habitat: str,
+    lat: float,
+    lon: float,
+    builder_root: Path | None,
+    species: dict[str, Any] | None,
+    species_source: Any | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, bool]:
+    """The species answer for the plan's name (and the probe) (#135.5).
+
+    A recorded answer passes through untouched; else the cache,
+    else one call, like the tile maker. Anything failing leaves
+    the name to the compass: a name never stops a plan. Only a
+    twice-misread cell blocks the probe, as the maker would.
+    Returns (probe_species, answer, place_blocked).
+    """
+    if species is not None:
+        return species, species, False
+    animals = list_animals(world)
+    source = species_source or SpeciesSource(
+        client=None,
+        cache_dir=(builder_root or BUILDER_ROOT) / "data" / "species",
+    )
+    try:
+        fetched = fetch_species(
+            tile, animals, habitat, lat, lon, source, list_fingerprint(animals)
+        )
+    except SpeciesPlaceError:
+        return None, None, True
+    except Exception:  # noqa: BLE001 - the compass names it instead
+        return None, None, False
+    if fetched.get("name_en") and fetched.get("name_fi"):
+        probe = {
+            key: fetched[key] for key in ("place", "present", "name_en", "name_fi")
+        }
+    else:
+        probe = None
+    return probe, fetched, False
 
 
 def _finish(
@@ -415,6 +478,7 @@ def _finish(
     lat: float,
     lon: float,
     world_commit: str,
+    answer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items."""
     picked_ids = {i["what"] for i in items if i["kind"] == "animal"}
@@ -445,7 +509,7 @@ def _finish(
         "items": items,
         "improve": improve,
         "estimate_usd": round(sum(i["estimate_usd"] for i in [*items, *improve]), 2),
-        "name": plan_name(habitat, lat, lon),
+        "name": plan_name(habitat, lat, lon, answer),
         "coming": coming,
         "world": world_commit,
         "planned_at": datetime.now(UTC).isoformat(),

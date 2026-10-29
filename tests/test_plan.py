@@ -512,3 +512,58 @@ def test_plan_names_direction_from_nearest_place() -> None:
         "en": "Tundra north of Saimaa",
         "fi": "Tundra Saimaan pohjoispuolella",
     }
+
+
+def test_plan_uses_the_species_names(tmp_path: Path) -> None:
+    """#135.5: a recorded answer names the plan in both languages."""
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _boreal())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={"fox": 5.0, "vole": 20.0},
+        unfiled_presence={},
+        species={
+            "place": "Boreal forest in southern Finland",
+            "present": ["fox", "vole"],
+            "name_en": "Nuuksio forest",
+            "name_fi": "Nuuksion metsä",
+        },
+    )
+    assert plan["name"] == {"en": "Nuuksio forest", "fi": "Nuuksion metsä"}
+
+
+def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:
+    """#135.5: no names in the answer, the compass names it."""
+    world = _world(tmp_path)
+    cells = _boreal([999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0])
+    cells["414,478"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    grids = _grids(tmp_path, cells)
+    nameless = {
+        "place": "Boreal forest in southern Finland",
+        "present": ["fox", "vole"],
+    }
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+        species=nameless,
+    )
+    plain = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    assert plan["name"] == plain["name"]
+    assert "Nuuksio" in plan["name"]["en"]

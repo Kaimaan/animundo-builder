@@ -141,8 +141,18 @@ def test_lab_recordings_decode_and_match_their_cells() -> None:
     }
     for spot in SPOTS:
         fix = json.loads((FIXTURES / f"{spot}.json").read_text())
-        answer = check_answer({"place": fix["place"], "present": fix["present"]}, ids)
+        answer = check_answer(
+            {
+                "place": fix["place"],
+                "present": fix["present"],
+                "name_en": fix["name_en"],
+                "name_fi": fix["name_fi"],
+            },
+            ids,
+        )
         assert answer["present"] == fix["present"]
+        assert answer["name_en"] == fix["name_en"]
+        assert answer["name_fi"] == fix["name_fi"]
         grid, col, row = parse_tile(fix["tile"])
         habitat = grids[grid].habitat(col, row)
         lat, lon = center(fix["tile"])
@@ -155,8 +165,18 @@ def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
     grids = _grids(tmp_path)
     client = _StubClient(
         [
-            {"place": "Open ocean far from land", "present": ["fox"]},
-            {"place": "Open ocean far from land", "present": ["fox"]},
+            {
+                "place": "Open ocean far from land",
+                "present": ["fox"],
+                "name_en": "Open ocean",
+                "name_fi": "Avomeri",
+            },
+            {
+                "place": "Open ocean far from land",
+                "present": ["fox"],
+                "name_en": "Open ocean",
+                "name_fi": "Avomeri",
+            },
         ]
     )
     source = Source(client=client, cache_dir=tmp_path / "cache")
@@ -178,10 +198,17 @@ def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
     grids = _grids(tmp_path)
     client = _StubClient(
         [
-            {"place": "Open ocean far from land", "present": ["fox"]},
+            {
+                "place": "Open ocean far from land",
+                "present": ["fox"],
+                "name_en": "Open ocean",
+                "name_fi": "Avomeri",
+            },
             {
                 "place": "Boreal forest in southern Finland",
                 "present": ["fox", "vole"],
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
             },
         ]
     )
@@ -212,6 +239,8 @@ def test_unknown_species_id_is_refused(tmp_path: Path) -> None:
             species={
                 "place": "Boreal forest in southern Finland",
                 "present": ["fox", "dragon"],
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
             },
         )
 
@@ -225,7 +254,14 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
         {"id": "vole", "name": "Vole", "latin": "Microtus agrestis"},
     ]
     client = _StubClient(
-        [{"place": "Boreal forest in southern Finland", "present": ["fox", "vole"]}]
+        [
+            {
+                "place": "Boreal forest in southern Finland",
+                "present": ["fox", "vole"],
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
+            }
+        ]
     )
     source = Source(client=client, cache_dir=tmp_path / "cache")
     lat, lon = tile_center("n_413_478")
@@ -233,11 +269,13 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
         "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1"
     )
     assert client.calls == 1
+    assert first["name_en"] == "Nuuksio forest"
     second = fetch_species(
         "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1"
     )
     assert client.calls == 1
     assert second == first
+    assert second["name_fi"] == "Nuuksion metsä"
     fetch_species("n_413_478", animals, "boreal_forest", lat, lon, source, "fp2")
     assert client.calls == 2
 
@@ -248,7 +286,14 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
 
     animals = [{"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"}]
     client = _StubClient(
-        [{"place": "Boreal forest in southern Finland", "present": ["fox"]}]
+        [
+            {
+                "place": "Boreal forest in southern Finland",
+                "present": ["fox"],
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
+            }
+        ]
     )
     cache = tmp_path / "cache"
     cache.mkdir()
@@ -285,6 +330,8 @@ def test_model_order_ranks_species(tmp_path: Path) -> None:
         species={
             "place": "Boreal forest in southern Finland",
             "present": ["mountain_hare", "fox", "vole"],
+            "name_en": "Nuuksio forest",
+            "name_fi": "Nuuksion metsä",
         },
     )
     assert blocked is None

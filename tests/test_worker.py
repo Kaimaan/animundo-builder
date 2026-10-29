@@ -74,6 +74,8 @@ def _planned_worker(tmp_path: Path, store: FakeStore, monkeypatch: Any) -> Worke
     worker.species = {
         "place": "Boreal forest in southern Finland",
         "present": ["fox", "vole"],
+        "name_en": "Nuuksio forest",
+        "name_fi": "Nuuksion metsä",
     }
     return worker
 
@@ -203,6 +205,8 @@ def _flow_worker(
     worker.species = {
         "place": "Boreal forest in southern Finland",
         "present": ["fox", "vole"],
+        "name_en": "Nuuksio forest",
+        "name_fi": "Nuuksion metsä",
     }
     return worker
 
@@ -273,7 +277,12 @@ def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> No
     store.plans["n_413_478"] = _code_plan("n_413_478")
     store.build_jobs["j1"] = _code_job()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
-    worker.species = {"place": "Boreal forest in southern Finland", "present": []}
+    worker.species = {
+        "place": "Boreal forest in southern Finland",
+        "present": [],
+        "name_en": "Nuuksio forest",
+        "name_fi": "Nuuksion metsä",
+    }
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "failed"

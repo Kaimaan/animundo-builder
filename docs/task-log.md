@@ -3,6 +3,22 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #135, the species call names the square (5)
+
+- The species call now answers a short child-friendly name
+  in English and Finnish in the same call, strictly
+  required; the cache keeps both. Plans carry the real
+  name ("Helsinki shore" / "Helsingin ranta"), areas
+  follow from the plan. Without names the compass names
+  it as before, and a name never stops a plan: any
+  species failure falls back to the compass.
+- The planner resolves the answer once and shares it
+  with the code-only probe; old cache entries without
+  names still load and read compass until re-fetched.
+- Evidence: fixture and recorded-answer name tests, a
+  compass-fallback test, cache round-trip names; suite,
+  ruff, gitleaks.
+
 ## 2026-10-29: inbox #139, build-first retries in code (3)
 
 - When the home check fails only on "build it first",

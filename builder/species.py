@@ -37,8 +37,9 @@ SYSTEM = (
     "resident, breeding, or a regular seasonal visitor. Leave out zoo, farm "
     "and pet animals, rare strays, and animals whose range stops short of "
     "the square. The list names exact species (see the Latin names), not "
-    "their relatives. Say what the square is in a few words. If none live "
-    "there, name none."
+    "their relatives. Say what the square is in a few words. Give the "
+    "square a short child-friendly name in English and in Finnish. If none "
+    "live there, name none."
 )
 
 
@@ -53,7 +54,7 @@ class SpeciesPlaceError(ValueError):
 
 
 def species_schema(ids: list[str]) -> dict[str, Any]:
-    """The strict answer shape: a place, and present ids from the list."""
+    """The strict answer shape: a place, present ids, both names (#135.5)."""
     return {
         "type": "object",
         "properties": {
@@ -62,8 +63,20 @@ def species_schema(ids: list[str]) -> dict[str, Any]:
                 "description": "What this square is, in a few words.",
             },
             "present": {"type": "array", "items": {"type": "string", "enum": ids}},
+            "name_en": {
+                "type": "string",
+                "description": (
+                    "A short child-friendly name for this square in English."
+                ),
+            },
+            "name_fi": {
+                "type": "string",
+                "description": (
+                    "A short child-friendly name for this square in Finnish."
+                ),
+            },
         },
-        "required": ["place", "present"],
+        "required": ["place", "present", "name_en", "name_fi"],
         "additionalProperties": False,
     }
 
@@ -107,7 +120,12 @@ def check_answer(data: Any, ids: list[str]) -> dict[str, Any]:
         jsonschema.validate(data, species_schema(ids))
     except jsonschema.ValidationError as error:
         raise ValueError(f"the species answer is refused: {error.message}") from error
-    return {"place": data["place"], "present": list(dict.fromkeys(data["present"]))}
+    return {
+        "place": data["place"],
+        "present": list(dict.fromkeys(data["present"])),
+        "name_en": data["name_en"],
+        "name_fi": data["name_fi"],
+    }
 
 
 def list_animals(world: Path) -> list[dict[str, Any]]:
@@ -388,6 +406,8 @@ def write_cache(
                 "tile": tile,
                 "place": answer["place"],
                 "present": answer["present"],
+                "name_en": answer.get("name_en"),
+                "name_fi": answer.get("name_fi"),
                 "model": MODEL,
                 "date": date,
                 "list": fingerprint,
@@ -415,7 +435,12 @@ def fetch_species(
     """
     cached = read_cache(source.cache_dir, tile)
     if cached is not None and cached.get("list") == fingerprint:
-        answer = {"place": cached["place"], "present": list(cached["present"])}
+        answer = {
+            "place": cached["place"],
+            "present": list(cached["present"]),
+            "name_en": cached.get("name_en"),
+            "name_fi": cached.get("name_fi"),
+        }
         if check_place(answer["place"], habitat, lat, lon) is None:
             return {**answer, "date": cached.get("date", "unknown")}
     if source.client is None:

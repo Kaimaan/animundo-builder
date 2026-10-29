@@ -24,7 +24,7 @@ The grown-up builder is gone. Every grown-up-built place was a separate world an
 | Criterion | Where to see it |
 |---|---|
 | Theme: Build for Your World | [Try it](#try-it): a real-Earth world that grows where children explore, from real habitat and species data |
-| Use of Meta AI | [Use of Meta AI](#use-of-meta-ai): every call in [`builder/meta.py`](builder/meta.py); written with Muse Code ([`muse-logs/`](muse-logs/)) |
+| Use of Meta AI | [Use of Meta AI](#use-of-meta-ai): every call in [`builder/meta.py`](builder/meta.py); written with Muse Code ([session logs](https://github.com/Kaimaan/animundo-builder/releases/tag/muse-logs-2026-10-28)) |
 | Technical depth | [How it works](#how-it-works): a tile maker with no AI, a planner, makers where code does the geometry from short strict AI forms; [`tests/`](tests/) |
 | It works | The live game at animundo.app; [Run the $0 path with no key](#run-the-0-path-with-no-key); [Costs measured](#costs-measured) |
 | Safety | [Safety](#safety): no player data reaches the builder; an admin approves before any AI build; a person reviews before children see anything new |
@@ -98,7 +98,7 @@ Every model call goes through one file, [`builder/meta.py`](builder/meta.py). It
 
 - The transport is the `openai` Python package pointed at Meta's endpoint, Meta's own documented pattern. No OpenAI service, key or model is used. `grep -rn "BASE_URL =" builder/meta.py` shows the only two hosts.
 - Each call's usage record says which host ran it.
-- **Muse Code wrote this repository**, from its first commit on Oct 26. Its rules are [`AGENTS.md`](AGENTS.md); its task log is [`docs/task-log.md`](docs/task-log.md); its exported sessions are in [`muse-logs/`](muse-logs/).
+- **Muse Code wrote this repository**, from its first commit on Oct 26. Its rules are [`AGENTS.md`](AGENTS.md); its task log is [`docs/task-log.md`](docs/task-log.md); its exported sessions are [release assets](https://github.com/Kaimaan/animundo-builder/releases/tag/muse-logs-2026-10-28), not in git.
 
 **Caps**, checked before every model call: each call reserves its worst-case cost against the job, the day and the total, and isn't sent if that would cross a cap or if the ledger can't be read ([`builder/ledger.py`](builder/ledger.py), [`builder/meta.py`](builder/meta.py)). Each build job also carries its own budget, set by the game.
 
@@ -175,7 +175,6 @@ schemas/    # the agents' working schemas
 tests/      # pytest suite; no paid API calls in unit tests
 docs/       # design docs, written as each part lands
 deploy/     # the worker on Modal
-muse-logs/  # Muse Code's exported sessions, with how the repo was built
 firebase/   # Storage rules with emulator tests (Firestore rules are the game's)
 data/       # baked data: the habitat grid, well-known places
 ```

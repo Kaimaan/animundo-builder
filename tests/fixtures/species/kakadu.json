@@ -1,17 +1,15 @@
-{
- "spot": "kakadu",
- "tile": "s_595_575",
- "place": "Tropical savanna wetlands near Mary River, Northern Territory, Australia",
- "present": [
-  "crocodile",
-  "emu",
-  "honey_bee",
-  "monarch",
-  "osprey",
-  "peregrine",
-  "swallow",
-  "wild_boar"
- ],
+{"find": "paperbark",
  "name_en": "Kakadu wetlands",
- "name_fi": "Kakadun kosteikot"
-}
+ "name_fi": "Kakadun kosteikot",
+ "parts": [{"kind": "savanna",
+            "species": ["emu",
+                        "honey_bee",
+                        "monarch",
+                        "osprey",
+                        "peregrine",
+                        "swallow",
+                        "wild_boar"]},
+           {"kind": "wetland", "species": ["crocodile"]}],
+ "place": "Tropical savanna wetlands near Mary River, Northern Territory, Australia",
+ "spot": "kakadu",
+ "tile": "s_595_575"}

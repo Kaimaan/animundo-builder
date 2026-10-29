@@ -1910,3 +1910,36 @@ reviewer runs the real step tests.
   tundra border plans home_774 from tundra; Wales sea plans
   herring_gull with puffin and grey seal to improve.
 - Suite: 591 passed, 12 skipped; ruff and gitleaks clean.
+
+## 2026-10-29: the tile survey (#141.1)
+
+- The species call is now a survey: our facts first
+  (habitat and blend, land/lake/sea shares, height range,
+  the home to build or adapt from, our plants), then parts
+  with animals from the list, the plant to find, and both
+  names. One call per tile, as before.
+- Code checks afterwards: the place as before, water parts
+  against our shares, and the English name against absent
+  animals' kinds (a name may paint with "sea" or "blue",
+  never name a missing seal). The retry carries the refusal
+  back, so the second answer fixes the first. The cache keys
+  on the tile, the list and the facts.
+- The planner takes the survey's find first: unfiled it
+  becomes the plant item (this replaces #140.4's "let the
+  species call choose"); filed or missing, the home's own
+  missing plant as before.
+- `builder survey lab` runs the survey on the six tiles we
+  have against the committed old answers; the run is in
+  `docs/survey-lab/`. All six pass: finds are bilberry on
+  the five land tiles and bladderwrack on the open sea, and
+  every name describes its tile's own parts. Along the way
+  the checks twice refused and the retry fixed a lake part
+  our bake doesn't have; the name rule was narrowed from
+  any word to the kind after it refused "blue" and "sea".
+- Cost: one survey call measured $0.021 twice against the
+  old call's $0.015-$0.018, so about a third over the old
+  $0.016 at the same one-call shape; a $0.042 outlier was
+  reasoning-length noise (a 150-id answer cost the same as
+  an 81-id one).
+- Tallinn's facts show the #141.4 problem live: the forest
+  tile would adapt from `sea`.

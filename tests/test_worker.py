@@ -73,7 +73,8 @@ def _planned_worker(tmp_path: Path, store: FakeStore, monkeypatch: Any) -> Worke
     worker.world_commit = "abc123"
     worker.species = {
         "place": "Boreal forest in southern Finland",
-        "present": ["fox", "vole"],
+        "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+        "find": None,
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -204,7 +205,8 @@ def _flow_worker(
     worker.world_commit = "abc123"
     worker.species = {
         "place": "Boreal forest in southern Finland",
-        "present": ["fox", "vole"],
+        "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+        "find": None,
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -279,7 +281,8 @@ def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> No
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.species = {
         "place": "Boreal forest in southern Finland",
-        "present": [],
+        "parts": [{"kind": "forest", "species": []}],
+        "find": None,
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }

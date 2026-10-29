@@ -1,12 +1,15 @@
-"""Tile species from Muse Spark (D18): one call per tile, cached.
+"""The tile survey from Muse Spark (D18, #141.1): one call per tile, cached.
 
-The tile maker asks Muse Spark which of the animal list's animals
-live wild in the tile's cell, instead of counting GBIF records.
-The answer is checked against the habitat grid (sea or land, and
-the continent) and cached per tile; a re-run calls the model only
-when the animal list changes. Every call goes through MetaClient
-with the Meta caps. GBIF stays for the T40 eval and the planner's
-improve list, never for a tile's species.
+The tile maker asks Muse Spark what is in the tile's cell: its
+parts, the animals per part, the plant children will find, and
+both names. The call carries our own surveyed facts first
+(habitat and blend, land and water, heights, the home), so the
+answer describes our square instead of guessing one. The answer
+is checked against the facts afterwards and cached per tile; a
+re-run calls the model only when the animal list or the facts
+change. Every call goes through MetaClient with the Meta caps.
+GBIF stays for the T40 eval and the planner's improve list,
+never for a tile's species.
 """
 
 from __future__ import annotations
@@ -31,16 +34,50 @@ EFFORT = "low"
 MAX_TOKENS = 16000
 
 SYSTEM = (
-    "You are a field biologist who knows where wild animals live today. "
-    "For one 25 km square of land or sea and a list of animals, name every "
-    "animal on the list with a wild population living in that square today: "
-    "resident, breeding, or a regular seasonal visitor. Leave out zoo, farm "
-    "and pet animals, rare strays, and animals whose range stops short of "
-    "the square. The list names exact species (see the Latin names), not "
-    "their relatives. Say what the square is in a few words. Give the "
-    "square a short child-friendly name in English and in Finnish. If none "
-    "live there, name none."
+    "You are a field biologist surveying one 25 km square of land or sea. "
+    "You are given the square's surveyed facts (habitat, land and water, "
+    "heights, the home the game builds it from) and a list of animals. "
+    "Name what's in the square in parts, and in each part every animal on "
+    "the list with a wild population living there today: resident, "
+    "breeding, or a regular seasonal visitor. Leave out zoo, farm and pet "
+    "animals, rare strays, and animals whose range stops short of the "
+    "square. The list names exact species (see the Latin names), not "
+    "their relatives. Name the plant children will find there: one of "
+    "ours when one grows there, else a new one that really grows there. "
+    "Say what the square is in a few words. Give the square a short "
+    "child-friendly name in English and in Finnish, describing what a "
+    "child will find there, without naming animals that aren't on the "
+    "tile. If no listed animal lives there, name none."
 )
+
+#: What a part of a square can be. The checks know the water
+#: ones; the rest are labels only.
+PART_KINDS = (
+    "sea",
+    "skerries",
+    "shore",
+    "forest",
+    "lake",
+    "town",
+    "river",
+    "farmland",
+    "mountain",
+    "tundra",
+    "savanna",
+    "grassland",
+    "desert",
+    "wetland",
+    "glacier",
+    "reef",
+    "mangrove",
+    "ice",
+)
+
+#: Part kinds that need open water in the square, and the one
+#: that needs lake water. A shore is unchecked: rivers aren't in
+#: our facts, so a riverbank reads as shore too.
+SEA_PARTS = frozenset({"sea", "skerries", "reef"})
+LAKE_PARTS = frozenset({"lake"})
 
 
 class SpeciesPlaceError(ValueError):
@@ -54,7 +91,7 @@ class SpeciesPlaceError(ValueError):
 
 
 def species_schema(ids: list[str]) -> dict[str, Any]:
-    """The strict answer shape: a place, present ids, both names (#135.5)."""
+    """The strict survey shape: parts with ids, the find, both names."""
     return {
         "type": "object",
         "properties": {
@@ -62,7 +99,32 @@ def species_schema(ids: list[str]) -> dict[str, Any]:
                 "type": "string",
                 "description": "What this square is, in a few words.",
             },
-            "present": {"type": "array", "items": {"type": "string", "enum": ids}},
+            "parts": {
+                "type": "array",
+                "description": (
+                    "What's in the square, in parts, with each part's "
+                    "animals from the list."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string", "enum": list(PART_KINDS)},
+                        "species": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": ids},
+                        },
+                    },
+                    "required": ["kind", "species"],
+                    "additionalProperties": False,
+                },
+            },
+            "find": {
+                "type": ["string", "null"],
+                "description": (
+                    "The plant children will find there: one of ours, a "
+                    "new one that really grows there, or null."
+                ),
+            },
             "name_en": {
                 "type": "string",
                 "description": (
@@ -76,23 +138,108 @@ def species_schema(ids: list[str]) -> dict[str, Any]:
                 ),
             },
         },
-        "required": ["place", "present", "name_en", "name_fi"],
+        "required": ["place", "parts", "find", "name_en", "name_fi"],
         "additionalProperties": False,
     }
 
 
-def user_message(lat: float, lon: float, animals: list[dict[str, Any]]) -> str:
-    """The square's centre both ways, and the animals as `id: name (Latin)`.
+def survey_facts(
+    *,
+    habitat: str,
+    eco1: int | None,
+    share1: float,
+    eco2: int | None,
+    share2: float,
+    land: float,
+    water: float,
+    elevation_m: float,
+    level: int,
+    edge_lo: int,
+    edge_hi: int,
+    home: str,
+    adapt: bool,
+    plants: list[str],
+) -> dict[str, Any]:
+    """Our own facts for the survey: what the prompt states, keyed as one.
+
+    `land` is the share of the 25 sample points on land, `water`
+    the share of those that is lake; `sea` is what is not land.
+    Rounded, so the cache key is stable.
+    """
+    land = round(land, 2)
+    water = round(water, 2)
+    return {
+        "habitat": habitat,
+        "eco1": eco1,
+        "share1": round(share1, 2),
+        "eco2": eco2,
+        "share2": round(share2, 2),
+        "land": land,
+        "lake": round(land * water, 2),
+        "sea": round(max(0.0, 1.0 - land), 2),
+        "elevation_m": round(elevation_m, 1),
+        "level": level,
+        "edge_lo": edge_lo,
+        "edge_hi": edge_hi,
+        "home": home,
+        "adapt": adapt,
+        "plants": sorted(plants),
+    }
+
+
+def facts_fingerprint(facts: dict[str, Any]) -> str:
+    """The facts' short hash: with the list's, it keys the cache."""
+    text = json.dumps(facts, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def filed_plants(world: Path) -> list[str]:
+    """Our plants' display names, for the survey's find: filed or new."""
+    return sorted(
+        p.stem.replace("_", " ") for p in (world / "models" / "plants").glob("*.json")
+    )
+
+
+def user_message(
+    lat: float, lon: float, animals: list[dict[str, Any]], facts: dict[str, Any]
+) -> str:
+    """The square's centre both ways, our facts, the plants, the animals.
 
     Decimals alone once read 120 W as 120 E, so the hemisphere
     letters ride along.
     """
     ns, ew = ("N" if lat >= 0 else "S"), ("E" if lon >= 0 else "W")
     listing = "\n".join(f"- {a['id']}: {a['name']} ({a['latin']})" for a in animals)
+    eco = f"ecoregion {facts['eco1']} over all of it"
+    if facts["eco2"] is not None:
+        eco = (
+            f"ecoregion {facts['eco1']} over {facts['share1']} of it, "
+            f"ecoregion {facts['eco2']} over {facts['share2']}"
+        )
+    land_pts = round(facts["land"] * 25)
+    lake_pts = round(facts["lake"] * 25)
+    sea_pts = round(facts["sea"] * 25)
+    home_line = (
+        f"The tile's new home adapts from the home {facts['home']}."
+        if facts["adapt"]
+        else f"The tile builds from the home {facts['home']}."
+    )
+    kinds = ", ".join(PART_KINDS)
     return (
         f"The square is centred at {abs(lat):.2f}° {ns}, {abs(lon):.2f}° {ew} "
         f"(latitude {lat}, longitude {lon} in decimals; about 25 km across). "
-        f"Which of these animals live wild there today?\n\nAnimals:\n{listing}"
+        f"Our survey of the square: habitat {facts['habitat']}, {eco}. "
+        f"Land on {land_pts} of 25 sample points, of which lake on "
+        f"{lake_pts}; sea on {sea_pts}. Mean elevation "
+        f"{facts['elevation_m']} m; the game builds it at level "
+        f"{facts['level']}, edges {facts['edge_lo']} to {facts['edge_hi']} "
+        f"blocks. {home_line} "
+        f"Name what's in the square in parts ({kinds}), the animals of "
+        f"each part from the list below, the plant children will find "
+        f"(one of ours, or name a new one that really grows there), and "
+        f"the square's name in English and Finnish.\n\n"
+        f"Our plants: {', '.join(facts['plants']) or 'none'}.\n\n"
+        f"Animals:\n{listing}"
     )
 
 
@@ -111,18 +258,28 @@ def decode_answer(content: str, ids: list[str]) -> dict[str, Any]:
 
 
 def check_answer(data: Any, ids: list[str]) -> dict[str, Any]:
-    """A decoded answer, refused unless the schema takes it.
+    """A decoded survey, refused unless the schema takes it.
 
     The id enum refuses anything off the list, live or recorded.
-    The model's order stands: ranking follows it.
+    `present` flattens the parts in the model's order: ranking
+    follows it, as before.
     """
     try:
         jsonschema.validate(data, species_schema(ids))
     except jsonschema.ValidationError as error:
         raise ValueError(f"the species answer is refused: {error.message}") from error
+    parts = data["parts"]
+    if not parts:
+        raise ValueError("the species answer is refused: no parts")
+    present = list(dict.fromkeys(s for p in parts for s in p["species"]))
+    find = data["find"]
+    if isinstance(find, str) and not find.strip():
+        find = None
     return {
         "place": data["place"],
-        "present": list(dict.fromkeys(data["present"])),
+        "parts": [{"kind": p["kind"], "species": list(p["species"])} for p in parts],
+        "find": find,
+        "present": present,
         "name_en": data["name_en"],
         "name_fi": data["name_fi"],
     }
@@ -136,14 +293,29 @@ def list_animals(world: Path) -> list[dict[str, Any]]:
 
 
 def ask(
-    client: Any, lat: float, lon: float, animals: list[dict[str, Any]]
+    client: Any,
+    lat: float,
+    lon: float,
+    animals: list[dict[str, Any]],
+    facts: dict[str, Any],
+    note: str | None = None,
 ) -> dict[str, Any]:
-    """One species call through MetaClient, with its caps and logging."""
+    """One survey call through MetaClient, with its caps and logging.
+
+    `note` carries a refusal back on the retry, so the second
+    answer fixes the first one's fault instead of repeating it.
+    """
     ids = [a["id"] for a in animals]
+    prompt = user_message(lat, lon, animals, facts)
+    if note is not None:
+        prompt += (
+            f"\n\nYour last answer was refused: {note}. Survey the "
+            "square again, keeping to our facts."
+        )
     response = client.chat(
         messages=[
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": user_message(lat, lon, animals)},
+            {"role": "user", "content": prompt},
         ],
         response_format={
             "type": "json_schema",
@@ -323,6 +495,70 @@ def check_place(place: str, habitat: str, lat: float, lon: float) -> str | None:
     return None
 
 
+def check_survey(
+    answer: dict[str, Any],
+    habitat: str,
+    lat: float,
+    lon: float,
+    facts: dict[str, Any],
+    animals: list[dict[str, Any]],
+) -> str | None:
+    """A checked survey against our facts: the place, parts, the name.
+
+    Returns None when it reads as the same square, else why not.
+    Water parts need water in the facts; the English name must not
+    name an animal that isn't on the tile ("Seal and Swan Shores"
+    with no seal or swan). The Finnish name is unchecked: the
+    list has no Finnish names.
+    """
+    problem = check_place(answer["place"], habitat, lat, lon)
+    if problem is not None:
+        return problem
+    for part in answer["parts"]:
+        if part["kind"] in SEA_PARTS and facts["sea"] <= 0:
+            return f"a {part['kind']} part with no sea in the square"
+        if part["kind"] in LAKE_PARTS and facts["lake"] <= 0:
+            return "a lake part with no lake in the square"
+    return check_name(answer["name_en"], answer["present"], animals)
+
+
+def _head_words(name: str) -> set[str]:
+    """An animal name's kind: its last word ("Grey seal" -> seal).
+
+    Modifiers ("sea" in "sea trout", "red" in "red fox") also
+    paint seas and sunsets, so only the kind counts: a name may
+    paint, never name a missing kind.
+    """
+    order = re.findall(r"[a-z]+", name.lower())
+    return {order[-1]} if order else set()
+
+
+def check_name(
+    name_en: str, present: list[str], animals: list[dict[str, Any]]
+) -> str | None:
+    """The English name against the tile's animals: none named missing.
+
+    Returns None when no absent animal's kind reads in the name,
+    else the first missing one ("Seal and Swan Shores" with no
+    seal). Word for word, so "seaside" never trips on "sea".
+    """
+    on_tile = set(present)
+    present_words = {
+        word
+        for a in animals
+        if a["id"] in on_tile
+        for word in _head_words(str(a.get("name", "")))
+    }
+    named = _words(name_en)
+    for a in animals:
+        if a["id"] in on_tile:
+            continue
+        for word in _head_words(str(a.get("name", ""))):
+            if len(word) >= 3 and word not in present_words and word in named:
+                return f"names {word}, which is not on the tile"
+    return None
+
+
 def list_fingerprint(animals: list[dict[str, Any]]) -> str:
     """The animal list's short hash: a re-run calls only on change."""
     text = "\n".join(
@@ -377,7 +613,11 @@ def cache_path(cache_dir: Path, tile: str) -> Path:
 
 
 def read_cache(cache_dir: Path, tile: str) -> dict[str, Any] | None:
-    """One cached answer, or None when there is none worth reading."""
+    """One cached survey, or None when there is none worth reading.
+
+    Answers from before the survey (no `parts`) read as misses:
+    the tile is surveyed again.
+    """
     try:
         data = json.loads(cache_path(cache_dir, tile).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -385,7 +625,7 @@ def read_cache(cache_dir: Path, tile: str) -> dict[str, Any] | None:
     if not isinstance(data, dict):
         return None
     if not isinstance(data.get("place"), str) or not isinstance(
-        data.get("present"), list
+        data.get("parts"), list
     ):
         return None
     return data
@@ -396,21 +636,24 @@ def write_cache(
     tile: str,
     answer: dict[str, Any],
     fingerprint: str,
+    facts_print: str,
     date: str,
 ) -> None:
-    """Keep one checked answer: only checked answers are kept."""
+    """Keep one checked survey: only checked surveys are kept."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path(cache_dir, tile).write_text(
         json.dumps(
             {
                 "tile": tile,
                 "place": answer["place"],
-                "present": answer["present"],
+                "parts": answer["parts"],
+                "find": answer.get("find"),
                 "name_en": answer.get("name_en"),
                 "name_fi": answer.get("name_fi"),
                 "model": MODEL,
                 "date": date,
                 "list": fingerprint,
+                "facts": facts_print,
             },
             indent=1,
         ),
@@ -426,37 +669,57 @@ def fetch_species(
     lon: float,
     source: Source,
     fingerprint: str,
+    facts: dict[str, Any],
 ) -> dict[str, Any]:
-    """One tile's species answer: the cache, else one call, else a retry.
+    """One tile's survey: the cache, else one call, else a retry.
 
-    A cached answer is checked again (cheap, no network) and used
-    only when the list is unchanged. On a `place` mismatch the call
-    goes out once more; a second mismatch blocks the tile.
+    A cached survey is checked again (cheap, no network) and used
+    only when the list and the facts are unchanged. On a mismatch
+    the call goes out once more, carrying the refusal; a second
+    mismatch blocks the tile.
     """
+    facts_print = facts_fingerprint(facts)
     cached = read_cache(source.cache_dir, tile)
-    if cached is not None and cached.get("list") == fingerprint:
-        answer = {
-            "place": cached["place"],
-            "present": list(cached["present"]),
-            "name_en": cached.get("name_en"),
-            "name_fi": cached.get("name_fi"),
-        }
-        if check_place(answer["place"], habitat, lat, lon) is None:
+    if (
+        cached is not None
+        and cached.get("list") == fingerprint
+        and cached.get("facts") == facts_print
+    ):
+        try:
+            answer = {
+                "place": cached["place"],
+                "parts": cached["parts"],
+                "find": cached.get("find"),
+                "name_en": cached.get("name_en"),
+                "name_fi": cached.get("name_fi"),
+            }
+            answer["present"] = list(
+                dict.fromkeys(s for p in answer["parts"] for s in p["species"])
+            )
+            usable = (
+                check_survey(answer, habitat, lat, lon, facts, animals) is None
+                and answer["name_en"]
+                and answer["name_fi"]
+            )
+        except (KeyError, TypeError, AttributeError):
+            usable = False
+        if usable:
             return {**answer, "date": cached.get("date", "unknown")}
     if source.client is None:
         raise ValueError(
             f"no usable cached species for {tile} and MODEL_API_KEY is not set"
         )
-    first = ask(source.client, lat, lon, animals)
-    if check_place(first["place"], habitat, lat, lon) is None:
+    first = ask(source.client, lat, lon, animals, facts)
+    refused = check_survey(first, habitat, lat, lon, facts, animals)
+    if refused is None:
         date = datetime.now(UTC).date().isoformat()
-        write_cache(source.cache_dir, tile, first, fingerprint, date)
+        write_cache(source.cache_dir, tile, first, fingerprint, facts_print, date)
         return {**first, "date": date}
-    second = ask(source.client, lat, lon, animals)
-    problem = check_place(second["place"], habitat, lat, lon)
+    second = ask(source.client, lat, lon, animals, facts, note=refused)
+    problem = check_survey(second, habitat, lat, lon, facts, animals)
     if problem is None:
         date = datetime.now(UTC).date().isoformat()
-        write_cache(source.cache_dir, tile, second, fingerprint, date)
+        write_cache(source.cache_dir, tile, second, fingerprint, facts_print, date)
         return {**second, "date": date}
     raise SpeciesPlaceError(tile, second["place"], problem)
 

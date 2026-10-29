@@ -34,6 +34,7 @@ from .tiles import (
     home_for_cell,
     make_tile,
     pick_species,
+    tile_facts,
 )
 
 #: Hand-made places the plan name points from: id, English and
@@ -228,16 +229,25 @@ def plant_slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
-def _missing_find(world: Path, home: dict[str, Any]) -> tuple[str, str] | None:
-    """The home's first named plant without a plant file, and its reference.
+def _missing_find(
+    world: Path, home: dict[str, Any], survey_find: str | None = None
+) -> tuple[str, str] | None:
+    """The plan's thing to find, and the plant it adapts from.
 
-    Homes name the plants children find (`food[].names`, say
-    "arctic willow"); the first name with no `models/plants/` file
-    becomes the plan's thing to find, adapted from a filed plant of
-    the same food kind, else the first plant there is. A home
-    naming nothing unfiled needs nothing.
+    The survey's find goes first (#141.1: the plant that really
+    grows there); then the home's first named plant without a
+    plant file (`food[].names`, say "arctic willow"). The find
+    adapts from a filed plant of the same food kind, else the
+    first plant there is. A find that is already filed, and a home
+    naming nothing unfiled, need nothing.
     """
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
+    if survey_find:
+        slug = plant_slug(survey_find)
+        if slug and slug not in have:
+            if not have:
+                raise ValueError("the world has no plants to adapt from")
+            return slug, have[0]
     for entry in home.get("food", []) or []:
         for name in entry.get("names", []) or []:
             slug = plant_slug(name)
@@ -319,12 +329,25 @@ def plan_tile(
             None,
             "open_water",
         )
-    probe_species, answer, place_blocked = _resolve_species(
-        tile, world, habitat, lat, lon, builder_root, species, species_source
-    )
     if home is None:
         assert eco1 is not None  # narrowed above; mypy can't see it
         home_id = nearest_home(tile, grids, homes, habitat)
+        adapt = True
+    else:
+        home_id = home
+        adapt = False
+    probe_species, answer, place_blocked = _resolve_species(
+        tile,
+        world,
+        habitat,
+        lat,
+        lon,
+        builder_root,
+        species,
+        species_source,
+        tile_facts(tile, grids, world, home_id, adapt),
+    )
+    if home is None:
         items.append(
             {
                 "id": f"home_{eco1}",
@@ -335,7 +358,6 @@ def plan_tile(
             }
         )
     else:
-        home_id = home
         if place_blocked:
             made = None
         else:
@@ -400,7 +422,10 @@ def plan_tile(
                     "estimate_usd": ITEM_ESTIMATES["animal"],
                 }
             )
-    find = _missing_find(world, house)
+    survey_find = answer.get("find") if answer else None
+    find = _missing_find(
+        world, house, survey_find if isinstance(survey_find, str) else None
+    )
     if find is not None:
         slug, ref = find
         items.append(
@@ -436,8 +461,9 @@ def _resolve_species(
     builder_root: Path | None,
     species: dict[str, Any] | None,
     species_source: Any | None,
+    facts: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, bool]:
-    """The species answer for the plan's name (and the probe) (#135.5).
+    """The survey for the plan's name and find (and the probe) (#141.1).
 
     A recorded answer passes through untouched; else the cache,
     else one call, like the tile maker. Anything failing leaves
@@ -454,7 +480,14 @@ def _resolve_species(
     )
     try:
         fetched = fetch_species(
-            tile, animals, habitat, lat, lon, source, list_fingerprint(animals)
+            tile,
+            animals,
+            habitat,
+            lat,
+            lon,
+            source,
+            list_fingerprint(animals),
+            facts,
         )
     except SpeciesPlaceError:
         return None, None, True
@@ -462,7 +495,8 @@ def _resolve_species(
         return None, None, False
     if fetched.get("name_en") and fetched.get("name_fi"):
         probe = {
-            key: fetched[key] for key in ("place", "present", "name_en", "name_fi")
+            key: fetched[key]
+            for key in ("place", "parts", "find", "name_en", "name_fi")
         }
     else:
         probe = None

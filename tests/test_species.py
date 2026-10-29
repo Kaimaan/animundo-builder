@@ -15,9 +15,11 @@ from builder.species import (
     Source,
     check_answer,
     check_place,
+    check_survey,
     fetch_species,
+    list_animals,
 )
-from builder.tiles import make_tile
+from builder.tiles import available_homes, home_for_cell, make_tile, tile_facts
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "species"
 SPOTS = ("sahel", "taymyr-tundra", "amazon-interior", "everglades", "kakadu")
@@ -118,6 +120,28 @@ class _StubClient:
         return _response(self.answers[min(self.calls - 1, len(self.answers) - 1)])
 
 
+def _facts() -> dict[str, Any]:
+    """Boreal facts for the stub calls: full land, no lake, no sea."""
+    from builder.species import survey_facts
+
+    return survey_facts(
+        habitat="boreal_forest",
+        eco1=717,
+        share1=1.0,
+        eco2=None,
+        share2=0.0,
+        land=1.0,
+        water=0.0,
+        elevation_m=80.0,
+        level=9,
+        edge_lo=8,
+        edge_hi=11,
+        home="boreal_forest",
+        adapt=False,
+        plants=["bilberry"],
+    )
+
+
 def _real_ids() -> list[str] | None:
     path = (
         Path(__file__).resolve().parent.parent.parent
@@ -130,10 +154,13 @@ def _real_ids() -> list[str] | None:
 
 
 def test_lab_recordings_decode_and_match_their_cells() -> None:
-    """#131.6: the five lab answers decode and read as their own cells."""
+    """#141.1: the five lab surveys decode and read as their own cells."""
     ids = _real_ids()
     if ids is None:
         pytest.skip("needs an animundo-world checkout for the animal list")
+    world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    animals = list_animals(world)
+    homes = available_homes(world)
     grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
     grids = {
         name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
@@ -144,19 +171,34 @@ def test_lab_recordings_decode_and_match_their_cells() -> None:
         answer = check_answer(
             {
                 "place": fix["place"],
-                "present": fix["present"],
+                "parts": fix["parts"],
+                "find": fix["find"],
                 "name_en": fix["name_en"],
                 "name_fi": fix["name_fi"],
             },
             ids,
         )
-        assert answer["present"] == fix["present"]
+        assert answer["present"] == [s for p in fix["parts"] for s in p["species"]], (
+            spot
+        )
+        assert answer["find"] == fix["find"]
         assert answer["name_en"] == fix["name_en"]
         assert answer["name_fi"] == fix["name_fi"]
         grid, col, row = parse_tile(fix["tile"])
         habitat = grids[grid].habitat(col, row)
         lat, lon = center(fix["tile"])
         assert check_place(answer["place"], habitat, lat, lon) is None, spot
+        eco1 = grids[grid].cell_data(col, row)[0]
+        home = home_for_cell(eco1, habitat, homes)
+        if home is None:
+            from builder.plan import nearest_home
+
+            home = nearest_home(fix["tile"], grids, homes, habitat)  # type: ignore[arg-type]
+            adapt = True
+        else:
+            adapt = False
+        facts = tile_facts(fix["tile"], grids, world, home, adapt)  # type: ignore[arg-type]
+        assert check_survey(answer, habitat, lat, lon, facts, animals) is None, spot
 
 
 def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
@@ -167,13 +209,15 @@ def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
         [
             {
                 "place": "Open ocean far from land",
-                "present": ["fox"],
+                "parts": [{"kind": "sea", "species": ["fox"]}],
+                "find": None,
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
             {
                 "place": "Open ocean far from land",
-                "present": ["fox"],
+                "parts": [{"kind": "sea", "species": ["fox"]}],
+                "find": None,
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
@@ -200,13 +244,15 @@ def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
         [
             {
                 "place": "Open ocean far from land",
-                "present": ["fox"],
+                "parts": [{"kind": "sea", "species": ["fox"]}],
+                "find": None,
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
             {
                 "place": "Boreal forest in southern Finland",
-                "present": ["fox", "vole"],
+                "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+                "find": None,
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -238,7 +284,8 @@ def test_unknown_species_id_is_refused(tmp_path: Path) -> None:
             builder_root=tmp_path,
             species={
                 "place": "Boreal forest in southern Finland",
-                "present": ["fox", "dragon"],
+                "parts": [{"kind": "forest", "species": ["fox", "dragon"]}],
+                "find": None,
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -257,7 +304,8 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
         [
             {
                 "place": "Boreal forest in southern Finland",
-                "present": ["fox", "vole"],
+                "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+                "find": None,
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -266,17 +314,19 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
     source = Source(client=client, cache_dir=tmp_path / "cache")
     lat, lon = tile_center("n_413_478")
     first = fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1"
+        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
     )
     assert client.calls == 1
     assert first["name_en"] == "Nuuksio forest"
     second = fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1"
+        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
     )
     assert client.calls == 1
     assert second == first
     assert second["name_fi"] == "Nuuksion metsä"
-    fetch_species("n_413_478", animals, "boreal_forest", lat, lon, source, "fp2")
+    fetch_species(
+        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp2", _facts()
+    )
     assert client.calls == 2
 
 
@@ -289,7 +339,8 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
         [
             {
                 "place": "Boreal forest in southern Finland",
-                "present": ["fox"],
+                "parts": [{"kind": "forest", "species": ["fox"]}],
+                "find": None,
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -301,7 +352,7 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
     source = Source(client=client, cache_dir=cache)
     lat, lon = tile_center("n_413_478")
     answer = fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1"
+        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
     )
     assert client.calls == 1
     assert answer["present"] == ["fox"]
@@ -315,7 +366,246 @@ def test_species_without_key_or_cache_fails_clearly(tmp_path: Path) -> None:
     source = Source(client=None, cache_dir=tmp_path / "cache")
     lat, lon = tile_center("n_413_478")
     with pytest.raises(ValueError, match="MODEL_API_KEY is not set"):
-        fetch_species("n_413_478", animals, "boreal_forest", lat, lon, source, "fp1")
+        fetch_species(
+            "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+        )
+
+
+def test_survey_prompt_carries_our_facts() -> None:
+    """#141.1: the call states our facts before asking."""
+    from builder.species import survey_facts, user_message
+
+    facts = survey_facts(
+        habitat="sea",
+        eco1=717,
+        share1=0.8,
+        eco2=812,
+        share2=0.2,
+        land=0.48,
+        water=0.0,
+        elevation_m=-20.0,
+        level=5,
+        edge_lo=4,
+        edge_hi=9,
+        home="sea_717",
+        adapt=False,
+        plants=["bilberry", "bladderwrack"],
+    )
+    text = user_message(
+        60.15,
+        24.91,
+        [{"id": "herring_gull", "name": "Herring gull", "latin": "Larus argentatus"}],
+        facts,
+    )
+    assert "habitat sea, ecoregion 717 over 0.8 of it" in text
+    assert "ecoregion 812 over 0.2" in text
+    assert "Land on 12 of 25 sample points" in text
+    assert "sea on 13" in text
+    assert "level 5, edges 4 to 9 blocks" in text
+    assert "builds from the home sea_717" in text
+    assert "Our plants: bilberry, bladderwrack." in text
+    assert "- herring_gull: Herring gull (Larus argentatus)" in text
+
+
+def test_survey_refuses_sea_part_without_sea() -> None:
+    """#141.1: a sea part needs sea in the square."""
+    from builder.species import check_survey
+
+    animals = [{"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"}]
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "sea", "species": ["fox"]}],
+        "find": None,
+        "present": ["fox"],
+        "name_en": "Nuuksio forest",
+        "name_fi": "Nuuksion metsä",
+    }
+    assert (
+        check_survey(answer, "boreal_forest", 60.55, 24.30, _facts(), animals)
+        == "a sea part with no sea in the square"
+    )
+    wet = {**_facts(), "sea": 0.5, "land": 0.5}
+    at_sea = {**answer, "place": "Open sea west of Helsinki"}
+    assert check_survey(at_sea, "sea", 60.03, 24.34, wet, animals) is None
+
+
+def test_survey_refuses_lake_part_without_lake() -> None:
+    """#141.1: a lake part needs lake water in the square."""
+    from builder.species import check_survey
+
+    animals = [{"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"}]
+    answer = {
+        "place": "Boreal forest and lakes in southern Finland",
+        "parts": [{"kind": "lake", "species": ["fox"]}],
+        "find": None,
+        "present": ["fox"],
+        "name_en": "Nuuksio forest",
+        "name_fi": "Nuuksion metsä",
+    }
+    assert (
+        check_survey(answer, "boreal_forest", 60.55, 24.30, _facts(), animals)
+        == "a lake part with no lake in the square"
+    )
+
+
+def test_survey_refuses_name_naming_an_absent_animal() -> None:
+    """#141.1: no "Seal Shores" when the tile has no seal."""
+    from builder.species import check_survey
+
+    animals = [
+        {"id": "grey_seal", "name": "Grey seal", "latin": "Halichoerus grypus"},
+        {"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"},
+    ]
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox"]}],
+        "find": None,
+        "present": ["fox"],
+        "name_en": "Seal and Swan Shores",
+        "name_fi": "Hylje- ja joutsenrannat",
+    }
+    assert (
+        check_survey(answer, "boreal_forest", 60.55, 24.30, _facts(), animals)
+        == "names seal, which is not on the tile"
+    )
+    answer["present"] = ["grey_seal", "fox"]
+    answer["parts"] = [{"kind": "forest", "species": ["grey_seal", "fox"]}]
+    assert (
+        check_survey(answer, "boreal_forest", 60.55, 24.30, _facts(), animals) is None
+    )
+
+
+def test_survey_name_may_paint_but_not_name_a_missing_kind() -> None:
+    """#141.1: "Blue Sea" paints; "Trout Bay" without trout is refused."""
+    from builder.species import check_name
+
+    animals = [
+        {"id": "sea_trout", "name": "Sea trout", "latin": "Salmo trutta"},
+        {"id": "red_fox", "name": "Red fox", "latin": "Vulpes vulpes"},
+    ]
+    assert check_name("Blue Sea Square", [], animals) is None
+    assert check_name("Red Sunset Forest", [], animals) is None
+    assert (
+        check_name("Trout Bay", [], animals) == "names trout, which is not on the tile"
+    )
+    assert check_name("Trout Bay", ["sea_trout"], animals) is None
+
+
+def test_empty_parts_are_refused() -> None:
+    """#141.1: a survey with no parts is no survey."""
+    import pytest
+
+    ids = ["fox"]
+    with pytest.raises(ValueError, match="no parts"):
+        check_answer(
+            {
+                "place": "Boreal forest in southern Finland",
+                "parts": [],
+                "find": None,
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
+            },
+            ids,
+        )
+
+
+def test_survey_part_mismatch_blocks_after_retry(tmp_path: Path) -> None:
+    """#141.1: a twice-waterless sea part blocks with `species_place`."""
+    world = _world(tmp_path)
+    grids = _grids(tmp_path)
+    sea = {
+        "place": "Boreal forest by the sea in southern Finland",
+        "parts": [{"kind": "sea", "species": ["fox"]}],
+        "find": None,
+        "name_en": "Nuuksio forest",
+        "name_fi": "Nuuksion metsä",
+    }
+    client = _StubClient([sea, dict(sea)])
+    source = Source(client=client, cache_dir=tmp_path / "cache")
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species_source=source,
+    )
+    assert made is None
+    assert blocked == {"reason": "species_place", "habitat": "boreal_forest"}
+    assert client.calls == 2
+
+
+def test_retry_carries_the_refusal_back(tmp_path: Path) -> None:
+    """#141.1: the retry is told what the first answer got wrong."""
+    from builder.grid import center as tile_center
+
+    animals = [{"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"}]
+    prompts: list[str] = []
+
+    class _NotingClient(_StubClient):
+        def chat(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][1]["content"])
+            return super().chat(**kwargs)
+
+    client = _NotingClient(
+        [
+            {
+                "place": "Open ocean far from land",
+                "parts": [{"kind": "sea", "species": ["fox"]}],
+                "find": None,
+                "name_en": "Open ocean",
+                "name_fi": "Avomeri",
+            },
+            {
+                "place": "Boreal forest in southern Finland",
+                "parts": [{"kind": "forest", "species": ["fox"]}],
+                "find": None,
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
+            },
+        ]
+    )
+    source = Source(client=client, cache_dir=tmp_path / "cache")
+    lat, lon = tile_center("n_413_478")
+    fetch_species(
+        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+    )
+    assert client.calls == 2
+    assert "was refused" not in prompts[0]
+    assert "Your last answer was refused: a land cell answered as sea." in prompts[1]
+
+
+def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
+    """#141.1: the cache keys on the tile, the list and the facts."""
+    from builder.grid import center as tile_center
+
+    animals = [
+        {"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"},
+        {"id": "vole", "name": "Vole", "latin": "Microtus agrestis"},
+    ]
+    client = _StubClient(
+        [
+            {
+                "place": "Boreal forest in southern Finland",
+                "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+                "find": None,
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
+            }
+        ]
+    )
+    source = Source(client=client, cache_dir=tmp_path / "cache")
+    lat, lon = tile_center("n_413_478")
+    fetch_species(
+        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+    )
+    assert client.calls == 1
+    fetch_species(
+        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+    )
+    assert client.calls == 1
+    moved = {**_facts(), "level": 12, "edge_hi": 14}
+    fetch_species("n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", moved)
+    assert client.calls == 2
 
 
 def test_model_order_ranks_species(tmp_path: Path) -> None:
@@ -329,7 +619,8 @@ def test_model_order_ranks_species(tmp_path: Path) -> None:
         builder_root=tmp_path,
         species={
             "place": "Boreal forest in southern Finland",
-            "present": ["mountain_hare", "fox", "vole"],
+            "parts": [{"kind": "forest", "species": ["mountain_hare", "fox", "vole"]}],
+            "find": None,
             "name_en": "Nuuksio forest",
             "name_fi": "Nuuksion metsä",
         },

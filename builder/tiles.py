@@ -36,11 +36,13 @@ from .species import Source as SpeciesSource
 from .species import (
     SpeciesPlaceError,
     check_answer,
-    check_place,
+    check_survey,
     fetch_species,
+    filed_plants,
     list_animals,
     list_fingerprint,
     rank_weights,
+    survey_facts,
 )
 
 #: The shared water level every home builds to.
@@ -428,6 +430,41 @@ def check_with_world(
     ]
 
 
+def tile_facts(
+    tile: str,
+    grids: dict[GridName, HabitatGrid],
+    world: Path,
+    home: str,
+    adapt: bool,
+) -> dict[str, Any]:
+    """Our own facts for one tile's survey, maker and planner alike."""
+    grid, col, row = parse_tile(tile)
+    habitat_grid = grids[grid]
+    eco1, share1, eco2, share2, _biome, land, water, elev = habitat_grid.cell_data(
+        col, row
+    )
+    habitat = habitat_grid.habitat(col, row)
+    level = cell_level(habitat, elev)
+    edges = tile_edges(tile, grids)
+    samples = [level, *(s for side in edges.values() for s in side)]
+    return survey_facts(
+        habitat=habitat,
+        eco1=eco1,
+        share1=share1,
+        eco2=eco2,
+        share2=share2,
+        land=land,
+        water=water,
+        elevation_m=elev,
+        level=level,
+        edge_lo=min(samples),
+        edge_hi=max(samples),
+        home=home,
+        adapt=adapt,
+        plants=filed_plants(world),
+    )
+
+
 def make_tile(
     tile: str,
     grids: dict[GridName, HabitatGrid],
@@ -477,9 +514,10 @@ def make_tile(
         species_tag = f"gbif:search:{datetime.now(UTC).date().isoformat()}"
     else:
         ids = [a["id"] for a in animals]
+        facts = tile_facts(tile, grids, world, home, False)
         if species is not None:
             answer = check_answer(species, ids)
-            problem = check_place(answer["place"], habitat, lat, lon)
+            problem = check_survey(answer, habitat, lat, lon, facts, animals)
             if problem is not None:
                 return None, {"reason": "species_place", "habitat": habitat}
             date = datetime.now(UTC).date().isoformat()
@@ -497,6 +535,7 @@ def make_tile(
                     lon,
                     source,
                     list_fingerprint(animals),
+                    facts,
                 )
             except SpeciesPlaceError:
                 return None, {"reason": "species_place", "habitat": habitat}

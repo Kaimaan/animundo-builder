@@ -18,6 +18,7 @@ from builder.tiles import (
     make_tile,
     pick_species,
     tile_edges,
+    tile_facts,
     tile_height,
     tile_seed,
     write_group,
@@ -451,8 +452,9 @@ def test_make_tile_builds_the_reviewed_sea_border() -> None:
         world,
         species={
             "place": "Gulf of Finland off Helsinki",
-            "present": ["herring_gull"],
-            "name_en": "Helsinki shore",
+            "parts": [{"kind": "sea", "species": ["herring_gull"]}],
+            "find": None,
+            "name_en": "Helsinki coast",
             "name_fi": "Helsingin ranta",
         },
     )
@@ -460,6 +462,31 @@ def test_make_tile_builds_the_reviewed_sea_border() -> None:
     assert made is not None
     assert made["home"] == "sea_717"
     assert "herring_gull" in made["species"]["playable"]
+
+
+def test_tile_facts_come_from_the_grids(tmp_path: Path) -> None:
+    """#141.1: the survey's facts are our own grid numbers."""
+    world = _world(tmp_path)
+    (world / "models" / "plants").mkdir(parents=True)
+    (world / "models" / "plants" / "bilberry.json").write_text("{}")
+    grids = _grids(tmp_path, _sea_3x3(413, 478))
+    facts = tile_facts(
+        "n_413_478",
+        grids,
+        world,
+        "sea",
+        True,  # type: ignore[arg-type]
+    )
+    assert facts["habitat"] == "sea"
+    assert facts["eco1"] == 651
+    assert facts["land"] == 0.3
+    assert facts["lake"] == 0.0
+    assert facts["sea"] == 0.7
+    assert facts["level"] == cell_level("sea", 0.0)
+    assert facts["edge_lo"] <= facts["level"] <= facts["edge_hi"]
+    assert facts["home"] == "sea"
+    assert facts["adapt"] is True
+    assert facts["plants"] == ["bilberry"]
 
 
 def test_make_tile_uses_sea_home_for_sea(tmp_path: Path) -> None:

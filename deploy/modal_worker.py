@@ -105,6 +105,9 @@ image = (
         ],
     )
     .run_commands(PIP_INSTALL_CMD)
+    # .env() is a build step: it must come before the add_local_*
+    # calls without copy, or the deploy fails (#134).
+    .env(WORKER_ENV)
     .add_local_file(
         BUILDER / "data" / "habitat-grid" / "ease2_n25.json.gz",
         "/grids/ease2_n25.json.gz",
@@ -113,7 +116,6 @@ image = (
         BUILDER / "data" / "habitat-grid" / "ease2_s25.json.gz",
         "/grids/ease2_s25.json.gz",
     )
-    .env(WORKER_ENV)
 )
 
 app = modal.App("animundo-worker")

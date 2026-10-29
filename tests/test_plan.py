@@ -164,10 +164,10 @@ def test_plan_lists_home_from_nearest(tmp_path: Path) -> None:
             "kind": "home",
             "what": "999",
             "from": "boreal_forest",
-            "estimate_usd": 0.02,
+            "estimate_usd": 0.2,
         }
     ]
-    assert plan["estimate_usd"] == 0.02
+    assert plan["estimate_usd"] == 0.2
     assert plan["coming"] == []
 
 
@@ -296,7 +296,7 @@ def test_tallinn_adapts_from_the_land_home() -> None:
         "kind": "home",
         "what": "679",
         "from": "boreal_forest",
-        "estimate_usd": 0.02,
+        "estimate_usd": 0.2,
     }
     assert all(i["what"] != "kelp" for i in plan["items"] if i["kind"] == "plant")
 
@@ -493,7 +493,7 @@ def test_plan_lists_one_thing_to_find(tmp_path: Path) -> None:
             "kind": "plant",
             "what": "arctic_willow",
             "from": "bilberry",
-            "estimate_usd": 0.02,
+            "estimate_usd": 0.15,
         }
     ]
 
@@ -548,7 +548,7 @@ def test_plan_find_prefers_the_survey_find(tmp_path: Path) -> None:
             "kind": "plant",
             "what": "bladderwrack",
             "from": "bilberry",
-            "estimate_usd": 0.02,
+            "estimate_usd": 0.15,
         }
     ]
 
@@ -575,7 +575,7 @@ def test_plan_find_falls_back_when_the_survey_find_is_filed(
             "kind": "plant",
             "what": "cloudberry",
             "from": "bilberry",
-            "estimate_usd": 0.02,
+            "estimate_usd": 0.15,
         }
     ]
 
@@ -693,7 +693,7 @@ def test_plan_adapts_a_find_from_the_same_food_kind(tmp_path: Path) -> None:
             "kind": "plant",
             "what": "cloudberry",
             "from": "bilberry",
-            "estimate_usd": 0.02,
+            "estimate_usd": 0.15,
         }
     ]
 

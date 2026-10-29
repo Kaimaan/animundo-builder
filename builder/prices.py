@@ -67,13 +67,14 @@ def prices_for(model: str) -> Prices:
 
 
 #: Measured build costs per plan item kind in US dollars, first
-#: guesses from the animal-first runs (spec 10): a home from the D8
-#: form is about $0.02, a new animal from the D7 edits about $0.10
-#: to $0.15 with its research call. Food is a code-only home edit.
-#: Re-measure the first border batches in phase 4 and update these.
+#: Measured medians from the first border batches' spend ledger
+#: (#141.5): Helsinki's home cost $0.15 to $0.49, its kelp $0.17.
+#: The old $0.02 guesses failed the second Helsinki build on
+#: `budget`, since the job's budget is the plan's estimate. Food
+#: is a code-only home edit. Re-measure when there is more data.
 ITEM_ESTIMATES: dict[str, float] = {
-    "home": 0.02,
+    "home": 0.20,
     "animal": 0.15,
-    "plant": 0.02,
+    "plant": 0.15,
     "food": 0.0,
 }

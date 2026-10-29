@@ -3,6 +3,23 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: T85, the README claims no Image or SAM
+
+- Closed the inbox's other way: neither fits. The queue and its
+  cards are the game's, so land pictures have no builder home;
+  judge builds run the one-shot maker, which adapts from
+  `start_from` and never reads reference sheets (wiring the
+  sheet-plus-SAM loop in would mean replacing the maker with the
+  old grown-up loop). `draw` and SAM survive only in
+  `ReferencesStage`, which no worker or CLI pipeline runs.
+- The README names no Muse Image, SAM, sheet or draw anywhere a
+  judge could read as a model claim ("preview sheets" in T41
+  means the T84 preview packs). Done when holds: the README
+  claims only what a judge can see.
+- Evidence: case-insensitive search for image/sam/draw/sheet/
+  picture/segment/reference_sheet over the README, each hit
+  read; `draw(` has no caller outside `references.py`.
+
 ## 2026-10-29: T79, no addon or web left in the builder
 
 - T48 already took it all out: no `godot/` or `web/` directory,

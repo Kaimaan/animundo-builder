@@ -244,6 +244,10 @@ class PlantsStage:
         else:
             messages = [first]
         response = self._ask_text(ctx, messages)
+        if not response:
+            # An empty answer retries once, like a cut one
+            # (#140.4): the kelp draft came back with nothing.
+            response = self._ask_text(ctx, messages)
         try:
             return json.loads(response), response
         except json.JSONDecodeError as error:

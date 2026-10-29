@@ -12,7 +12,7 @@ import pytest
 from PIL import Image
 
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
-from builder.stages.plants import PlantsStage
+from builder.stages.plants import PlantsStage, _Stopped
 
 SPEC = {
     "id": "wood_sorrel",
@@ -405,6 +405,31 @@ def test_schema_break_fixed_next_round(tmp_path: Path) -> None:
     )
     assert result["rounds"] == {"wood_sorrel": 2}
     assert "plant schema" in chat.prompts[1]
+
+
+def test_empty_draft_retries_once(tmp_path: Path) -> None:
+    """#140.4: an empty draft retries once, like a cut one."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    chat = ScriptChat(["", json.dumps(SPEC), json.dumps(REVIEW_CLEAN)])
+    result = PlantsStage(match=_match_new, chat=chat, build=_build_ok).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/wood_sorrel.json"]
+    assert result["rounds"] == {"wood_sorrel": 1}
+    assert len(chat.prompts) == 3
+
+
+def test_empty_draft_twice_stops(tmp_path: Path) -> None:
+    """#140.4: two empty drafts stop, as one bad draft did."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    chat = ScriptChat(["", ""])
+    with pytest.raises(_Stopped, match="was not JSON"):
+        PlantsStage(match=_match_new, chat=chat, build=_build_ok).run(
+            _ctx(tmp_path, world)
+        )
+    assert len(chat.prompts) == 2
 
 
 def test_poison_notes_flagged_for_expert(tmp_path: Path) -> None:

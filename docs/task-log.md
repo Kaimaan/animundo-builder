@@ -3,6 +3,23 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #134, the kangaroo tail within 10% (T94)
+
+- The tail was never short: the tool's T94 reach (each part's
+  centre distance from the tail base plus its half extent
+  along its own line) measures exactly 1.0 m on the sized
+  kangaroo. The builder's old z-span ruler read 0.87 m and
+  could never agree, so `_measure_spec` now mirrors the
+  reach, rotations included, and the back-leg shoulder skip
+  with it (the tool leaves shoulders alone on upright
+  specs; the builder no longer demands or rescales them).
+- The kangaroo test asserts length and tail within 10% like
+  the other sizes, the tail exact to a millimetre, and no
+  size misses; rotation cases pin `_part_axis_along` to the
+  tool's answers. Suite: 99 maker tests pass.
+- Evidence: the sized kangaroo through real code sizing;
+  part-by-part reach against the tool's own functions.
+
 ## 2026-10-29: T85, the README claims no Image or SAM
 
 - Closed the inbox's other way: neither fits. The queue and its

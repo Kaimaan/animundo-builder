@@ -32,6 +32,8 @@ from builder.stages.maker import (
     _measure_spec,
     _measurements,
     _offered_factors,
+    _on_back_legs,
+    _part_axis_along,
     _part_list,
     _pruned_regions,
     _reference_line,
@@ -2384,7 +2386,7 @@ def _adapt_world() -> Path:
 
 def _run_sizing(
     animal: str, tmp_path: Path
-) -> tuple[dict[str, float], dict[str, float]]:
+) -> tuple[dict[str, float], dict[str, float], dict[str, Any]]:
     """The recorded loop-final spec through real code sizing."""
     fix = json.loads((NEWSHAPE_FIXTURES / f"{animal}.json").read_text())
     world = _adapt_world()
@@ -2398,24 +2400,54 @@ def _run_sizing(
     adapted = _run_adapt(world, ref_path, sizes_path, out_path)
     assert adapted["ok"], adapted["log"]
     sized = json.loads(out_path.read_text())
-    return _measure_spec(sized), fix["sourced"]
+    return _measure_spec(sized), fix["sourced"], sized
 
 
 def test_newshape_sizes_anteater_within_10_percent(tmp_path: Path) -> None:
     """#132.6: the recorded anteater sizes to its sources."""
-    found, sourced = _run_sizing("giant_anteater", tmp_path)
+    found, sourced, _sized = _run_sizing("giant_anteater", tmp_path)
     for key in ("length_m", "shoulder_m", "tail_m"):
         assert abs(found[key] - sourced[key]) / sourced[key] <= 0.10, key
 
 
-def test_newshape_sizes_kangaroo_lists_its_tail(tmp_path: Path) -> None:
-    """#132.2: code sizing saturates on the tail; the miss is listed."""
-    found, sourced = _run_sizing("kangaroo", tmp_path)
-    for key in ("length_m", "shoulder_m"):
+def test_newshape_sizes_kangaroo_within_10_percent(tmp_path: Path) -> None:
+    """#134: the tail reaches its exact length; shoulders are skipped
+    on back-leg standers, like the tool."""
+    found, sourced, sized = _run_sizing("kangaroo", tmp_path)
+    for key in ("length_m", "tail_m"):
         assert abs(found[key] - sourced[key]) / sourced[key] <= 0.10, key
-    assert "tail_m" in _size_misses(found, sourced)
-    errors = _size_errors(found, sourced)
-    assert any("72 cm" in error and "100 cm" in error for error in errors)
+    assert found["tail_m"] == pytest.approx(sourced["tail_m"], abs=1e-3)
+    assert _on_back_legs(sized)
+    assert _size_misses(found, sourced, sized) == {}
+
+
+def test_part_axis_along_matches_the_tool() -> None:
+    """#134: rotated parts resolve their long axis like long_axis."""
+    cases = [
+        ({"size": [0.2, 0.2, 0.6]}, [0, 0, -1], 2),
+        (
+            {"size": [0.243, 0.243, 0.397], "rot": [-30, 0, 0]},
+            [0, -0.35, -0.94],
+            2,
+        ),
+        ({"size": [0.1, 0.5, 0.1], "rot": [0, 90, 0]}, [1, 0, 0], 2),
+        ({"size": [0.4, 0.1, 0.1], "rot": [0, 0, 90]}, [0, 1, 0], 0),
+        ({"size": [0.3, 0.3, 0.3], "rot": [8, 0, 0]}, [0, 1, 0], 1),
+    ]
+    for part, direction, want in cases:
+        assert _part_axis_along(part, direction) == want
+
+
+def test_size_misses_skips_shoulder_on_back_legs() -> None:
+    """#134: upright specs skip the shoulder; the rest still flag it."""
+    found = {"length_m": 1.0, "shoulder_m": 2.0, "tail_m": 1.0}
+    sourced = {"length_m": 1.0, "shoulder_m": 1.0, "tail_m": 1.0}
+    upright = {"bones": [{"name": "leg_l", "role": "leg", "tail": [0.0, 0.0, -0.5]}]}
+    assert _size_misses(found, sourced, upright) == {}
+    assert _size_errors(found, sourced, upright) == []
+    flat = {"bones": [{"name": "leg_l", "role": "leg", "tail": [0.0, 0.5, 0.3]}]}
+    assert "shoulder_m" in _size_misses(found, sourced, flat)
+    assert "shoulder_m" in _size_misses(found, sourced)
 
 
 def test_sizing_edits_carry_no_factors() -> None:

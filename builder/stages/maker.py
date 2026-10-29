@@ -445,7 +445,7 @@ class AnimalMakerStage:
                 if spec is not None and not file_errors:
                     found = _measure_spec(spec)
                     sourced = _sourced_sizes(research, target)
-                    misses = _size_misses(found, sourced)
+                    misses = _size_misses(found, sourced, spec)
                     if misses and not code_fixed:
                         # Code owns the sizes: rescale and re-run,
                         # no model call spent (#60.4).
@@ -462,8 +462,8 @@ class AnimalMakerStage:
                         )
                     if spec is not None and not file_errors:
                         found = _measure_spec(spec)
-                        misses = _size_misses(found, sourced)
-                        file_errors += _size_errors(found, sourced)
+                        misses = _size_misses(found, sourced, spec)
+                        file_errors += _size_errors(found, sourced, spec)
                         file_errors += _ratio_errors(found, target, world)
                         if (
                             code_fixed
@@ -1598,16 +1598,83 @@ def _with_example(template: str, world: Path, example_id: str) -> str:
     return template
 
 
+def _rotated(axis: list[float], angle: float, vec: list[float]) -> list[float]:
+    """vec turned about a unit axis (Rodrigues), the tool's rotate (#134)."""
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+    dot = sum(axis[i] * vec[i] for i in range(3))
+    cross = [
+        axis[1] * vec[2] - axis[2] * vec[1],
+        axis[2] * vec[0] - axis[0] * vec[2],
+        axis[0] * vec[1] - axis[1] * vec[0],
+    ]
+    return [
+        vec[i] * cos_a + cross[i] * sin_a + axis[i] * dot * (1 - cos_a)
+        for i in range(3)
+    ]
+
+
+def _part_axis_along(part: dict[str, Any], direction: list[float]) -> int:
+    """The part's local axis (0, 1, 2) closest to a world direction (#134).
+
+    The tool's long_axis: pitch/yaw/roll turn each local axis to
+    the world first, then the best-aligned one wins.
+    """
+    pitch, yaw, roll = (math.radians(a) for a in (part.get("rot") or [0, 0, 0]))
+    best, best_score = 0, -1.0
+    for axis in range(3):
+        vec = [0.0, 0.0, 0.0]
+        vec[axis] = 1.0
+        turned = [vec[0], -vec[2], vec[1]]
+        turned = _rotated([0.0, -1.0, 0.0], roll, turned)
+        turned = _rotated([1.0, 0.0, 0.0], pitch, turned)
+        turned = _rotated([0.0, 0.0, 1.0], yaw, turned)
+        world_vec = [turned[0], turned[2], -turned[1]]
+        score = abs(sum(world_vec[i] * direction[i] for i in range(3)))
+        if score > best_score:
+            best, best_score = axis, score
+    return best
+
+
+def _tail_reach(tail_parts: list[dict[str, Any]], base: list[float]) -> float:
+    """The tail's reach from its base (#134): each part's centre
+    distance plus its half extent along its own line, the furthest
+    wins. The tool's definition - a tail may hang down or reach
+    back, so a z span alone undershoots it."""
+    reach = 0.0
+    for part in tail_parts:
+        length = math.dist(part["at"], base)
+        if length:
+            line = [(part["at"][i] - base[i]) / length for i in range(3)]
+            axis = _part_axis_along(part, line)
+        else:
+            axis = max(range(3), key=lambda i: part["size"][i])
+        reach = max(reach, length + part["size"][axis] / 2)
+    return reach
+
+
+def _on_back_legs(spec: dict[str, Any]) -> bool:
+    """Whether the spec stands on its back legs (#134): its leg
+    bones reach below zero. Then shoulders have no meaning and
+    the tool skips them, so the builder must not demand them."""
+    return any(
+        isinstance(bone.get("tail"), list)
+        and len(bone["tail"]) > 2
+        and bone["tail"][2] < 0
+        for bone in spec.get("bones", [])
+        if isinstance(bone, dict) and bone.get("role") == "leg"
+    )
+
+
 def _measure_spec(spec: dict[str, Any]) -> dict[str, float]:
     """What the spec measures, in metres (#57.4, #60).
 
     The tool's own definitions, so code and adapt agree:
     shoulder is the top of the back above the front legs,
-    tail its parts' span, length the torso's span. Legs are
-    the top of the leg parts (they reach y = 0); depth the
-    body part's length axis. Specs without bone roles fall
-    back to bone names. Anything the spec doesn't name stays
-    out.
+    tail its parts' reach from the tail base, length the
+    torso's span. Legs are the top of the leg parts (they
+    reach y = 0); depth the body part's length axis. Specs
+    without bone roles fall back to bone names. Anything
+    the spec doesn't name stays out.
     """
     bones = {
         bone["name"]: bone
@@ -1662,7 +1729,17 @@ def _measure_spec(spec: dict[str, Any]) -> dict[str, float]:
         for part in parts
         if (part.get("bone") or "").startswith("tail") or role_of(part) == "tail"
     ]
-    if tail_parts:
+    tail_base = next(
+        (
+            bone["head"]
+            for bone in bones.values()
+            if bone.get("role") == "tail" and isinstance(bone.get("head"), list)
+        ),
+        None,
+    )
+    if tail_parts and tail_base is not None:
+        found["tail_m"] = _tail_reach(tail_parts, tail_base)
+    elif tail_parts:
         found["tail_m"] = max(
             part["at"][2] + part["size"][2] / 2 for part in tail_parts
         ) - min(part["at"][2] - part["size"][2] / 2 for part in tail_parts)
@@ -1704,7 +1781,7 @@ def _measure_errors(
     """
     found = _measure_spec(spec)
     sourced = _sourced_sizes(research, target)
-    return _size_errors(found, sourced) + _ratio_errors(found, target, world)
+    return _size_errors(found, sourced, spec) + _ratio_errors(found, target, world)
 
 
 def _reference_path(world: Path, start_from: str) -> Path | None:
@@ -1966,20 +2043,35 @@ def _sourced_sizes(
 
 
 def _size_misses(
-    found: dict[str, float], sourced: dict[str, float]
+    found: dict[str, float],
+    sourced: dict[str, float],
+    spec: dict[str, Any] | None = None,
 ) -> dict[str, tuple[float, float]]:
-    """Code-owned sizes off by more than a fifth: key to (have, want)."""
+    """Code-owned sizes off by more than a fifth: key to (have, want).
+
+    Specs on their back legs skip the shoulder: it has no
+    meaning there and the tool leaves it alone (#134).
+    """
     misses = {}
     for key in ("length_m", "shoulder_m", "tail_m"):
         if key not in found or key not in sourced or not sourced[key]:
+            continue
+        if key == "shoulder_m" and spec is not None and _on_back_legs(spec):
             continue
         if abs(found[key] - sourced[key]) / sourced[key] > 0.20:
             misses[key] = (found[key], sourced[key])
     return misses
 
 
-def _size_errors(found: dict[str, float], sourced: dict[str, float]) -> list[str]:
-    """Absolute misses with exact numbers, for the fix round."""
+def _size_errors(
+    found: dict[str, float],
+    sourced: dict[str, float],
+    spec: dict[str, Any] | None = None,
+) -> list[str]:
+    """Absolute misses with exact numbers, for the fix round.
+
+    Specs on their back legs skip the shoulder (#134).
+    """
     names = {
         "length_m": "body",
         "shoulder_m": "shoulder",
@@ -1989,6 +2081,8 @@ def _size_errors(found: dict[str, float], sourced: dict[str, float]) -> list[str
     errors = []
     for key, name in names.items():
         if key not in found or key not in sourced or not sourced[key]:
+            continue
+        if key == "shoulder_m" and spec is not None and _on_back_legs(spec):
             continue
         if abs(found[key] - sourced[key]) / sourced[key] <= 0.20:
             continue

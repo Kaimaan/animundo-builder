@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #118 (phase 2, T86 the session logs)
+
+- T86 revised: the logs first landed in `muse-logs/` and were
+  pulled from git the same hour (leak review: the work domain,
+  a masked work address, a home-folder listing with other
+  project names). They ship as a GitHub release asset instead,
+  after a blocklist re-scrub Kai reviews — never in git again.
+- Evidence: `gitleaks git` clean.
+
 ## 2026-10-29: inbox #118 (phase 2, T77 Modal)
 
 - T77: `deploy/modal_worker.py` (shape A, the unchanged listener,

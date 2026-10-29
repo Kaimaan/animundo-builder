@@ -1274,6 +1274,95 @@ def test_newhome_makes_home_first_try(tmp_path: Path) -> None:
     )
 
 
+def _fresh_clone(tmp_path: Path) -> Path:
+    """A fresh worker clone: the adapt tool and library, no built models."""
+    real = _adapt_world()
+    world = tmp_path / "world"
+    (world / "tools").mkdir(parents=True)
+    shutil.copy(real / "tools" / "adapt_home.py", world / "tools" / "adapt_home.py")
+    shutil.copy(
+        real / "tools" / "validate_region.py", world / "tools" / "validate_region.py"
+    )
+    shutil.copytree(real / "homes", world / "homes")
+    shutil.copytree(real / "animals", world / "animals")
+    shutil.copytree(real / "models" / "plants", world / "models" / "plants")
+    return world
+
+
+def _fake_glb() -> bytes:
+    """A .glb the triangle budget can read: 100 triangles, no geometry."""
+    import struct
+
+    gltf = json.dumps(
+        {
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [{"count": 300}],
+        }
+    ).encode()
+    return (
+        b"glTF"
+        + struct.pack("<II", 2, 12 + 8 + len(gltf))
+        + struct.pack("<I", len(gltf))
+        + b"JSON"
+        + gltf
+    )
+
+
+def test_newhome_builds_missing_plant_models(tmp_path: Path) -> None:
+    """#139.1: a fresh clone with no .glb still adapts a home from the forest."""
+    world = _fresh_clone(tmp_path)
+    _home_inputs(tmp_path, habitat="boreal_forest")
+    built: list[str] = []
+
+    def fake_build(target_world: Path, plant_id: str) -> dict[str, Any]:
+        target = target_world / "assets" / "plants" / f"{plant_id}.glb"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(_fake_glb())
+        built.append(plant_id)
+        return {"ok": True, "log": f"BUILT {plant_id}: fake"}
+
+    answer = _choices_answer(plants=[{"model": "heather"}])
+    client = ScriptClient([answer, answer])
+    stage = HomeMakerStage(plant_cache=tmp_path / "cache", plant_build=fake_build)
+    result = stage.run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/boreal_forest.json"]
+    assert built == ["heather"]
+    assert (world / "assets" / "plants" / "heather.glb").is_file()
+    home = json.loads((tmp_path / "homes" / "boreal_forest.json").read_text())
+    assert home["ground_cover"]["plants"][0]["model"] == "heather"
+
+
+def test_plant_cache_restores_without_rebuilding(tmp_path: Path) -> None:
+    """#139.1: after a restart the cache copies, it does not rebuild."""
+    from builder.stages.models import ensure_plant_models
+
+    world = _fresh_clone(tmp_path)
+    cache = tmp_path / "cache"
+    calls: list[str] = []
+
+    def fake_build(target_world: Path, plant_id: str) -> dict[str, Any]:
+        calls.append(plant_id)
+        target = target_world / "assets" / "plants" / f"{plant_id}.glb"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(_fake_glb())
+        return {"ok": True, "log": "BUILT"}
+
+    assert ensure_plant_models(world, ["heather", "heather"], cache, fake_build) == []
+    assert calls == ["heather"]
+    shutil.rmtree(world / "assets")
+    assert ensure_plant_models(world, ["heather"], cache, fake_build) == []
+    assert calls == ["heather"]
+    assert (world / "assets" / "plants" / "heather.glb").is_file()
+
+    def failing_build(target_world: Path, plant_id: str) -> dict[str, Any]:
+        return {"ok": False, "log": "Blender missing"}
+
+    shutil.rmtree(world / "assets")
+    shutil.rmtree(cache)
+    errors = ensure_plant_models(world, ["heather"], cache, failing_build)
+    assert len(errors) == 1 and "heather" in errors[0]
+
+
 def test_newhome_border_home_carries_plan_item(tmp_path: Path) -> None:
     """#130.4: ecoregion, habitat and based_on set by code, never the model."""
     world = _home_world(tmp_path)

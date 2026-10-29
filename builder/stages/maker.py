@@ -48,6 +48,7 @@ from .models import (
     ModelsStage,
     _ensure_sandbox,
     build_in_sandbox,
+    ensure_plant_models,
 )
 from .models import (
     _Stopped as _LoopStopped,
@@ -2198,9 +2199,13 @@ class HomeMakerStage:
         self,
         chat: Any | None = None,
         adapt: Any | None = None,
+        plant_cache: Path | None = None,
+        plant_build: Any | None = None,
     ) -> None:
         self._chat = chat
         self._adapt = adapt or _run_adapt_home
+        self._plant_cache = plant_cache
+        self._plant_build = plant_build
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -2393,6 +2398,16 @@ class HomeMakerStage:
         folder.mkdir(parents=True, exist_ok=True)
         choices_path = folder / "choices.json"
         choices_path.write_text(json.dumps(choices, indent=2), encoding="utf-8")
+        plant_ids = [
+            plant["model"]
+            for plant in choices.get("plants", [])
+            if isinstance(plant, dict) and plant.get("model")
+        ]
+        missing = ensure_plant_models(
+            world, plant_ids, self._plant_cache, self._plant_build
+        )
+        if missing:
+            return missing
         return self._adapt(world, base, choices_path, folder / "home.json")
 
     def _save_try(

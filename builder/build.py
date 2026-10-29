@@ -45,6 +45,7 @@ def item_pipeline(
     adapt: Any = None,
     state_path: Path | None = None,
     guard: Any = None,
+    plant_cache: Path | None = None,
 ) -> Pipeline:
     """The item pipeline, with the makers' seams open for tests."""
     return Pipeline(
@@ -52,7 +53,7 @@ def item_pipeline(
             ResearchStage(),
             MinimumStage(),
             LooksStage(),
-            HomeMakerStage(chat=chat, adapt=adapt),
+            HomeMakerStage(chat=chat, adapt=adapt, plant_cache=plant_cache),
             AnimalMakerStage(chat=chat, build=build, adapt=adapt),
             PlantsStage(chat=chat, build=build),
         ],

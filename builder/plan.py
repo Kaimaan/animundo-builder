@@ -104,15 +104,34 @@ def nearest_home(
 ) -> str:
     """The nearest existing home to adapt a new home from.
 
-    The first home around the tile in expanding rings: the
-    ecoregion the child came from. Without one nearby, the first
-    home of the same habitat; without that, the first home there
-    is. A world with no homes at all is broken, said loudly.
+    The same habitat first: the nearest around the tile in
+    expanding rings, else the first anywhere. Only when no home
+    of the habitat exists, the nearest of any habitat the same
+    way. A sea home from the forest brings forest plants into
+    the sea, so nearness never beats the habitat (#139.2). A
+    world with no homes at all is broken, said loudly.
     """
     if not homes:
         raise ValueError("the world has no homes to adapt from")
     grid, col, row = parse_tile(tile)
     habitat_grid = grids[grid]
+    rings = list(_ring_cells(habitat_grid, col, row))
+    for eco, neighbour in rings:
+        found = home_for_cell(eco, neighbour, homes)
+        if found is not None and homes[found].get("habitat") == habitat:
+            return found
+    same = sorted(h for h, d in homes.items() if d.get("habitat") == habitat)
+    if same:
+        return same[0]
+    for eco, neighbour in rings:
+        found = home_for_cell(eco, neighbour, homes)
+        if found is not None:
+            return found
+    return sorted(homes)[0]
+
+
+def _ring_cells(habitat_grid: Any, col: int, row: int) -> Any:
+    """Neighbour cells in expanding rings, as (ecoregion, habitat)."""
     for radius in range(1, 6):
         for dcol in range(-radius, radius + 1):
             for drow in range(-radius, radius + 1):
@@ -121,17 +140,12 @@ def nearest_home(
                 ncol = min(max(col + dcol, 0), CELLS - 1)
                 nrow = min(max(row + drow, 0), CELLS - 1)
                 try:
-                    eco = habitat_grid.cell_data(ncol, nrow)[0]
-                    neighbour = habitat_grid.habitat(ncol, nrow)
+                    yield (
+                        habitat_grid.cell_data(ncol, nrow)[0],
+                        habitat_grid.habitat(ncol, nrow),
+                    )
                 except KeyError:
                     continue
-                found = home_for_cell(eco, neighbour, homes)
-                if found is not None:
-                    return found
-    same = sorted(h for h, d in homes.items() if d.get("habitat") == habitat)
-    if same:
-        return same[0]
-    return sorted(homes)[0]
 
 
 def _unfiled(

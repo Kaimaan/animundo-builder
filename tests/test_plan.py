@@ -187,6 +187,26 @@ def test_nearest_home_falls_back_without_neighbours(tmp_path: Path) -> None:
     )
 
 
+def test_nearest_home_prefers_the_same_habitat(tmp_path: Path) -> None:
+    """#139.2: a sea border near the forest adapts from sea, not the forest."""
+    world = _world(tmp_path)
+    (world / "homes" / "sea.json").write_text(
+        json.dumps({"habitat": "sea", "ecoregions": [651]})
+    )
+    grids = _grids(tmp_path, _boreal())
+    from builder.tiles import available_homes
+
+    assert (
+        nearest_home(
+            "n_413_478",
+            grids,  # type: ignore[arg-type]
+            available_homes(world),
+            "sea",  # type: ignore[arg-type]
+        )
+        == "sea"
+    )
+
+
 def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:
     world = _world(tmp_path)
     grids = _grids(tmp_path, _boreal())

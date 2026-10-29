@@ -524,6 +524,7 @@ class Worker:
             adapt=self.adapt,
             state_path=item_dir / "state.json",
             guard=self._guard,
+            plant_cache=self.jobs_dir / "_plant-cache",
         )
         build_mod.run_item_stages(ctx, item_dir, pipeline)
 

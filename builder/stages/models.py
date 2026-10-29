@@ -447,6 +447,67 @@ def build_in_sandbox(sandbox: Path, spec: str) -> dict[str, Any]:
     return {"ok": False, "summary": "the build failed", "log": log}
 
 
+def _world_commit(world: Path) -> str:
+    """The checkout's commit, or `unversioned` off git."""
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(world), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unversioned"
+    commit = done.stdout.strip()
+    return commit if done.returncode == 0 and commit else "unversioned"
+
+
+def ensure_plant_models(
+    world: Path,
+    plant_ids: list[str],
+    cache_dir: Path | None,
+    build: Callable[[Path, str], dict[str, Any]] | None = None,
+) -> list[str]:
+    """Every named plant's .glb in the checkout, built once and cached (#139.1).
+
+    A fresh worker clone holds no built models, but the home check
+    wants the .glb on disk. Missing ones are built with the world's
+    script and cached per world commit (specs move with commits),
+    so a restarted worker only copies. Without a cache dir the
+    builds land in the checkout alone. An error per plant it could
+    not provide.
+    """
+    run = build or (
+        lambda target_world, plant_id: build_in_sandbox(
+            target_world, f"models/plants/{plant_id}.json"
+        )
+    )
+    commit = _world_commit(world)
+    errors = []
+    for plant_id in dict.fromkeys(plant_ids):
+        target = world / "assets" / "plants" / f"{plant_id}.glb"
+        if target.is_file():
+            continue
+        cached = (
+            cache_dir / commit / f"{plant_id}.glb" if cache_dir is not None else None
+        )
+        if cached is not None and cached.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(cached, target)
+            continue
+        built = run(world, plant_id)
+        if not built.get("ok") or not target.is_file():
+            log = (built.get("log") or "").strip()
+            errors.append(
+                f'"{plant_id}": the plant build failed' + (f": {log}" if log else "")
+            )
+            continue
+        if cached is not None:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(target, cached)
+    return errors
+
+
 def check_in_sandbox(
     ctx: Any, sandbox: Path, species_id: str, round_no: int
 ) -> list[str]:

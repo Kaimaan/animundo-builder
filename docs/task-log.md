@@ -3,6 +3,24 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #139, the worker builds the plants (1-2)
+
+- New homes failed on the worker because a fresh clone
+  holds no built plant models. Chose the build: newhome
+  ensures every named plant's `.glb` before adapting,
+  built with the image's Blender and cached per world
+  commit on the jobs Volume, so a restart only copies.
+  Relaxing the world-owned check from here was the other
+  way; building is what the script is for.
+- The sea home adapted from the forest again: the planner
+  now prefers the same habitat anywhere over the nearest
+  home of another (no ring cell matches sea, so rings
+  alone could not fix it). A sea border near Nuuksio
+  adapts from `sea`.
+- Evidence: a fresh-clone home test with the real adapt
+  tool, a cache restore test, a same-habitat planner
+  test; suite, ruff, gitleaks.
+
 ## 2026-10-29: inbox #135, first production round trip (1-3)
 
 - The sea tile's home failed on a stray space ("not

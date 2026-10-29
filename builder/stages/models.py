@@ -462,6 +462,41 @@ def _world_commit(world: Path) -> str:
     return commit if done.returncode == 0 and commit else "unversioned"
 
 
+#: A check naming the build that would satisfy it (#139.3).
+_BUILD_FIRST_RE = re.compile(r"build it first with tools/build_model\.sh (\S+)")
+
+
+def _target_for_spec(spec: str) -> str | None:
+    """Where the build lands: plants to .glb, tree specs to .json (#139.3)."""
+    for prefix, assets, suffix in (
+        ("models/plants/", "assets/plants/", ".glb"),
+        ("models/trees/", "assets/trees/", ".json"),
+    ):
+        if spec.startswith(prefix) and spec.endswith(".json"):
+            stem = spec[len(prefix) : -len(".json")]
+            if re.fullmatch(r"[a-z][a-z0-9_]*", stem):
+                return f"{assets}{stem}{suffix}"
+    return None
+
+
+def _build_only(errors: list[str]) -> bool:
+    """Every error is a missing build: ours to fix, not the model's (#139.3)."""
+    return bool(errors) and all(
+        _BUILD_FIRST_RE.search(error) is not None
+        or "the worker could not build it" in error
+        for error in errors
+    )
+
+
+def _build_first_specs(errors: list[str]) -> list[str]:
+    """The spec files the check's build-first errors name (#139.3)."""
+    return [
+        match.group(1)
+        for error in errors
+        if (match := _BUILD_FIRST_RE.search(error)) is not None
+    ]
+
+
 def ensure_plant_models(
     world: Path,
     plant_ids: list[str],
@@ -477,29 +512,47 @@ def ensure_plant_models(
     builds land in the checkout alone. An error per plant it could
     not provide.
     """
-    run = build or (
-        lambda target_world, plant_id: build_in_sandbox(
-            target_world, f"models/plants/{plant_id}.json"
-        )
+    return ensure_specs(
+        world,
+        [f"models/plants/{plant_id}.json" for plant_id in plant_ids],
+        cache_dir,
+        build,
     )
+
+
+def ensure_specs(
+    world: Path,
+    specs: list[str],
+    cache_dir: Path | None,
+    build: Callable[[Path, str], dict[str, Any]] | None = None,
+) -> list[str]:
+    """Every named spec's built file in the checkout, cached (#139.3).
+
+    The retry behind a build-first check failure: plants and tree
+    specs alike, built with the world's script and cached per world
+    commit like the plants. An error per spec it could not provide.
+    """
+    run = build or (lambda target_world, spec: build_in_sandbox(target_world, spec))
     commit = _world_commit(world)
     errors = []
-    for plant_id in dict.fromkeys(plant_ids):
-        target = world / "assets" / "plants" / f"{plant_id}.glb"
+    for spec in dict.fromkeys(specs):
+        target_rel = _target_for_spec(spec)
+        if target_rel is None:
+            errors.append(f'"{spec}": the worker cannot build this')
+            continue
+        target = world / target_rel
         if target.is_file():
             continue
-        cached = (
-            cache_dir / commit / f"{plant_id}.glb" if cache_dir is not None else None
-        )
+        cached = cache_dir / commit / target_rel if cache_dir is not None else None
         if cached is not None and cached.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(cached, target)
             continue
-        built = run(world, plant_id)
+        built = run(world, spec)
         if not built.get("ok") or not target.is_file():
             log = (built.get("log") or "").strip()
             errors.append(
-                f'"{plant_id}": the plant build failed' + (f": {log}" if log else "")
+                f'"{spec}": the worker could not build it' + (f": {log}" if log else "")
             )
             continue
         if cached is not None:

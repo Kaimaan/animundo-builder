@@ -3,6 +3,16 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #139, build-first retries in code (3)
+
+- When the home check fails only on "build it first",
+  newhome builds what it names (tree specs too) and
+  adapts again with no model call. Still missing after
+  the rebuild stops as the worker's job ("the worker
+  could not build it"), never "a person makes it".
+- Evidence: a no-fix-round retry test and a worker-owned
+  failure test; suite, ruff, gitleaks.
+
 ## 2026-10-29: inbox #139, the worker builds the plants (1-2)
 
 - New homes failed on the worker because a fresh clone

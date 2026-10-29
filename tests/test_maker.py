@@ -1308,25 +1308,41 @@ def _fake_glb() -> bytes:
     )
 
 
+def _fake_builder(
+    built: list[str],
+) -> Any:
+    """A plant/tree build that writes a readable fake, recording specs."""
+
+    def fake_build(target_world: Path, spec: str) -> dict[str, Any]:
+        from builder.stages.models import _target_for_spec
+
+        target_rel = _target_for_spec(spec)
+        assert target_rel is not None, spec
+        target = target_world / target_rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.suffix == ".glb":
+            target.write_bytes(_fake_glb())
+        else:
+            target.write_text(json.dumps({"id": target.stem}))
+        built.append(spec)
+        return {"ok": True, "log": f"BUILT {spec}: fake"}
+
+    return fake_build
+
+
 def test_newhome_builds_missing_plant_models(tmp_path: Path) -> None:
     """#139.1: a fresh clone with no .glb still adapts a home from the forest."""
     world = _fresh_clone(tmp_path)
     _home_inputs(tmp_path, habitat="boreal_forest")
     built: list[str] = []
-
-    def fake_build(target_world: Path, plant_id: str) -> dict[str, Any]:
-        target = target_world / "assets" / "plants" / f"{plant_id}.glb"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(_fake_glb())
-        built.append(plant_id)
-        return {"ok": True, "log": f"BUILT {plant_id}: fake"}
+    fake_build = _fake_builder(built)
 
     answer = _choices_answer(plants=[{"model": "heather"}])
     client = ScriptClient([answer, answer])
     stage = HomeMakerStage(plant_cache=tmp_path / "cache", plant_build=fake_build)
     result = stage.run(_ctx(tmp_path, world, client))
     assert result["home_files"] == ["homes/boreal_forest.json"]
-    assert built == ["heather"]
+    assert built == ["models/plants/heather.json"]
     assert (world / "assets" / "plants" / "heather.glb").is_file()
     home = json.loads((tmp_path / "homes" / "boreal_forest.json").read_text())
     assert home["ground_cover"]["plants"][0]["model"] == "heather"
@@ -1339,19 +1355,13 @@ def test_plant_cache_restores_without_rebuilding(tmp_path: Path) -> None:
     world = _fresh_clone(tmp_path)
     cache = tmp_path / "cache"
     calls: list[str] = []
-
-    def fake_build(target_world: Path, plant_id: str) -> dict[str, Any]:
-        calls.append(plant_id)
-        target = target_world / "assets" / "plants" / f"{plant_id}.glb"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(_fake_glb())
-        return {"ok": True, "log": "BUILT"}
+    fake_build = _fake_builder(calls)
 
     assert ensure_plant_models(world, ["heather", "heather"], cache, fake_build) == []
-    assert calls == ["heather"]
+    assert calls == ["models/plants/heather.json"]
     shutil.rmtree(world / "assets")
     assert ensure_plant_models(world, ["heather"], cache, fake_build) == []
-    assert calls == ["heather"]
+    assert calls == ["models/plants/heather.json"]
     assert (world / "assets" / "plants" / "heather.glb").is_file()
 
     def failing_build(target_world: Path, plant_id: str) -> dict[str, Any]:
@@ -1361,6 +1371,46 @@ def test_plant_cache_restores_without_rebuilding(tmp_path: Path) -> None:
     shutil.rmtree(cache)
     errors = ensure_plant_models(world, ["heather"], cache, failing_build)
     assert len(errors) == 1 and "heather" in errors[0]
+
+
+def test_newhome_retries_a_build_first_without_a_fix_round(
+    tmp_path: Path,
+) -> None:
+    """#139.3: a tree spec builds in code; the model is not asked again."""
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    tree_err = (
+        '"trees.mix[0]": build it first with tools/build_model.sh models/trees/fir.json'
+    )
+    adapt = _AdaptStub([[tree_err]])
+    client = ScriptClient([_choices_answer()])
+    built: list[str] = []
+    stage = HomeMakerStage(
+        adapt=adapt, plant_cache=tmp_path / "cache", plant_build=_fake_builder(built)
+    )
+    result = stage.run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/rainforest.json"]
+    assert built == ["models/trees/fir.json"]
+    assert len(adapt.calls) == 2
+    assert len(client.prompts) == 1
+
+
+def test_newhome_build_failure_is_the_workers_job(tmp_path: Path) -> None:
+    """#139.3: still missing after a rebuild is not a person's job."""
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    tree_err = (
+        '"trees.mix[0]": build it first with tools/build_model.sh models/trees/fir.json'
+    )
+    adapt = _AdaptStub([[tree_err]] * 4)
+    client = ScriptClient([_choices_answer(), _choices_answer()])
+
+    def failing_build(target_world: Path, spec: str) -> dict[str, Any]:
+        return {"ok": False, "log": "Blender missing"}
+
+    stage = HomeMakerStage(adapt=adapt, plant_build=failing_build)
+    with pytest.raises(_Stopped, match="the worker could not build it"):
+        stage.run(_ctx(tmp_path, world, client))
 
 
 def test_newhome_border_home_carries_plan_item(tmp_path: Path) -> None:

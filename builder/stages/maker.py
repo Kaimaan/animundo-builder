@@ -46,9 +46,12 @@ from .capability import NotPossibleError
 from .home import refresh_welcome
 from .models import (
     ModelsStage,
+    _build_first_specs,
+    _build_only,
     _ensure_sandbox,
     build_in_sandbox,
     ensure_plant_models,
+    ensure_specs,
 )
 from .models import (
     _Stopped as _LoopStopped,
@@ -2360,6 +2363,11 @@ class HomeMakerStage:
                 _place_home(ctx, habitat, attempt, tag, home_id or habitat)
                 return
             errors = file_errors or ["the answer held no usable choices"]
+        if _build_only(errors or []):
+            raise _Stopped(
+                f"{habitat}: still failing after one fix round "
+                f"({'; '.join(errors or [])}); the worker could not build it"
+            )
         raise _Stopped(
             f"{habitat}: still failing after one fix round "
             f"({'; '.join(errors or [])}); a person makes it"
@@ -2408,7 +2416,16 @@ class HomeMakerStage:
         )
         if missing:
             return missing
-        return self._adapt(world, base, choices_path, folder / "home.json")
+        errors = self._adapt(world, base, choices_path, folder / "home.json")
+        specs = _build_first_specs(errors) if errors else []
+        if errors and specs and _build_only(errors):
+            # Missing builds are ours to fix: build what the check
+            # names (tree specs too) and adapt again, no model call (#139.3).
+            missing = ensure_specs(world, specs, self._plant_cache, self._plant_build)
+            if missing:
+                return missing
+            return self._adapt(world, base, choices_path, folder / "home.json")
+        return errors
 
     def _save_try(
         self,

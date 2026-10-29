@@ -89,6 +89,40 @@ def test_write_scaffold_uses_home_food(tmp_path: Path) -> None:
     assert "welcome" not in scaffold
 
 
+def test_write_plant_brief_carries_names(tmp_path: Path) -> None:
+    item = {"id": "plant_arctic_willow", "kind": "plant", "what": "arctic_willow"}
+    brief = build_mod.write_brief(
+        tmp_path, item, "tundra", 68.4, 23.6, None, ["Arctic Willow"]
+    )
+    assert brief["plant"] == "arctic_willow"
+    assert brief["names"] == ["Arctic Willow"]
+    assert brief["needs_home"] is False
+    assert json.loads((tmp_path / "home.json").read_text()) == brief
+
+
+def test_write_scaffold_names_ground_cover_plants(tmp_path: Path) -> None:
+    home: dict[str, Any] = {"food": [], "fish": []}
+    path = build_mod.write_scaffold(
+        tmp_path, home, [{"model": "arctic_willow", "names": ["Arctic Willow"]}]
+    )
+    scaffold = json.loads(path.read_text())
+    assert scaffold["ground_cover"]["plants"] == [
+        {"model": "arctic_willow", "names": ["Arctic Willow"]}
+    ]
+
+
+def test_find_plant_names_matches_slug() -> None:
+    home = {"food": [{"kind": "browse", "names": ["Arctic Willow", "dwarf birch"]}]}
+    assert build_mod.find_plant_names(home, "arctic_willow") == ["Arctic Willow"]
+    assert build_mod.find_plant_names(home, "cloudberry") == ["cloudberry"]
+
+
+def test_write_flora_survey_lists_facts(tmp_path: Path) -> None:
+    path = build_mod.write_flora_survey(tmp_path, ["Arctic Willow"])
+    facts = json.loads(path.read_text())["facts"]
+    assert facts == [{"topic": "plant", "text": "Arctic Willow grows here"}]
+
+
 def test_run_item_stages_retries_once(tmp_path: Path) -> None:
     from builder.pipeline import BudgetTracker, Pipeline
 

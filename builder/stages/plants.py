@@ -66,9 +66,11 @@ class PlantsStage:
         if ctx.world_path is None:
             raise ValueError("plants needs --world")
         world = Path(ctx.world_path)
-        region_path = next((ctx.job_dir / "regions").glob("*.json"))
+        regions = sorted((ctx.job_dir / "regions").glob("*.json"))
+        if not regions:
+            return self._nothing()
+        region_path = regions[0]
         region = json.loads(region_path.read_text(encoding="utf-8"))
-        survey = json.loads((ctx.job_dir / "survey.json").read_text(encoding="utf-8"))
         entries = {
             plant.get("model", ""): plant
             for plant in region.get("ground_cover", {}).get("plants", [])
@@ -80,6 +82,11 @@ class PlantsStage:
                 f"the region names {len(new_ids)} new plants "
                 f"({', '.join(new_ids)}), at most {self.max_new_plants}"
             )
+        if not new_ids:
+            # Items that name no plants skip the survey, the
+            # sandbox and every model call (T76's item pipeline).
+            return self._nothing()
+        survey = json.loads((ctx.job_dir / "survey.json").read_text(encoding="utf-8"))
         sandbox = _ensure_sandbox(ctx.job_dir, world)
         facts = _flora_facts(survey)
         progress = _load_progress(ctx.job_dir)
@@ -113,6 +120,11 @@ class PlantsStage:
             "reused": reused,
             "expert_review": sorted(expert),
         }
+
+    @staticmethod
+    def _nothing() -> dict[str, Any]:
+        """No plants named, nothing built, $0."""
+        return {"plant_files": [], "rounds": {}, "reused": {}, "expert_review": []}
 
     def _plant(
         self,

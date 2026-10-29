@@ -3,7 +3,7 @@
 The builder is a factory (D17): the game runs the world, the worker
 plans every new or changed border request and builds only the build
 jobs the game creates. Planning (T74) and building (T76) are
-live; plant builds, previews (T84) and Modal (T77) land next.
+live; previews (T84) and Modal (T77) land next.
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def git_commit(world: Path | None) -> str:
 
 @dataclass
 class Worker:
-    """Plans border requests and builds jobs; plants wait."""
+    """Plans border requests and builds jobs."""
 
     store: Store
     jobs_dir: Path
@@ -271,22 +271,6 @@ class Worker:
         if self.chat is not None:
             ctx.client = self.chat
         start = ctx.tracker.spent_usd
-        if item["kind"] == "plant":
-            print(
-                f"build job {job_id}: {item['id']} waits for plant builds",
-                file=sys.stderr,
-            )
-            self._close_item(
-                job_id,
-                item,
-                item_dir,
-                ctx,
-                start,
-                before,
-                budget,
-                ValueError("plant items build in the next step"),
-            )
-            return
         try:
             if item["kind"] == "food":
                 home = self._tile_home(tile, plan, job_id)
@@ -423,9 +407,18 @@ class Worker:
                 raise ValueError(
                     f"item {item['id']} names {item['what']}, off the list"
                 )
-        build_mod.write_brief(item_dir, item, habitat, lat, lon, entry)
-        if item["kind"] == "animal":
-            build_mod.write_scaffold(item_dir, self._tile_home(tile, plan, job_id))
+        if item["kind"] == "plant":
+            home = self._tile_home(tile, plan, job_id)
+            names = build_mod.find_plant_names(home, item["what"])
+            build_mod.write_brief(item_dir, item, habitat, lat, lon, None, names)
+            build_mod.write_scaffold(
+                item_dir, home, [{"model": item["what"], "names": names}]
+            )
+            build_mod.write_flora_survey(item_dir, names)
+        else:
+            build_mod.write_brief(item_dir, item, habitat, lat, lon, entry)
+            if item["kind"] == "animal":
+                build_mod.write_scaffold(item_dir, self._tile_home(tile, plan, job_id))
         pipeline = build_mod.item_pipeline(
             chat=self.chat,
             build=self.build,

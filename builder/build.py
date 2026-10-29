@@ -26,12 +26,13 @@ from .schemas import validate
 from .stages.looks import LooksStage
 from .stages.maker import AnimalMakerStage, HomeMakerStage
 from .stages.minimum import MinimumStage
+from .stages.plants import PlantsStage
 from .stages.research import ResearchStage
 
 #: The kept steps for one border item, in D2/D10's order. Each
-#: maker skips when the minset holds nothing for it, so home and
-#: animal items share this list.
-ITEM_STAGES = ("research", "minimum", "looks", "newhome", "oneshot")
+#: maker skips when the minset holds nothing for it, so home,
+#: animal and plant items share this list.
+ITEM_STAGES = ("research", "minimum", "looks", "newhome", "oneshot", "plants")
 
 #: What take downloads, laid out like the world.
 TAKE_DIRS = ("homes", "animals", "models", "plants", "locale")
@@ -52,6 +53,7 @@ def item_pipeline(
             LooksStage(),
             HomeMakerStage(chat=chat, adapt=adapt),
             AnimalMakerStage(chat=chat, build=build, adapt=adapt),
+            PlantsStage(chat=chat, build=build),
         ],
         state_path=state_path or Path("state.json"),
         guard=guard,
@@ -71,13 +73,15 @@ def write_brief(
     lat: float,
     lon: float,
     entry: dict[str, Any] | None,
+    plant_names: list[str] | None = None,
 ) -> dict[str, Any]:
     """The item's `home.json` brief from its plan item (the intake).
 
     A home item carries no species: research covers the habitat's
     surroundings and minimum makes only the home. An animal item
-    carries its animal-list entry. Ids and keys only, never free
-    text, and never anything about the player.
+    carries its animal-list entry. A plant item carries its names.
+    Ids and keys only, never free text, and never anything about
+    the player.
     """
     if item["kind"] == "home":
         eco = int(item["what"])
@@ -88,6 +92,14 @@ def write_brief(
             "base_home": item["from"],
             "based_on": item["from"],
             "needs_home": True,
+            "center": {"lat": lat, "lon": lon},
+        }
+    elif item["kind"] == "plant":
+        brief = {
+            "plant": item["what"],
+            "names": plant_names or [item["what"]],
+            "home": habitat,
+            "needs_home": False,
             "center": {"lat": lat, "lon": lon},
         }
     else:
@@ -106,24 +118,59 @@ def write_brief(
     return brief
 
 
-def write_scaffold(item_dir: Path, home: dict[str, Any]) -> Path:
+def write_scaffold(
+    item_dir: Path, home: dict[str, Any], plants: list[dict[str, Any]] | None = None
+) -> Path:
     """A working region for the one-shot maker, from the tile's home.
 
     Real food and fish (the checks mean something), empty casts,
     no welcome: the region is scaffolding, discarded after the
-    item's animals and models are made.
+    item's animals and models are made. A plant item names its
+    plant in the ground cover for the plants step.
     """
     regions = item_dir / "regions"
     regions.mkdir(parents=True, exist_ok=True)
+    region: dict[str, Any] = {
+        "id": "work",
+        "animals": {"playable": [], "prey": [], "predators": []},
+        "food": home.get("food", []),
+        "fish": home.get("fish", []),
+    }
+    if plants:
+        region["ground_cover"] = {"plants": plants}
     path = regions / "work.json"
+    path.write_text(json.dumps(region, indent=2))
+    return path
+
+
+def find_plant_names(home: dict[str, Any], what: str) -> list[str]:
+    """The home's human names for one findable plant id.
+
+    Food entries name their plants ("Arctic Willow"); the ones
+    slugifying to the plan item's id ground the draft. Without a
+    match, the id itself, so the draft still has a name.
+    """
+    from .plan import plant_slug
+
+    names = [
+        name
+        for entry in home.get("food", []) or []
+        for name in entry.get("names", []) or []
+        if plant_slug(name) == what
+    ]
+    return names or [what]
+
+
+def write_flora_survey(item_dir: Path, names: list[str]) -> Path:
+    """`survey.json`'s flora facts from the home's named plants.
+
+    The plants step grounds its draft in these; each name the
+    home gives its findables becomes one fact. Code-only.
+    """
+    path = item_dir / "survey.json"
     path.write_text(
         json.dumps(
-            {
-                "id": "work",
-                "animals": {"playable": [], "prey": [], "predators": []},
-                "food": home.get("food", []),
-                "fish": home.get("fish", []),
-            },
+            {"facts": [{"topic": "plant", "text": f"{n} grows here"} for n in names]},
             indent=2,
         )
     )

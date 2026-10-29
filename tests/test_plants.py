@@ -179,6 +179,23 @@ def _build_ok(sandbox: Path, plant_id: str) -> dict[str, Any]:
     return {"ok": True, "summary": "wood_sorrel: 40 triangles", "log": "BUILT"}
 
 
+def test_skips_when_no_region_names_plants(tmp_path: Path) -> None:
+    """Items that name no plants skip survey, sandbox and calls."""
+    world = _world(tmp_path)
+    result = PlantsStage().run(_ctx(tmp_path, world))
+    assert result == {
+        "plant_files": [],
+        "rounds": {},
+        "reused": {},
+        "expert_review": [],
+    }
+    assert not (tmp_path / "sandbox").exists()
+
+    _inputs(tmp_path, plants=[])
+    result = PlantsStage().run(_ctx(tmp_path, world))
+    assert result["plant_files"] == []
+
+
 def test_builds_one_new_plant(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

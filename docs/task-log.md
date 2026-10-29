@@ -3,6 +3,17 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #118 (phase 2, T76 finished: plant builds)
+
+- Plant items build through the plants step: the brief carries
+  the home's human names, the scaffold names the plant in its
+  ground cover, and a code-only flora survey grounds the draft.
+  The plants step skips items naming no plants (no survey, no
+  sandbox, no model call), so home and animal items are
+  untouched.
+- Evidence: `uv run pytest -q` → 636 passed, 12 skipped;
+  `ruff check` + `format --check` clean.
+
 ## 2026-10-29: inbox #118 (phase 2, T76 the worker, partial)
 
 - T76: the worker builds jobs (`builder/build.py`, `worker.py`):

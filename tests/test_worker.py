@@ -309,12 +309,14 @@ def test_request_alerts_plan_failed_when_gbif_is_down(
     assert store.alerts[-1]["kind"] == "plan_failed"
 
 
-def test_plant_item_fails_loud_and_alone(
-    tmp_path: Path, monkeypatch: Any, capsys: Any
-) -> None:
-    """T76 partial: plants fail loud at $0 while other items build."""
+def test_plant_item_builds_through_stages(tmp_path: Path, monkeypatch: Any) -> None:
+    """T76 finished: a plant item briefs, scaffolds and checks."""
+    import json
+
+    from builder import build as build_mod
+
     store = FakeStore()
-    plan = _code_plan("n_401_434")
+    plan = _code_plan("n_413_478")
     plan["code_only"] = False
     plan["items"] = [
         {
@@ -323,40 +325,66 @@ def test_plant_item_fails_loud_and_alone(
             "what": "cloudberry",
             "from": "bilberry",
             "estimate_usd": 0.02,
-        },
-        {
-            "id": "animal_lion",
-            "kind": "animal",
-            "what": "lion",
-            "from": "fox",
-            "estimate_usd": 0.15,
-        },
+        }
     ]
     plan["improve"] = []
-    store.plans["n_401_434"] = plan
+    store.plans["n_413_478"] = plan
     store.build_jobs["j1"] = {
         "format": 1,
-        "tile": "n_401_434",
+        "tile": "n_413_478",
         "budget_usd": 8.0,
         "kind": "build",
         "status": "queued",
-        "items": ["plant_cloudberry", "animal_lion"],
+        "items": ["plant_cloudberry"],
         "visibility": "public",
         "created_by": "admin",
         "progress": [],
         "cost_usd": 0.0,
     }
-    worker = _flow_worker(
-        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
-    )
-    monkeypatch.setattr(worker, "_run_stages", lambda *a, **k: None)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    home_path = worker.world / "homes" / "boreal_forest.json"
+    home = json.loads(home_path.read_text())
+    home["food"] = [{"kind": "berries", "names": ["cloudberry"]}]
+    home_path.write_text(json.dumps(home))
+
+    made: list[str] = []
+
+    class Pipe:
+        def run(self, ctx: Any) -> dict[str, Any]:
+            item_dir = tmp_path / "jobs" / "j1" / "plant_cloudberry"
+            models = item_dir / "models" / "plants"
+            models.mkdir(parents=True)
+            (models / "cloudberry.json").write_text(json.dumps({"id": "cloudberry"}))
+            made.append("cloudberry")
+            return {}
+
+    monkeypatch.setattr(build_mod, "item_pipeline", lambda **k: Pipe())
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
+    assert made == ["cloudberry"]
     assert job["status"] == "checking"
-    assert job["cost_usd"] == 0.0
-    by_id = {e["id"]: e["status"] for e in job["progress"]}
-    assert by_id == {"plant_cloudberry": "failed", "animal_lion": "checking"}
-    assert "waits for plant builds" in capsys.readouterr().err
+    assert job["progress"] == [
+        {
+            "id": "plant_cloudberry",
+            "status": "checking",
+            "report": job["progress"][0]["report"],
+            "cost_usd": 0.0,
+        }
+    ]
+    item_dir = tmp_path / "jobs" / "j1" / "plant_cloudberry"
+    brief = json.loads((item_dir / "home.json").read_text())
+    assert brief["plant"] == "cloudberry"
+    assert brief["names"] == ["cloudberry"]
+    region = json.loads((item_dir / "regions" / "work.json").read_text())
+    assert region["ground_cover"]["plants"] == [
+        {"model": "cloudberry", "names": ["cloudberry"]}
+    ]
+    survey = json.loads((item_dir / "survey.json").read_text())
+    assert survey["facts"] == [{"topic": "plant", "text": "cloudberry grows here"}]
+    assert (
+        store.blobs["review/j1/plant_cloudberry/models/plants/cloudberry.json"]
+        == b'{"id": "cloudberry"}'
+    )
 
 
 def test_build_job_fails_without_its_tile(tmp_path: Path) -> None:

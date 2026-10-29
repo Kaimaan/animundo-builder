@@ -188,6 +188,11 @@ def _missing_food(
     return None
 
 
+def plant_slug(name: str) -> str:
+    """A food name as a plant id: "Arctic Willow" -> "arctic_willow"."""
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
+
 def _missing_find(world: Path, home: dict[str, Any]) -> tuple[str, str] | None:
     """The home's first named plant without a plant file, and its reference.
 
@@ -199,7 +204,7 @@ def _missing_find(world: Path, home: dict[str, Any]) -> tuple[str, str] | None:
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
     for entry in home.get("food", []) or []:
         for name in entry.get("names", []) or []:
-            slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+            slug = plant_slug(name)
             if slug and slug not in have:
                 if not have:
                     raise ValueError("the world has no plants to adapt from")

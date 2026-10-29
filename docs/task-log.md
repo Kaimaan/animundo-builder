@@ -3,6 +3,20 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #102/T30, the README for judges
+
+- T30: `README.md` rewritten for 0038 (the grown-up draft stays
+  out): Try it, the For judges table, How it works, Use of Meta
+  AI, the $0 path with no key, Built during the event, measured
+  costs, Run it yourself, To finish. Every fact checked against
+  this tree: model ids and hosts, stages, contracts, the lab
+  run's counts and globe, grid sources and licences, tags and
+  the first commit. No Muse Image/SAM claims (T85 doesn't fit);
+  no recorded replay (retired with the grown-up builder); only
+  evidenced numbers, the rest [TO FILL].
+- Evidence: `uv run pytest -q` → 643 passed, 12 skipped;
+  every relative link resolves.
+
 ## 2026-10-29: inbox #118 (phase 2, T86 the session logs)
 
 - T86 revised: the logs first landed in `muse-logs/` and were

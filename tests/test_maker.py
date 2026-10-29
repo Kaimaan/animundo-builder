@@ -15,6 +15,7 @@ from builder.prompts import PROMPTS_DIR
 from builder.schemas import ROOT
 from builder.stages.maker import (
     EDITS_FACTORS,
+    NEWSHAPE_ROUNDS,
     AnimalMakerStage,
     HomeMakerStage,
     _choices_files,
@@ -30,6 +31,7 @@ from builder.stages.maker import (
     _measure_errors,
     _measure_spec,
     _measurements,
+    _offered_factors,
     _part_list,
     _pruned_regions,
     _reference_line,
@@ -39,7 +41,9 @@ from builder.stages.maker import (
     _reference_spec,
     _run_adapt,
     _run_adapt_home,
+    _size_errors,
     _size_misses,
+    _sizing_edits,
     _sourced_sizes,
     _Stopped,
     _surroundings_text,
@@ -2346,3 +2350,300 @@ def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:
     assert fix[1]["content"] == first
     assert "nectar" in fix[2]["content"]
     assert "Change only what these problems name" in fix[2]["content"]
+
+
+NEWSHAPE_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "newshape"
+
+CRANE_REF = {
+    "id": "crane",
+    "colors": {"feather": "#999999"},
+    "parts": [
+        {"name": "body"},
+        {"name": "neck"},
+        {"name": "bill_upper"},
+        {"name": "wing_l"},
+    ],
+    "bones": [],
+}
+
+FOX_PARTS_REF = {
+    "id": "fox",
+    "colors": {"fur": "#c4622b"},
+    "parts": [{"name": "body"}, {"name": "muzzle"}, {"name": "tail_1"}],
+    "bones": [],
+}
+
+
+def _adapt_world() -> Path:
+    """The sibling checkout, for the real adapt tool only."""
+    world = ROOT.parent / "animundo-world"
+    if not (world / "tools" / "adapt_model.py").is_file():
+        pytest.skip(f"needs a real world checkout at {world}")
+    return world
+
+
+def _run_sizing(
+    animal: str, tmp_path: Path
+) -> tuple[dict[str, float], dict[str, float]]:
+    """The recorded loop-final spec through real code sizing."""
+    fix = json.loads((NEWSHAPE_FIXTURES / f"{animal}.json").read_text())
+    world = _adapt_world()
+    ref_path = tmp_path / "ref.json"
+    ref_path.write_text(json.dumps(fix["spec"]))
+    sizes_path = tmp_path / "sizes.json"
+    sizes_path.write_text(
+        json.dumps(_sizing_edits(animal, animal, "test", fix["sourced"]))
+    )
+    out_path = tmp_path / "sized.json"
+    adapted = _run_adapt(world, ref_path, sizes_path, out_path)
+    assert adapted["ok"], adapted["log"]
+    sized = json.loads(out_path.read_text())
+    return _measure_spec(sized), fix["sourced"]
+
+
+def test_newshape_sizes_anteater_within_10_percent(tmp_path: Path) -> None:
+    """#132.6: the recorded anteater sizes to its sources."""
+    found, sourced = _run_sizing("giant_anteater", tmp_path)
+    for key in ("length_m", "shoulder_m", "tail_m"):
+        assert abs(found[key] - sourced[key]) / sourced[key] <= 0.10, key
+
+
+def test_newshape_sizes_kangaroo_lists_its_tail(tmp_path: Path) -> None:
+    """#132.2: code sizing saturates on the tail; the miss is listed."""
+    found, sourced = _run_sizing("kangaroo", tmp_path)
+    for key in ("length_m", "shoulder_m"):
+        assert abs(found[key] - sourced[key]) / sourced[key] <= 0.10, key
+    assert "tail_m" in _size_misses(found, sourced)
+    errors = _size_errors(found, sourced)
+    assert any("72 cm" in error and "100 cm" in error for error in errors)
+
+
+def test_sizing_edits_carry_no_factors() -> None:
+    """#132.2: code sizing sends sizes only, never factors."""
+    edits = _sizing_edits("roo", "Kangaroo", "test", {"length_m": 1.4, "tail_m": 1.0})
+    assert edits == {
+        "id": "roo",
+        "name": "Kangaroo",
+        "author": "test",
+        "length_m": 1.4,
+        "tail_m": 1.0,
+    }
+
+
+def _bird_edits_answer(ref: dict[str, Any], **factors: float) -> str:
+    answer: dict[str, Any] = {
+        "colors": {name: "#112233" for name in ref["colors"]},
+        "new_colors": [],
+        "repaint": [],
+        "unmakable": [],
+    }
+    for name in _offered_factors(ref):
+        answer[name] = factors.get(name, 1.0)
+    return json.dumps(answer)
+
+
+def test_heron_edits_offer_bill_and_neck() -> None:
+    """#132.4: a bird reference offers neck, bill and bill depth."""
+    schema = _edits_schema(CRANE_REF)
+    assert_strict_subset(schema)
+    for name in ("neck", "bill", "bill_depth"):
+        assert name in schema["required"]
+    assert schema["properties"]["bill_depth"]["maximum"] == 4.0
+    edits, errors = _edits_files(_bird_edits_answer(CRANE_REF, bill=1.6), CRANE_REF)
+    assert errors == []
+    assert edits is not None
+    assert edits["bill"] == 1.6
+
+
+def test_mammal_edits_offer_no_bill() -> None:
+    """#132.4: a mammal is never asked for a bill."""
+    schema = _edits_schema(FOX_PARTS_REF)
+    for name in ("neck", "bill", "bill_depth"):
+        assert name not in schema["required"]
+    edits, errors = _edits_files(_bird_edits_answer(FOX_PARTS_REF), FOX_PARTS_REF)
+    assert errors == []
+    assert edits is not None
+
+
+def test_model_edits_prompt_names_muzzle_and_bill() -> None:
+    """#132.4: the prompt tells a mammal's face from a bird's."""
+    text = (PROMPTS_DIR / "model_edits.md").read_text(encoding="utf-8")
+    assert "`muzzle` is a mammal's face" in text
+    assert "a bird's is its `bill`" in text
+
+
+def _newshape_target() -> dict[str, Any]:
+    return {
+        "id": "roo",
+        "entry": {"id": "roo", "name": "Kangaroo", "latin": "Macropus rufus"},
+        "start_from": "fox",
+        "prey": False,
+        "size_cm": None,
+        "shape": "new",
+    }
+
+
+def _newshape_research() -> dict[str, Any]:
+    return {
+        "size": {"length_cm": 140},
+        "looks": {"shoulder_cm": 150, "tail_cm": 100},
+    }
+
+
+def test_make_routes_newshape_targets_to_the_loop(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#132.1: `shape: new` loops a free spec; anything else edits."""
+    stage = AnimalMakerStage()
+    calls: list[str] = []
+    monkeypatch.setattr(
+        stage, "_make_model", lambda *a, **k: calls.append("edits") or []
+    )
+    monkeypatch.setattr(
+        stage, "_make_newshape", lambda *a, **k: calls.append("newshape") or []
+    )
+    monkeypatch.setattr(stage, "_save_final", lambda *a, **k: None)
+    (tmp_path / "animals").mkdir()
+    (tmp_path / "animals" / "roo.json").write_text("{}")
+    (tmp_path / "animals" / "lynx.json").write_text("{}")
+    for animal_id in ("roo", "lynx"):
+        passed = tmp_path / "tries" / animal_id / "animal" / "1"
+        passed.mkdir(parents=True)
+        (passed / "errors.json").write_text("[]")
+    ctx = SimpleNamespace(job_dir=tmp_path)
+    stage._make(ctx, tmp_path, {}, {}, {}, _newshape_target(), set())
+    lynx = dict(_newshape_target(), id="lynx", shape=None)
+    stage._make(ctx, tmp_path, {}, {}, {}, lynx, set())
+    assert calls == ["newshape", "edits"]
+
+
+def test_newshape_loop_passes_to_sizing(tmp_path: Path, monkeypatch: Any) -> None:
+    """#132.1: the loop's spec is sized from the sourced numbers."""
+    import builder.stages.maker as maker_module
+
+    world = _world(tmp_path)
+    job = tmp_path / "job"
+    job.mkdir()
+    seen: dict[str, Any] = {}
+
+    class PassingLoop:
+        def __init__(self, **kwargs: Any) -> None:
+            seen.update(kwargs)
+
+        def run(self, ctx: Any) -> dict[str, Any]:
+            assert seen["reference"] == "none"
+            assert seen["max_rounds"] == NEWSHAPE_ROUNDS
+            assert seen["refs"]["roo"]["start"] == "fox"
+            assert seen["refs"]["roo"]["kind"] == "mammal"
+            round_dir = ctx.job_dir / "rounds" / "roo" / "1"
+            round_dir.mkdir(parents=True)
+            (round_dir / "spec.json").write_text("{}")
+            (round_dir / "preview.png").write_bytes(b"png")
+            reviews = ctx.job_dir / "reviews"
+            reviews.mkdir(exist_ok=True)
+            (reviews / "roo-1.json").write_text(json.dumps({"issues": []}))
+            models = ctx.job_dir / "models"
+            models.mkdir(exist_ok=True)
+            fox = json.loads((world / "models" / "fox.json").read_text())
+            fox["id"] = "roo"
+            (models / "roo.json").write_text(json.dumps(fox))
+            return {"model_files": ["models/roo.json"]}
+
+    monkeypatch.setattr(maker_module, "ModelsStage", PassingLoop)
+    fox_spec = json.loads((world / "models" / "fox.json").read_text())
+    found = _measure_spec(fox_spec)
+    research = {
+        "size": {"length_cm": found["length_m"] * 100},
+        "looks": {
+            "shoulder_cm": found["shoulder_m"] * 100,
+            "tail_cm": found["tail_m"] * 100,
+        },
+    }
+
+    def fake_adapt(
+        world: Path, ref: Path, edits_path: Path, out_path: Path
+    ) -> dict[str, Any]:
+        edits = json.loads(edits_path.read_text())
+        assert set(edits) <= {
+            "id",
+            "name",
+            "author",
+            "length_m",
+            "shoulder_m",
+            "tail_m",
+        }
+        assert ref == job / "models" / "roo.json"
+        sized = dict(fox_spec, id="roo")
+        out_path.write_text(json.dumps(sized))
+        return {"ok": True, "log": ""}
+
+    stage = AnimalMakerStage(
+        adapt=fake_adapt,
+        build=lambda sandbox, animal_id: {"ok": True, "log": "BUILT roo"},
+    )
+    ctx = SimpleNamespace(job_dir=job)
+    marks = stage._make_newshape(ctx, world, {}, research, _newshape_target())
+    assert marks == []
+    assert json.loads((job / "species-plan.json").read_text()) == {
+        "species": [{"species": "roo", "decision": "new"}]
+    }
+    survey = json.loads((job / "survey.json").read_text())
+    assert survey["species"][0]["latin"] == "Macropus rufus"
+    measurements = json.loads((job / "measurements" / "roo.json").read_text())
+    assert measurements["reference"] == "none"
+    assert measurements["sourced"]["length_m"] == found["length_m"]
+    checks = json.loads((job / "checks" / "newshape-roo.json").read_text())
+    assert checks["ok"] is True
+    assert checks["results"][0]["problems"] == []
+
+
+def test_newshape_loop_failure_goes_to_review_not_passed(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#132.3: an unpassed loop keeps its last render, marked."""
+    import builder.stages.maker as maker_module
+    from builder.stages.models import _Stopped as LoopStopped
+
+    world = _world(tmp_path)
+    job = tmp_path / "job"
+    job.mkdir()
+
+    class DeadLoop:
+        def __init__(self, **kwargs: Any) -> None:
+            pass
+
+        def run(self, ctx: Any) -> dict[str, Any]:
+            round_dir = ctx.job_dir / "rounds" / "roo" / "1"
+            round_dir.mkdir(parents=True)
+            (round_dir / "preview.png").write_bytes(b"last-render")
+            reviews = ctx.job_dir / "reviews"
+            reviews.mkdir(exist_ok=True)
+            (reviews / "roo-1.json").write_text(
+                json.dumps(
+                    {
+                        "issues": [
+                            {
+                                "severity": "blocking",
+                                "part": "tail",
+                                "problem": "too short",
+                                "fix": "lengthen",
+                            }
+                        ]
+                    }
+                )
+            )
+            raise LoopStopped("still failing after 3 rounds")
+
+    monkeypatch.setattr(maker_module, "ModelsStage", DeadLoop)
+    stage = AnimalMakerStage()
+    ctx = SimpleNamespace(job_dir=job)
+    marks = stage._make_newshape(
+        ctx, world, {}, _newshape_research(), _newshape_target()
+    )
+    assert marks == ["tail: too short (fix: lengthen)"]
+    assert (job / "models" / "roo.png").read_bytes() == b"last-render"
+    assert not (job / "models" / "roo.json").is_file()
+    checks = json.loads((job / "checks" / "newshape-roo.json").read_text())
+    assert checks["ok"] is False
+    assert checks["results"][0]["status"] == "not passed"
+    assert checks["results"][0]["problems"] == marks

@@ -3,6 +3,39 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #132, D19 a new reference once per body plan
+
+- D19: an animal whose list entry has `"shape": "new"` loops a
+  free spec with `ModelsStage(reference="none")` (at most 3
+  rounds, the world's checks on every one) instead of the edits
+  call. The loop gets the closest spec, the sourced numbers and
+  the research's looks, and the kind (bird or mammal) from the
+  start spec's wing parts. Every other animal keeps the edits
+  call. The list has no `shape` yet (the reviewer's T94); until
+  then nothing routes here.
+- Once a round passes, the spec is written as the reference and
+  code sizes it with only length, shoulder and tail from the
+  sourced numbers: no factors, no AI call. Then it builds, and
+  the size checks run without the leg-to-body ratio. What still
+  misses (the lab's kangaroo tail, 72cm of 100) goes to review
+  with the misses listed, not to a fix call. A loop with no
+  passing round keeps its last render, marked "not passed" with
+  the reviewer's blocking issues, for the person to decide.
+- Bird references offer `neck`, `bill` and `bill_depth` (to 4.0)
+  when their parts have those names; a mammal is never asked for
+  a bill, and the tool refuses one on a reference with none. The
+  `model_edits` prompt says the muzzle is a mammal's face and
+  the bill a bird's. No `drop`, no word-to-mark mapping, no
+  sheets for models; the optional report sheet stays out.
+- No live model calls were made: the kangaroo and giant anteater
+  sizing runs replay the lab's loop-final specs through the real
+  adapt tool ($0). The anteater lands within 10% on all three
+  sizes; the kangaroo's length and shoulder do, and its tail is
+  asserted listed at 72 of 100cm.
+- Evidence: `uv run pytest -q` → 680 passed, 12 skipped;
+  `ruff check` + `format --check` clean; `gitleaks git` clean;
+  `builder check --world` skeleton on.
+
 ## 2026-10-29: inbox #131, D18 tile species from Muse Spark
 
 - D18: `make_tile` takes its species from one Muse Spark call per

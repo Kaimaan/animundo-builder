@@ -43,7 +43,14 @@ from ..world import check_draft, problems_by_file
 from . import animals as animal_writers
 from .capability import NotPossibleError
 from .home import refresh_welcome
-from .models import _ensure_sandbox, build_in_sandbox
+from .models import (
+    ModelsStage,
+    _ensure_sandbox,
+    build_in_sandbox,
+)
+from .models import (
+    _Stopped as _LoopStopped,
+)
 from .species_plan import SpeciesPlanStage, animal_file
 
 #: Tries per thing: the write, then at most one fix round.
@@ -59,6 +66,25 @@ EDITS_FACTORS = (
     "body_girth",
     "tail_width",
 )
+
+#: Bird factors the tool has: offered only when the start spec has
+#: parts with those names, so a mammal is never asked for a bill.
+EDITS_BIRD_FACTORS = ("neck", "bill", "bill_depth")
+
+#: The free-spec loop's rounds for a `newshape` animal (D19).
+NEWSHAPE_ROUNDS = 3
+
+
+def _offered_factors(ref: dict[str, Any]) -> tuple[str, ...]:
+    """The base factors plus the bird ones this reference can take."""
+    names = [part.get("name", "") for part in ref.get("parts", [])]
+    extra = tuple(
+        factor
+        for factor in EDITS_BIRD_FACTORS
+        if any(name.startswith(factor.split("_")[0]) for name in names)
+    )
+    return EDITS_FACTORS + extra
+
 
 #: Tree shapes the game draws without a spec.
 TREE_SHAPES = ("spruce", "pine", "birch", "round", "rowan")
@@ -117,11 +143,13 @@ class AnimalMakerStage:
         chat: Any | None = None,
         build: Any | None = None,
         adapt: Any | None = None,
+        check: Any | None = None,
     ) -> None:
         self.author = author
         self._chat = chat
         self._build = build or build_in_sandbox
         self._adapt = adapt or _run_adapt
+        self._check = check
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -296,13 +324,17 @@ class AnimalMakerStage:
 
         Two calls instead of one combined one: the animal file
         first, then the edits the world's adapt tool turns into
-        the spec. Returns the id and the marks the tool can't
+        the spec. A `newshape` animal instead loops a free spec
+        (D19). Returns the id and the marks the tool can't
         make yet.
         """
         animal_id = target["id"]
         if not _animal_passed(ctx.job_dir, animal_id):
             self._make_animal(ctx, world, brief, research, region, target, excused)
-        marks = self._make_model(ctx, world, brief, research, target)
+        if target.get("shape") == "new":
+            marks = self._make_newshape(ctx, world, brief, research, target)
+        else:
+            marks = self._make_model(ctx, world, brief, research, target)
         self._save_final(ctx, world, animal_id)
         return animal_id, marks
 
@@ -598,6 +630,240 @@ class AnimalMakerStage:
             )
         return [error for error in errors if "model file not found" not in error]
 
+    def _make_newshape(
+        self,
+        ctx: Any,
+        world: Path,
+        brief: dict[str, Any],
+        research: dict[str, Any],
+        target: dict[str, Any],
+    ) -> list[str]:
+        """The model from the free-spec loop, then code sizing (D19).
+
+        A `newshape` animal's `start_from` is only the closest
+        spec: the loop adapts it freely, checked by the world's
+        checks on every round, and code sizes the passed spec to
+        the sourced numbers with no factors and no AI call. The
+        leg-to-body check is skipped: upright animals fail it by
+        shape, not by error. Misses and an unpassed loop go to
+        review listed, never to a fix call.
+        """
+        animal_id = target["id"]
+        start_from = target["start_from"]
+        ref = _reference_spec(world, start_from)
+        if ref is None:
+            raise _Stopped(
+                f"{animal_id}: no reference spec {start_from!r} to adapt; "
+                "a person picks one"
+            )
+        self._write_newshape_inputs(ctx, world, research, target)
+        winged = any(
+            part.get("name", "").startswith("wing") for part in ref.get("parts", [])
+        )
+        line = _reference_row(world, start_from, target["entry"].get("name", animal_id))
+        refs = {
+            animal_id: {
+                "start": start_from,
+                "change": line[1] if line else "",
+                "kind": "bird" if winged else "mammal",
+            }
+        }
+        stage = ModelsStage(
+            reference="none",
+            refs=refs,
+            author=self.author,
+            max_rounds=NEWSHAPE_ROUNDS,
+            chat=self._chat,
+            build=self._build,
+            check=self._check,
+        )
+        try:
+            stage.run(ctx)
+        except _LoopStopped as error:
+            rounds = ctx.job_dir / "rounds" / animal_id
+            if not rounds.is_dir() or not any(rounds.iterdir()):
+                raise
+            return self._newshape_not_passed(ctx, animal_id, error)
+        return self._newshape_size(ctx, world, research, target)
+
+    def _write_newshape_inputs(
+        self,
+        ctx: Any,
+        world: Path,
+        research: dict[str, Any],
+        target: dict[str, Any],
+    ) -> None:
+        """The loop's inputs: the plan, the looks, the sourced numbers."""
+        entry = target["entry"]
+        animal_id = target["id"]
+        (ctx.job_dir / "species-plan.json").write_text(
+            json.dumps({"species": [{"species": animal_id, "decision": "new"}]}),
+            encoding="utf-8",
+        )
+        (ctx.job_dir / "survey.json").write_text(
+            json.dumps(
+                {
+                    "species": [
+                        {
+                            "species": animal_id,
+                            "latin": entry.get("latin", ""),
+                            "description": _description(entry, research, target),
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        measurements = ctx.job_dir / "measurements"
+        measurements.mkdir(parents=True, exist_ok=True)
+        (measurements / f"{animal_id}.json").write_text(
+            json.dumps(
+                {
+                    "species": animal_id,
+                    "reference": "none",
+                    "sourced": _sourced_sizes(research, target),
+                    "measured": None,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _newshape_not_passed(
+        self, ctx: Any, animal_id: str, error: Exception
+    ) -> list[str]:
+        """The last render goes to review, marked not passed (D19).
+
+        The report's rounds already show every review; the checks
+        file marks the verdict, and the blocking issues return as
+        marks so the unmakable lines list them too.
+        """
+        job = ctx.job_dir
+        rounds = job / "rounds" / animal_id
+        previews = (
+            sorted(rounds.glob("*/preview.png"), key=lambda p: int(p.parent.name))
+            if rounds.is_dir()
+            else []
+        )
+        blocking: list[str] = []
+        if previews:
+            models = job / "models"
+            models.mkdir(parents=True, exist_ok=True)
+            (models / f"{animal_id}.png").write_bytes(previews[-1].read_bytes())
+            review_path = (
+                job / "reviews" / f"{animal_id}-{previews[-1].parent.name}.json"
+            )
+            if review_path.is_file():
+                review = json.loads(review_path.read_text(encoding="utf-8"))
+                blocking = [
+                    f"{issue.get('part')}: {issue.get('problem')} "
+                    f"(fix: {issue.get('fix')})"
+                    for issue in review.get("issues", [])
+                    if issue.get("severity") == "blocking"
+                ]
+        if not blocking:
+            blocking = [f"the loop stopped: {error}"]
+        checks = job / "checks"
+        checks.mkdir(parents=True, exist_ok=True)
+        (checks / f"newshape-{animal_id}.json").write_text(
+            json.dumps(
+                {
+                    "ok": False,
+                    "results": [
+                        {
+                            "check": "newshape",
+                            "status": "not passed",
+                            "reason": (
+                                f"no round passed in {NEWSHAPE_ROUNDS} rounds; "
+                                "a person decides"
+                            ),
+                            "problems": blocking,
+                        }
+                    ],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return blocking
+
+    def _newshape_size(
+        self,
+        ctx: Any,
+        world: Path,
+        research: dict[str, Any],
+        target: dict[str, Any],
+    ) -> list[str]:
+        """Code sizing for the passed spec: sourced sizes only (D19).
+
+        The loop's spec becomes the reference; adapt runs on it
+        with only length, shoulder and tail from the sourced
+        numbers. Then it builds, and the size checks run without
+        the leg-to-body ratio. What still misses goes to review
+        listed; the adapt or the build failing is breakage, loud.
+        """
+        animal_id = target["id"]
+        spec_path = ctx.job_dir / "models" / f"{animal_id}.json"
+        sourced = _sourced_sizes(research, target)
+        sizes = _sizing_edits(
+            animal_id, target["entry"].get("name", animal_id), self.author, sourced
+        )
+        folder = ctx.job_dir / "tries" / animal_id / "newshape" / "1"
+        folder.mkdir(parents=True, exist_ok=True)
+        sizes_path = folder / "sizes.json"
+        sizes_path.write_text(json.dumps(sizes, indent=2), encoding="utf-8")
+        sized_path = folder / "spec.json"
+        adapted = self._adapt(world, spec_path, sizes_path, sized_path)
+        if not adapted["ok"]:
+            raise _Stopped(f"{animal_id}: the sizing adapt refused: {adapted['log']}")
+        sized = json.loads(sized_path.read_text(encoding="utf-8"))
+        self._place_spec(ctx, world, animal_id, sized)
+        sandbox = _ensure_sandbox(ctx.job_dir, world)
+        built = self._build(sandbox, animal_id)
+        (folder / "build.log").write_text(built["log"], encoding="utf-8")
+        if not built["ok"] and not built["log"].strip():
+            raise _Stopped(
+                f"{animal_id}: the build failed with no output: Blender itself "
+                "did not run here, not the spec. A person looks."
+            )
+        if not built["ok"]:
+            raise _Stopped(f"{animal_id}: the sized build failed: {built['log']}")
+        self._collect_built(ctx, sandbox, animal_id)
+        found = _measure_spec(sized)
+        errors = _size_errors(found, sourced)
+        checks = ctx.job_dir / "checks"
+        checks.mkdir(parents=True, exist_ok=True)
+        (checks / f"newshape-{animal_id}.json").write_text(
+            json.dumps(
+                {
+                    "ok": True,
+                    "results": [
+                        {
+                            "check": "sizes",
+                            "status": "pass",
+                            "reason": "code sizing from the sourced numbers",
+                            "problems": errors,
+                        }
+                    ],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return errors
+
+    def _collect_built(self, ctx: Any, sandbox: Path, animal_id: str) -> None:
+        """The built model and preview, from the sandbox to the job."""
+        for name, rel in (
+            (f"{animal_id}.glb", Path("assets") / "animals" / f"{animal_id}.glb"),
+            (f"{animal_id}.png", Path("models") / "previews" / f"{animal_id}.png"),
+        ):
+            src = sandbox / rel
+            if src.is_file():
+                dest = ctx.job_dir / "models" / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(src.read_bytes())
+
     def _adapt_build_place(
         self,
         ctx: Any,
@@ -673,15 +939,7 @@ class AnimalMakerStage:
                 f"{animal_id}: the build failed with no output: Blender itself "
                 "did not run here, not the spec. A person looks."
             )
-        for name, rel in (
-            (f"{animal_id}.glb", Path("assets") / "animals" / f"{animal_id}.glb"),
-            (f"{animal_id}.png", Path("models") / "previews" / f"{animal_id}.png"),
-        ):
-            src = sandbox / rel
-            if src.is_file():
-                dest = ctx.job_dir / "models" / name
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(src.read_bytes())
+        self._collect_built(ctx, sandbox, animal_id)
         errors = [] if built["ok"] else [f"the build failed: {built['log']}"]
         errors += _verdict_errors(
             _verdicts(world, ctx, animal_id, "edits", attempt), ("models",), animal_id
@@ -895,6 +1153,7 @@ def _all_targets(
                 "prey": True,
                 "size_cm": prey.get("size_cm"),
                 "looks": prey_looks,
+                "shape": match.get("shape"),
             }
         )
     if minset.get("make_animal"):
@@ -911,6 +1170,7 @@ def _all_targets(
                 "start_from": start_from,
                 "prey": False,
                 "size_cm": None,
+                "shape": entry.get("shape"),
             }
         )
     return targets
@@ -1471,11 +1731,21 @@ def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:
 
 
 def _run_adapt(
-    world: Path, start_from: str, edits_path: Path, out_path: Path
+    world: Path, start_from: str | Path, edits_path: Path, out_path: Path
 ) -> dict[str, Any]:
-    """The world's adapt tool: reference plus edits become the spec."""
+    """The world's adapt tool: reference plus edits become the spec.
+
+    The reference is a list id, or (for `newshape` sizing) the
+    loop's spec file itself.
+    """
     tool = world / "tools" / "adapt_model.py"
-    ref = _reference_path(world, start_from) or world / "models" / f"{start_from}.json"
+    if isinstance(start_from, Path):
+        ref = start_from
+    else:
+        ref = (
+            _reference_path(world, start_from)
+            or world / "models" / f"{start_from}.json"
+        )
     try:
         done = subprocess.run(
             [
@@ -1501,18 +1771,21 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
 
     Colours and part names come from the reference spec itself,
     so the answer can only name what exists; factors stay in the
-    tool's 0.4–2.5. Every key required, nothing extra, flat.
+    tool's 0.4–2.5 (bill depth to 4.0). Bird factors join only
+    when the reference has such parts. Every key required,
+    nothing extra, flat.
     """
     colours = list(ref.get("colors", {}))
     parts = [part["name"] for part in ref.get("parts", []) if "name" in part]
+    offered = _offered_factors(ref)
     factors = {
         name: {
             "type": "number",
             "minimum": 0.4,
-            "maximum": 2.5,
+            "maximum": 4.0 if name == "bill_depth" else 2.5,
             "description": f"{name}, 1 meaning as the reference",
         }
-        for name in EDITS_FACTORS
+        for name in offered
     }
     return {
         "type": "object",
@@ -1520,7 +1793,7 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
         "required": [
             "colors",
             "new_colors",
-            *EDITS_FACTORS,
+            *offered,
             "repaint",
             "unmakable",
         ],
@@ -1592,7 +1865,7 @@ def _edits_files(
         return None, [f"not JSON: {error}"]
     if not isinstance(edits, dict):
         return None, ["reply with the edits as one JSON object"]
-    want = {"colors", "repaint", "unmakable", *EDITS_FACTORS}
+    want = {"colors", "repaint", "unmakable", *_offered_factors(ref)}
     missing = sorted(want - set(edits))
     if missing:
         return None, [f"the edits leave out {', '.join(missing)}"]
@@ -1662,6 +1935,17 @@ def _edits_sizes(research: dict[str, Any], target: dict[str, Any]) -> dict[str, 
     if research.get("looks"):
         sizes.update(_looks_sizes(research["looks"]))
     return sizes
+
+
+def _sizing_edits(
+    animal_id: str, name: str, author: str, sourced: dict[str, float]
+) -> dict[str, Any]:
+    """Sizes-only edits for code sizing: no factors, no AI call."""
+    edits: dict[str, Any] = {"id": animal_id, "name": name, "author": author}
+    for key in ("length_m", "shoulder_m", "tail_m"):
+        if key in sourced:
+            edits[key] = sourced[key]
+    return edits
 
 
 def _sourced_sizes(

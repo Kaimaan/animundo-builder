@@ -37,6 +37,11 @@ The schema arrives with the call; its shape:
   front of the eyes), `ears`, `leg_thickness` (legs' width,
   never length), `paws` (the lowest part of each leg),
   `body_girth` (the body's width and depth), `tail_width`.
+  `muzzle` is a mammal's face; a bird's is its `bill`. A bird
+  reference offers three more, only when the schema names them:
+  `neck` (the neck's length; the head rides along), `bill` (the
+  bill's length from the head), `bill_depth` (the bill's height,
+  to 4).
 - `repaint`: parts to paint another colour, as
   `{"part", "color"}` with the part and colour names above.
 - `unmakable`: marks the animal has that no edit above can

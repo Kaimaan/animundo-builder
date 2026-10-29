@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -343,6 +344,74 @@ def _real_world() -> Path | None:
     if not (world / "tools" / "check_draft.py").is_file():
         return None
     return world
+
+
+def _fake_glb() -> bytes:
+    """A .glb the checks can read: skeleton, mesh, clips, no geometry."""
+    import struct
+
+    gltf = json.dumps(
+        {
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [{"count": 300}],
+            "nodes": [{"mesh": 0}],
+            "skins": [{"joints": [0]}],
+            "animations": [
+                {"name": clip} for clip in ("idle", "walk", "run", "eat", "sleep")
+            ],
+        }
+    ).encode()
+    return (
+        b"glTF"
+        + struct.pack("<II", 2, 12 + 8 + len(gltf))
+        + struct.pack("<I", len(gltf))
+        + b"JSON"
+        + gltf
+    )
+
+
+def _world_without_built_models(tmp_path: Path, real: Path) -> Path:
+    """A fresh clone: everything committed, no .glb, built mode forced on."""
+
+    def prune(path: str, names: list[str]) -> list[str]:
+        return [
+            name
+            for name in names
+            if name == ".git" or name == "__pycache__" or name.endswith(".glb")
+        ]
+
+    world = tmp_path / "world"
+    shutil.copytree(real, world, ignore=prune)
+    (world / "animals" / "herring_gull.json").unlink()
+    (world / "models" / "herring_gull.json").unlink()
+    other = world / "assets" / "animals" / "other.glb"
+    other.parent.mkdir(parents=True, exist_ok=True)
+    other.write_bytes(_fake_glb())
+    return world
+
+
+def test_take_lays_the_built_model_for_the_check(tmp_path: Path) -> None:
+    """#140.2: the bundle's .glb satisfies the check, not the world's."""
+    real = _real_world()
+    if real is None:
+        pytest.skip("needs a real world checkout")
+    if not (real / "animals" / "herring_gull.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed gull")
+    world = _world_without_built_models(tmp_path, real)
+    store = FakeStore()
+    store.write_blob(
+        "review/j1/animal_1/animals/herring_gull.json",
+        (real / "animals" / "herring_gull.json").read_bytes(),
+    )
+    store.write_blob(
+        "review/j1/animal_1/models/herring_gull.json",
+        (real / "models" / "herring_gull.json").read_bytes(),
+    )
+    store.write_blob("review/j1/animal_1/models/herring_gull.glb", _fake_glb())
+    dest = build_mod.take_bundle(store, "j1", tmp_path)
+    problems = build_mod.check_draft(dest / "animal_1", world)
+    assert problems == []
+    assert (dest / "animal_1" / "assets" / "animals" / "herring_gull.glb").is_file()
 
 
 def test_take_files_pass_draft_check(tmp_path: Path) -> None:

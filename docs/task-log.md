@@ -3,6 +3,18 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #140, take lays the built model for the check (2)
+
+- `take` failed its own draft check on the built `.glb`:
+  the job collects it under `models/`, the world's check
+  wants it at `assets/animals/`. Take now lays the
+  bundle's `.glb` files there before checking, from what
+  it downloaded, never required from the world path (the
+  world never commits `.glb`).
+- Evidence: a take against a `.glb`-less world passes
+  with the laid model, and fails without it exactly as
+  production did; suite, ruff, gitleaks.
+
 ## 2026-10-29: inbox #140, the tile maker takes the reviewed sea home (1)
 
 - `home_for_cell` took only the home literally named `sea`

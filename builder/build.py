@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -432,10 +433,28 @@ def take_bundle(store: Any, job_id: str, out_dir: Path) -> Path:
     return dest
 
 
+def _lay_built_models(bundle_dir: Path) -> None:
+    """The bundle's built models where the draft check looks (#140.2).
+
+    The job collects each built .glb under models/; the world's
+    check wants it at assets/animals/. Laid from the bundle the
+    take downloaded, never required from the world path (the world
+    never commits .glb). Existing files stay put.
+    """
+    dest = bundle_dir / "assets" / "animals"
+    for built in sorted((bundle_dir / "models").glob("*.glb")):
+        target = dest / built.name
+        if target.is_file():
+            continue
+        dest.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(built, target)
+
+
 def check_draft(bundle_dir: Path, world: Path) -> list[str]:
     """The world's draft check over a taken item; problems, [] when clean."""
     from .world import DRAFT_TIMEOUT
 
+    _lay_built_models(bundle_dir)
     tool = world / "tools" / "check_draft.py"
     if not tool.is_file():
         raise ValueError(f"no draft check in {world}")

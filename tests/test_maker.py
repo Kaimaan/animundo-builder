@@ -329,7 +329,11 @@ def _build_ok(sandbox: Path, spec: str) -> dict[str, Any]:
     (sandbox / "assets" / "animals" / f"{spec}.glb").write_bytes(b"glb-bytes")
     (sandbox / "models" / "previews").mkdir(parents=True, exist_ok=True)
     (sandbox / "models" / "previews" / f"{spec}.png").write_bytes(b"png-bytes")
-    return {"ok": True, "summary": f"{spec}: built", "log": f"BUILT {spec}: ok"}
+    log = (
+        f"BUILT {spec}: ok\n"
+        f'  for animals/{spec}.json: "length": 0.233 (real size), "yaw": 0.0'
+    )
+    return {"ok": True, "summary": f"{spec}: built", "log": log}
 
 
 def _adapt_ok(
@@ -370,8 +374,21 @@ def _animal_answer(animal_id: str, **overrides: Any) -> str:
         "latin": "X y",
         "diet": ["grass"],
         "text": {"title": "T"},
+        "model": {
+            "file": f"res://assets/animals/{animal_id}.glb",
+            "length": 0.61,
+            "yaw": 0.0,
+            "anims": {"idle": "idle"},
+        },
     }
     animal.update(overrides)
+    return json.dumps(animal)
+
+
+def _nameless_answer(animal_id: str) -> str:
+    """An animal answer missing `name`: the checker's schema error."""
+    animal = json.loads(_animal_answer(animal_id))
+    del animal["name"]
     return json.dumps(animal)
 
 
@@ -487,8 +504,8 @@ def test_fix_round_repairs_check_errors(tmp_path: Path) -> None:
     _inputs(tmp_path)
     client = ScriptClient(
         [
-            _animal_answer("lynx", diet=["nectar"]),
-            _animal_answer("lynx", diet=["grass"]),
+            _nameless_answer("lynx"),
+            _animal_answer("lynx"),
             _edits_answer(),
         ]
     )
@@ -496,7 +513,7 @@ def test_fix_round_repairs_check_errors(tmp_path: Path) -> None:
     assert result["animal_files"] == ["animals/lynx.json"]
     assert len(client.prompts) == 3
     assert "Change only what these problems name" in client.prompts[1]
-    assert "nectar" in client.prompts[1]
+    assert "'name' is a required property" in client.prompts[1]
     assert (tmp_path / "tries" / "lynx" / "animal" / "2" / "answer.json").is_file()
 
 
@@ -514,8 +531,8 @@ def test_still_failing_stops_for_a_person(tmp_path: Path) -> None:
     _inputs(tmp_path)
     client = ScriptClient(
         [
-            _animal_answer("lynx", diet=["nectar"]),
-            _animal_answer("lynx", diet=["nectar"]),
+            _nameless_answer("lynx"),
+            _nameless_answer("lynx"),
         ]
     )
     with pytest.raises(_Stopped, match="its file still failing"):
@@ -583,6 +600,12 @@ def _real_answer(animal_id: str, latin: str, key: int) -> str:
                     "winter": "Dry grass.",
                 },
             },
+            "model": {
+                "file": f"res://assets/animals/{animal_id}.glb",
+                "length": 0.61,
+                "yaw": 0.0,
+                "anims": {"idle": "idle"},
+            },
         }
     )
 
@@ -596,7 +619,11 @@ def _build_real_glb(sandbox: Path, spec: str) -> dict[str, Any]:
     previews = sandbox / "models" / "previews"
     previews.mkdir(parents=True, exist_ok=True)
     (previews / f"{spec}.png").write_bytes(b"png-bytes")
-    return {"ok": True, "summary": f"{spec}: built", "log": f"BUILT {spec}: ok"}
+    log = (
+        f"BUILT {spec}: ok\n"
+        f'  for animals/{spec}.json: "length": 0.233 (real size), "yaw": 0.0'
+    )
+    return {"ok": True, "summary": f"{spec}: built", "log": log}
 
 
 def _recast_region(tmp_path: Path) -> None:
@@ -843,6 +870,7 @@ def test_resume_skips_a_passed_animal_file(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())
     placed = json.loads(_animal_answer("capybara"))
+    placed["model"]["length"] = 0.233
     (tmp_path / "animals").mkdir()
     (tmp_path / "animals" / "capybara.json").write_text(json.dumps(placed))
     attempt = tmp_path / "tries" / "capybara" / "animal" / "1"
@@ -1007,8 +1035,8 @@ def test_hunter_keeps_its_preys_tags_through_the_fix_round(
     path.write_text(json.dumps(region), encoding="utf-8")
     client = ScriptClient(
         [
-            _animal_answer("lynx", diet=["lichen"]),
-            _animal_answer("lynx", diet=["grass"], hunts=[]),
+            _nameless_answer("lynx"),
+            _animal_answer("lynx", hunts=[]),
             _edits_answer(),
         ]
     )
@@ -1016,6 +1044,94 @@ def test_hunter_keeps_its_preys_tags_through_the_fix_round(
     assert len(client.prompts) == 3
     made = json.loads((tmp_path / "animals" / "lynx.json").read_text())
     assert made["hunts"] == ["mammal", "rodent"]
+
+
+def _gull_research(tmp_path: Path) -> None:
+    """Mussels and fish over a sea region: the herring gull's case."""
+    research = json.loads((tmp_path / "research.json").read_text(encoding="utf-8"))
+    research["main_food"] = {"name": "blue mussels", "kind": "bottom_bugs"}
+    research["other_foods"] = [{"name": "fish", "kind": "prey", "size_cm": 20}]
+    (tmp_path / "research.json").write_text(json.dumps(research))
+    path = next((tmp_path / "regions").glob("*.json"))
+    region = json.loads(path.read_text(encoding="utf-8"))
+    region["food"].append({"kind": "bottom_bugs"})
+    path.write_text(json.dumps(region), encoding="utf-8")
+
+
+def test_diet_comes_from_the_research(tmp_path: Path) -> None:
+    """#140.3: mussels and fish mean bottom_bugs, not the model's berries."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    _gull_research(tmp_path)
+    client = ScriptClient(
+        [_animal_answer("lynx", diet=["berries"]), _edits_answer()]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    made = json.loads((tmp_path / "animals" / "lynx.json").read_text())
+    assert made["diet"] == ["bottom_bugs"]
+
+
+def test_pure_hunter_gets_an_empty_diet(tmp_path: Path) -> None:
+    """#140.3: all prey in the research, nothing in the diet."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    research = json.loads((tmp_path / "research.json").read_text(encoding="utf-8"))
+    research["other_foods"] = []
+    (tmp_path / "research.json").write_text(json.dumps(research))
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    _stage().run(_ctx(tmp_path, world, client))
+    made = json.loads((tmp_path / "animals" / "lynx.json").read_text())
+    assert made["diet"] == []
+
+
+def test_prey_keeps_the_models_diet(tmp_path: Path) -> None:
+    """#140.3: the research is the hunter's; its prey keeps its own diet."""
+    world = _world(tmp_path)
+    _inputs(tmp_path, minset=_minset_with_prey())
+    client = ScriptClient(
+        [
+            _animal_answer("capybara", diet=["grass"]),
+            _edits_answer(),
+            _animal_answer("lynx"),
+            _edits_answer(),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    made = json.loads((tmp_path / "animals" / "capybara.json").read_text())
+    assert made["diet"] == ["grass"]
+    hunter = json.loads((tmp_path / "animals" / "lynx.json").read_text())
+    assert hunter["diet"] == ["berries"]
+
+
+def test_length_comes_from_the_build(tmp_path: Path) -> None:
+    """#140.3: the file's length is the build's measurement, not 0.61."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient(
+        [
+            _animal_answer("lynx", box=[0.45, 0.45, 0.65]),
+            _edits_answer(),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    made = json.loads((tmp_path / "animals" / "lynx.json").read_text())
+    assert made["model"]["length"] == 0.233
+    assert made["box"] == [0.45, 0.45, 0.65]
+
+
+def test_build_without_a_measured_length_stops(tmp_path: Path) -> None:
+    """#140.3: a good build with no length line is a person, not a retry."""
+
+    def _build_silent(sandbox: Path, spec: str) -> dict[str, Any]:
+        (sandbox / "assets" / "animals").mkdir(parents=True, exist_ok=True)
+        (sandbox / "assets" / "animals" / f"{spec}.glb").write_bytes(b"glb-bytes")
+        return {"ok": True, "log": f"BUILT {spec}: ok"}
+
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    with pytest.raises(_Stopped, match="no measured length"):
+        _stage(build=_build_silent).run(_ctx(tmp_path, world, client))
 
 
 def test_hunter_stops_when_its_prey_is_not_seated(tmp_path: Path) -> None:
@@ -2568,10 +2684,8 @@ def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:
     """#59: user (first prompt), assistant (its answer), user (fixes)."""
     world = _world(tmp_path)
     _inputs(tmp_path)
-    first = _animal_answer("lynx", diet=["nectar"])
-    client = ScriptClient(
-        [first, _animal_answer("lynx", diet=["grass"]), _edits_answer()]
-    )
+    first = _nameless_answer("lynx")
+    client = ScriptClient([first, _animal_answer("lynx"), _edits_answer()])
     _stage().run(_ctx(tmp_path, world, client))
     assert len(client.calls) == 3
     assert client.calls[0] == [
@@ -2581,7 +2695,7 @@ def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:
     assert [message["role"] for message in fix] == ["user", "assistant", "user"]
     assert fix[0] == client.calls[0][0]
     assert fix[1]["content"] == first
-    assert "nectar" in fix[2]["content"]
+    assert "'name' is a required property" in fix[2]["content"]
     assert "Change only what these problems name" in fix[2]["content"]
 
 

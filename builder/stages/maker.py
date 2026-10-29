@@ -360,6 +360,7 @@ class AnimalMakerStage:
             if not target["prey"]
             else []
         )
+        diet = None if target["prey"] else _code_diet(research)
         prompt = self._animal_prompt(world, brief, research, region, target)
         errors: list[str] | None = None
         previous: str | None = None
@@ -371,6 +372,8 @@ class AnimalMakerStage:
             if files is not None:
                 if hunts:
                     files["animal"]["hunts"] = hunts
+                if diet is not None:
+                    files["animal"]["diet"] = diet
                 self._place_animal(ctx, animal_id, files)
                 file_errors = self._check_animal(
                     world, ctx, animal_id, attempt, excused
@@ -944,6 +947,8 @@ class AnimalMakerStage:
                 f"{animal_id}: the build failed with no output: Blender itself "
                 "did not run here, not the spec. A person looks."
             )
+        if built["ok"]:
+            self._write_measured_length(ctx, animal_id, built["log"])
         self._collect_built(ctx, sandbox, animal_id)
         errors = [] if built["ok"] else [f"the build failed: {built['log']}"]
         errors += _verdict_errors(
@@ -953,6 +958,33 @@ class AnimalMakerStage:
             json.dumps(errors, indent=2), encoding="utf-8"
         )
         return errors
+
+    def _write_measured_length(
+        self, ctx: Any, animal_id: str, log: str
+    ) -> None:
+        """The file's game length, from the build's measurement (#140.3).
+
+        The build prints what `animals/{id}.json` carries; the
+        model's guess never stands. A good build with no line
+        means the world's script changed under us: a person
+        looks, no fix round can help.
+        """
+        measured = _measured_length(log, animal_id)
+        if measured is None:
+            raise _Stopped(
+                f"{animal_id}: the build printed no measured length; "
+                "a person looks"
+            )
+        path = ctx.job_dir / "animals" / f"{animal_id}.json"
+        try:
+            animal = json.loads(path.read_text(encoding="utf-8"))
+            animal["model"]["length"] = measured
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise _Stopped(
+                f"{animal_id}: cannot write the measured length: {error}; "
+                "a person looks"
+            ) from error
+        path.write_text(json.dumps(animal, indent=2), encoding="utf-8")
 
     def _save_try(
         self,
@@ -2191,6 +2223,36 @@ def _unfence(answer: str) -> str:
     text = answer.strip()
     match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     return match.group(1) if match else text
+
+
+def _code_diet(research: dict[str, Any]) -> list[str]:
+    """The animal's diet, from its research's foods (#140.3).
+
+    Every food's kind in order, deduped, except `prey`: hunted
+    animals become `hunts` through `_code_hunts`, never diet. A
+    gull over mussels and fish eats `bottom_bugs`, the way the
+    review wrote it; the model's own diet never stands.
+    """
+    kinds: list[str] = []
+    foods = [research.get("main_food") or {}]
+    foods.extend(research.get("other_foods") or [])
+    for food in foods:
+        kind = food.get("kind") if isinstance(food, dict) else None
+        if kind and kind != "prey" and kind not in kinds:
+            kinds.append(kind)
+    return kinds
+
+
+#: The build's measured game length, per animal it builds.
+_MEASURED_RE = (
+    r"for animals/{id}\.json:\s*\"length\":\s*([0-9]+\.[0-9]+)\s*\(real size\)"
+)
+
+
+def _measured_length(log: str, animal_id: str) -> float | None:
+    """The build log's measured length for one animal (#140.3)."""
+    match = re.search(_MEASURED_RE.format(id=re.escape(animal_id)), log)
+    return float(match.group(1)) if match else None
 
 
 class HomeMakerStage:

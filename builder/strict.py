@@ -187,6 +187,19 @@ class Research(_Strict):
     looks: Looks
 
 
+class HabitatResearch(_Strict):
+    """One habitat's research: the foods and surroundings a home needs."""
+
+    main_food: Food = Field(description="What animals here eat most")
+    other_foods: list[Food] = Field(description="Up to 3 more foods eaten here")
+    surroundings: list[Surrounding] = Field(
+        description="3 to 7 things here: trees, plants, ground, water"
+    )
+    sources: list[str] = Field(
+        description="The pages the facts came from, most important first"
+    )
+
+
 class ThingLooks(_Strict):
     """A short looks call for one thing the minimum will make (#58.5).
 

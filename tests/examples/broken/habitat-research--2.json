@@ -1,0 +1,10 @@
+{
+  "main_food": {"name": "mountain hare", "kind": "pizza"},
+  "other_foods": [],
+  "surroundings": [
+    {"name": "Norway spruce", "kind": "tree"},
+    {"name": "bilberry", "kind": "plant"},
+    {"name": "mossy rocks", "kind": "ground"}
+  ],
+  "sources": []
+}

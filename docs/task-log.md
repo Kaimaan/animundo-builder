@@ -3,6 +3,24 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: inbox #118 (phase 2, T76 the worker, partial)
+
+- T76: the worker builds jobs (`builder/build.py`, `worker.py`):
+  expand items first (a new home, then food, then animals), each
+  through the kept stages; improve items after; resume by stage.
+  The off switch stops new starts and in-flight builds at the
+  next stage. Spending alerts at 50/80/100%; failures alert
+  loudly. Items charge their tracker's delta; a failed item never
+  stops the others. The job's own `tile` drives the worker;
+  nothing is guessed from plans. Partial: plant items fail loud
+  at $0 until plant builds land.
+- `builder take <job>` lays checked items out like animundo-world
+  and runs the world's `check_draft.py` on each item; the report
+  lands next to the taken files.
+- Evidence: `uv run pytest -q` → 631 passed, 12 skipped;
+  `ruff check` + `format --check` clean; `gitleaks git` clean;
+  `builder check --world` skeleton on.
+
 ## 2026-10-29: inbox #118 (phase 2, T74 the planner + find item)
 
 - T74: the planner by code (`builder/plan.py`, `request plan`):

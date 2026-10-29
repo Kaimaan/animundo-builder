@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -788,6 +789,19 @@ def test_oneshot_adds_made_prey_to_the_plan(tmp_path: Path) -> None:
     assert plan["species"][1]["taxon"]["gbif_key"] == 2437585
 
 
+def test_oneshot_skips_home_items_without_regions(tmp_path: Path) -> None:
+    world = _world(tmp_path)
+    minset = _minset_with_prey()
+    minset["make_animal"] = False
+    minset["prey"] = None
+    _inputs(tmp_path, minset=minset)
+    shutil.rmtree(tmp_path / "regions")
+    client = ScriptClient([])
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result == {"animal_files": [], "cost_usd": 0.0}
+    assert client.prompts == []
+
+
 def test_prey_matches_by_species_key(tmp_path: Path) -> None:
     world = _world(tmp_path)
     minset = _minset_with_prey()
@@ -1251,6 +1265,45 @@ def test_newhome_makes_home_first_try(tmp_path: Path) -> None:
     assert client.options[0]["response_format"]["json_schema"]["name"] == (
         "HomeChoices"
     )
+
+
+def test_newhome_border_home_carries_plan_item(tmp_path: Path) -> None:
+    """#130.4: ecoregion, habitat and based_on set by code, never the model."""
+    world = _home_world(tmp_path)
+    (world / "homes" / "tundra.json").write_text(
+        json.dumps(
+            {
+                "id": "tundra",
+                "description": "Treeless northern land.",
+                "palette": {"ground_lush": "#5f9445"},
+                "trees": {"density": 0.0, "mix": []},
+                "lake_life": {"reeds": 0.0, "lilies": 0.0, "pondweed": 0.0},
+            }
+        )
+    )
+    _home_inputs(tmp_path, habitat="tundra")
+    brief = json.loads((tmp_path / "home.json").read_text())
+    brief.update(
+        {
+            "home_id": "tundra_774",
+            "ecoregion": 774,
+            "base_home": "tundra",
+            "based_on": "tundra",
+        }
+    )
+    (tmp_path / "home.json").write_text(json.dumps(brief))
+    adapt = _AdaptStub()
+    client = ScriptClient([_choices_answer()])
+    result = HomeMakerStage(adapt=adapt).run(_ctx(tmp_path, world, client))
+    assert result["home_files"] == ["homes/tundra_774.json"]
+    tried = json.loads(
+        (tmp_path / "tries" / "tundra" / "1" / "choices.json").read_text()
+    )
+    assert tried["id"] == "tundra_774"
+    assert tried["ecoregions"] == [774]
+    assert tried["habitat"] == "tundra"
+    assert tried["based_on"] == "tundra"
+    assert "ecoregion" not in client.prompts[0]
 
 
 def test_newhome_prompt_carries_the_inputs(tmp_path: Path) -> None:

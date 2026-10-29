@@ -97,6 +97,35 @@ def test_research_writes_research_and_cost(tmp_path: Path) -> None:
     assert "`latin`" in client.prompts[0]
 
 
+def test_research_habitat_mode_without_species(tmp_path: Path) -> None:
+    (tmp_path / "home.json").write_text(
+        json.dumps(
+            {
+                "home": "tundra",
+                "needs_home": True,
+                "center": {"lat": 68.40, "lon": 23.60},
+            }
+        )
+    )
+    answer = {
+        "main_food": {"name": "crowberries", "kind": "berries"},
+        "other_foods": [{"name": "lemming", "kind": "prey", "size_cm": 15}],
+        "surroundings": [
+            {"name": "dwarf birch", "kind": "plant", "food_kind": "browse"},
+            {"name": "reindeer lichen", "kind": "plant"},
+            {"name": "tundra pond", "kind": "water"},
+        ],
+        "sources": ["https://example.org/tundra"],
+    }
+    client = ScriptClient([_response(json.dumps(answer))])
+    result = ResearchStage().run(_ctx(tmp_path, client))
+    assert result["research_file"] == "research.json"
+    assert result["main_food"] == "crowberries"
+    assert "Habitat research" in client.prompts[0]
+    saved = json.loads((tmp_path / "research.json").read_text(encoding="utf-8"))
+    assert saved == answer
+
+
 def test_research_bad_answer_stops(tmp_path: Path) -> None:
     (tmp_path / "home.json").write_text(json.dumps(_brief()))
     with pytest.raises(Exception, match="unparsable"):

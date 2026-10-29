@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://animundo-builder/schemas/habitat-research.schema.json",
+  "title": "One habitat's research: foods and surroundings for a new home",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["main_food", "other_foods", "surroundings", "sources"],
+  "properties": {
+    "main_food": { "$ref": "#/$defs/food" },
+    "other_foods": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/food" }
+    },
+    "surroundings": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "kind"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["tree", "plant", "ground", "water"] },
+          "food_kind": { "$ref": "#/$defs/diet_kind" },
+          "latin": { "type": "string", "minLength": 1 },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "diet_kind": {
+      "enum": ["bark", "berries", "bottom_bugs", "browse", "carrion", "carrot", "clover", "cones", "grass", "insects", "mushrooms", "nectar", "nest", "seeds", "water_bugs", "water_plants"]
+    },
+    "food": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "kind": {
+          "anyOf": [
+            { "$ref": "#/$defs/diet_kind" },
+            { "const": "prey" }
+          ]
+        },
+        "size_cm": { "type": "number", "exclusiveMinimum": 0 },
+        "latin": { "type": "string", "minLength": 1 },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

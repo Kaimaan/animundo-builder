@@ -153,7 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Natural Earth land shapefile for the globe background.",
     )
-    request = sub.add_parser("request", help="Border requests: plan them.")
+    request = sub.add_parser("request", help="Border requests: plan them, build them.")
     request_sub = request.add_subparsers(dest="request_command", required=True)
     plan = request_sub.add_parser("plan", help="Print one tile's border plan.")
     plan.add_argument("tile", help="The border tile id, e.g. n_413_478.")
@@ -164,6 +164,37 @@ def build_parser() -> argparse.ArgumentParser:
         "--habitat-grid",
         default="data/habitat-grid",
         help="Baked habitat grids (default: data/habitat-grid).",
+    )
+    build = request_sub.add_parser("build", help="Run one build round for a job.")
+    build.add_argument("job", help="The build job id.")
+    build.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    build.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grids (default: data/habitat-grid).",
+    )
+    build.add_argument("--project", default=None, help="The Firebase project.")
+    build.add_argument(
+        "--storage-bucket",
+        default=None,
+        help="The Storage bucket (default: the project's default bucket).",
+    )
+    build.add_argument(
+        "--jobs-dir", default="jobs", help="Job folders (default: jobs)."
+    )
+    take = sub.add_parser("take", help="Take a job's checked items for review.")
+    take.add_argument("job", help="The build job id.")
+    take.add_argument("--out", required=True, help="Directory for the taken files.")
+    take.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    take.add_argument("--project", default=None, help="The Firebase project.")
+    take.add_argument(
+        "--storage-bucket",
+        default=None,
+        help="The Storage bucket (default: the project's default bucket).",
     )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
@@ -430,6 +461,64 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_request_build(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .worker import Worker
+    from .worker_store import FirebaseStore, StoreError
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    try:
+        store = FirebaseStore(args.project, args.storage_bucket)
+    except StoreError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    worker = Worker(
+        store=store,
+        jobs_dir=Path(args.jobs_dir),
+        world=world,
+        config=load_config(),
+        grid_dir=Path(args.habitat_grid),
+    )
+    worker.handle_build_job(args.job)
+    return 0
+
+
+def cmd_take(args: argparse.Namespace) -> int:
+    from .build import check_draft, take_bundle, take_report
+    from .worker_store import FirebaseStore, StoreError
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    try:
+        store = FirebaseStore(args.project, args.storage_bucket)
+    except StoreError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        dest = take_bundle(store, args.job, Path(args.out))
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    items = sorted(p for p in dest.iterdir() if p.is_dir())
+    for item_dir in items:
+        try:
+            problems = check_draft(item_dir, world)
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        if problems:
+            print(f"error: {item_dir.name} fails the draft check:", file=sys.stderr)
+            for problem in problems:
+                print(f"  {problem}", file=sys.stderr)
+            return 1
+    report = take_report(dest)
+    print(f"{args.job}: taken to {dest}, report {report.name}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "check":
@@ -450,6 +539,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_tiles_lab(args)
     if args.command == "request" and args.request_command == "plan":
         return cmd_request_plan(args)
+    if args.command == "request" and args.request_command == "build":
+        return cmd_request_build(args)
+    if args.command == "take":
+        return cmd_take(args)
     return cmd_not_built_yet(args.command)
 
 

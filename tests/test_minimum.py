@@ -7,9 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
-
-from builder.stages.capability import NotPossibleError
 from builder.stages.minimum import MinimumStage
 
 FOX = {
@@ -129,7 +126,7 @@ def test_library_set_makes_nothing(tmp_path: Path) -> None:
     assert "shares its habitat" in minset["prey_reason"]
 
 
-def test_new_animal_waits_for_maker(tmp_path: Path) -> None:
+def test_new_animal_and_home_make_list(tmp_path: Path) -> None:
     brief = _brief(
         species_key=5225712,
         latin="Eunectes murinus",
@@ -139,19 +136,31 @@ def test_new_animal_waits_for_maker(tmp_path: Path) -> None:
     )
     research = _research(main_food={"name": "capybara", "kind": "prey", "size_cm": 110})
     world = _files(tmp_path, [ANACONDA, CAPYBARA], brief, research)
-    with pytest.raises(NotPossibleError, match="home is made next"):
-        MinimumStage().run(_ctx(tmp_path, world))
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == ["animal", "home", "prey"]
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["make_animal"] is True
     assert minset["make_home"] is True
     assert minset["prey"]["name"] == "capybara"
 
 
-def test_new_home_waits_for_maker(tmp_path: Path) -> None:
+def test_new_home_runs_newhome_next(tmp_path: Path) -> None:
+    """#109.3: minimum returns and the pipeline runs newhome itself."""
     brief = _brief(home="rainforest", needs_home=True)
     world = _files(tmp_path, [FOX, HARE], brief, _research())
-    with pytest.raises(NotPossibleError, match="home is made next"):
-        MinimumStage().run(_ctx(tmp_path, world))
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == ["home"]
+
+
+def test_home_item_without_species_makes_only_home(tmp_path: Path) -> None:
+    brief = _brief(home="rainforest", needs_home=True)
+    del brief["species_key"]
+    world = _files(tmp_path, [FOX, HARE], brief, _research())
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == ["home"]
+    minset = json.loads((tmp_path / "minset.json").read_text())
+    assert minset["make_animal"] is False
+    assert minset["prey"] is None
 
 
 def test_prey_is_smallest_makeable(tmp_path: Path) -> None:
@@ -173,8 +182,7 @@ def test_prey_is_smallest_makeable(tmp_path: Path) -> None:
         {**ANACONDA, "id": "agouti", "name": "Agouti", "can_make": False},
     ]
     world = _files(tmp_path, entries, brief, research)
-    with pytest.raises(NotPossibleError, match="home is made next"):
-        MinimumStage().run(_ctx(tmp_path, world))
+    MinimumStage().run(_ctx(tmp_path, world))
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["prey"]["name"] == "capybara"
 

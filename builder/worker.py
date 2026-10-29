@@ -2,8 +2,8 @@
 
 The builder is a factory (D17): the game runs the world, the worker
 plans every new or changed border request and builds only the build
-jobs the game creates. Planning (T74) is live; building (T76)
-lands next.
+jobs the game creates. Planning (T74) and building (T76) are
+live; plant builds, previews (T84) and Modal (T77) land next.
 """
 
 from __future__ import annotations
@@ -33,6 +33,11 @@ class Store(Protocol):
     def list_requests(self) -> list[tuple[str, dict[str, Any]]]: ...
     def list_plans(self) -> list[tuple[str, dict[str, Any]]]: ...
     def get_enabled(self) -> bool: ...
+    def read_blob(self, path: str) -> bytes | None: ...
+    def write_blob(
+        self, path: str, data: bytes, content_type: str = "application/json"
+    ) -> None: ...
+    def list_blobs(self, prefix: str) -> list[str]: ...
     def get_plan(self, tile: str) -> dict[str, Any] | None: ...
     def set_plan(self, tile: str, doc: dict[str, Any]) -> None: ...
     def get_build_job(self, job_id: str) -> dict[str, Any] | None: ...
@@ -54,6 +59,18 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+class _Off(Exception):
+    """The off switch stopped this item; resume when enabled."""
+
+
+class _BudgetOut(Exception):
+    """Money or access ran out; remaining items don't start."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 def git_commit(world: Path | None) -> str:
     """The world checkout's short commit, or "unknown" without git."""
     if world is None:
@@ -73,7 +90,7 @@ def git_commit(world: Path | None) -> str:
 
 @dataclass
 class Worker:
-    """Plans border requests; build jobs land with T76."""
+    """Plans border requests and builds jobs; plants wait."""
 
     store: Store
     jobs_dir: Path
@@ -84,7 +101,11 @@ class Worker:
     in_flight: set[tuple[str, str]] = field(default_factory=set)
     grid_dir: Path | None = None
     world_commit: str | None = None
+    chat: Any | None = None
+    adapt: Any | None = None
+    build: Any | None = None
     _grid_cache: dict[str, Any] | None = field(default=None, repr=False)
+    _was_enabled: bool = field(default=True, repr=False)
 
     # -- events ----------------------------------------------------
 
@@ -131,7 +152,432 @@ class Worker:
         print(f"request {tile}: planned code_only={plan['code_only']}")
 
     def handle_build_job(self, job_id: str) -> None:
-        print(f"build job {job_id}: phase 2 builds this")
+        """Build one job, or ship its reviewed items (T76)."""
+        if not self.store.get_enabled():
+            print(f"build job {job_id}: the off switch is off, skipping")
+            return
+        if self.world is None or self.grid_dir is None:
+            print(
+                f"build job {job_id}: building needs --world and --habitat-grid",
+                file=sys.stderr,
+            )
+            return
+        self.sync_world()
+        job = self.store.get_build_job(job_id)
+        if job is None or job.get("status") in ("published", "failed"):
+            return
+        if job.get("status") == "checking":
+            self.review_job(job_id, job)
+        else:
+            self.build_job(job_id, job)
+
+    def build_job(self, job_id: str, job: dict[str, Any]) -> None:
+        """Claim the job and build it: code directly, items each alone."""
+        from .build import publish_group
+        from .tiles import make_tile
+
+        assert self.world is not None
+        if job.get("status") == "queued":
+            if not self.store.claim_build_job(job_id, self.worker_id):
+                return
+            self._set_status(job_id, "building")
+            job = self.store.get_build_job(job_id) or job
+        tile = self._job_tile(job_id, job)
+        if tile is None:
+            return
+        if job.get("kind") == "code":
+            made, blocked = make_tile(tile, self._grids(), self.world)
+            if made is None:
+                reason = (blocked or {}).get("reason", "no_home")
+                self._fail(job_id, reason)
+                return
+            path = publish_group(tile, made, self.store, self.world_commit or "unknown")
+            print(f"build job {job_id}: published {path}")
+            self._set_status(job_id, "published")
+            return
+        self.build_items(job_id, job, tile)
+
+    def build_items(self, job_id: str, job: dict[str, Any], tile: str) -> None:
+        """Each approved item through the kept steps, within budget."""
+        from . import build as build_mod
+
+        assert self.world is not None
+        plan = self.store.get_plan(tile) or {}
+        wanted = set(job.get("items", []))
+        expand = build_mod.order_items(
+            [i for i in plan.get("items", []) if i["id"] in wanted]
+        )
+        improve = [i for i in plan.get("improve", []) if i["id"] in wanted]
+        if not expand and not improve:
+            self._fail(job_id, "no_items")
+            return
+        budget = float(job.get("budget_usd", 0.0))
+        stopped: str | None = None
+        for item in [*expand, *improve]:
+            if self._item_done(job, item["id"]):
+                continue
+            if not self._fits_budget(item, job, budget):
+                stopped = "budget"
+                break
+            try:
+                self.run_item(job_id, job, tile, plan, item, budget)
+            except _Off:
+                print(f"build job {job_id}: off switch stopped {item['id']}")
+                return
+            except _BudgetOut as error:
+                stopped = error.code
+                job = self.store.get_build_job(job_id) or job
+                break
+            job = self.store.get_build_job(job_id) or job
+        if stopped:
+            self.store.update_build_job(job_id, {"error": stopped})
+        progress = (self.store.get_build_job(job_id) or {}).get("progress", [])
+        expand_ids = {i["id"] for i in expand}
+        expand_failed = [
+            e for e in progress if e["id"] in expand_ids and e["status"] == "failed"
+        ]
+        if expand and len(expand_failed) == len(expand):
+            self._fail(job_id, stopped or expand_failed[0]["id"])
+            return
+        if stopped and not any(e["status"] == "checking" for e in progress):
+            self._fail(job_id, stopped)
+            return
+        self._set_status(job_id, "checking")
+
+    def run_item(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        budget: float,
+    ) -> None:
+        """One item through its steps, reported, within the job budget."""
+        import dataclasses
+
+        from . import build as build_mod
+        from .jobs import make_context
+        from .ledger import CapExceeded, LedgerError
+        from .meta import MetaAuthError
+        from .pipeline import BudgetExceeded, OffSwitch
+
+        assert self.world is not None
+        item_dir = self.jobs_dir / job_id / item["id"]
+        item_dir.mkdir(parents=True, exist_ok=True)
+        before = float((self.store.get_build_job(job_id) or {}).get("cost_usd", 0.0))
+        config = dataclasses.replace(self.config, job_budget_usd=budget)
+        ctx = make_context(config, f"{job_id}/{item['id']}", item_dir, self.world)
+        if self.chat is not None:
+            ctx.client = self.chat
+        start = ctx.tracker.spent_usd
+        if item["kind"] == "plant":
+            print(
+                f"build job {job_id}: {item['id']} waits for plant builds",
+                file=sys.stderr,
+            )
+            self._close_item(
+                job_id,
+                item,
+                item_dir,
+                ctx,
+                start,
+                before,
+                budget,
+                ValueError("plant items build in the next step"),
+            )
+            return
+        try:
+            if item["kind"] == "food":
+                home = self._tile_home(tile, plan, job_id)
+                build_mod.build_food_item(item_dir, item, home)
+            else:
+                self._run_stages(ctx, job_id, tile, plan, item, item_dir)
+        except BudgetExceeded as error:
+            self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
+            raise _BudgetOut("budget") from error
+        except (CapExceeded, LedgerError, MetaAuthError) as error:
+            self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
+            code = "auth" if isinstance(error, MetaAuthError) else "cap"
+            raise _BudgetOut(code) from error
+        except OffSwitch:
+            spent = round(ctx.tracker.spent_usd - start, 6)
+            self.store.update_build_job(
+                job_id, {"cost_usd": before + spent, "updated_at": now_iso()}
+            )
+            raise _Off()
+        except Exception as error:  # noqa: BLE001 - one item never stops the rest
+            print(f"build job {job_id}: {item['id']} failed: {error}", file=sys.stderr)
+            self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
+            return
+        self._close_item(job_id, item, item_dir, ctx, start, before, budget, None)
+
+    def review_job(self, job_id: str, job: dict[str, Any]) -> None:
+        """Ship or drop reviewed items; publish the tile; finish (T76)."""
+        from .build import publish_group
+        from .tiles import make_tile
+
+        assert self.world is not None
+        review = job.get("review") or {}
+        if not review:
+            return
+        tile = self._job_tile(job_id, job)
+        if tile is None:
+            return
+        plan = self.store.get_plan(tile) or {}
+        by_id = {i["id"]: i for i in [*plan.get("items", []), *plan.get("improve", [])]}
+        progress = list(job.get("progress", []))
+        shipped_any = False
+        for entry in list(progress):
+            verdict = (review.get(entry["id"]) or {}).get("result")
+            if verdict == "not_accepted":
+                progress.remove(entry)
+                print(f"build job {job_id}: dropped {entry['id']}")
+            elif verdict == "shipped":
+                item = by_id.get(entry["id"])
+                if item is not None and self._world_has(item, plan):
+                    progress.remove(entry)
+                    shipped_any = True
+                    print(f"build job {job_id}: shipped {entry['id']}")
+                else:
+                    print(f"build job {job_id}: {entry['id']} waits for the world")
+        if progress != job.get("progress", []):
+            self.store.update_build_job(
+                job_id, {"progress": progress, "updated_at": now_iso()}
+            )
+        if progress:
+            return
+        if not shipped_any:
+            self._fail(job_id, "nothing_shipped")
+            return
+        made, blocked = make_tile(tile, self._grids(), self.world)
+        if made is None:
+            self._fail(job_id, (blocked or {}).get("reason", "no_home"))
+            return
+        path = publish_group(tile, made, self.store, self.world_commit or "unknown")
+        print(f"build job {job_id}: published {path}")
+        self._set_status(job_id, "published")
+
+    # -- build helpers --------------------------------------------------
+
+    def _set_status(self, job_id: str, status: str) -> None:
+        self.store.update_build_job(job_id, {"status": status, "updated_at": now_iso()})
+
+    def _fail(self, job_id: str, error: str) -> None:
+        print(f"build job {job_id}: failed ({error})", file=sys.stderr)
+        self.store.update_build_job(
+            job_id, {"status": "failed", "error": error, "updated_at": now_iso()}
+        )
+        self.alert({"kind": "job_failed", "id": job_id, "error": error})
+
+    def _job_tile(self, job_id: str, job: dict[str, Any]) -> str | None:
+        """The job's tile, straight from the job (spec/02 §build job)."""
+        tile = job.get("tile")
+        if not tile:
+            self._fail(job_id, "no_tile")
+            return None
+        if self.store.get_plan(tile) is None:
+            self._fail(job_id, "no_plan")
+            return None
+        return tile
+
+    def _item_done(self, job: dict[str, Any], item_id: str) -> bool:
+        """An item with a finished progress entry builds no more."""
+        return any(
+            e["id"] == item_id and e["status"] in ("checking", "failed")
+            for e in job.get("progress", [])
+        )
+
+    def _fits_budget(
+        self, item: dict[str, Any], job: dict[str, Any], budget: float
+    ) -> bool:
+        """An item starts only below the cap; code-only food always fits."""
+        if item.get("kind") == "food":
+            return True
+        return float(job.get("cost_usd", 0.0)) < budget
+
+    def _run_stages(
+        self,
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+    ) -> None:
+        """Brief, scaffold and the item pipeline, staged to build."""
+        from . import build as build_mod
+        from .animal_list import find_list, load_list
+        from .grid import center, parse_tile
+
+        assert self.world is not None
+        grid, col, row = parse_tile(tile)
+        habitat = self._grids()[grid].habitat(col, row)
+        lat, lon = center(tile)
+        entry = None
+        if item["kind"] == "animal":
+            data = load_list(find_list(self.world))
+            by_id = {e["id"]: e for e in data["animals"]}
+            entry = by_id.get(item["what"])
+            if entry is None:
+                raise ValueError(
+                    f"item {item['id']} names {item['what']}, off the list"
+                )
+        build_mod.write_brief(item_dir, item, habitat, lat, lon, entry)
+        if item["kind"] == "animal":
+            build_mod.write_scaffold(item_dir, self._tile_home(tile, plan, job_id))
+        pipeline = build_mod.item_pipeline(
+            chat=self.chat,
+            build=self.build,
+            adapt=self.adapt,
+            state_path=item_dir / "state.json",
+            guard=self._guard,
+        )
+        build_mod.run_item_stages(ctx, item_dir, pipeline)
+
+    def _guard(self, stage: str) -> None:
+        """The pipeline calls this before every stage (spec 10)."""
+        from .pipeline import OffSwitch
+
+        if not self.store.get_enabled():
+            raise OffSwitch(f"off switch stopped {stage}")
+
+    def _close_item(
+        self,
+        job_id: str,
+        item: dict[str, Any],
+        item_dir: Path,
+        ctx: Any,
+        start: float,
+        before: float,
+        budget: float,
+        error: Exception | None,
+    ) -> None:
+        """Report, upload, charge and alert one finished item."""
+        from . import build as build_mod
+        from .report import build_report
+
+        cost = round(ctx.tracker.spent_usd - start, 6)
+        status = "failed" if error is not None else "checking"
+        build_report(item_dir)
+        report = build_mod.upload_bundle(
+            self.store, f"review/{job_id}/{item['id']}", item_dir
+        )
+        job = self.store.get_build_job(job_id) or {}
+        progress = [e for e in job.get("progress", []) if e["id"] != item["id"]]
+        progress.append(
+            {"id": item["id"], "status": status, "report": report, "cost_usd": cost}
+        )
+        total = round(before + cost, 6)
+        self.store.update_build_job(
+            job_id,
+            {"progress": progress, "cost_usd": total, "updated_at": now_iso()},
+        )
+        if budget > 0:
+            for pct in (50, 80, 100):
+                if before < budget * pct / 100 <= total:
+                    self.alert(
+                        {
+                            "kind": "spending",
+                            "id": job_id,
+                            "pct": pct,
+                            "cost_usd": total,
+                        }
+                    )
+
+    def _tile_home(
+        self, tile: str, plan: dict[str, Any], job_id: str
+    ) -> dict[str, Any]:
+        """The tile's home: the job's made one, else the world's."""
+        import json
+
+        from .grid import parse_tile
+        from .tiles import available_homes, home_for_cell
+
+        assert self.world is not None
+        for item in plan.get("items", []):
+            if item.get("kind") != "home":
+                continue
+            homes = self.jobs_dir / job_id / item["id"] / "homes"
+            made = sorted(homes.glob("*.json"))
+            if made:
+                return json.loads(made[0].read_text(encoding="utf-8"))
+        grid, col, row = parse_tile(tile)
+        cells = self._grids()[grid]
+        homes = available_homes(self.world)
+        found = home_for_cell(
+            cells.cell_data(col, row)[0], cells.habitat(col, row), homes
+        )
+        if found is None:
+            raise ValueError(f"tile {tile} has no home in this checkout")
+        return homes[found]
+
+    def _world_has(self, item: dict[str, Any], plan: dict[str, Any]) -> bool:
+        """The shipped item's files reached this checkout."""
+        import json
+
+        assert self.world is not None
+        if item["kind"] == "home":
+            return self._home_id_files(item)
+        if item["kind"] == "animal":
+            return (self.world / "animals" / f"{item['what']}.json").is_file()
+        home_path = self.world / "homes" / f"{item['from']}.json"
+        if not home_path.is_file():
+            return False
+        try:
+            home = json.loads(home_path.read_text(encoding="utf-8"))
+        except ValueError:
+            return False
+        return any(
+            f.get("kind") == item["what"]
+            for f in home.get("food", [])
+            if isinstance(f, dict)
+        )
+
+    def _home_id_files(self, item: dict[str, Any]) -> bool:
+        """A home id the worker would have made exists in the world."""
+        assert self.world is not None
+        return any(
+            path.stem.endswith(f"_{item['what']}")
+            for path in (self.world / "homes").glob("*.json")
+        )
+
+    def pull_world(self) -> bool:
+        """Pull the world checkout fast-forward; True when it moved."""
+        if self.world is None or not (self.world / ".git").exists():
+            return False
+        before = git_commit(self.world)
+        try:
+            proc = subprocess.run(
+                ["git", "pull", "--ff-only"],
+                cwd=self.world,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as error:
+            print(f"world pull failed: {error}", file=sys.stderr)
+            return False
+        if proc.returncode != 0:
+            print(f"world pull failed: {proc.stderr.strip()}", file=sys.stderr)
+            return False
+        return git_commit(self.world) != before
+
+    def poll(self) -> list[str]:
+        """One world-poll round: pull, re-plan, retry ships, resume builds."""
+        queued: list[str] = []
+        if self.pull_world():
+            self.sync_world()
+            for job_id, doc in self.store.pending_build_jobs():
+                if doc.get("status") == "checking" and doc.get("review"):
+                    queued.append(job_id)
+        enabled = self.store.get_enabled()
+        if enabled and not self._was_enabled:
+            for job_id, doc in self.store.pending_build_jobs():
+                if doc.get("status") == "building" and job_id not in queued:
+                    queued.append(job_id)
+        self._was_enabled = enabled
+        return queued
 
     def sync_world(self, commit: str | None = None) -> None:
         """Re-plan every request when the world commit moved (T74).
@@ -177,6 +623,7 @@ class Listener:
     store: Any  # FirebaseStore: watch_requests/watch_build_jobs
     events: queue.Queue = field(default_factory=queue.Queue)
     stop: threading.Event = field(default_factory=threading.Event)
+    poll_seconds: float = 0
 
     def start(self) -> None:
         for job_id, doc in self.store.pending_build_jobs():
@@ -184,6 +631,9 @@ class Listener:
                 self.events.put(("build_job", job_id))
         unsub_requests = self.store.watch_requests(self._on_requests)
         unsub_jobs = self.store.watch_build_jobs(self._on_build_jobs)
+        if self.poll_seconds > 0:
+            thread = threading.Thread(target=self._poll_loop, daemon=True)
+            thread.start()
         print("worker listening (Ctrl-C stops it)")
         try:
             while not self.stop.is_set():
@@ -198,6 +648,15 @@ class Listener:
         finally:
             unsub_requests()
             unsub_jobs()
+
+    def _poll_loop(self) -> None:
+        """The world commit, every few minutes: pull, re-plan, retry."""
+        while not self.stop.wait(self.poll_seconds):
+            try:
+                for job_id in self.worker.poll():
+                    self.events.put(("build_job", job_id))
+            except Exception as error:  # noqa: BLE001 - the loop must live
+                print(f"worker: poll failed: {error!r}", file=sys.stderr)
 
     def _on_requests(self, snapshots: Any, changes: Any, _read_time: Any) -> None:
         for change in changes:
@@ -230,6 +689,9 @@ class Listener:
                 print(f"worker: unknown kind {kind}", file=sys.stderr)
         except Exception as error:  # noqa: BLE001 - the loop must live
             print(f"worker: {kind} {doc_id} crashed: {error!r}", file=sys.stderr)
+            self.worker.alert(
+                {"kind": f"{kind}_failed", "id": doc_id, "error": repr(error)[:200]}
+            )
         finally:
             self.worker.in_flight.discard(key)
 
@@ -257,5 +719,5 @@ def listen(
         config=config,
         grid_dir=grid_dir,
     )
-    Listener(worker=worker, store=store).start()
+    Listener(worker=worker, store=store, poll_seconds=300).start()
     return 0

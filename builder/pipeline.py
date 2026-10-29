@@ -9,7 +9,7 @@ budget first and records the spend after.
 from __future__ import annotations
 
 import json
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -148,12 +148,17 @@ def _usage(client: Any, response: Any, images: int = 0) -> Usage:
     return usage_from_response(response, client.model, images)
 
 
+class OffSwitch(Exception):
+    """The off switch went off: stop at the next stage, resume later."""
+
+
 @dataclass
 class Pipeline:
     """A fixed list of stages with crash-safe state."""
 
     stages: list[Stage]
     state_path: Path
+    guard: Callable[[str], None] | None = None
 
     def run(self, ctx: JobContext) -> dict[str, dict[str, Any]]:
         """Run every unfinished stage. Safe to call again after a crash."""
@@ -161,11 +166,13 @@ class Pipeline:
         for stage in self.stages:
             if stage.name in state["completed"]:
                 continue
+            if self.guard is not None:
+                self.guard(stage.name)
             ctx.check_budget()
             _set_stage(ctx, stage.name)
             try:
                 result = stage.run(ctx)
-            except (BudgetExceeded, CapExceeded, MetaAuthError):
+            except (BudgetExceeded, CapExceeded, MetaAuthError, OffSwitch):
                 raise
             except Exception as error:  # noqa: BLE001 - recorded, then raised
                 state["failed"] = {"stage": stage.name, "error": str(error)}

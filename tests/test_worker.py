@@ -130,6 +130,20 @@ def test_sync_world_ignores_same_and_unknown(
     assert "re-planning" not in capsys.readouterr().out
 
 
+def test_dispatch_alerts_on_crash(tmp_path: Path) -> None:
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+
+    def boom(tile: str) -> None:
+        raise RuntimeError("kaboom")
+
+    worker.handle_request = boom  # type: ignore[method-assign]
+    listener = Listener(worker=worker, store=store)
+    listener._dispatch("request", "n_413_296")
+    assert ("request", "n_413_296") not in worker.in_flight
+    assert store.alerts[-1]["kind"] == "request_failed"
+
+
 def test_handle_build_job_leaves_it_queued(tmp_path: Path) -> None:
     store = FakeStore()
     store.build_jobs["j1"] = {"status": "queued", "tile": "n_413_296"}
@@ -172,3 +186,431 @@ def test_listen_reports_a_dead_backend(tmp_path: Path, monkeypatch, capsys) -> N
     )
     assert code == 1
     assert "no credentials" in capsys.readouterr().err
+
+
+def _flow_worker(
+    tmp_path: Path, store: FakeStore, tile_cells: dict[str, Any]
+) -> Worker:
+    from fake_world import make_world, write_grids
+
+    worker = _worker(tmp_path, store)
+    worker.world = make_world(tmp_path)
+    worker.grid_dir = write_grids(tmp_path / "grids", tile_cells)
+    worker.world_commit = "abc123"
+    return worker
+
+
+def _code_plan(tile: str) -> dict[str, Any]:
+    return {
+        "format": 1,
+        "tile": tile,
+        "code_only": True,
+        "items": [],
+        "improve": [
+            {
+                "id": "improve_lion",
+                "kind": "animal",
+                "what": "lion",
+                "from": "fox",
+                "estimate_usd": 0.15,
+            }
+        ],
+        "estimate_usd": 0.15,
+        "name": {"en": "Boreal forest", "fi": "Havumetsä"},
+        "coming": ["improve_lion"],
+        "world": "abc123",
+        "planned_at": "2026-10-28T00:00:00+00:00",
+    }
+
+
+def _code_job() -> dict[str, Any]:
+    return {
+        "format": 1,
+        "tile": "n_413_478",
+        "budget_usd": 0.0,
+        "kind": "code",
+        "status": "queued",
+        "items": ["improve_lion"],
+        "visibility": "public",
+        "created_by": "policy",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+
+
+def test_code_job_publishes_with_no_model_call(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#118.10: a code request becomes ready with no model call."""
+    import builder.jobs
+
+    def no_model(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a code job makes no model call")
+
+    monkeypatch.setattr(builder.jobs, "MetaClient", no_model)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    store = FakeStore()
+    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["cost_usd"] == 0.0
+    assert job["worker_id"] == worker.worker_id
+    assert "tiles/v1/ease2_n25/51_59.json" in store.blobs
+    assert "tiles/v1/index.json" in store.blobs
+
+
+def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> None:
+    store = FakeStore()
+    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.build_jobs["j1"] = _code_job()
+    monkeypatch.setattr("builder.tiles.fetch_smoothed", lambda tile, c: {})
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "no_animal"
+    assert store.alerts[-1]["kind"] == "job_failed"
+
+
+def test_pending_request_builds_nothing(tmp_path: Path, monkeypatch: Any) -> None:
+    """#118.10: a pending or turned-down request builds nothing."""
+    store = FakeStore()
+    store.requests["n_413_478"] = {"tile": "n_413_478", "turned_down": "far"}
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    monkeypatch.setattr("builder.plan.fetch_smoothed", lambda tile, c: {})
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    worker.handle_request("n_413_478")
+    assert "n_413_478" in store.plans
+    assert store.build_jobs == {}
+    assert store.blobs == {}
+
+
+def test_request_alerts_plan_failed_when_gbif_is_down(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """A GBIF outage is a plan failure, loud and unretried."""
+    store = FakeStore()
+    store.requests["n_413_478"] = {"tile": "n_413_478"}
+
+    def down(*args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("GBIF timed out")
+
+    monkeypatch.setattr("builder.worker.plan_tile", down)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_request("n_413_478")
+    assert "n_413_478" not in store.plans
+    assert store.alerts[-1]["kind"] == "plan_failed"
+
+
+def test_plant_item_fails_loud_and_alone(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    """T76 partial: plants fail loud at $0 while other items build."""
+    store = FakeStore()
+    plan = _code_plan("n_401_434")
+    plan["code_only"] = False
+    plan["items"] = [
+        {
+            "id": "plant_cloudberry",
+            "kind": "plant",
+            "what": "cloudberry",
+            "from": "bilberry",
+            "estimate_usd": 0.02,
+        },
+        {
+            "id": "animal_lion",
+            "kind": "animal",
+            "what": "lion",
+            "from": "fox",
+            "estimate_usd": 0.15,
+        },
+    ]
+    plan["improve"] = []
+    store.plans["n_401_434"] = plan
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "tile": "n_401_434",
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "queued",
+        "items": ["plant_cloudberry", "animal_lion"],
+        "visibility": "public",
+        "created_by": "admin",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    worker = _flow_worker(
+        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
+    )
+    monkeypatch.setattr(worker, "_run_stages", lambda *a, **k: None)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"
+    assert job["cost_usd"] == 0.0
+    by_id = {e["id"]: e["status"] for e in job["progress"]}
+    assert by_id == {"plant_cloudberry": "failed", "animal_lion": "checking"}
+    assert "waits for plant builds" in capsys.readouterr().err
+
+
+def test_build_job_fails_without_its_tile(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.plans["n_413_478"] = _code_plan("n_413_478")
+    job = _code_job()
+    del job["tile"]
+    store.build_jobs["j1"] = job
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "no_tile"
+
+
+def test_build_job_fails_without_its_plan(tmp_path: Path) -> None:
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "no_plan"
+
+
+def test_build_job_stops_at_zero_budget(tmp_path: Path) -> None:
+    """#118.10: a judge build stops at its cap."""
+    store = FakeStore()
+    plan = _code_plan("n_401_434")
+    plan["code_only"] = False
+    plan["items"] = [
+        {
+            "id": "home_774",
+            "kind": "home",
+            "what": "774",
+            "from": "tundra",
+            "estimate_usd": 0.02,
+        }
+    ]
+    plan["improve"] = []
+    store.plans["n_401_434"] = plan
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "tile": "n_401_434",
+        "budget_usd": 0.0,
+        "kind": "build",
+        "status": "queued",
+        "items": ["home_774"],
+        "visibility": "private",
+        "created_by": "policy",
+        "progress": [],
+        "cost_usd": 0.0,
+        "private_to": "judge1",
+    }
+    worker = _flow_worker(
+        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "budget"
+    assert job["progress"] == []
+    assert store.blobs == {}
+    assert "preview" not in job
+
+
+def test_failed_item_does_not_stop_others(tmp_path: Path, monkeypatch: Any) -> None:
+    """#118.10: a failed item doesn't stop the others."""
+    store = FakeStore()
+    plan = _code_plan("n_401_434")
+    plan["code_only"] = False
+    plan["items"] = [
+        {
+            "id": "home_774",
+            "kind": "home",
+            "what": "774",
+            "from": "tundra",
+            "estimate_usd": 0.02,
+        },
+        {
+            "id": "animal_lion",
+            "kind": "animal",
+            "what": "lion",
+            "from": "fox",
+            "estimate_usd": 0.15,
+        },
+    ]
+    plan["improve"] = []
+    store.plans["n_401_434"] = plan
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "tile": "n_401_434",
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "queued",
+        "items": ["home_774", "animal_lion"],
+        "visibility": "public",
+        "created_by": "admin",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    calls: list[str] = []
+    worker = _flow_worker(
+        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
+    )
+
+    def flaky(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+    ) -> None:
+        calls.append(item["id"])
+        if item["id"] == "home_774":
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(worker, "_run_stages", flaky)
+    worker.handle_build_job("j1")
+    assert calls == ["home_774", "animal_lion"]
+    assert store.build_jobs["j1"]["status"] == "checking"
+    by_id = {e["id"]: e["status"] for e in store.build_jobs["j1"]["progress"]}
+    assert by_id == {"home_774": "failed", "animal_lion": "checking"}
+
+
+def test_close_item_alerts_on_spending_crossings(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from builder.pipeline import BudgetTracker
+
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "area": "a",
+        "budget_usd": 10.0,
+        "kind": "build",
+        "status": "building",
+        "items": ["animal_lion"],
+        "progress": [],
+        "cost_usd": 4.0,
+    }
+    worker = _worker(tmp_path, store)
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    item_dir.mkdir(parents=True)
+    tracker = BudgetTracker(budget_usd=10.0)
+    tracker.spent_usd = 9.0
+    ctx = SimpleNamespace(tracker=tracker)
+    worker._close_item("j1", {"id": "animal_lion"}, item_dir, ctx, 0.0, 4.0, 10.0, None)
+    job = store.build_jobs["j1"]
+    assert job["cost_usd"] == 13.0
+    assert [a["pct"] for a in store.alerts] == [50, 80, 100]
+
+
+def test_poll_resumes_builds_on_reenable(tmp_path: Path, monkeypatch: Any) -> None:
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "area": "a",
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "building",
+        "items": [],
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    worker = _worker(tmp_path, store)
+    monkeypatch.setattr(Worker, "pull_world", lambda self: False)
+    store.enabled = False
+    assert worker.poll() == []
+    store.enabled = True
+    assert worker.poll() == ["j1"]
+    assert worker.poll() == []
+
+
+def test_guard_stops_pipeline_at_next_stage(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from builder.pipeline import OffSwitch, Pipeline
+
+    ran: list[str] = []
+
+    class Step:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def run(self, ctx: Any) -> dict[str, Any]:
+            ran.append(self.name)
+            return {}
+
+    ctx = SimpleNamespace(
+        job_dir=tmp_path, client=None, open_client=None, check_budget=lambda: None
+    )
+
+    def guard(stage: str) -> None:
+        if stage == "b":
+            raise OffSwitch("off")
+
+    pipeline = Pipeline(
+        [Step("a"), Step("b")],  # type: ignore[list-item]
+        state_path=tmp_path / "state.json",
+        guard=guard,
+    )
+    try:
+        pipeline.run(ctx)
+    except OffSwitch:
+        pass
+    assert ran == ["a"]
+
+
+def test_no_player_field_anywhere(tmp_path: Path, monkeypatch: Any) -> None:
+    """#118.10: no player field anywhere the worker writes."""
+    import json
+
+    store = FakeStore()
+    store.requests["n_413_478"] = {
+        "tile": "n_413_478",
+        "uid": "kid-1",
+        "player": {"device": "x", "ip": "1.2.3.4"},
+        "email": "kid@example.org",
+    }
+    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    monkeypatch.setattr("builder.plan.fetch_smoothed", lambda tile, c: {})
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"fox": 5.0, "vole": 20.0}
+    )
+    worker.handle_request("n_413_478")
+    worker.handle_build_job("j1")
+
+    def keys_below(data: Any) -> set[str]:
+        found = set()
+        if isinstance(data, dict):
+            for key, value in data.items():
+                found.add(str(key))
+                found |= keys_below(value)
+        elif isinstance(data, list):
+            for value in data:
+                found |= keys_below(value)
+        return found
+
+    written = [
+        store.plans["n_413_478"],
+        store.build_jobs["j1"],
+        *[json.loads(v.decode("utf-8")) for v in store.blobs.values()],
+    ]
+    leaked = keys_below(written) & {
+        "uid",
+        "player",
+        "device",
+        "ip",
+        "email",
+        "child",
+        "kid",
+        "parent",
+        "family",
+        "address",
+        "phone",
+    }
+    assert leaked == set()

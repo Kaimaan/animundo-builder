@@ -15,7 +15,6 @@ from typing import Any
 
 from ..animal_list import find_entry, find_list, load_list
 from ..taxa import match_entry
-from .capability import NotPossibleError
 from .species_plan import animal_file
 
 
@@ -33,10 +32,15 @@ class MinimumStage:
             (ctx.job_dir / "research.json").read_text(encoding="utf-8")
         )
         data = load_list(find_list(world))
-        entry = find_entry(data["animals"], brief["species_key"])
-        make_animal, animal_reason = self._need_animal(ctx, brief, entry)
+        if brief.get("species_key"):
+            entry = find_entry(data["animals"], brief["species_key"])
+            make_animal, animal_reason = self._need_animal(ctx, brief, entry)
+            prey, prey_reason = self._need_prey(world, data, brief, entry, research)
+        else:
+            # A home item carries no species: only the home is made.
+            make_animal, animal_reason = False, "this item makes no animal"
+            prey, prey_reason = None, "this item makes no animal"
         make_home, home_reason = self._need_home(ctx, brief)
-        prey, prey_reason = self._need_prey(world, data, brief, entry, research)
         minset = {
             "make_animal": make_animal,
             "animal_reason": animal_reason,
@@ -49,13 +53,10 @@ class MinimumStage:
         (ctx.job_dir / "minset.json").write_text(
             json.dumps(minset, indent=2), encoding="utf-8"
         )
-        result = {"minset_file": "minset.json", "make": _making(minset)}
-        if make_home:
-            raise NotPossibleError(
-                f"the {brief['home']} home is made next; "
-                "run the newhome stage, then resume"
-            )
-        return result
+        # When a home must be made the pipeline runs newhome next
+        # itself (#109.3); stopping here stranded every build whose
+        # home didn't exist yet.
+        return {"minset_file": "minset.json", "make": _making(minset)}
 
     def _need_animal(
         self, ctx: Any, brief: dict[str, Any], entry: dict[str, Any]
@@ -73,10 +74,11 @@ class MinimumStage:
             return False, f"{brief['reuse_place_id']} is built"
         if not brief.get("needs_home"):
             return False, f"{brief['home']} is built"
-        made = ctx.job_dir / "homes" / f"{brief['home']}.json"
+        home_id = brief.get("home_id") or brief["home"]
+        made = ctx.job_dir / "homes" / f"{home_id}.json"
         if made.is_file():
-            return False, f"{brief['home']} is already made in this job"
-        return True, f"no {brief['home']} template is built yet"
+            return False, f"{home_id} is already made in this job"
+        return True, f"no {home_id} template is built yet"
 
     def _need_prey(
         self,

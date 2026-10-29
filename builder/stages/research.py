@@ -14,7 +14,7 @@ from typing import Any
 from ..meta import count_search_calls, is_cut_off
 from ..prompts import for_children, load_prompt, place_line
 from ..schemas import validate
-from ..strict import Research, strict_schema, strip_nulls
+from ..strict import HabitatResearch, Research, strict_schema, strip_nulls
 from .survey import SEARCH_TOOL, final_text
 
 SEARCHES = 5
@@ -25,6 +25,16 @@ RESEARCH_FORMAT = {
     "type": "json_schema",
     "name": "Research",
     "schema": strict_schema(Research),
+    "strict": True,
+}
+
+#: The habitat variant: foods and surroundings for a new home,
+#: no size, looks or year. A brief without `species_key` (a home
+#: item) takes this path.
+HABITAT_FORMAT = {
+    "type": "json_schema",
+    "name": "HabitatResearch",
+    "schema": strict_schema(HabitatResearch),
     "strict": True,
 }
 
@@ -58,7 +68,11 @@ class _Stopped(Exception):
 
 
 class ResearchStage:
-    """Research the animal once; write `research.json` and its cost."""
+    """Research once; write `research.json` and its cost.
+
+    The animal, or the habitat's surroundings when the brief
+    carries no species (a home item).
+    """
 
     name = "research"
 
@@ -87,23 +101,40 @@ class ResearchStage:
     def _ask(
         self, ctx: Any, brief: dict[str, Any]
     ) -> tuple[dict[str, Any], list[str], int]:
-        prompt = load_prompt(
-            "research",
-            {
-                "NAME": brief.get("name", ""),
-                "LATIN": brief.get("latin", ""),
-                "LAT": str(brief["center"]["lat"]),
-                "LON": str(brief["center"]["lon"]),
-                "PLACE_LINE": place_line(brief),
-                "FOR_CHILDREN": for_children(),
-            },
-        )
+        habitat_mode = not brief.get("species_key")
+        if habitat_mode:
+            prompt = load_prompt(
+                "habitat_research",
+                {
+                    "HABITAT": str(brief.get("home", "land")),
+                    "LAT": str(brief["center"]["lat"]),
+                    "LON": str(brief["center"]["lon"]),
+                    "PLACE_LINE": place_line(brief),
+                    "FOR_CHILDREN": for_children(),
+                },
+            )
+            text_format = HABITAT_FORMAT
+            schema = "habitat-research"
+        else:
+            prompt = load_prompt(
+                "research",
+                {
+                    "NAME": brief.get("name", ""),
+                    "LATIN": brief.get("latin", ""),
+                    "LAT": str(brief["center"]["lat"]),
+                    "LON": str(brief["center"]["lon"]),
+                    "PLACE_LINE": place_line(brief),
+                    "FOR_CHILDREN": for_children(),
+                },
+            )
+            text_format = RESEARCH_FORMAT
+            schema = "research"
         response = ctx.respond(
             prompt,
             tools=SEARCH_TOOL,
             timeout=180,
             max_tool_calls=SEARCHES + SEARCH_SLACK,
-            text_format=RESEARCH_FORMAT,
+            text_format=text_format,
         )
         searches = count_search_calls(response)
         text = final_text(response)
@@ -113,7 +144,7 @@ class ResearchStage:
             data = strip_nulls(json.loads(text))
             if isinstance(data, dict):
                 data["sources"] = _source_urls(data.get("sources"))
-            validate("research", data)
+            validate(schema, data)
         except ValueError as error:
             raise _Stopped(f"the research came back unparsable: {error}")
         return data, data["sources"], searches

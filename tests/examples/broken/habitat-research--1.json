@@ -1,0 +1,9 @@
+{
+  "main_food": {"name": "mountain hare", "kind": "prey"},
+  "other_foods": [],
+  "surroundings": [
+    {"name": "Norway spruce", "kind": "tree"},
+    {"name": "mossy rocks", "kind": "ground"}
+  ],
+  "sources": ["https://example.org/hare-habitat"]
+}

@@ -119,6 +119,20 @@ class FirebaseStore:
     def update_job(self, job_id: str, fields: dict[str, Any]) -> None:
         self._db.collection("jobs").document(job_id).update(fields)
 
+    # -- Storage blobs: tiles, review bundles, previews ----------------------
+
+    def read_blob(self, path: str) -> bytes | None:
+        blob = self._bucket.blob(path)
+        return blob.download_as_bytes() if blob.exists() else None
+
+    def write_blob(
+        self, path: str, data: bytes, content_type: str = "application/json"
+    ) -> None:
+        self._bucket.blob(path).upload_from_string(data, content_type=content_type)
+
+    def list_blobs(self, prefix: str) -> list[str]:
+        return [blob.name for blob in self._bucket.list_blobs(prefix=prefix)]
+
     # -- watch -------------------------------------------------------------
 
     def watch_requests(self, callback: Any) -> Any:
@@ -138,15 +152,18 @@ STORE_METHODS = (
     "get_job",
     "get_plan",
     "get_request",
+    "list_blobs",
     "list_plans",
     "list_requests",
     "pending_build_jobs",
+    "read_blob",
     "set_job",
     "set_plan",
     "update_build_job",
     "update_job",
     "watch_build_jobs",
     "watch_requests",
+    "write_blob",
 )
 
 

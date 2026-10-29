@@ -1,0 +1,13 @@
+{
+  "main_food": {"name": "mountain hare", "kind": "prey", "size_cm": 55},
+  "other_foods": [
+    {"name": "bilberries", "kind": "berries"},
+    {"name": "bank vole", "kind": "prey", "size_cm": 11}
+  ],
+  "surroundings": [
+    {"name": "Norway spruce", "kind": "tree", "food_kind": "cones"},
+    {"name": "bilberry", "kind": "plant", "food_kind": "berries"},
+    {"name": "mossy rocks", "kind": "ground"}
+  ],
+  "sources": ["https://example.org/hare-habitat"]
+}

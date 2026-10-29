@@ -132,6 +132,15 @@ class AnimalMakerStage:
             (ctx.job_dir / "research.json").read_text(encoding="utf-8")
         )
         minset = json.loads((ctx.job_dir / "minset.json").read_text(encoding="utf-8"))
+        if not minset.get("make_animal") and minset.get("prey") is None:
+            # A home item makes no animals: nothing to seat, no call.
+            checks = ctx.job_dir / "checks"
+            checks.mkdir(parents=True, exist_ok=True)
+            (checks / "oneshot.json").write_text(
+                json.dumps({"cost_usd": 0.0, "made": [], "unmakable": {}}),
+                encoding="utf-8",
+            )
+            return {"animal_files": [], "cost_usd": 0.0}
         region_path = next((ctx.job_dir / "regions").glob("*.json"))
         region = json.loads(region_path.read_text(encoding="utf-8"))
         data = load_list(find_animal_list(world))
@@ -1826,24 +1835,36 @@ class HomeMakerStage:
         if not minset.get("make_home"):
             return {"home_files": [], "cost_usd": 0.0}
         habitat = brief["home"]
-        made = ctx.job_dir / "homes" / f"{habitat}.json"
+        home_id = brief.get("home_id") or habitat
+        made = ctx.job_dir / "homes" / f"{home_id}.json"
         passed = ctx.job_dir / "checks" / "newhome.json"
         if made.is_file() and passed.is_file():
             # A failed try leaves its home behind too; only a
             # passing run counts as done, or the failure stands (#64.3).
-            return {"home_files": [f"homes/{habitat}.json"], "cost_usd": 0.0}
+            return {"home_files": [f"homes/{home_id}.json"], "cost_usd": 0.0}
         before = ctx.tracker.spent_usd
         base, plants, trees, looks = self._setup(world, ctx, brief)
-        self._make(ctx, world, brief, research, habitat, base, plants, trees, looks)
+        self._make(
+            ctx,
+            world,
+            brief,
+            research,
+            habitat,
+            base,
+            plants,
+            trees,
+            looks,
+            home_id=home_id,
+        )
         cost = round(ctx.tracker.spent_usd - before, 6)
         checks = ctx.job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
         (checks / "newhome.json").write_text(
-            json.dumps({"cost_usd": cost, "made": habitat, "plants": []}, indent=2),
+            json.dumps({"cost_usd": cost, "made": home_id, "plants": []}, indent=2),
             encoding="utf-8",
         )
         return {
-            "home_files": [f"homes/{habitat}.json"],
+            "home_files": [f"homes/{home_id}.json"],
             "plant_files": [],
             "cost_usd": cost,
         }
@@ -1854,7 +1875,14 @@ class HomeMakerStage:
     ) -> tuple[Path, list[str], list[str], dict[str, Any]]:
         """The choices call's world inputs: base, plants, trees, looks."""
         habitat = brief["home"]
-        base = _closest_home(world, habitat)
+        if brief.get("base_home"):
+            base = world / "homes" / f"{brief['base_home']}.json"
+            if not base.is_file():
+                raise _Stopped(
+                    f"no home template {brief['base_home']} in this checkout"
+                )
+        else:
+            base = _closest_home(world, habitat)
         plants = sorted(
             path.stem for path in (world / "models" / "plants").glob("*.json")
         )
@@ -1913,11 +1941,13 @@ class HomeMakerStage:
         previous_form: str | None = None,
         note: str | None = None,
         tag: str = "",
+        home_id: str | None = None,
     ) -> None:
         """One home: a choices call, then the adapt tool, plus one fix round.
 
         An improve fix passes the previous form and the grown-up's
-        note, and tags its tries with the round (#82.6).
+        note, and tags its tries with the round (#82.6). A border
+        home lands under its own id, not its habitat.
         """
         prompt = self._prompt(brief, research, habitat, base, plants, trees, looks)
         prompt += improve_blocks(previous_form, note)
@@ -1943,7 +1973,7 @@ class HomeMakerStage:
                 )
             self._save_try(ctx, habitat, attempt, answer, file_errors, tag)
             if choices is not None and not file_errors:
-                _place_home(ctx, habitat, attempt, tag)
+                _place_home(ctx, habitat, attempt, tag, home_id or habitat)
                 return
             errors = file_errors or ["the answer held no usable choices"]
         raise _Stopped(
@@ -2267,27 +2297,39 @@ def _code_choices(
     brief: dict[str, Any],
     research: dict[str, Any],
 ) -> None:
-    """Code's part of the choices: the id, the tropics, the sources (#65.2)."""
+    """Code's part of the choices: the id, the tropics, the sources (#65.2).
+
+    A border home also carries its ecoregion, habitat and the home
+    it was adapted from, set by code from the plan item; the model
+    never writes them (#130.4).
+    """
     lat = float((brief.get("center") or {}).get("lat", 0.0))
     tropical = abs(lat) < 23
     choices.update(
         {
-            "id": habitat,
+            "id": brief.get("home_id") or habitat,
             "tropical": tropical,
             "sources": [*research["sources"], "GBIF.org"],
         }
     )
+    if brief.get("ecoregion") is not None:
+        choices["ecoregions"] = [brief["ecoregion"]]
+        choices["habitat"] = habitat
+        if brief.get("based_on"):
+            choices["based_on"] = brief["based_on"]
     if tropical:
         # No ice in the tropics: no seasons there (#69.3).
         choices["ice"] = "none"
 
 
-def _place_home(ctx: Any, habitat: str, attempt: int, tag: str = "") -> None:
+def _place_home(
+    ctx: Any, habitat: str, attempt: int, tag: str = "", home_id: str | None = None
+) -> None:
     """The passing try's home, where the home stage finds it."""
     homes_dir = ctx.job_dir / "homes"
     homes_dir.mkdir(exist_ok=True)
     src = ctx.job_dir / "tries" / habitat / f"{tag}{attempt}" / "home.json"
-    (homes_dir / f"{habitat}.json").write_text(
+    (homes_dir / f"{home_id or habitat}.json").write_text(
         src.read_text(encoding="utf-8"), encoding="utf-8"
     )
 

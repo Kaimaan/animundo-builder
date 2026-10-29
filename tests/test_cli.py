@@ -124,3 +124,46 @@ def test_stage_replay_needs_records(tmp_path: Path, monkeypatch, capsys) -> None
     code = main(["stage", "research", "--job", str(job_dir), "--replay"])
     assert code == 1
     assert "no records/" in capsys.readouterr().err
+
+
+def _real_world() -> Path | None:
+    world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (world / "tools" / "check_draft.py").is_file():
+        return None
+    return world
+
+
+def test_take_checks_each_item(tmp_path: Path, monkeypatch, capsys) -> None:
+    """#118.10: take names the item that fails the draft check."""
+    from fake_store import FakeStore
+
+    world = _real_world()
+    if world is None:
+        pytest.skip("needs a real world checkout")
+    store = FakeStore()
+    store.write_blob(
+        "review/j1/home_1/animals/fox.json",
+        (world / "animals" / "fox.json").read_bytes(),
+    )
+    store.write_blob("review/j1/home_2/animals/broken.json", b"{}")
+    monkeypatch.setattr("builder.worker_store.FirebaseStore", lambda *a, **k: store)
+    code = main(["take", "j1", "--out", str(tmp_path), "--world", str(world)])
+    assert code == 1
+    assert "home_2 fails the draft check" in capsys.readouterr().err
+
+
+def test_take_clean_job_reports(tmp_path: Path, monkeypatch, capsys) -> None:
+    from fake_store import FakeStore
+
+    world = _real_world()
+    if world is None:
+        pytest.skip("needs a real world checkout")
+    store = FakeStore()
+    store.write_blob(
+        "review/j1/home_1/animals/fox.json",
+        (world / "animals" / "fox.json").read_bytes(),
+    )
+    monkeypatch.setattr("builder.worker_store.FirebaseStore", lambda *a, **k: store)
+    code = main(["take", "j1", "--out", str(tmp_path), "--world", str(world)])
+    assert code == 0
+    assert "taken to" in capsys.readouterr().out

@@ -3,6 +3,20 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-10-29: T79, no addon or web left in the builder
+
+- T48 already took it all out: no `godot/` or `web/` directory,
+  and nothing matching `godot|addon|web/admin` in tracked code or
+  tests (only stale bytecode under ignored `__pycache__/` and
+  third-party `node_modules/`). Docs mention them only as
+  history, plus the README's stated absence ("No web pages, no
+  game addon, no Firestore rules"). `firebase/` holds the
+  Storage rules block plus its emulator tests, no Firestore
+  rules. Nothing to remove; this entry is the check. The game
+  half (its checks pass without the addon) is Claude's.
+- Evidence: the search above over tracked code and tests;
+  `git status` clean.
+
 ## 2026-10-29: inbox #132, D19 a new reference once per body plan
 
 - D19: an animal whose list entry has `"shape": "new"` loops a

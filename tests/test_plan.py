@@ -207,6 +207,100 @@ def test_nearest_home_prefers_the_same_habitat(tmp_path: Path) -> None:
     )
 
 
+def test_nearest_home_prefers_land_behind_the_coast(tmp_path: Path) -> None:
+    """#141.4: a forest border adapts from the farther forest, not the sea."""
+    world = _world(tmp_path)
+    (world / "homes" / "sea.json").write_text(
+        json.dumps({"habitat": "sea", "ecoregions": [651]})
+    )
+    forest = [679, 1.0, None, 0.0, 4, 1.0, 0.0, 50.0]
+    sea = [651, 1.0, None, 0.0, 4, 0.3, 0.0, 0.0]
+    boreal = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    bare = [999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]
+    cells = {f"{c},{r}": list(bare) for r in range(476, 481) for c in range(411, 416)}
+    cells["413,478"] = list(forest)
+    cells["414,478"] = list(sea)
+    cells["411,478"] = list(boreal)
+    grids = _grids(tmp_path, cells)
+    from builder.tiles import available_homes
+
+    assert (
+        nearest_home(
+            "n_413_478",
+            grids,  # type: ignore[arg-type]
+            available_homes(world),
+            "forest",  # type: ignore[arg-type]
+        )
+        == "boreal_forest"
+    )
+
+
+def test_nearest_home_prefers_water_for_the_sea(tmp_path: Path) -> None:
+    """#141.4: a sea border adapts from the farther sea, not the land."""
+    world = _world(tmp_path)
+    (world / "homes" / "sea.json").write_text(
+        json.dumps({"habitat": "sea", "ecoregions": [651]})
+    )
+    sea = [651, 1.0, None, 0.0, 4, 0.3, 0.0, 0.0]
+    boreal = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    bare = [999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]
+    cells = {f"{c},{r}": list(bare) for r in (477, 478, 479) for c in (412, 413, 414)}
+    cells["413,478"] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
+    cells["412,478"] = list(boreal)
+    cells["414,478"] = list(sea)
+    grids = _grids(tmp_path, cells)
+    from builder.tiles import available_homes
+
+    assert (
+        nearest_home(
+            "n_413_478",
+            grids,  # type: ignore[arg-type]
+            available_homes(world),
+            "open_ocean",  # type: ignore[arg-type]
+        )
+        == "sea"
+    )
+
+
+def test_tallinn_adapts_from_the_land_home() -> None:
+    """#141.4: n_416_482 plans home_679 from boreal_forest, not sea."""
+    import pytest
+
+    from builder.tiles import available_homes
+
+    world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs an animundo-world checkout")
+    grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+    grids = {
+        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
+        for name in ("ease2_n25", "ease2_s25")
+    }
+    homes = available_homes(world)
+    assert (
+        nearest_home("n_416_482", grids, homes, "forest")  # type: ignore[arg-type]
+        == "boreal_forest"
+    )
+    plan = plan_tile(
+        "n_416_482",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    home_item = next(i for i in plan["items"] if i["kind"] == "home")
+    assert home_item == {
+        "id": "home_679",
+        "kind": "home",
+        "what": "679",
+        "from": "boreal_forest",
+        "estimate_usd": 0.02,
+    }
+    assert all(i["what"] != "kelp" for i in plan["items"] if i["kind"] == "plant")
+
+
 def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:
     world = _world(tmp_path)
     grids = _grids(tmp_path, _boreal())

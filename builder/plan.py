@@ -109,6 +109,10 @@ def plan_name(
     }
 
 
+#: Habitats that are water: a new water home adapts from water.
+WATER_HABITATS = frozenset({"sea", "open_ocean"})
+
+
 def nearest_home(
     tile: str,
     grids: dict[GridName, HabitatGrid],
@@ -118,11 +122,13 @@ def nearest_home(
     """The nearest existing home to adapt a new home from.
 
     The same habitat first: the nearest around the tile in
-    expanding rings, else the first anywhere. Only when no home
-    of the habitat exists, the nearest of any habitat the same
-    way. A sea home from the forest brings forest plants into
-    the sea, so nearness never beats the habitat (#139.2). A
-    world with no homes at all is broken, said loudly.
+    expanding rings, else the first anywhere. Then the nearest
+    of the same kind (land or water) the same way: a forest
+    border adapts from the forest behind it, not the sea
+    beside it (#141.4). Only with no home of the kind at all,
+    the nearest of any habitat. Nearness never beats the
+    habitat (#139.2), then never the kind. A world with no
+    homes at all is broken, said loudly.
     """
     if not homes:
         raise ValueError("the world has no homes to adapt from")
@@ -136,6 +142,18 @@ def nearest_home(
     same = sorted(h for h, d in homes.items() if d.get("habitat") == habitat)
     if same:
         return same[0]
+    want_water = habitat in WATER_HABITATS
+
+    def kind_matches(home_id: str) -> bool:
+        return (homes[home_id].get("habitat") in WATER_HABITATS) == want_water
+
+    for eco, neighbour in rings:
+        found = home_for_cell(eco, neighbour, homes)
+        if found is not None and kind_matches(found):
+            return found
+    kind = sorted(h for h in homes if kind_matches(h))
+    if kind:
+        return kind[0]
     for eco, neighbour in rings:
         found = home_for_cell(eco, neighbour, homes)
         if found is not None:

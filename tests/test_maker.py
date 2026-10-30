@@ -747,6 +747,16 @@ def _recast_region(tmp_path: Path) -> None:
     region["animals"] = {"playable": ["lynx"], "predators": [], "prey": ["capybara"]}
     region["fish"] = [{"kind": "lynx", "count": 3}]
     region["ground_cover"]["plants"] = []
+    # The test cast's food, seated with it: the shipped file layers
+    # its food elsewhere now, but a region still feeds its cast
+    # (food first, decision 0011). The prey keeps the model's grass;
+    # the hunter's code diet is the research's berries (#160.2).
+    food = region.get("food") or []
+    have = {entry.get("kind") for entry in food if isinstance(entry, dict)}
+    for kind, names in (("grass", ["grass"]), ("berries", ["bilberries"])):
+        if kind not in have:
+            food.append({"kind": kind, "names": names})
+    region["food"] = food
     regions = tmp_path / "regions"
     (regions / "fi_test.json").unlink()
     (regions / "fi_nuuksio.json").write_text(json.dumps(region))

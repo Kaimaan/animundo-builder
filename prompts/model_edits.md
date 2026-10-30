@@ -53,10 +53,17 @@ The schema arrives with the call; its shape:
   white body bands"); empty only when the looks name none.
   Code maps them to the tool's marks with the rest, and the
   render is checked for them before the model passes.
+- `bands`: wide body bands, 1 to 5, when the looks name
+  bands or bars; 0 when they name none.
+- `band_color`: the bands' colour name from `colors` or
+  `new_colors`; empty when `bands` is 0.
 
 Marks need no entry: code adds ear tufts, ruffs, tail tips,
-bars and stripes, spots, spines and hammer heads from the
-research's own words.
+bands and stripes, spots, spines and hammer heads from the
+research's own words. Few wide bars are bands (a clownfish's
+three white bands); many thin stripes are stripes (a zebra,
+a tiger). A fish that is mostly its colour keeps the colour:
+bands only when the research names bars.
 
 ## Tools
 

@@ -499,6 +499,8 @@ def test_edits_prompt_carries_looks_and_parts(tmp_path: Path) -> None:
     assert request["json_schema"]["name"] == "ModelEdits"
     assert request["json_schema"]["strict"] is True
     assert_strict_subset(request["json_schema"]["schema"])
+    assert "bands" in request["json_schema"]["schema"]["required"]
+    assert "band_color" in request["json_schema"]["schema"]["required"]
 
 
 def test_fix_round_repairs_check_errors(tmp_path: Path) -> None:
@@ -2464,12 +2466,18 @@ def test_tool_marks_map_words_to_the_tool() -> None:
         "ear_tufts",
         "ruff",
         "tail_tip",
-        "stripes",
+        "bands",
         "spots",
         "spines",
         "hammer",
     ]
     assert unmatched == ["long whiskers"]
+
+
+def test_tool_marks_keep_thin_stripes_as_stripes() -> None:
+    """#149.1: many thin stripes stay stripes; few wide bars are bands."""
+    marks, _ = _tool_marks(["many thin black stripes", "banded fins"])
+    assert marks == ["stripes", "bands"]
 
 
 def test_tool_marks_skip_fin_spines() -> None:
@@ -2483,7 +2491,7 @@ def test_mark_miss_points_at_the_tool_mark() -> None:
     """#146.3: a missing mark's fix keeps what paints it."""
     assert _mark_miss("three white bars across the body") == (
         "the render shows no three white bars across the body: "
-        "the stripes mark paints it, so keep the mark and its "
+        "the bands mark paints it, so keep the mark and its "
         "colours, and don't repaint its parts away"
     )
     assert _mark_miss("yellow body") == (
@@ -2813,7 +2821,7 @@ def test_marks_review_passes_a_render_with_the_bands(tmp_path: Path) -> None:
     client = ScriptClient(
         [
             _animal_answer("clownfish"),
-            _edits_answer(key_marks=[bands]),
+            _edits_answer(key_marks=[bands], bands=3, band_color="band"),
             _marks_answer([bands], []),
         ]
     )
@@ -2823,13 +2831,31 @@ def test_marks_review_passes_a_render_with_the_bands(tmp_path: Path) -> None:
     edits = json.loads(
         (tmp_path / "tries" / "clownfish" / "edits" / "1" / "edits.json").read_text()
     )
-    assert "stripes" in edits["marks"]
+    assert "bands" in edits["marks"]
+    assert edits["bands"] == 3
+    assert edits["band_color"] == "band"
     review = json.loads(
         (
             tmp_path / "tries" / "clownfish" / "edits" / "1" / "marks_review.json"
         ).read_text()
     )
     assert review == {"shown": [bands], "missing": []}
+
+
+def test_unbanded_edits_carry_no_band_fields(tmp_path: Path) -> None:
+    """#149.1: a lynx's edits leave bands and band_color out."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient(
+        [_animal_answer("lynx"), _edits_answer(bands=0, band_color="")]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    edits = json.loads(
+        (tmp_path / "tries" / "lynx" / "edits" / "1" / "edits.json").read_text()
+    )
+    assert "bands" not in edits["marks"]
+    assert "bands" not in edits
+    assert "band_color" not in edits
 
 
 def test_marks_review_sends_a_bandless_render_to_a_fix_round(

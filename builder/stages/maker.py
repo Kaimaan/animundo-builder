@@ -453,6 +453,11 @@ class AnimalMakerStage:
                 keyed, _ = _tool_marks(key_marks)
                 marks = [*marks, *[m for m in keyed if m not in marks]]
                 edits["marks"] = marks
+                if "bands" not in marks:
+                    # Unbanded animals carry no band fields; the
+                    # adapt tool defaults banded ones (#149.1).
+                    edits.pop("bands", None)
+                    edits.pop("band_color", None)
                 edits["unmakable"] = list(
                     dict.fromkeys([*(edits.get("unmakable") or []), *unmatched])
                 )
@@ -2007,6 +2012,8 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
             "repaint",
             "unmakable",
             "key_marks",
+            "bands",
+            "band_color",
         ],
         "properties": {
             "colors": {
@@ -2067,6 +2074,22 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
                 ),
                 "items": {"type": "string"},
             },
+            "bands": {
+                "type": "integer",
+                "description": (
+                    "Wide body bands, 1 to 5, when the looks name "
+                    "bands or bars; 0 when they name none"
+                ),
+                "minimum": 0,
+                "maximum": 5,
+            },
+            "band_color": {
+                "type": "string",
+                "description": (
+                    "The bands' colour name from colors or "
+                    "new_colors; empty when bands is 0"
+                ),
+            },
         },
     }
 
@@ -2126,11 +2149,12 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
     """Look-mark words to the tool's marks (#63.1).
 
     "ruff" gives `ruff`, "tuft" gives `ear_tufts`, "tail"
-    plus "tip" gives `tail_tip`; bars, bands and stripes
-    give `stripes`, spots give `spots`, a hammer head gives
-    `hammer`, and spines give `spines` unless they are fin
-    spines, which the tool's hedgehog coat can't make
-    (#146.3). The rest go unmakable, for the report.
+    plus "tip" gives `tail_tip`; few wide bars or bands give
+    `bands`, many thin stripes give `stripes` (#149.1), spots
+    give `spots`, a hammer head gives `hammer`, and spines
+    give `spines` unless they are fin spines, which the
+    tool's hedgehog coat can't make (#146.3). The rest go
+    unmakable, for the report.
     """
     marks: list[str] = []
     unmatched: list[str] = []
@@ -2143,7 +2167,9 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
             found.append("ear_tufts")
         if "tail" in low and "tip" in low:
             found.append("tail_tip")
-        if re.search(r"\b(bars?|bands?|banded|stripes?|striped)\b", low):
+        if re.search(r"\b(bands?|banded|bars?)\b", low):
+            found.append("bands")
+        if re.search(r"\b(stripes?|striped)\b", low):
             found.append("stripes")
         if re.search(r"\bspots?\b|\bspotted\b", low):
             found.append("spots")

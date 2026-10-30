@@ -8,6 +8,17 @@ from typing import Any
 from builder.worker import DELETE
 
 
+class _Watch:
+    """A Firestore Watch: unsubscribing stops it (#150.3)."""
+
+    def __init__(self, store: FakeStore, name: str) -> None:
+        self._store = store
+        self._name = name
+
+    def unsubscribe(self) -> None:
+        self._store.unsubscribed.append(self._name)
+
+
 class FakeStore:
     """An in-memory Firestore."""
 
@@ -18,6 +29,7 @@ class FakeStore:
         self.alerts: list[dict[str, Any]] = []
         self.jobs: dict[str, dict[str, Any]] = {}
         self.watchers: list[tuple[str, Any]] = []
+        self.unsubscribed: list[str] = []
         self.blobs: dict[str, bytes] = {}
         self.enabled = True
         self._lock = threading.Lock()
@@ -81,11 +93,11 @@ class FakeStore:
 
     def watch_requests(self, callback: Any) -> Any:
         self.watchers.append(("requests", callback))
-        return lambda: None
+        return _Watch(self, "requests")
 
     def watch_build_jobs(self, callback: Any) -> Any:
         self.watchers.append(("build_jobs", callback))
-        return lambda: None
+        return _Watch(self, "build_jobs")
 
     def read_blob(self, path: str) -> bytes | None:
         return self.blobs.get(path)

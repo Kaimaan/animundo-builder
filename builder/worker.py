@@ -1097,8 +1097,8 @@ class Listener:
         for job_id, doc in self.store.pending_build_jobs():
             if self.worker.note_build_job(job_id, doc):
                 self.events.put(("build_job", job_id))
-        unsub_requests = self.store.watch_requests(self._on_requests)
-        unsub_jobs = self.store.watch_build_jobs(self._on_build_jobs)
+        requests_watch = self.store.watch_requests(self._on_requests)
+        jobs_watch = self.store.watch_build_jobs(self._on_build_jobs)
         if self.poll_seconds > 0:
             thread = threading.Thread(target=self._poll_loop, daemon=True)
             thread.start()
@@ -1114,8 +1114,9 @@ class Listener:
         except KeyboardInterrupt:
             pass
         finally:
-            unsub_requests()
-            unsub_jobs()
+            # Firestore Watches, not callbacks (#150.3).
+            requests_watch.unsubscribe()
+            jobs_watch.unsubscribe()
 
     def _poll_loop(self) -> None:
         """The world commit, every few minutes: pull, re-plan, retry."""

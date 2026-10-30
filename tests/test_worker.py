@@ -170,6 +170,16 @@ def test_dispatch_runs_and_releases(tmp_path: Path) -> None:
     assert ("build_job", "j1") not in worker.in_flight
 
 
+def test_listener_stop_unsubscribes_both_watches(tmp_path: Path) -> None:
+    """#150.3: stopping the listener unsubscribes, never crashes."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    listener = Listener(worker=worker, store=store)
+    listener.stop.set()
+    listener.start()
+    assert store.unsubscribed == ["requests", "build_jobs"]
+
+
 def test_dispatch_survives_unknown_kinds(tmp_path: Path, capsys: Any) -> None:
     worker = _worker(tmp_path, FakeStore())
     listener = Listener(worker=worker, store=FakeStore())

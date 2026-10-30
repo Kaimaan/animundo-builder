@@ -346,6 +346,31 @@ def publish_group(
     return blob_path
 
 
+def _apply_index_delta(
+    index: dict[str, Any],
+    old_group: dict[str, Any],
+    tile: str,
+    made: bool,
+    blocked_reason: str | None,
+) -> None:
+    """One tile's honest delta on the index counts."""
+    was_ready = tile in (old_group.get("tiles") or {})
+    was_blocked = (old_group.get("blocked") or {}).get(tile, {}).get("reason")
+    counts = index["counts"]
+    if made and not was_ready:
+        counts["ready"] += 1
+    if not made and was_ready:
+        counts["ready"] = max(0, counts["ready"] - 1)
+    if was_blocked and was_blocked != blocked_reason:
+        blocked = counts["blocked"]
+        blocked[was_blocked] = max(0, blocked.get(was_blocked, 0) - 1)
+        if blocked[was_blocked] == 0:
+            del blocked[was_blocked]
+    if blocked_reason and blocked_reason != was_blocked:
+        blocked = counts["blocked"]
+        blocked[blocked_reason] = blocked.get(blocked_reason, 0) + 1
+
+
 def _update_index(
     store: Any,
     grid: GridName,
@@ -370,20 +395,175 @@ def _update_index(
         }
     key = f"{grid}/{gcol:02d}_{grow:02d}"
     index["groups"][key] = version
-    was_ready = tile in (old_group.get("tiles") or {})
-    was_blocked = (old_group.get("blocked") or {}).get(tile, {}).get("reason")
-    counts = index["counts"]
-    if not was_ready:
-        counts["ready"] += 1
-    if was_blocked:
-        blocked = counts["blocked"]
-        blocked[was_blocked] = max(0, blocked.get(was_blocked, 0) - 1)
-        if blocked[was_blocked] == 0:
-            del blocked[was_blocked]
+    _apply_index_delta(index, old_group, tile, True, None)
     index["made_at"] = datetime.now(UTC).isoformat()
     index["world"] = world_commit
     validate("tile-index", index)
     store.write_blob("tiles/v1/index.json", json.dumps(index).encode("utf-8"))
+
+
+class EnrichRemakeError(ValueError):
+    """A remade tile broke enrichment's promise: loud, with the tile."""
+
+    def __init__(self, tile: str, reason: str) -> None:
+        super().__init__(f"{tile}: {reason}")
+        self.tile = tile
+        self.reason = reason
+
+
+#: A remake's verdict per tile: the new entry, or nothing changed.
+Remake = tuple[str, dict[str, Any] | None]
+
+
+def _content(tile: dict[str, Any]) -> dict[str, Any]:
+    """The tile without provenance: what a version bump means."""
+    return {k: v for k, v in tile.items() if k not in ("version", "made")}
+
+
+def _filed_now(world: Path, kind: str, what: str) -> bool:
+    if kind == "animal":
+        return (world / "animals" / f"{what}.json").is_file()
+    return (world / "models" / "plants" / f"{what}.json").is_file()
+
+
+def remake_decision(
+    tile: str,
+    old_tile: dict[str, Any] | None,
+    old_blocked: dict[str, Any] | None,
+    made: dict[str, Any] | None,
+    blocked: dict[str, Any] | None,
+    world: Path,
+    what: str,
+) -> tuple[Remake, bool]:
+    """One remade tile's verdict: publish, refresh, or skip (#143.4).
+
+    Enrichment only adds: seed, home, edges and coast (and
+    everything but the tile's own lists) stay byte-identical, the
+    species lists only grow, and `wanted` drops only what is filed
+    now. Anything else fails the job loudly instead of publishing
+    a rebuilt tile. Returns the verdict and whether the shipped
+    thing missed its food here (`no_food`): wanted but still out
+    of the species.
+    """
+    wanted_before = [e.get("what") for e in (old_tile or {}).get("wanted", [])]
+    wanted_before += [e.get("what") for e in (old_blocked or {}).get("wanted", [])]
+    if made is None:
+        if old_tile is not None:
+            raise EnrichRemakeError(tile, "a ready tile remade blocked; a person looks")
+        if blocked is None:
+            raise EnrichRemakeError(tile, "the remake came back empty")
+        return ("blocked", blocked), what in wanted_before
+    species = made.get("species", {})
+    no_food = what in wanted_before and all(
+        what not in species.get(name, []) for name in ("playable", "prey", "predators")
+    )
+    if old_tile is None:
+        made["version"] = 1
+        return ("tile", made), no_food
+    for key, old_value in old_tile.items():
+        if key in ("species", "wanted", "requires", "version", "made"):
+            continue
+        if made.get(key) != old_value:
+            raise EnrichRemakeError(tile, f"enrichment moved {key}; a person looks")
+    for name in ("playable", "prey", "predators"):
+        if not set(old_tile.get("species", {}).get(name, [])) <= set(
+            species.get(name, [])
+        ):
+            raise EnrichRemakeError(tile, f"enrichment dropped {name}; a person looks")
+    if not set(old_tile.get("requires", {}).get("animals", [])) <= set(
+        made.get("requires", {}).get("animals", [])
+    ):
+        raise EnrichRemakeError(tile, "enrichment dropped requires; a person looks")
+    dropped = {e.get("what") for e in old_tile.get("wanted", [])} - {
+        e.get("what") for e in made.get("wanted", [])
+    }
+    for_entry = {e.get("what"): e.get("kind") for e in old_tile.get("wanted", [])}
+    for missing in sorted(dropped, key=str):
+        kind = for_entry.get(missing)
+        if kind not in ("animal", "plant") or not _filed_now(world, kind, str(missing)):
+            raise EnrichRemakeError(
+                tile, f"wanted lost {missing}, unfiled; a person looks"
+            )
+    if _content(made) == _content(old_tile):
+        return ("skip", None), no_food
+    made["version"] = int(old_tile.get("version", 0)) + 1
+    return ("tile", made), no_food
+
+
+def publish_remakes(
+    store: Any,
+    groups: dict[str, dict[str, Any]],
+    decisions: dict[str, Remake],
+    world_commit: str,
+) -> dict[str, int]:
+    """Changed remake tiles to Storage: one write per group, index once.
+
+    `groups` holds the loaded group files by blob path; only groups
+    with a changed tile are written, their version up by one.
+    Returns `versions` for the tiles whose content changed.
+    """
+    from .grid import group, group_path
+
+    by_blob: dict[str, list[str]] = {}
+    for tile, (kind, entry) in decisions.items():
+        if kind == "skip" or entry is None:
+            continue
+        by_blob.setdefault(group_path(tile), []).append(tile)
+    versions: dict[str, int] = {}
+    raw = store.read_blob("tiles/v1/index.json")
+    if raw is not None:
+        index = json.loads(raw.decode("utf-8"))
+    else:
+        index = {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {},
+            "counts": {"ready": 0, "blocked": {}},
+        }
+    for blob_path, tiles in by_blob.items():
+        grid, gcol, grow = group(tiles[0])
+        data = groups.get(blob_path)
+        if data is None:
+            raw_group = store.read_blob(blob_path)
+            data = (
+                json.loads(raw_group.decode("utf-8"))
+                if raw_group is not None
+                else {
+                    "format": 1,
+                    "grid": grid,
+                    "group": [gcol, grow],
+                    "version": 0,
+                    "tiles": {},
+                    "blocked": {},
+                }
+            )
+            groups[blob_path] = data
+        old = json.loads(json.dumps(data))
+        for tile in tiles:
+            kind, entry = decisions[tile]
+            assert entry is not None
+            if kind == "tile":
+                data.setdefault("tiles", {})[tile] = entry
+                data.get("blocked", {}).pop(tile, None)
+                versions[tile] = int(entry["version"])
+            else:
+                data.setdefault("blocked", {})[tile] = entry
+                data.get("tiles", {}).pop(tile, None)
+        data["version"] = int(data.get("version", 0)) + 1
+        validate("tile-group", data)
+        store.write_blob(blob_path, json.dumps(data, indent=1).encode("utf-8"))
+        index["groups"][f"{grid}/{gcol:02d}_{grow:02d}"] = data["version"]
+        for tile in tiles:
+            kind, entry = decisions[tile]
+            assert entry is not None
+            reason = entry.get("reason") if kind == "blocked" else None
+            _apply_index_delta(index, old, tile, kind == "tile", reason)
+    index["made_at"] = datetime.now(UTC).isoformat()
+    index["world"] = world_commit
+    validate("tile-index", index)
+    store.write_blob("tiles/v1/index.json", json.dumps(index).encode("utf-8"))
+    return versions
 
 
 def assemble_preview(

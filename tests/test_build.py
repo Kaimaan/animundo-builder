@@ -471,3 +471,221 @@ def test_broken_item_fails_draft_check(tmp_path: Path) -> None:
 def test_draft_check_without_tool_errors(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no draft check"):
         build_mod.check_draft(tmp_path, tmp_path / "no-world")
+
+
+def _old_tile(**over: Any) -> dict[str, Any]:
+    tile: dict[str, Any] = {
+        "id": "n_413_478",
+        "version": 3,
+        "made": {"at": "2026-01-01", "world": "aaa", "maker": "m"},
+        "seed": 7,
+        "home": "boreal_forest",
+        "edges": {"n": [1]},
+        "species": {"playable": ["fox"], "prey": [], "predators": []},
+        "requires": {"animals": ["fox"]},
+        "wanted": [{"kind": "animal", "what": "lynx", "part": "forest"}],
+    }
+    tile.update(over)
+    return tile
+
+
+def test_remake_decision_skips_an_identical_tile(tmp_path: Path) -> None:
+    """#143.4: provenance alone never bumps a version."""
+    old = _old_tile()
+    del old["wanted"]
+    made = _old_tile(version=1, made={"at": "2026-10-30", "world": "bbb"})
+    del made["wanted"]
+    verdict, no_food = build_mod.remake_decision(
+        "n_413_478", old, None, made, None, tmp_path, "lynx"
+    )
+    assert verdict == ("skip", None)
+    assert no_food is False
+
+
+def test_remake_decision_publishes_an_addition(tmp_path: Path) -> None:
+    """#143.4: the joined animal bumps the version; wanted drops it."""
+    (tmp_path / "animals").mkdir()
+    (tmp_path / "animals" / "lynx.json").write_text("{}")
+    made = _old_tile(
+        version=1,
+        species={"playable": ["fox", "lynx"], "prey": [], "predators": []},
+        requires={"animals": ["fox", "lynx"]},
+    )
+    del made["wanted"]
+    verdict, no_food = build_mod.remake_decision(
+        "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+    )
+    assert verdict[0] == "tile"
+    assert verdict[1] is not None and verdict[1]["version"] == 4
+    assert no_food is False
+
+
+def test_remake_decision_flags_no_food_and_still_bumps(tmp_path: Path) -> None:
+    """#143.4: the unfed animal stays out, but wanted changed."""
+    (tmp_path / "animals").mkdir()
+    (tmp_path / "animals" / "lynx.json").write_text("{}")
+    made = _old_tile(version=1)
+    del made["wanted"]
+    verdict, no_food = build_mod.remake_decision(
+        "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+    )
+    assert verdict[0] == "tile"
+    assert no_food is True
+
+
+def test_remake_decision_refuses_a_rebuilt_tile(tmp_path: Path) -> None:
+    """#143.4: a moved home or a shrunk list fails loudly."""
+    made = _old_tile(version=1, home="tundra")
+    with pytest.raises(build_mod.EnrichRemakeError, match="moved home"):
+        build_mod.remake_decision(
+            "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+        )
+    made = _old_tile(version=1, species={"playable": [], "prey": [], "predators": []})
+    with pytest.raises(build_mod.EnrichRemakeError, match="dropped playable"):
+        build_mod.remake_decision(
+            "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+        )
+    made = _old_tile(version=1)
+    del made["wanted"]
+    with pytest.raises(build_mod.EnrichRemakeError, match="unfiled"):
+        build_mod.remake_decision(
+            "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+        )
+
+
+def test_remake_decision_opens_a_blocked_tile(tmp_path: Path) -> None:
+    """#143.4: the opener publishes the tile at version 1."""
+    old_blocked = {
+        "reason": "no_animal",
+        "habitat": "boreal_forest",
+        "wanted": [{"kind": "animal", "what": "lynx", "part": "forest"}],
+    }
+    made = _old_tile(
+        version=1,
+        species={"playable": ["lynx"], "prey": [], "predators": []},
+        requires={"animals": ["lynx"]},
+    )
+    del made["wanted"]
+    verdict, no_food = build_mod.remake_decision(
+        "n_413_478", None, old_blocked, made, None, tmp_path, "lynx"
+    )
+    assert verdict[0] == "tile"
+    assert verdict[1] is not None and verdict[1]["version"] == 1
+    assert no_food is False
+
+
+def test_remake_decision_keeps_a_hungry_block(tmp_path: Path) -> None:
+    """#143.4: still nothing kept refreshes the block, flagged no_food."""
+    old_blocked = {
+        "reason": "no_animal",
+        "habitat": "boreal_forest",
+        "wanted": [{"kind": "animal", "what": "lynx", "part": "forest"}],
+    }
+    blocked = {"reason": "no_animal", "habitat": "boreal_forest"}
+    verdict, no_food = build_mod.remake_decision(
+        "n_413_478", None, old_blocked, None, blocked, tmp_path, "lynx"
+    )
+    assert verdict == ("blocked", blocked)
+    assert no_food is True
+    with pytest.raises(build_mod.EnrichRemakeError, match="remade blocked"):
+        build_mod.remake_decision(
+            "n_413_478", _old_tile(), None, None, blocked, tmp_path, "lynx"
+        )
+
+
+def test_publish_remakes_writes_once_per_group_and_index_once() -> None:
+    """#143.4: two tiles in one group share its write and its bump."""
+    store = FakeStore()
+    writes: list[str] = []
+    real_write = store.write_blob
+    store.write_blob = lambda path, data, **k: (
+        writes.append(path),
+        real_write(path, data, **k),
+    )  # type: ignore[method-assign]
+    group_blob = "tiles/v1/ease2_n25/51_59.json"
+    groups = {
+        group_blob: {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 5,
+            "tiles": {
+                "n_413_478": _old_tile(id="n_413_478", version=3),
+                "n_413_479": _old_tile(id="n_413_479", version=2),
+            },
+            "blocked": {},
+        }
+    }
+    store.blobs[group_blob] = json.dumps(groups[group_blob]).encode("utf-8")
+    other_blob = "tiles/v1/ease2_n25/52_59.json"
+    other = {
+        "format": 1,
+        "grid": "ease2_n25",
+        "group": [52, 59],
+        "version": 9,
+        "tiles": {"n_421_478": _old_tile(id="n_421_478", version=1)},
+        "blocked": {},
+    }
+    store.blobs[other_blob] = json.dumps(other).encode("utf-8")
+    versions = build_mod.publish_remakes(
+        store,
+        groups,
+        {
+            "n_413_478": ("tile", _old_tile(id="n_413_478", version=4)),
+            "n_413_479": ("tile", _old_tile(id="n_413_479", version=3)),
+            "n_421_478": ("skip", None),
+        },
+        "abc",
+    )
+    assert versions == {"n_413_478": 4, "n_413_479": 3}
+    assert writes.count(group_blob) == 1
+    assert writes.count("tiles/v1/index.json") == 1
+    assert writes.count(other_blob) == 0
+    assert store.blobs[other_blob] == json.dumps(other).encode("utf-8")
+    data = json.loads(store.blobs[group_blob].decode("utf-8"))
+    assert data["version"] == 6
+    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    assert index["groups"] == {"ease2_n25/51_59": 6}
+    assert index["counts"]["ready"] == 0
+
+
+def test_publish_remakes_moves_counts_on_an_opener() -> None:
+    """#143.4: blocked to ready shifts the index by honest delta."""
+    store = FakeStore()
+    group_blob = "tiles/v1/ease2_n25/51_59.json"
+    groups = {
+        group_blob: {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": {},
+            "blocked": {
+                "n_413_478": {
+                    "reason": "no_animal",
+                    "habitat": "boreal_forest",
+                }
+            },
+        }
+    }
+    store.blobs[group_blob] = json.dumps(groups[group_blob]).encode("utf-8")
+    store.blobs["tiles/v1/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {},
+            "counts": {"ready": 0, "blocked": {"no_animal": 1}},
+        }
+    ).encode("utf-8")
+    versions = build_mod.publish_remakes(
+        store,
+        groups,
+        {"n_413_478": ("tile", _old_tile(id="n_413_478", version=1))},
+        "abc",
+    )
+    assert versions == {"n_413_478": 1}
+    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    assert index["counts"] == {"ready": 1, "blocked": {}}
+    data = json.loads(store.blobs[group_blob].decode("utf-8"))
+    assert data["blocked"] == {}

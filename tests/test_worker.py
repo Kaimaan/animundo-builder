@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -575,6 +576,365 @@ def test_enrich_job_fails_cleanly_when_malformed(tmp_path: Path) -> None:
     store.build_jobs["j2"] = _enrich_job(items=["enrich_tiger"])
     worker.handle_build_job("j2")
     assert store.build_jobs["j2"]["error"] == "bad_enrich"
+
+
+def _forest_survey(
+    *species: str, name_en: str = "Fox woods", name_fi: str = "Kettumetsä"
+) -> dict[str, Any]:
+    return {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": list(species)}],
+        "find": None,
+        "name_en": name_en,
+        "name_fi": name_fi,
+    }
+
+
+class _AnswerClient:
+    """One survey answer, on repeat."""
+
+    def __init__(self, answer: dict[str, Any]) -> None:
+        self.answer = answer
+
+    def chat(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=json.dumps(self.answer))
+                )
+            ]
+        )
+
+
+class _SilentClient:
+    """A remake never calls, however live the worker."""
+
+    def chat(self, **kwargs: Any) -> Any:
+        raise AssertionError("a remake never calls")
+
+    def responses_create(self, **kwargs: Any) -> Any:
+        raise AssertionError("a remake never calls")
+
+
+def _named_list(world: Path) -> None:
+    """Names for the fake list's animals: the survey prompt needs them."""
+    names = {
+        "fox": ("Red fox", "Vulpes vulpes"),
+        "mountain_hare": ("Mountain hare", "Lepus timidus"),
+        "vole": ("Vole", "Microtus agrestis"),
+        "lion": ("Lion", "Panthera leo"),
+        "tiger": ("Tiger", "Panthera tigris"),
+    }
+    listed = json.loads((world / "animal-list.json").read_text())
+    for entry in listed["animals"]:
+        if entry["id"] in names:
+            entry["name"], entry["latin"] = names[entry["id"]]
+    (world / "animal-list.json").write_text(json.dumps(listed))
+
+
+def _file_lion(world: Path, diet: list[str]) -> None:
+    import json
+
+    (world / "animals" / "lion.json").write_text(
+        json.dumps({"playable": True, "tags": ["big_cat"], "diet": diet})
+    )
+    listed = json.loads((world / "animal-list.json").read_text())
+    next(e for e in listed["animals"] if e["id"] == "lion")["in_library"] = "lion"
+    (world / "animal-list.json").write_text(json.dumps(listed))
+
+
+def test_enrich_review_remakes_only_the_tiles_that_list_it(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#143.4's lab: two tiles list the lion, one doesn't."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A, B, C = "n_413_478", "n_413_479", "n_421_478"
+    block = boreal_3x3(413, 478)
+    side = boreal_3x3(421, 478)
+    # B's northern neighbours: the block's row above.
+    edge = {f"{c},480": list(block["413,478"]) for c in (412, 413, 414)}
+    cells = {**block, **edge, **side}
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, cells)
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    FOUR = ("fox", "mountain_hare", "vole", "lion")
+    THREE = ("fox", "mountain_hare", "vole")
+    made: dict[str, Any] = {}
+    for tile, species in ((A, FOUR), (B, FOUR), (C, THREE)):
+        tile_made, blocked = make_tile(
+            tile,
+            worker._grids(),
+            worker.world,
+            builder_root=tmp_path,
+            species_source=SpeciesSource(
+                client=_AnswerClient(_forest_survey(*species)), cache_dir=cache
+            ),
+        )
+        assert blocked is None and tile_made is not None
+        made[tile] = tile_made
+    assert made[A]["wanted"] == [{"kind": "animal", "what": "lion", "part": "forest"}]
+    assert "wanted" not in made[C]
+    g1, g2 = group_path(A), group_path(C)
+    assert g1 != g2 and group_path(B) == g1
+    store.blobs[g1] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": {A: made[A], B: made[B]},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    store.blobs[g2] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [52, 59],
+            "version": 1,
+            "tiles": {C: made[C]},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    before_c = store.blobs[g2]
+    store.blobs["tiles/v1/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {},
+            "counts": {"ready": 3, "blocked": {}},
+        }
+    ).encode("utf-8")
+    assert worker.world is not None
+    _file_lion(worker.world, ["grass"])
+    store.build_jobs["j1"] = _enrich_job(
+        tile=A,
+        tiles=[A, B, C],
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    writes: list[str] = []
+    real_write = store.write_blob
+    monkeypatch.setattr(
+        store,
+        "write_blob",
+        lambda path, data, *a, **k: (writes.append(path), real_write(path, data)),
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["versions"] == {A: 2, B: 2}
+    g1data = json.loads(store.blobs[g1].decode("utf-8"))
+    assert g1data["version"] == 2
+    assert "lion" in g1data["tiles"][A]["species"]["playable"]
+    assert "lion" in g1data["tiles"][B]["species"]["playable"]
+    assert "wanted" not in g1data["tiles"][A]
+    assert store.blobs[g2] == before_c
+    assert writes.count(g1) == 1
+    assert writes.count(g2) == 0
+    assert writes.count("tiles/v1/index.json") == 1
+    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    assert index["counts"]["ready"] == 3
+
+
+def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) -> None:
+    """#143.4: the wanted opener publishes its tile at version 1."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    D = "n_413_478"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        D,
+        worker._grids(),
+        worker.world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(
+            client=_AnswerClient(
+                _forest_survey("lion", name_en="Lion woods", name_fi="Leijonametsä")
+            ),
+            cache_dir=cache,
+        ),
+    )
+    assert made is None and blocked is not None
+    assert blocked["reason"] == "no_animal"
+    blob = group_path(D)
+    store.blobs[blob] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": {},
+            "blocked": {D: blocked},
+        }
+    ).encode("utf-8")
+    assert worker.world is not None
+    _file_lion(worker.world, ["grass"])
+    store.build_jobs["j1"] = _enrich_job(
+        tile=D,
+        tiles=[D],
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["versions"] == {D: 1}
+    data = json.loads(store.blobs[blob].decode("utf-8"))
+    assert "lion" in data["tiles"][D]["species"]["playable"]
+    assert data["blocked"] == {}
+
+
+def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
+    """#143.4: the unfed lion stays out; the report says no_food."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A = "n_413_478"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        A,
+        worker._grids(),
+        worker.world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(
+            client=_AnswerClient(
+                _forest_survey("fox", "mountain_hare", "vole", "lion")
+            ),
+            cache_dir=cache,
+        ),
+    )
+    assert blocked is None and made is not None
+    blob = group_path(A)
+    store.blobs[blob] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": {A: made},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    assert worker.world is not None
+    _file_lion(worker.world, ["honey"])
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
+    item_dir.mkdir(parents=True)
+    (item_dir / "report.html").write_text("<html></html>", encoding="utf-8")
+    store.build_jobs["j1"] = _enrich_job(
+        tiles=[A],
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["versions"] == {A: 2}
+    data = json.loads(store.blobs[blob].decode("utf-8"))
+    assert "lion" not in data["tiles"][A]["species"]["playable"]
+    assert "wanted" not in data["tiles"][A]
+    report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
+    assert "no_food n_413_478" in report
+
+
+def test_enrich_review_drops_not_accepted(tmp_path: Path) -> None:
+    """#143.4: not_accepted fails with nothing_shipped, as for a build."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "not_accepted"}},
+    )
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "nothing_shipped"
+
+
+def test_enrich_review_waits_for_the_world(tmp_path: Path) -> None:
+    """#143.4: shipped but unfiled stays checking."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "checking"
 
 
 def test_build_job_refuses_a_blocked_plan(tmp_path: Path) -> None:

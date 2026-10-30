@@ -475,6 +475,9 @@ class Worker:
         review = job.get("review") or {}
         if not review:
             return
+        if job.get("kind") == "enrich":
+            self.review_enrich_job(job_id, job)
+            return
         tile = self._job_tile(job_id, job)
         if tile is None:
             return
@@ -520,6 +523,140 @@ class Worker:
         path = publish_group(tile, made, self.store, self.world_commit or "unknown")
         print(f"build job {job_id}: published {path}")
         self._set_status(job_id, "published")
+
+    def review_enrich_job(self, job_id: str, job: dict[str, Any]) -> None:
+        """Remake a shipped enrich item's tiles, then publish (#143.4).
+
+        `not_accepted` fails with `nothing_shipped`, as for a build.
+        A shipped item still missing from the checkout waits. Else
+        every listed tile is remade by code from its cached survey
+        (never a new call), the changed groups publish in one go,
+        and the job carries `versions` for the tiles that changed.
+        Tiles the thing missed for food are flagged `no_food` in
+        the item's report.
+        """
+        from . import build as build_mod
+
+        assert self.world is not None
+        tile = self._job_tile(job_id, job)
+        if tile is None:
+            return
+        if self.pull_world():
+            self.world_commit = git_commit(self.world)
+        plan = self._job_plan(job_id, job, tile)
+        by_id = {i["id"]: i for i in plan.get("items", [])}
+        review = job.get("review") or {}
+        item_id = (job.get("items") or [None])[0]
+        item = by_id.get(item_id or "")
+        verdict = (review.get(item_id or "") or {}).get("result")
+        if verdict == "not_accepted":
+            print(f"build job {job_id}: dropped {item_id}")
+            self._fail(job_id, "nothing_shipped")
+            return
+        if verdict != "shipped" or item is None or not self._world_has(item, plan):
+            print(f"build job {job_id}: {item_id} waits for the world")
+            return
+        try:
+            versions, no_food = self._remake_enrich_tiles(job, item)
+        except build_mod.EnrichRemakeError as error:
+            print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
+            self._fail(job_id, "remake_failed")
+            return
+        except ValueError as error:
+            if "no usable cached species" not in str(error):
+                raise
+            print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
+            self._fail(job_id, "no_cache")
+            return
+        what = (job.get("enrich") or {}).get("what", "")
+        self._flag_no_food(job_id, item, no_food, what)
+        self.store.update_build_job(
+            job_id, {"versions": versions, "updated_at": now_iso()}
+        )
+        print(f"build job {job_id}: remade {len(versions)} tiles")
+        self._set_status(job_id, "published")
+
+    def _remake_enrich_tiles(
+        self, job: dict[str, Any], item: dict[str, Any]
+    ) -> tuple[dict[str, int], list[str]]:
+        """Every listed tile remade keyless; versions and no-food tiles."""
+        import dataclasses
+        import json
+
+        from . import build as build_mod
+        from .grid import group_path
+        from .tiles import make_tile
+
+        assert self.world is not None
+        source = dataclasses.replace(self._species_source(), client=None)
+        groups: dict[str, dict[str, Any]] = {}
+        decisions: dict[str, build_mod.Remake] = {}
+        no_food: list[str] = []
+        what = str(item["what"])
+        for tile in job.get("tiles", []):
+            blob_path = group_path(tile)
+            if blob_path not in groups:
+                raw = self.store.read_blob(blob_path)
+                groups[blob_path] = json.loads(raw.decode("utf-8")) if raw else {}
+            old = groups[blob_path]
+            made, blocked = make_tile(
+                tile,
+                self._grids(),
+                self.world,
+                builder_root=self.builder_root,
+                species_source=source,
+            )
+            verdict, hungry = build_mod.remake_decision(
+                tile,
+                (old.get("tiles") or {}).get(tile),
+                (old.get("blocked") or {}).get(tile),
+                made,
+                blocked,
+                self.world,
+                what,
+            )
+            decisions[tile] = verdict
+            if hungry:
+                no_food.append(tile)
+        versions = build_mod.publish_remakes(
+            self.store, groups, decisions, self.world_commit or "unknown"
+        )
+        return versions, no_food
+
+    def _flag_no_food(
+        self, job_id: str, item: dict[str, Any], tiles: list[str], what: str
+    ) -> None:
+        """The unfed tiles into the item's report, re-uploaded."""
+        import json
+
+        from . import build as build_mod
+        from .report import build_report
+
+        if not tiles:
+            return
+        item_dir = self.jobs_dir / job_id / item["id"]
+        checks = item_dir / "checks"
+        checks.mkdir(parents=True, exist_ok=True)
+        (checks / "remake.json").write_text(
+            json.dumps(
+                {
+                    "ok": True,
+                    "results": [
+                        {
+                            "check": f"no_food {tile}",
+                            "status": "skip",
+                            "reason": f"{what}'s food is not in this tile",
+                            "problems": [],
+                        }
+                        for tile in tiles
+                    ],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        build_report(item_dir)
+        build_mod.upload_bundle(self.store, f"review/{job_id}/{item['id']}", item_dir)
 
     # -- build helpers --------------------------------------------------
 

@@ -427,6 +427,7 @@ class Worker:
                             f"build job {job_id}: no cast for {tile}: {error}",
                             file=sys.stderr,
                         )
+                    self._label_enrich_item(item_dir, tile)
                 self._run_stages(ctx, job_id, tile, plan, item, item_dir, cast)
         except BudgetExceeded as error:
             self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
@@ -764,6 +765,24 @@ class Worker:
             name: list(made.get("species", {}).get(name) or [])
             for name in ("playable", "prey", "predators")
         }
+
+    def _label_enrich_item(self, item_dir: Path, tile: str) -> None:
+        """An enrich item's report labels: its tile and kind (#150.2).
+
+        The tile's compass name points from the nearest place, the
+        way a plan would name it; no survey answer is spent.
+        """
+        from . import build as build_mod
+        from .grid import center, parse_tile
+        from .plan import plan_name
+
+        grid, col, row = parse_tile(tile)
+        habitat = self._grids()[grid].habitat(col, row)
+        lat, lon = center(tile)
+        name = plan_name(habitat, lat, lon, None)["en"]
+        build_mod.write_state_params(
+            item_dir, {"area": f"{tile} ({name})", "kind": "enrich"}
+        )
 
     def _run_stages(
         self,

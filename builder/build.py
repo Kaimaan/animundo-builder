@@ -266,6 +266,26 @@ def prepare_item(
             write_scaffold(item_dir, home, lat=lat, lon=lon, species=species)
 
 
+def write_state_params(item_dir: Path, params: dict[str, Any]) -> None:
+    """Merge labels into the item state for its report (#150.2).
+
+    Retry-safe: the pipeline's completed stages and results stay
+    untouched; the labels land under `params` again as they were.
+    """
+    path = item_dir / "state.json"
+    state: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            state = {}
+    if not isinstance(state, dict):
+        state = {}
+    state["params"] = {**state.get("params", {}), **params}
+    item_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
 def run_item_stages(ctx: Any, item_dir: Path, pipeline: Pipeline) -> dict[str, Any]:
     """The item's stages, one try and at most one fix round.
 

@@ -136,6 +136,22 @@ def test_write_scaffold_seats_the_tiles_cast(tmp_path: Path) -> None:
     }
 
 
+def test_write_state_params_merges_retry_safely(tmp_path: Path) -> None:
+    """#150.2: labels merge into the item state, stages untouched."""
+    (tmp_path / "state.json").write_text(
+        json.dumps({"completed": ["research"], "params": {"area": "old"}})
+    )
+    build_mod.write_state_params(
+        tmp_path, {"area": "n_413_478 (Forest)", "kind": "enrich"}
+    )
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert state["completed"] == ["research"]
+    assert state["params"] == {"area": "n_413_478 (Forest)", "kind": "enrich"}
+    build_mod.write_state_params(tmp_path, {"kind": "enrich"})
+    again = json.loads((tmp_path / "state.json").read_text())
+    assert again["params"]["area"] == "n_413_478 (Forest)"
+
+
 def test_write_scaffold_falls_back_to_its_own_source(tmp_path: Path) -> None:
     home = {"food": [], "fish": []}
     path = build_mod.write_scaffold(tmp_path, home, lat=68.4, lon=23.6)

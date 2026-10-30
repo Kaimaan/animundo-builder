@@ -906,6 +906,79 @@ def test_enrich_run_item_passes_the_tiles_cast(
     assert seen["cast"] == cast
 
 
+def test_enrich_item_report_names_its_tile(tmp_path: Path, monkeypatch: Any) -> None:
+    """#150.2: an enrich report shows the tile, its name and the kind."""
+    T = "n_413_478"
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(status="building")
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+        cast: Any = None,
+    ) -> None:
+        (item_dir / "animals").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    job = store.build_jobs["j1"]
+    item = {
+        "id": "enrich_lion",
+        "kind": "animal",
+        "what": "lion",
+        "from": "fox",
+        "estimate_usd": 1.0,
+    }
+    worker.run_item("j1", job, T, {"items": [item]}, item, 1.0)
+    report = (tmp_path / "jobs" / "j1" / "enrich_lion" / "report.html").read_text()
+    assert f"<td>{T} (" in report
+    assert "Nuuksio" in report
+    assert "<td>enrich</td>" in report
+
+
+def test_build_item_report_keeps_old_labels(tmp_path: Path, monkeypatch: Any) -> None:
+    """#150.2: a build item's report is unlabeled, as before."""
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "kind": "build",
+        "tile": "n_413_478",
+        "status": "building",
+        "cost_usd": 0.0,
+        "progress": [],
+    }
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+        cast: Any = None,
+    ) -> None:
+        (item_dir / "animals").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    job = store.build_jobs["j1"]
+    item = {
+        "id": "animal_fox",
+        "kind": "animal",
+        "what": "fox",
+        "from": "fox",
+        "estimate_usd": 1.0,
+    }
+    worker.run_item("j1", job, "n_413_478", {"items": [item]}, item, 1.0)
+    report = (tmp_path / "jobs" / "j1" / "animal_fox" / "report.html").read_text()
+    assert "(unknown area)" in report
+    assert "new_place" in report
+
+
 def test_tile_cast_remakes_an_unpublished_tile(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

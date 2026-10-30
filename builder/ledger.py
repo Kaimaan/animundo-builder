@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import fcntl
 import json
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -41,6 +42,15 @@ class Receipt:
     job_id: str
     day: str
     reserved_usd: float
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+
+@dataclass(frozen=True)
+class PairedReceipt(Receipt):
+    """A reservation on two ledgers: the provider's and the allowance's."""
+
+    provider: Receipt | None = None
+    allowance: Receipt | None = None
 
 
 class Ledger(Protocol):
@@ -97,6 +107,9 @@ class FileLedger:
     def settle(self, receipt: Receipt, actual_usd: float) -> None:
         with _LockedFile(self.path) as locked:
             data = locked.data
+            settled = data.setdefault("settled", {})
+            if receipt.id in settled:
+                return
             release = receipt.reserved_usd - actual_usd
             job = data["jobs"].get(receipt.job_id, {"spent": 0.0})
             job["spent"] = max(0.0, job.get("spent", 0.0) - release)
@@ -106,6 +119,8 @@ class FileLedger:
                 0.0, data["days"].get(receipt.day, 0.0) - release
             )
             data["total"] = max(0.0, data.get("total", 0.0) - release)
+            settled[receipt.id] = receipt.day
+            self._prune_settled(data, today_iso())
             locked.write(data)
 
     def total_spent(self) -> float:
@@ -145,6 +160,17 @@ class FileLedger:
             if age < self.KEEP_JOB_DAYS:
                 kept[job] = entry
         data["jobs"] = kept
+
+    def _prune_settled(self, data: dict[str, Any], day: str) -> None:
+        kept = {}
+        for rid, rday in data.get("settled", {}).items():
+            try:
+                age = (datetime.fromisoformat(day) - datetime.fromisoformat(rday)).days
+            except ValueError:
+                continue
+            if age < self.KEEP_JOB_DAYS:
+                kept[rid] = rday
+        data["settled"] = kept
 
 
 class _LockedFile:
@@ -249,10 +275,14 @@ class FirestoreLedger:
 
         def txn(transaction: Any) -> None:
             spend = self._db.collection("spend")
+            settled_ref = spend.document(f"settled-{receipt.id}")
+            if (transaction.get(settled_ref).to_dict() or {}).get("done"):
+                return
             for doc_id in (receipt.day, "total", f"job-{receipt.job_id}"):
                 ref = spend.document(doc_id)
                 spent = _doc_spent(transaction.get(ref))
                 transaction.set(ref, {"spent": max(0.0, spent - release)})
+            transaction.set(settled_ref, {"done": True, "day": receipt.day})
 
         try:
             self._db.run_transaction(txn)
@@ -284,3 +314,54 @@ class FirestoreLedger:
 def _doc_spent(snapshot: Any) -> float:
     data = snapshot.to_dict() or {}
     return float(data.get("spent", 0.0))
+
+
+class CombinedLedger:
+    """One provider pool plus the shared job allowance, as one ledger.
+
+    Every call reserves its conservative cost on both: the shared
+    allowance binds all of a job's items, providers and fallbacks
+    to the one approved budget, while each provider's own day and
+    total pools stay separate (#156). When either side refuses,
+    the other's reservation is released and the call never goes
+    out, so no provider pool can bypass the combined budget.
+    """
+
+    def __init__(
+        self, provider: Ledger, allowance: Ledger, allowance_caps: Caps
+    ) -> None:
+        self.provider = provider
+        self.allowance = allowance
+        self.allowance_caps = allowance_caps
+
+    def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt:
+        first = self.allowance.reserve(job_id, amount_usd, self.allowance_caps)
+        try:
+            second = self.provider.reserve(job_id, amount_usd, caps)
+        except Exception:
+            try:
+                self.allowance.settle(first, 0.0)
+            except LedgerError:
+                pass  # the release leaked; the refusal below still refuses
+            raise
+        return PairedReceipt(
+            job_id=job_id,
+            day=second.day,
+            reserved_usd=amount_usd,
+            provider=second,
+            allowance=first,
+        )
+
+    def settle(self, receipt: Receipt, actual_usd: float) -> None:
+        if not isinstance(receipt, PairedReceipt):
+            raise LedgerError("a combined ledger settles only its own receipts")
+        if receipt.provider is None or receipt.allowance is None:
+            raise LedgerError("a combined receipt names both reservations")
+        self.provider.settle(receipt.provider, actual_usd)
+        self.allowance.settle(receipt.allowance, actual_usd)
+
+    def total_spent(self) -> float:
+        return self.provider.total_spent()
+
+    def job_spent(self, job_id: str) -> float:
+        return self.provider.job_spent(job_id)

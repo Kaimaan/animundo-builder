@@ -67,6 +67,11 @@ class Config:
         path = Path(self.ledger_path)
         return str(path.with_name(f"{path.stem}-baseten{path.suffix}"))
 
+    def allowance_path(self) -> str:
+        """The shared job allowance file, next to the Meta one (#156)."""
+        path = Path(self.ledger_path)
+        return str(path.with_name(f"{path.stem}-allowance{path.suffix}"))
+
 
 def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
     names = (

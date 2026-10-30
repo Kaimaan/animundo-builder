@@ -14,6 +14,7 @@ from typing import Any
 
 from .grid import GridName, parse_tile, tile_at
 from .habitats import HabitatGrid
+from .plan import plant_slug
 from .presence import fetch_raw
 from .prompts import load_prompt
 
@@ -294,6 +295,147 @@ def write_survey(out_dir: Path, survey: dict[str, Any]) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "survey.json"
     path.write_text(json.dumps(survey, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def plan_place(
+    survey: dict[str, Any], world: Path, world_commit: str
+) -> dict[str, Any]:
+    """The §7 plan from a place survey (T98), not from the grid.
+
+    A home item when `home_from` is an example (examples are not
+    buildable); each unfiled survey animal with its food, the
+    children's animals first; one findable plant per kind the
+    home names. Items stop at the budget. An animal with no
+    `start_from` and no `"shape": "new"` is `blocked` with
+    `needs_reference`, never built; one the list can't make is
+    `not_makeable`. Filed animals need nothing: with
+    `--improve` the plan holds only what the place lacks.
+    """
+    from datetime import UTC, datetime
+
+    from .animal_list import find_list, load_list
+    from .prices import ITEM_ESTIMATES
+    from .schemas import validate
+
+    animals = load_list(find_list(world))["animals"]
+    by_id = {a["id"]: a for a in animals}
+    budget = float(survey["budget_usd"])
+    items: list[dict[str, Any]] = []
+    blocked: list[dict[str, str]] = []
+    spent = 0.0
+
+    def afford(estimate: float) -> bool:
+        return spent + estimate <= budget
+
+    home_from = survey["home_from"]
+    if home_from.startswith("examples/"):
+        stem = home_from.split("/")[-1]
+        estimate = ITEM_ESTIMATES["home"]
+        if afford(estimate):
+            items.append(
+                {
+                    "id": f"home_{stem}",
+                    "kind": "home",
+                    "what": stem,
+                    "from": home_from,
+                    "estimate_usd": estimate,
+                }
+            )
+            spent += estimate
+    home = json.loads((world / "homes" / f"{home_from}.json").read_text())
+    made: set[str] = set()
+    for entry in survey["animals"]:
+        animal_id = entry["id"]
+        if (world / "animals" / f"{animal_id}.json").is_file():
+            continue
+        listed = by_id[animal_id]
+        if not listed.get("can_make", True):
+            blocked.append({"what": animal_id, "reason": "not_makeable"})
+            continue
+        if not listed.get("start_from") and listed.get("shape") != "new":
+            blocked.append({"what": animal_id, "reason": "needs_reference"})
+            continue
+        estimate = ITEM_ESTIMATES["animal"]
+        if not afford(estimate):
+            continue
+        items.append(
+            {
+                "id": f"animal_{animal_id}",
+                "kind": "animal",
+                "what": animal_id,
+                "from": str(listed.get("start_from") or listed["id"]),
+                "estimate_usd": estimate,
+            }
+        )
+        made.add(animal_id)
+        spent += estimate
+    have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
+    for food in home.get("food", []) or []:
+        slug = next(
+            (
+                plant_slug(name)
+                for name in food.get("names", []) or []
+                if plant_slug(name) and plant_slug(name) not in have
+            ),
+            None,
+        )
+        if slug is None:
+            continue
+        estimate = ITEM_ESTIMATES["plant"]
+        if not afford(estimate):
+            break
+        items.append(
+            {
+                "id": f"plant_{slug}",
+                "kind": "plant",
+                "what": slug,
+                "from": _plant_ref(home, food.get("kind"), have),
+                "estimate_usd": estimate,
+            }
+        )
+        spent += estimate
+    unplanned = {b["what"] for b in blocked}
+    coming = [
+        e["id"]
+        for e in survey["animals"]
+        if e["id"] not in made
+        and e["id"] not in unplanned
+        and not (world / "animals" / f"{e['id']}.json").is_file()
+    ]
+    plan = {
+        "format": 1,
+        "tile": survey["tile"],
+        "code_only": not items,
+        "items": items,
+        "improve": [],
+        "blocked": blocked,
+        "survey": "survey.json",
+        "estimate_usd": round(spent, 2),
+        "name": survey["name"],
+        "coming": coming,
+        "world": world_commit,
+        "planned_at": datetime.now(UTC).isoformat(),
+    }
+    validate("plan", plan)
+    return plan
+
+
+def _plant_ref(home: dict[str, Any], kind: str | None, have: list[str]) -> str:
+    """A filed plant of the same food kind, else the first there is."""
+    for entry in home.get("food", []) or []:
+        if entry.get("kind") != kind:
+            continue
+        for name in entry.get("names", []) or []:
+            if plant_slug(name) in have:
+                return plant_slug(name)
+    return have[0]
+
+
+def write_plan(out_dir: Path, plan: dict[str, Any]) -> Path:
+    """`plan.json` next to the survey it was planned from."""
+    path = out_dir / "plan.json"
+    path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     return path
 
 

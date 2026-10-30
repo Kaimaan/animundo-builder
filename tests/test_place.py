@@ -267,6 +267,189 @@ def test_place_survey_replays_from_records(
     assert survey["home_from"] == "examples/reef"
 
 
+def _replay_survey(
+    tmp_path: Path,
+    recording: str,
+    place: str,
+    want: list[str],
+    budget: float,
+    improve: str | None,
+    world: Path,
+    animals: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from builder.pipeline import BudgetTracker, JobContext
+    from builder.place import ask_survey, check_survey, list_homes
+    from builder.records import ReplayClient
+
+    records = tmp_path / "records"
+    records.mkdir(exist_ok=True)
+    shutil.copy(FIXTURES / recording, records / "survey.jsonl")
+    client = ReplayClient(records)
+    client.set_stage("survey")
+    ctx = JobContext(
+        job_id="place",
+        job_dir=tmp_path,
+        client=client,
+        tracker=BudgetTracker(budget_usd=budget),
+        world_path=world,
+    )
+    data, _ = ask_survey(ctx, place, animals, list_homes(world), want, improve)
+    survey = check_survey(data, place, _grids(), world, animals, want, budget, improve)
+    client.verify_consumed()
+    return survey
+
+
+def test_reef_plan_lists_home_fish_shark_and_turtle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """T98's done-when: the reef plan from the recorded GBR survey."""
+    from builder.place import plan_place
+
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(
+        monkeypatch, {"clownfish", "green_sea_turtle", "reef_shark", "manta_ray"}
+    )
+    survey = _replay_survey(
+        tmp_path,
+        "gbr-survey.jsonl",
+        "Great Barrier Reef",
+        [],
+        8.0,
+        None,
+        world,
+        animals,
+    )
+    plan = plan_place(survey, world, "abc123")
+    by_id = {i["id"]: i for i in plan["items"]}
+    assert by_id["home_reef"] == {
+        "id": "home_reef",
+        "kind": "home",
+        "what": "reef",
+        "from": "examples/reef",
+        "estimate_usd": 0.2,
+    }
+    assert by_id["animal_clownfish"]["from"] == "perch"
+    assert by_id["animal_reef_shark"]["from"] == "reef_shark"
+    assert "animal_green_sea_turtle" in by_id
+    turtle = next(a for a in animals if a["id"] == "green_sea_turtle")
+    assert turtle["shape"] == "new"
+    assert plan["blocked"] == []
+    assert plan["estimate_usd"] == 1.25
+    assert plan["survey"] == "survey.json"
+    assert plan["improve"] == []
+
+
+def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """T98's done-when: improve fi_nuuksio, bear first, $1 stops it."""
+    from builder.place import plan_place
+
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(
+        monkeypatch,
+        {
+            "brown_bear",
+            "lynx",
+            "wolverine",
+            "arctic_fox",
+            "otter",
+            "beaver",
+            "pine_marten",
+            "raccoon_dog",
+        },
+    )
+    survey = _replay_survey(
+        tmp_path,
+        "nuuksio-survey.jsonl",
+        "Nuuksio National Park",
+        ["brown_bear"],
+        1.0,
+        "n_414_479",
+        world,
+        animals,
+    )
+    plan = plan_place(survey, world, "abc123")
+    assert [i["kind"] for i in plan["items"]] == ["animal"] * 6
+    assert plan["items"][0]["id"] == "animal_brown_bear"
+    assert plan["estimate_usd"] == 0.9
+    assert len(plan["coming"]) >= 1
+
+
+def test_unmakeable_animals_are_blocked_not_built(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T98: no reference and no new shape blocks; unmakeable blocks."""
+    import builder.animal_list as list_mod
+    from builder.place import plan_place
+
+    world = _needs_world()
+    real_load = list_mod.load_list
+
+    def fake_load(path: Path) -> dict[str, Any]:
+        data = real_load(path)
+        data["animals"] = [
+            *data["animals"],
+            {"id": "test_newt", "can_make": True, "gbif_key": 123},
+        ]
+        return data
+
+    monkeypatch.setattr(list_mod, "load_list", fake_load)
+    survey = {
+        "place": "Great Barrier Reef",
+        "tile": "s_530_612",
+        "habitat": "coral reef",
+        "home_from": "examples/reef",
+        "name": {"en": "Green Island Reef", "fi": "Green Islandin riutta"},
+        "animals": [
+            {"id": "blue_whale", "source": "x"},
+            {"id": "test_newt", "source": "x"},
+            {"id": "clownfish", "source": "x"},
+        ],
+        "plants": [],
+        "food": [],
+        "wanted": [],
+        "budget_usd": 8.0,
+    }
+    plan = plan_place(survey, world, "abc123")
+    assert {"what": "blue_whale", "reason": "not_makeable"} in plan["blocked"]
+    assert {"what": "test_newt", "reason": "needs_reference"} in plan["blocked"]
+    assert "animal_clownfish" in [i["id"] for i in plan["items"]]
+
+
+def test_place_plan_writes_plan_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """T98: `place plan` writes a §7 plan.json next to the survey."""
+    from builder.cli import main
+    from builder.place import write_survey
+
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(
+        monkeypatch, {"clownfish", "green_sea_turtle", "reef_shark", "manta_ray"}
+    )
+    survey = _replay_survey(
+        tmp_path,
+        "gbr-survey.jsonl",
+        "Great Barrier Reef",
+        [],
+        8.0,
+        None,
+        world,
+        animals,
+    )
+    out = tmp_path / "gbr"
+    write_survey(out, survey)
+    code = main(["place", "plan", str(out), "--world", str(world)])
+    assert code == 0
+    plan = json.loads((out / "plan.json").read_text())
+    assert plan["tile"] == "s_530_612"
+    assert plan["items"][0]["kind"] == "home"
+
+
 def test_cells_within_two() -> None:
     cells = cells_within("n_413_478")
     assert len(cells) == 25

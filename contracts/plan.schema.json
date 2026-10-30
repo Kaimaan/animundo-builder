@@ -68,7 +68,25 @@
     "world": {"type": "string", "minLength": 1},
     "planned_at": {"type": "string", "minLength": 1},
     "blocked": {
-      "description": "Why nothing can be built here yet, for the game to show.",
+      "description": "Why nothing can be built here yet: a reason for the game to show, or, for a place plan, the surveyed animals the builder can't make.",
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["what", "reason"],
+            "properties": {
+              "what": {"type": "string", "minLength": 1},
+              "reason": {"enum": ["needs_reference", "not_makeable"]}
+            }
+          }
+        }
+      ]
+    },
+    "survey": {
+      "description": "For a place plan: the path of its survey.json.",
       "type": "string",
       "minLength": 1
     }

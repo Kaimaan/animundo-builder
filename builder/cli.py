@@ -276,6 +276,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run on the request's records/ instead of the model API.",
     )
+    plan = place_sub.add_parser("plan", help="Plan a surveyed place, write plan.json.")
+    plan.add_argument("dir", help="The request folder with survey.json.")
+    plan.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
 
@@ -435,6 +440,28 @@ def cmd_place_survey(args: argparse.Namespace) -> int:
             print(f"error: {error}", file=sys.stderr)
             return 1
     print(f"wrote {path} ({searches} searches, {len(survey['animals'])} animals)")
+    return 0
+
+
+def cmd_place_plan(args: argparse.Namespace) -> int:
+    from .place import plan_place, write_plan
+    from .worker import git_commit
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    survey_path = Path(args.dir) / "survey.json"
+    if not survey_path.is_file():
+        print(f"error: no survey.json in {args.dir}", file=sys.stderr)
+        return 1
+    try:
+        survey = json.loads(survey_path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        print(f"error: survey.json is not JSON: {error}", file=sys.stderr)
+        return 1
+    plan = plan_place(survey, world, git_commit(world))
+    path = write_plan(Path(args.dir), plan)
+    print(f"wrote {path} ({len(plan['items'])} items, ${plan['estimate_usd']:.2f})")
     return 0
 
 
@@ -796,6 +823,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_survey_lab(args)
     if args.command == "place" and args.place_command == "survey":
         return cmd_place_survey(args)
+    if args.command == "place" and args.place_command == "plan":
+        return cmd_place_plan(args)
     if args.command == "request" and args.request_command == "plan":
         return cmd_request_plan(args)
     if args.command == "request" and args.request_command == "build":

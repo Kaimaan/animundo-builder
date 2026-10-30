@@ -1251,6 +1251,180 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
     assert "no_food n_413_478" in report
 
 
+def _two_tile_lab(
+    tmp_path: Path,
+) -> tuple[Any, Any, Path, str, str, str]:
+    """Two forest tiles listing the lion, filed with grass to eat."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A, B = "n_413_478", "n_413_479"
+    store = FakeStore()
+    block = boreal_3x3(413, 478)
+    edge = {f"{c},480": list(block["413,478"]) for c in (412, 413, 414)}
+    worker = _flow_worker(tmp_path, store, {**block, **edge})
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    made = {}
+    for tile in (A, B):
+        tile_made, blocked = make_tile(
+            tile,
+            worker._grids(),
+            worker.world,
+            builder_root=tmp_path,
+            species_source=SpeciesSource(
+                client=_AnswerClient(
+                    _forest_survey("fox", "mountain_hare", "vole", "lion")
+                ),
+                cache_dir=cache,
+            ),
+        )
+        assert blocked is None and tile_made is not None
+        made[tile] = tile_made
+    blob = group_path(A)
+    assert group_path(B) == blob
+    store.blobs[blob] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": made,
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    store.blobs["tiles/v1/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {},
+            "counts": {"ready": 2, "blocked": {}},
+        }
+    ).encode("utf-8")
+    assert worker.world is not None
+    _file_lion(worker.world, ["grass"])
+    return store, worker, cache, blob, A, B
+
+
+def _ship_job(store: Any, tiles: list[str]) -> None:
+    store.build_jobs["j1"] = _enrich_job(
+        tiles=tiles,
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+
+
+def test_enrich_review_ships_only_tiles_that_passed_their_places(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#161.2: the passed tile remakes; the failed one is listed, left out."""
+    import json
+
+    from builder.species import Source as SpeciesSource
+
+    store, worker, cache, blob, A, B = _two_tile_lab(tmp_path)
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
+    (item_dir / "checks").mkdir(parents=True)
+    (item_dir / "report.html").write_text("<html></html>", encoding="utf-8")
+    (item_dir / "checks" / "places.json").write_text(
+        json.dumps(
+            {
+                "ok": False,
+                "results": [
+                    {"check": f"place {A}", "status": "pass", "problems": []},
+                    {
+                        "check": f"place {B}",
+                        "status": "fail",
+                        "problems": [
+                            f'ERROR: squirrel in tl_{B} eats "mushrooms", '
+                            "but the region has no such food"
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _ship_job(store, [A, B])
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["versions"] == {A: 2}
+    data = json.loads(store.blobs[blob].decode("utf-8"))
+    assert "lion" in data["tiles"][A]["species"]["playable"]
+    assert data["tiles"][B]["version"] == 1
+    assert "wanted" in data["tiles"][B]
+    report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
+    assert f"place {B}" in report
+    assert "mushrooms" in report
+
+
+def test_enrich_review_fails_place_when_no_tile_passes(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#161.2: with every place refusing, the job fails as place, listed."""
+    import json
+
+    from builder.species import Source as SpeciesSource
+
+    store, worker, cache, blob, A, B = _two_tile_lab(tmp_path)
+    before = store.blobs[blob]
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
+    (item_dir / "checks").mkdir(parents=True)
+    (item_dir / "report.html").write_text("<html></html>", encoding="utf-8")
+    (item_dir / "checks" / "places.json").write_text(
+        json.dumps(
+            {
+                "ok": False,
+                "results": [
+                    {
+                        "check": f"place {A}",
+                        "status": "fail",
+                        "problems": ["ERROR: squirrel in tl_n_413_478 eats mushrooms"],
+                    },
+                    {
+                        "check": f"place {B}",
+                        "status": "fail",
+                        "problems": ["ERROR: squirrel in tl_n_413_479 eats mushrooms"],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _ship_job(store, [A, B])
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "place"
+    assert store.blobs[blob] == before
+    report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
+    assert f"place {A}" in report
+    assert f"place {B}" in report
+
+
 def test_enrich_review_drops_not_accepted(tmp_path: Path) -> None:
     """#143.4: not_accepted fails with nothing_shipped, as for a build."""
     store = FakeStore()

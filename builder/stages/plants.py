@@ -275,15 +275,58 @@ class PlantsStage:
             f"plants-{plant_id}-{round_no}",
             extra=extra,
         )
-        models = next(
-            (
-                entry
-                for entry in result.get("results", [])
-                if entry.get("check") == "models"
-            ),
-            {},
+        from ..enrich import (
+            place_tiles,
+            sort_problems,
+            sort_region_problems,
+            write_places,
         )
+
+        rid_to_tile = place_tiles(ctx.job_dir)
+        verdicts = {
+            entry.get("check", ""): entry for entry in result.get("results", [])
+        }
+        if rid_to_tile:
+            # An enrich plant checks in its tiles' places: the
+            # food web and the region verdict land per tile for
+            # the report, never the fix round, and anything
+            # outside the new plant is the place's (#161.2).
+            animals = verdicts.get("animals", {})
+            _, tiled, general = sort_problems(
+                (
+                    animals.get("problems", [])
+                    if animals.get("status") == "fail"
+                    else []
+                ),
+                plant_id,
+                rid_to_tile,
+            )
+            region = verdicts.get("region", {})
+            if region.get("status") == "fail":
+                region_tiled, region_general = sort_region_problems(
+                    region.get("problems", []), rid_to_tile
+                )
+                for tile, reasons in region_tiled.items():
+                    tiled.setdefault(tile, []).extend(reasons)
+                general.extend(region_general)
+            region_note = (
+                region.get("reason")
+                if region.get("status") == "skip" and region.get("reason")
+                else None
+            )
+
+            def record() -> None:
+                write_places(ctx.job_dir, rid_to_tile, tiled, general, region_note)
+
+        else:
+            tiled, general = {}, []
+
+            def record() -> None:
+                pass
+
+        models = verdicts.get("models", {})
         if models.get("status") != "fail":
+            record()
             return []
         errors = []
         for file, lines in problems_by_file(models.get("problems", [])).items():
@@ -294,6 +337,11 @@ class PlantsStage:
                     else (plant_id if mentions(line, plant_id) else None)
                 )
                 if owner is None:
+                    if rid_to_tile:
+                        general.append(
+                            f"{file}: {line.strip()}" if file else line.strip()
+                        )
+                        continue
                     raise _Stopped(
                         "the checker failed outside the new plant: "
                         + (f"{file}: {line.strip()}" if file else line.strip())
@@ -305,6 +353,7 @@ class PlantsStage:
                     continue
                 text = line[2:].strip() if line.startswith("- ") else line.strip()
                 errors.append(f"{file}: {text}" if file else text)
+        record()
         return errors
 
     def _review(

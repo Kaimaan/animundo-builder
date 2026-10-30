@@ -543,7 +543,10 @@ class Worker:
         (never a new call), the changed groups publish in one go,
         and the job carries `versions` for the tiles that changed.
         Tiles the thing missed for food are flagged `no_food` in
-        the item's report.
+        the item's report. With per-tile place verdicts (#161.2),
+        only the tiles that passed remake; the rest are listed
+        with their reasons instead of failing the whole job, and
+        no passed tile fails the job as `place`.
         """
         from . import build as build_mod
 
@@ -566,8 +569,13 @@ class Worker:
         if verdict != "shipped" or item is None or not self._world_has(item, plan):
             print(f"build job {job_id}: {item_id} waits for the world")
             return
+        ship, failed, general, missing = self._place_ship(job_id, job, item)
+        if general or (ship is not None and not ship):
+            self._flag_place(job_id, item, failed, missing, general)
+            self._fail(job_id, "place")
+            return
         try:
-            versions, no_food = self._remake_enrich_tiles(job, item)
+            versions, no_food = self._remake_enrich_tiles(job, item, ship)
         except build_mod.EnrichRemakeError as error:
             print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
             self._fail(job_id, "remake_failed")
@@ -580,16 +588,96 @@ class Worker:
             return
         what = (job.get("enrich") or {}).get("what", "")
         self._flag_no_food(job_id, item, no_food, what)
+        self._flag_place(job_id, item, failed, missing, [])
         self.store.update_build_job(
             job_id, {"versions": versions, "updated_at": now_iso()}
         )
         print(f"build job {job_id}: remade {len(versions)} tiles")
         self._set_status(job_id, "published")
 
+    def _place_ship(
+        self, job_id: str, job: dict[str, Any], item: dict[str, Any]
+    ) -> tuple[set[str] | None, dict[str, list[str]], list[str], list[str]]:
+        """Per-tile shipping from the item's place verdicts (#161.2).
+
+        Returns the tiles that passed (None when the item
+        predates place verdicts: every tile remakes as before),
+        the failed tiles with their reasons, place-general
+        reasons, and listed tiles with no verdict at all (the
+        intake converted no place for them).
+        """
+        import json
+
+        from .tiles import place_cells
+
+        assert self.world is not None
+        path = self.jobs_dir / job_id / item["id"] / "checks" / "places.json"
+        if not path.is_file():
+            return None, {}, [], []
+        try:
+            results = json.loads(path.read_text(encoding="utf-8")).get("results", [])
+        except ValueError:
+            results = []
+        ship: set[str] = set()
+        failed: dict[str, list[str]] = {}
+        general: list[str] = []
+        for entry in results:
+            check = str(entry.get("check", ""))
+            if check == "place":
+                if entry.get("status") == "fail":
+                    general.extend(entry.get("problems", []))
+            elif check.startswith("place "):
+                tile = check[len("place ") :]
+                if entry.get("status") == "pass":
+                    ship.add(tile)
+                else:
+                    failed[tile] = list(entry.get("problems", [])) or [
+                        str(entry.get("reason", "its place checks failed"))
+                    ]
+        placed = place_cells(self.world)
+        missing = [
+            tile
+            for tile in job.get("tiles", [])
+            if tile not in ship and tile not in failed and tile not in placed
+        ]
+        return ship, failed, general, missing
+
+    def _flag_place(
+        self,
+        job_id: str,
+        item: dict[str, Any],
+        failed: dict[str, list[str]],
+        missing: list[str],
+        general: list[str],
+    ) -> None:
+        """Tiles their places refused into the item's report (#161.2)."""
+        entries = [
+            {"check": f"place {tile}", "status": "fail", "problems": reasons}
+            for tile, reasons in sorted(failed.items())
+        ]
+        entries += [
+            {
+                "check": f"place {tile}",
+                "status": "skip",
+                "reason": "the intake converted no place for this tile",
+                "problems": [],
+            }
+            for tile in missing
+        ]
+        if general:
+            entries.append({"check": "place", "status": "fail", "problems": general})
+        self._flag_entries(job_id, item, entries)
+
     def _remake_enrich_tiles(
-        self, job: dict[str, Any], item: dict[str, Any]
+        self,
+        job: dict[str, Any],
+        item: dict[str, Any],
+        ship: set[str] | None = None,
     ) -> tuple[dict[str, int], list[str]]:
-        """Every listed tile remade keyless; versions and no-food tiles."""
+        """Every listed tile remade keyless; versions and no-food tiles.
+
+        With per-tile place verdicts only the passed tiles remake.
+        """
         import dataclasses
         import json
 
@@ -607,6 +695,9 @@ class Worker:
         for tile in job.get("tiles", []):
             if tile in placed:
                 print(f"{tile} is a place cell; left to its region")
+                continue
+            if ship is not None and tile not in ship:
+                print(f"{tile} missed its place checks; left out")
                 continue
             blob_path = group_path(tile)
             if blob_path not in groups:
@@ -641,29 +732,48 @@ class Worker:
         self, job_id: str, item: dict[str, Any], tiles: list[str], what: str
     ) -> None:
         """The unfed tiles into the item's report, re-uploaded."""
+        self._flag_entries(
+            job_id,
+            item,
+            [
+                {
+                    "check": f"no_food {tile}",
+                    "status": "skip",
+                    "reason": f"{what}'s food is not in this tile",
+                    "problems": [],
+                }
+                for tile in tiles
+            ],
+        )
+
+    def _flag_entries(
+        self, job_id: str, item: dict[str, Any], entries: list[dict[str, Any]]
+    ) -> None:
+        """Remake entries into the item's report, merged, re-uploaded."""
         import json
 
         from . import build as build_mod
         from .report import build_report
 
-        if not tiles:
+        if not entries:
             return
         item_dir = self.jobs_dir / job_id / item["id"]
         checks = item_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
-        (checks / "remake.json").write_text(
+        path = checks / "remake.json"
+        have: list[dict[str, Any]] = []
+        if path.is_file():
+            try:
+                have = json.loads(path.read_text(encoding="utf-8")).get("results", [])
+            except ValueError:
+                have = []
+        seen = {entry.get("check") for entry in have}
+        have.extend(entry for entry in entries if entry.get("check") not in seen)
+        path.write_text(
             json.dumps(
                 {
-                    "ok": True,
-                    "results": [
-                        {
-                            "check": f"no_food {tile}",
-                            "status": "skip",
-                            "reason": f"{what}'s food is not in this tile",
-                            "problems": [],
-                        }
-                        for tile in tiles
-                    ],
+                    "ok": all(r.get("status") != "fail" for r in have),
+                    "results": have,
                 },
                 indent=2,
             ),

@@ -11,11 +11,14 @@ the builder only feeds it the tile and reads back the place.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+from .world import mentions, problems_by_file
 
 GAME_ONLY = ("level", "edges", "coast", "ecoregions", "habitat", "land", "plants")
 
@@ -97,3 +100,134 @@ def tile_place(
             f"tile_region.py gave no JSON for {tile.get('id')}: "
             f"{proc.stdout.strip()[:200]}"
         )
+
+
+def enrich_places(job_dir: Path) -> list[Path]:
+    """The job's converter places, sorted; empty for a non-enrich job."""
+    return sorted((job_dir / "regions").glob("tl_*.json"))
+
+
+def place_tiles(job_dir: Path) -> dict[str, str]:
+    """Each place's region id (and file stem) to its tile (#161.2)."""
+    out: dict[str, str] = {}
+    for path in enrich_places(job_dir):
+        tile = path.stem[3:] if path.stem.startswith("tl_") else path.stem
+        try:
+            rid = json.loads(path.read_text(encoding="utf-8")).get("id")
+        except ValueError:
+            rid = None
+        out[path.stem] = tile
+        if isinstance(rid, str) and rid:
+            out[rid] = tile
+    return out
+
+
+_IN_PLACE = re.compile(r"\bin ([A-Za-z0-9_]+)")
+_REGION_OF = re.compile(r"region ([A-Za-z0-9_]+):")
+
+
+def sort_problems(
+    problems: list[str], what: str, rid_to_tile: dict[str, str]
+) -> tuple[list[str], dict[str, list[str]], list[str]]:
+    """Sort check problems: the model's, per tile's, the place's (#161.2).
+
+    A failure in the new file is the model's and feeds the fix
+    round. A failure in a place (food, cast) lands on its tile,
+    for the report, with no model call. Anything else names
+    neither the new file nor a known place and is the place's in
+    general, never the model's.
+    """
+    model: list[str] = []
+    tiled: dict[str, list[str]] = {}
+    general: list[str] = []
+    for line in problems:
+        match = _IN_PLACE.search(line) or _REGION_OF.search(line)
+        rid = match.group(1) if match else None
+        if rid is not None:
+            tile = rid_to_tile.get(rid)
+            if tile is None:
+                general.append(line)
+            else:
+                tiled.setdefault(tile, []).append(line)
+        elif mentions(line, what):
+            model.append(line)
+        else:
+            general.append(line)
+    return model, tiled, general
+
+
+def sort_region_problems(
+    problems: list[str], rid_to_tile: dict[str, str]
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Sort region-verdict problems per tile, by their file (#161.2).
+
+    Each failing place file lands its details on its tile; lines
+    under no known file are the place's in general.
+    """
+    tiled: dict[str, list[str]] = {}
+    general: list[str] = []
+    for file, lines in problems_by_file(problems).items():
+        cleaned = [
+            line[2:].strip() if line.startswith("- ") else line.strip()
+            for line in lines
+        ]
+        tile = None
+        if file:
+            stem = file.rsplit("/", 1)[-1]
+            if stem.endswith(".json"):
+                stem = stem[: -len(".json")]
+            tile = rid_to_tile.get(stem)
+        if tile is None:
+            general.extend(cleaned)
+        else:
+            tiled.setdefault(tile, []).extend(cleaned)
+    return tiled, general
+
+
+def write_places(
+    job_dir: Path,
+    rid_to_tile: dict[str, str],
+    tiled: dict[str, list[str]],
+    general: list[str],
+    region_note: str | None = None,
+) -> None:
+    """Each tile's place verdict, where the report finds it (#161.2).
+
+    `checks/places.json` lists every converted tile as passed or
+    failed with its reasons, plus place-general failures and the
+    region check's skip note. The review ships the passed tiles
+    and lists the rest instead of failing the whole job.
+    """
+    results: list[dict[str, Any]] = []
+    for tile in sorted(set(rid_to_tile.values())):
+        reasons = tiled.get(tile, [])
+        results.append(
+            {
+                "check": f"place {tile}",
+                "status": "fail" if reasons else "pass",
+                "problems": reasons,
+            }
+        )
+    if general:
+        results.append({"check": "place", "status": "fail", "problems": general})
+    if region_note:
+        results.append(
+            {
+                "check": "region",
+                "status": "skip",
+                "reason": region_note,
+                "problems": [],
+            }
+        )
+    checks = job_dir / "checks"
+    checks.mkdir(parents=True, exist_ok=True)
+    (checks / "places.json").write_text(
+        json.dumps(
+            {
+                "ok": all(r["status"] != "fail" for r in results),
+                "results": results,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )

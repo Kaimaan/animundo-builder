@@ -3338,3 +3338,123 @@ def test_newshape_loop_failure_goes_to_review_not_passed(
     assert checks["ok"] is False
     assert checks["results"][0]["status"] == "not passed"
     assert checks["results"][0]["problems"] == marks
+
+
+_SORT_STUB = """\
+import json
+problems = [
+    'ERROR: squirrel in tl_n_413_479 eats "mushrooms", '
+    "but the region has no such food",
+]
+report = {
+    "ok": False,
+    "results": [
+        {"check": "animals", "status": "fail", "problems": problems},
+        {"check": "taxa", "status": "pass", "problems": []},
+        {
+            "check": "region",
+            "status": "skip",
+            "reason": "models not built: run tools/build_model.sh first",
+            "problems": [],
+        },
+        {"check": "models", "status": "pass", "problems": []},
+    ],
+}
+print(json.dumps(report))
+"""
+
+_MODEL_STUB = """\
+import json
+report = {
+    "ok": False,
+    "results": [
+        {
+            "check": "animals",
+            "status": "fail",
+            "problems": ['ERROR: lynx: needs text "intro"'],
+        },
+        {"check": "taxa", "status": "pass", "problems": []},
+        {"check": "region", "status": "pass", "problems": []},
+        {"check": "models", "status": "pass", "problems": []},
+    ],
+}
+print(json.dumps(report))
+"""
+
+
+def _enrich_inputs(tmp_path: Path) -> None:
+    _inputs(
+        tmp_path,
+        brief={
+            "species_key": 2435240,
+            "id": "lynx",
+            "latin": "Lynx lynx",
+            "name": "Eurasian lynx",
+            "in_library": None,
+            "start_from": "fox",
+            "habitats": ["boreal_forest"],
+            "home": "boreal_forest",
+            "needs_home": False,
+            "enrich": {"tiles": ["n_413_478", "n_413_479"]},
+        },
+    )
+    regions = tmp_path / "regions"
+    (regions / "fi_test.json").unlink()
+    (regions / "tl_n_413_478.json").write_text(
+        json.dumps(
+            {
+                "id": "tl_n_413_478",
+                "animals": {"playable": ["lynx"], "prey": [], "predators": []},
+                "food": [{"kind": "grass"}],
+            }
+        )
+    )
+    (regions / "tl_n_413_479.json").write_text(
+        json.dumps(
+            {
+                "id": "tl_n_413_479",
+                "animals": {
+                    "playable": ["lynx", "squirrel"],
+                    "prey": [],
+                    "predators": [],
+                },
+                "food": [{"kind": "grass"}],
+            }
+        )
+    )
+
+
+def test_enrich_run_sorts_place_failures_per_tile(tmp_path: Path) -> None:
+    """#161.2: a place-only failure ships one tile, lists the other, no stop."""
+    world = _world(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(_SORT_STUB)
+    _enrich_inputs(tmp_path)
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/lynx.json"]
+    assert len(client.prompts) == 2
+    places = json.loads((tmp_path / "checks" / "places.json").read_text())
+    assert places["ok"] is False
+    by_check = {entry["check"]: entry for entry in places["results"]}
+    assert by_check["place n_413_478"]["status"] == "pass"
+    failed = by_check["place n_413_479"]
+    assert failed["status"] == "fail"
+    assert "mushrooms" in failed["problems"][0]
+    assert by_check["region"]["status"] == "skip"
+
+
+def test_enrich_run_still_fix_rounds_the_new_file(tmp_path: Path) -> None:
+    """#161.2: a failure in the new file still spends the fix round."""
+    world = _world(tmp_path)
+    (world / "tools" / "check_draft.py").write_text(_MODEL_STUB)
+    _enrich_inputs(tmp_path)
+    client = ScriptClient(
+        [_animal_answer("lynx"), _animal_answer("lynx"), _edits_answer()]
+    )
+    with pytest.raises(_Stopped, match="its file still failing"):
+        _stage().run(_ctx(tmp_path, world, client))
+    assert len(client.prompts) == 2
+    places = json.loads((tmp_path / "checks" / "places.json").read_text())
+    by_check = {entry["check"]: entry for entry in places["results"]}
+    assert by_check["place n_413_478"]["status"] == "pass"
+    assert by_check["place n_413_479"]["status"] == "pass"

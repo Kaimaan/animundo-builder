@@ -177,7 +177,18 @@ class AnimalMakerStage:
                 encoding="utf-8",
             )
             return {"animal_files": [], "cost_usd": 0.0}
-        region_path = next((ctx.job_dir / "regions").glob("*.json"))
+        enrich_tiles = (brief.get("enrich") or {}).get("tiles") or []
+        if enrich_tiles:
+            # An enrich item checks in every target tile's place;
+            # the first, sorted, stands in for prompts and seating.
+            region_files = sorted((ctx.job_dir / "regions").glob("*.json"))
+            if not region_files:
+                raise _Stopped(
+                    "enrich: no place was converted for its tiles; nothing to check"
+                )
+            region_path = region_files[0]
+        else:
+            region_path = next((ctx.job_dir / "regions").glob("*.json"))
         region = json.loads(region_path.read_text(encoding="utf-8"))
         data = load_list(find_animal_list(world))
         looks_path = ctx.job_dir / "looks.json"
@@ -359,12 +370,19 @@ class AnimalMakerStage:
         excused: set[str],
     ) -> None:
         """The animal file, one try plus one fix round."""
+        from ..enrich import enrich_places
+
         animal_id = target["id"]
-        hunts = (
-            self._code_hunts(world, ctx, research, region, animal_id)
-            if not target["prey"]
-            else []
-        )
+        if not target["prey"]:
+            places = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in enrich_places(ctx.job_dir)
+            ]
+            hunts = self._code_hunts(
+                world, ctx, research, region, animal_id, extra=places
+            )
+        else:
+            hunts = []
         diet = None if target["prey"] else _code_diet(research)
         whale = animal_id == "humpback_whale"
         prompt = self._animal_prompt(world, brief, research, region, target)
@@ -682,6 +700,7 @@ class AnimalMakerStage:
         research: dict[str, Any],
         region: dict[str, Any],
         animal_id: str,
+        extra: list[dict[str, Any]] | None = None,
     ) -> list[str]:
         """The hunter's hunts, from its seated research prey (#84.2).
 
@@ -691,7 +710,9 @@ class AnimalMakerStage:
         When prey has files but no seat, the run stops here: the
         pipeline seats made prey before the hunter's file is
         checked, so no fix round can help. [] leaves the model's
-        own hunts alone (no prey, or none with a file yet).
+        own hunts alone (no prey, or none with a file yet). An
+        enrich hunter stands where its prey sits in any of its
+        tiles' places; tiles without it fail their place check.
         """
         entries = load_list(find_animal_list(world))["animals"]
         overlay = ctx.job_dir
@@ -710,7 +731,10 @@ class AnimalMakerStage:
             if not data:
                 continue
             saw_file = True
-            if not _seated(region, stem):
+            seated = _seated(region, stem) or any(
+                _seated(place, stem) for place in extra or []
+            )
+            if not seated:
                 unseated.append(food["name"])
                 continue
             seated_any = True
@@ -718,10 +742,15 @@ class AnimalMakerStage:
                 tag for tag in data.get("tags", []) or [] if isinstance(tag, str)
             )
         if saw_file and not seated_any:
+            where = (
+                "in any of its tiles' places"
+                if extra
+                else "in the region; the pipeline seats made prey before the "
+                "hunter's file is checked"
+            )
             raise _Stopped(
                 f"{animal_id}: its prey ({', '.join(unseated)}) isn't seated "
-                "in the region; the pipeline seats made prey before the "
-                "hunter's file is checked, so this run stops for a person"
+                f"{where}, so this run stops for a person"
             )
         return sorted(tags)
 
@@ -735,22 +764,68 @@ class AnimalMakerStage:
         the whole cast, so the check runs on a copy with the
         still-unmade targets taken out of the cast and the fish:
         no wording, now or later, can fault their missing files,
-        and everything else is still checked (#67.1).
+        and everything else is still checked (#67.1). An enrich
+        item instead sorts the animals and region verdicts:
+        failures in the new file feed the fix round, failures in
+        a place land on their tile for the report, and anything
+        else is the place's in general, never the model's.
         """
         if excused:
             with tempfile.TemporaryDirectory(prefix="oneshot-pruned-") as tmp:
                 extra = _pruned_regions(ctx.job_dir, excused, Path(tmp))
-                errors = _verdict_errors(
-                    _verdicts(world, ctx, animal_id, "animal", attempt, extra=extra),
-                    ("animals", "taxa", "region"),
-                    animal_id,
+                verdicts = _verdicts(
+                    world, ctx, animal_id, "animal", attempt, extra=extra
                 )
         else:
-            errors = _verdict_errors(
-                _verdicts(world, ctx, animal_id, "animal", attempt),
-                ("animals", "taxa", "region"),
+            verdicts = _verdicts(world, ctx, animal_id, "animal", attempt)
+        from ..enrich import (
+            place_tiles,
+            sort_problems,
+            sort_region_problems,
+            write_places,
+        )
+
+        rid_to_tile = place_tiles(ctx.job_dir)
+        if rid_to_tile:
+            animals = verdicts.get("animals", {})
+            if animals.get("status") == "fail" and not animals.get("problems"):
+                raise _Stopped(
+                    f"{animal_id}: the animals check failed without problems; "
+                    "a person looks"
+                )
+            model, tiled, general = sort_problems(
+                animals.get("problems", []) if animals.get("status") == "fail" else [],
                 animal_id,
+                rid_to_tile,
             )
+            model += _verdict_errors(verdicts, ("taxa",), animal_id)
+            region = verdicts.get("region", {})
+            if region.get("status") == "fail" and not region.get("problems"):
+                raise _Stopped(
+                    f"{animal_id}: the region check failed without problems; "
+                    "a person looks"
+                )
+            if region.get("status") == "fail":
+                region_tiled, region_general = sort_region_problems(
+                    region.get("problems", []), rid_to_tile
+                )
+                for tile, reasons in region_tiled.items():
+                    tiled.setdefault(tile, []).extend(reasons)
+                general.extend(region_general)
+            write_places(
+                ctx.job_dir,
+                rid_to_tile,
+                tiled,
+                general,
+                region_note=(
+                    region.get("reason")
+                    if region.get("status") == "skip" and region.get("reason")
+                    else None
+                ),
+            )
+            errors = _format_lines(model)
+        else:
+            errors = _verdict_errors(verdicts, ("animals", "taxa", "region"), animal_id)
         return [error for error in errors if "model file not found" not in error]
 
     def _make_newshape(
@@ -2376,6 +2451,16 @@ def _verdicts(
     return {entry.get("check", ""): entry for entry in result.get("results", [])}
 
 
+def _format_lines(lines: list[str]) -> list[str]:
+    """Raw problem lines as fix-round errors, filed where filed."""
+    errors = []
+    for file, grouped in problems_by_file(lines).items():
+        for line in grouped:
+            text = line[2:].strip() if line.startswith("- ") else line.strip()
+            errors.append(f"{file}: {text}" if file else text)
+    return errors
+
+
 def _verdict_errors(
     verdicts: dict[str, dict[str, Any]], names: tuple[str, ...], animal_id: str
 ) -> list[str]:
@@ -2389,10 +2474,7 @@ def _verdict_errors(
             raise _Stopped(
                 f"{animal_id}: the {name} check failed without problems; a person looks"
             )
-        for file, lines in problems_by_file(entry["problems"]).items():
-            for line in lines:
-                text = line[2:].strip() if line.startswith("- ") else line.strip()
-                errors.append(f"{file}: {text}" if file else text)
+        errors.extend(_format_lines(entry["problems"]))
     return errors
 
 

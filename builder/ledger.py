@@ -244,10 +244,13 @@ class _LockedFile:
         return self
 
     def write(self, data: dict[str, Any]) -> None:
-        self.handle.seek(0)
-        self.handle.truncate()
-        self.handle.write(json.dumps(data, indent=2))
-        self.handle.flush()
+        try:
+            self.handle.seek(0)
+            self.handle.truncate()
+            self.handle.write(json.dumps(data, indent=2))
+            self.handle.flush()
+        except OSError as error:
+            raise LedgerError(f"cannot write the ledger: {error}") from error
 
     def __exit__(self, *exc: Any) -> None:
         try:

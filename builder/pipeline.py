@@ -180,6 +180,7 @@ class Pipeline:
             except (
                 BudgetExceeded,
                 CapExceeded,
+                LedgerError,
                 MetaAuthError,
                 OffSwitch,
                 SpendUncertain,

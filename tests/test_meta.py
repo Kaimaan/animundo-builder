@@ -767,3 +767,36 @@ def test_billed_failure_settles_reported_usage(tmp_path: Path) -> None:
 
 def test_open_host_uncertainty_is_not_a_refusal() -> None:
     assert is_open_host_refusal(SpendUncertain("sent, spend unknown")) is False
+
+
+def test_settle_failure_marks_charge_uncertain(tmp_path: Path) -> None:
+    class Unwritable(FakeLedger):
+        def settle(self, receipt: Receipt, actual_usd: float) -> None:
+            raise LedgerError("cannot settle spend: locked")
+
+    script = Script([(200, chat_body())])
+    ledger = Unwritable(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(script, tmp_path, ledger=ledger, caps=ledger.caps)
+    with pytest.raises(LedgerError, match="cannot settle spend"):
+        client.chat([{"role": "user", "content": "hi"}], max_tokens=5)
+    assert len(ledger.reserved) == 1
+    assert ledger.settled == []  # unrecorded, not free: nothing released
+    lines = read_log(logger)
+    assert len(lines) == 1
+    assert lines[0]["result"] == "settle_failed"
+    assert lines[0]["spend_uncertain"] is True
+    assert lines[0]["reserved_usd"] == pytest.approx(round(ledger.reserved[0], 6))
+
+
+def test_reserve_failure_sends_nothing(tmp_path: Path) -> None:
+    class Down(FakeLedger):
+        def reserve(self, job_id: str, amount_usd: float, caps: Caps) -> Receipt:
+            raise LedgerError("cannot read the ledger")
+
+    script = Script([(200, chat_body())])
+    ledger = Down(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(script, tmp_path, ledger=ledger, caps=ledger.caps)
+    with pytest.raises(LedgerError, match="cannot read"):
+        client.chat([{"role": "user", "content": "hi"}])
+    assert script.requests == []
+    assert logger.path.is_file() is False or read_log(logger) == []

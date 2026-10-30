@@ -140,8 +140,9 @@ class CostLogger:
         receipt: Any,
         duration_s: float,
         host: str = "meta",
+        result: str = "timeout",
     ) -> None:
-        """Mark a timed-out call's spend uncertain, reservation held (#157)."""
+        """Mark a call's spend uncertain, its reservation held (#157)."""
         refs = receipt_refs(receipt)
         reserved = round(float(receipt.reserved_usd), 6) if receipt is not None else 0.0
         line: dict[str, Any] = {
@@ -152,7 +153,7 @@ class CostLogger:
             "reserved_usd": reserved,
             "spend_uncertain": True,
             "duration_s": round(duration_s, 3),
-            "result": "timeout",
+            "result": result,
         }
         if refs:
             line["receipts"] = refs
@@ -354,7 +355,7 @@ class MetaClient:
             self._failed("chat", receipt, error, start)
             raise
         usage = usage_from_response(response, self.model)
-        self._settle(receipt, usage.cost_usd(self.prices))
+        self._settle(receipt, usage.cost_usd(self.prices), call="chat", start=start)
         self._log("chat", usage, time.monotonic() - start)
         return response
 
@@ -403,7 +404,9 @@ class MetaClient:
             self._failed("responses", receipt, error, start)
             raise
         usage = usage_from_response(response, self.model, images)
-        self._settle(receipt, usage.cost_usd(self.prices))
+        self._settle(
+            receipt, usage.cost_usd(self.prices), call="responses", start=start
+        )
         self._log("responses", usage, time.monotonic() - start)
         return response
 
@@ -468,7 +471,7 @@ class MetaClient:
         except Exception as error:
             self._failed("images", receipt, error, start)
             raise
-        self._settle(receipt, usage.cost_usd(self.prices))
+        self._settle(receipt, usage.cost_usd(self.prices), call="images", start=start)
         self._log("images", usage, time.monotonic() - start)
         return base64.b64decode(response.data[0].b64_json)
 
@@ -524,10 +527,10 @@ class MetaClient:
             if held:
                 pass
             elif failed:
-                self._settle(receipt, 0.0)
+                self._settle(receipt, 0.0, call="responses", start=start)
             else:
                 # Finished, or abandoned mid-stream: the call went out.
-                self._settle(receipt, price)
+                self._settle(receipt, price, call="responses", start=start)
                 if completed:
                     self._log(
                         "responses",
@@ -549,10 +552,27 @@ class MetaClient:
         )
         return self.ledger.reserve(self.job_id, worst.cost_usd(self.prices), self.caps)
 
-    def _settle(self, receipt: Receipt | None, actual_usd: float) -> None:
-        if receipt is not None and self.ledger is not None:
+    def _settle(
+        self,
+        receipt: Receipt | None,
+        actual_usd: float,
+        *,
+        call: str | None = None,
+        start: float | None = None,
+    ) -> None:
+        if receipt is None or self.ledger is None:
+            return
+        try:
             self.ledger.settle(receipt, actual_usd)
-            self._warn_when_baseten_runs_low()
+        except LedgerError:
+            # Unrecorded, not free: the reservation stays outstanding
+            # and the log marks the charge uncertain (#159, #157).
+            if call is not None and start is not None:
+                self._hold(
+                    call, receipt, time.monotonic() - start, result="settle_failed"
+                )
+            raise
+        self._warn_when_baseten_runs_low()
 
     def _warn_when_baseten_runs_low(self) -> None:
         """Warn once per process when Baseten credit runs low.
@@ -645,13 +665,22 @@ class MetaClient:
             error.host = self.host
             self._hold(call, receipt, time.monotonic() - start)
         else:
-            self._settle(receipt, getattr(error, "actual_usd", 0.0) or 0.0)
+            actual = getattr(error, "actual_usd", 0.0) or 0.0
+            self._settle(receipt, actual, call=call, start=start)
 
-    def _hold(self, call: str, receipt: Receipt | None, duration_s: float) -> None:
+    def _hold(
+        self,
+        call: str,
+        receipt: Receipt | None,
+        duration_s: float,
+        result: str = "timeout",
+    ) -> None:
         """Keep the reservation outstanding and mark spend uncertain (#157)."""
         if self.logger is None:
             return
-        self.logger.log_uncertain(call, self.model, receipt, duration_s, self.host)
+        self.logger.log_uncertain(
+            call, self.model, receipt, duration_s, self.host, result
+        )
 
     def _log(self, call: str, usage: Usage, duration_s: float) -> None:
         if self.logger is None:

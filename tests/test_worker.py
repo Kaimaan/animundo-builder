@@ -1989,6 +1989,50 @@ def test_build_job_stops_second_item_at_remaining_budget(
     assert by_id == {"animal_lion": "checking", "animal_tiger": "failed"}
 
 
+def test_ledger_failure_reports_unavailable_and_stops_items(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#159: a down ledger stops the job as unavailable, not as content."""
+    from builder.ledger import LedgerError
+
+    store = FakeStore()
+    plan = _code_plan("n_413_478")
+    plan["code_only"] = False
+    plan["items"] = [
+        _file_item("animal_lion", "animal", "lion", "fox"),
+        _file_item("animal_tiger", "animal", "tiger", "fox"),
+    ]
+    plan["improve"] = []
+    store.plans["n_413_478"] = plan
+    store.build_jobs["j1"] = _build_job(
+        "n_413_478", ["animal_lion", "animal_tiger"], budget_usd=1.0
+    )
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    runs: list[str] = []
+
+    def down(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+        cast: Any = None,
+        enrich_tiles: Any = None,
+    ) -> None:
+        runs.append(item["id"])
+        raise LedgerError("cannot reserve spend: locked")
+
+    monkeypatch.setattr(worker, "_run_stages", down)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["error"] == "ledger"
+    assert job["status"] == "failed"
+    by_id = {e["id"]: e["status"] for e in job["progress"]}
+    assert by_id == {"animal_lion": "failed"}
+    assert runs == ["animal_lion"]
+
+
 def _fake_animal_stages(worker: Worker, monkeypatch: Any, tmp_path: Path) -> None:
     def fake_stages(
         ctx: Any,

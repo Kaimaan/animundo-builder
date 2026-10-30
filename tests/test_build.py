@@ -245,6 +245,33 @@ def test_run_item_stages_fails_twice(tmp_path: Path) -> None:
         build_mod.run_item_stages(ctx, tmp_path, pipeline)
 
 
+def test_run_item_stages_does_not_retry_ledger_errors(tmp_path: Path) -> None:
+    """#159: a down ledger is a control failure, not a content fix round."""
+    from builder.ledger import LedgerError
+    from builder.pipeline import BudgetTracker, Pipeline
+
+    calls: list[str] = []
+
+    class Broke:
+        name = "broke"
+
+        def run(self, ctx: Any) -> dict[str, Any]:
+            calls.append("run")
+            raise LedgerError("cannot reserve spend: locked")
+
+    ctx = SimpleNamespace(
+        job_dir=tmp_path,
+        tracker=BudgetTracker(budget_usd=8.0),
+        check_budget=lambda: None,
+        client=None,
+        open_client=None,
+    )
+    pipeline = Pipeline([Broke()], state_path=tmp_path / "state.json")  # type: ignore[list-item]
+    with pytest.raises(LedgerError, match="cannot reserve spend"):
+        build_mod.run_item_stages(ctx, tmp_path, pipeline)
+    assert calls == ["run"]
+
+
 def test_build_food_item_patches_home_copy(tmp_path: Path) -> None:
     home = {"id": "tundra", "food": [{"kind": "grass", "names": []}]}
     item = {"id": "food_berries", "kind": "food", "what": "berries", "from": "tundra"}

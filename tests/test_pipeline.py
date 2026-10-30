@@ -147,6 +147,19 @@ def test_spend_uncertain_passes_through_unwrapped(tmp_path: Path) -> None:
         pipeline.run(ctx)
 
 
+def test_ledger_error_passes_through_unwrapped(tmp_path: Path) -> None:
+    from builder.ledger import LedgerError
+
+    class BrokeStage(FakeStage):
+        def run(self, ctx: JobContext) -> dict[str, Any]:
+            raise LedgerError("cannot settle spend: disk full")
+
+    pipeline = Pipeline([BrokeStage("one", tmp_path)], tmp_path / "state.json")
+    ctx, _ = make_ctx(tmp_path)
+    with pytest.raises(LedgerError, match="cannot settle spend"):
+        pipeline.run(ctx)
+
+
 def test_runs_stages_in_order_and_saves_state(tmp_path: Path) -> None:
     stages = [FakeStage(name, tmp_path) for name in ("one", "two", "three")]
     pipeline = Pipeline(stages, tmp_path / "state.json")

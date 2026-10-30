@@ -572,7 +572,12 @@ class Worker:
             raise _BudgetOut("budget") from error
         except (CapExceeded, LedgerError, MetaAuthError) as error:
             self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
-            code = "auth" if isinstance(error, MetaAuthError) else "cap"
+            if isinstance(error, MetaAuthError):
+                code = "auth"
+            elif isinstance(error, LedgerError):
+                code = "ledger"
+            else:
+                code = "cap"
             raise _BudgetOut(code) from error
         except OffSwitch:
             spent = round(ctx.tracker.spent_usd - start, 6)

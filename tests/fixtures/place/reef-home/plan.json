@@ -12,21 +12,37 @@
     }
   ],
   "improve": [],
-  "blocked": [],
+  "blocked": [
+    {
+      "what": "humpback_whale",
+      "reason": "not_makeable"
+    },
+    {
+      "what": "whale_shark",
+      "reason": "not_makeable"
+    },
+    {
+      "what": "jellyfish",
+      "reason": "not_makeable"
+    }
+  ],
   "survey": "survey.json",
   "estimate_usd": 0.2,
   "name": {
-    "en": "Green Island Reef",
-    "fi": "Green Islandin riutta"
+    "en": "Great Barrier Reef",
+    "fi": "Iso Valliriutta"
   },
   "country": "Australia",
   "region_id": "au_great_barrier_reef",
   "coming": [
     "clownfish",
     "green_sea_turtle",
+    "blue_tang",
     "reef_shark",
-    "manta_ray"
+    "bottlenose_dolphin",
+    "lionfish",
+    "butterflyfish"
   ],
   "world": "fixture",
-  "planned_at": "2026-10-30T07:55:24.248090+00:00"
+  "planned_at": "2026-10-30T08:05:14.303482+00:00"
 }

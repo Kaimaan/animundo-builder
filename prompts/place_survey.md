@@ -14,7 +14,8 @@ A few web searches at most. Answer with JSON only, no prose.
 - `home_from`: the home file to adapt the place's home from,
   one of the homes below.
 - `name`: the place's short child-friendly name in English (`en`)
-  and in Finnish (`fi`).
+  and in Finnish (`fi`), each written as in that language
+  (Finnish takes a lower-case initial unless it is a proper noun).
 - `country`: the country it is in, in English.
 - `region_id`: the region file's id: `<two-letter country>_<place>`,
   lowercase, like `au_great_barrier_reef`.

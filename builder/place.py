@@ -55,6 +55,10 @@ def survey_schema(ids: list[str]) -> dict[str, Any]:
             },
             "name": {
                 "type": "object",
+                "description": (
+                    "The short child-friendly name in each language, "
+                    "written as in that language."
+                ),
                 "properties": {
                     "en": {"type": "string"},
                     "fi": {"type": "string"},

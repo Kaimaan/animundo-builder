@@ -50,12 +50,32 @@ def _needs_world() -> Path:
 
 def _gbr_answer() -> dict[str, Any]:
     entry = json.loads((FIXTURES / "gbr-survey.jsonl").read_text().splitlines()[0])
-    for item in entry["response"]["output"]:
-        if item.get("type") == "message":
-            for part in item["content"]:
-                if part.get("type") == "output_text":
-                    return json.loads(part["text"])
-    raise AssertionError("no survey text in the recording")
+    texts = [
+        part["text"]
+        for item in entry["response"]["output"]
+        if item.get("type") == "message" and item.get("phase") != "commentary"
+        for part in item["content"]
+        if part.get("type") == "output_text"
+    ]
+    if not texts:
+        raise AssertionError("no survey text in the recording")
+    return json.loads(texts[-1])
+
+
+#: The live survey's animals with GBIF records near the reef: the
+#: answer names 12, the manta ray and the octopus have none (#145).
+_LIVE_GBR = {
+    "clownfish",
+    "green_sea_turtle",
+    "blue_tang",
+    "reef_shark",
+    "bottlenose_dolphin",
+    "humpback_whale",
+    "whale_shark",
+    "lionfish",
+    "butterflyfish",
+    "jellyfish",
+}
 
 
 def _reef_counts(monkeypatch: pytest.MonkeyPatch, recorded: set[str]) -> list[str]:
@@ -81,9 +101,7 @@ def test_recorded_gbr_survey_surveys_the_reef(
 
     world = _needs_world()
     animals = _animals(world)
-    _reef_counts(
-        monkeypatch, {"clownfish", "green_sea_turtle", "reef_shark", "manta_ray"}
-    )
+    _reef_counts(monkeypatch, _LIVE_GBR)
     records = tmp_path / "records"
     records.mkdir()
     shutil.copy(FIXTURES / "gbr-survey.jsonl", records / "survey.jsonl")
@@ -101,19 +119,37 @@ def test_recorded_gbr_survey_surveys_the_reef(
     data, searches = ask_survey(
         ctx, "Great Barrier Reef", animals, list_homes(world), [], None
     )
-    assert searches == 2
+    assert searches == 6
     survey = check_survey(
         data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
     )
     assert survey["tile"] == "s_530_612"
     assert survey["home_from"] == "examples/reef"
-    assert survey["name"] == {"en": "Green Island Reef", "fi": "Green Islandin riutta"}
+    assert survey["name"] == {"en": "Great Barrier Reef", "fi": "Iso Valliriutta"}
     assert survey["country"] == "Australia"
     assert survey["region_id"] == "au_great_barrier_reef"
-    first = [a["id"] for a in survey["animals"]][:3]
-    assert first == ["clownfish", "green_sea_turtle", "reef_shark"]
+    found = [a["id"] for a in survey["animals"]]
+    assert found == [
+        "clownfish",
+        "green_sea_turtle",
+        "blue_tang",
+        "reef_shark",
+        "bottlenose_dolphin",
+        "humpback_whale",
+        "whale_shark",
+        "lionfish",
+        "butterflyfish",
+        "jellyfish",
+    ]
     assert all(a["source"] for a in survey["animals"])
-    assert "moray_eel" not in [a["id"] for a in survey["animals"]]
+    assert "manta_ray" not in found
+    assert "octopus" not in found
+    assert [p["name"] for p in survey["plants"]] == [
+        "Dugong grass (Halodule uninervis)",
+        "Paddle grass (Halophila ovalis)",
+        "Green algae (Halimeda)",
+        "Brown seaweed (Sargassum)",
+    ]
     client.verify_consumed()
 
 
@@ -125,7 +161,7 @@ def test_survey_drops_animals_without_gbif_records(
     seen = _reef_counts(monkeypatch, {"clownfish"})
     counts = gbif_near("s_530_612", animals)
     assert counts.get("clownfish", 0) > 0
-    assert counts.get("moray_eel", 0) == 0
+    assert counts.get("manta_ray", 0) == 0
     assert len(seen) == 25
     survey = check_survey(
         _gbr_answer(), "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
@@ -145,12 +181,12 @@ def test_survey_keeps_wanted_first_without_records(
         _grids(),
         world,
         animals,
-        ["moray_eel"],
+        ["manta_ray"],
         8.0,
         None,
     )
-    assert [a["id"] for a in survey["animals"]][:2] == ["moray_eel", "clownfish"]
-    assert survey["wanted"] == ["moray_eel"]
+    assert [a["id"] for a in survey["animals"]][:2] == ["manta_ray", "clownfish"]
+    assert survey["wanted"] == ["manta_ray"]
 
 
 def test_survey_refuses_a_tile_off_the_grid() -> None:
@@ -209,9 +245,7 @@ def test_survey_with_improve_keeps_the_places_tile(
 ) -> None:
     world = _needs_world()
     animals = _animals(world)
-    _reef_counts(
-        monkeypatch, {"clownfish", "green_sea_turtle", "reef_shark", "manta_ray"}
-    )
+    _reef_counts(monkeypatch, _LIVE_GBR)
     survey = check_survey(
         _gbr_answer(),
         "Great Barrier Reef",
@@ -243,9 +277,7 @@ def test_place_survey_replays_from_records(
     from builder.cli import main
 
     world = _needs_world()
-    _reef_counts(
-        monkeypatch, {"clownfish", "green_sea_turtle", "reef_shark", "manta_ray"}
-    )
+    _reef_counts(monkeypatch, _LIVE_GBR)
     records = tmp_path / "gbr" / "records"
     records.mkdir(parents=True)
     shutil.copy(FIXTURES / "gbr-survey.jsonl", records / "survey.jsonl")
@@ -309,9 +341,7 @@ def test_reef_plan_lists_home_fish_shark_and_turtle(
 
     world = _needs_world()
     animals = _animals(world)
-    _reef_counts(
-        monkeypatch, {"clownfish", "green_sea_turtle", "reef_shark", "manta_ray"}
-    )
+    _reef_counts(monkeypatch, _LIVE_GBR)
     survey = _replay_survey(
         tmp_path,
         "gbr-survey.jsonl",
@@ -333,16 +363,25 @@ def test_reef_plan_lists_home_fish_shark_and_turtle(
     }
     assert by_id["animal_clownfish"]["from"] == "perch"
     assert by_id["animal_reef_shark"]["from"] == "reef_shark"
+    assert by_id["animal_blue_tang"]["from"] == "bream"
+    assert by_id["animal_bottlenose_dolphin"]["from"] == "harbour_porpoise"
     assert "animal_green_sea_turtle" in by_id
     turtle = next(a for a in animals if a["id"] == "green_sea_turtle")
     assert turtle["shape"] == "new"
-    assert plan["blocked"] == []
-    assert plan["estimate_usd"] == 0.8
+    assert plan["blocked"] == [
+        {"what": "humpback_whale", "reason": "not_makeable"},
+        {"what": "whale_shark", "reason": "not_makeable"},
+        {"what": "jellyfish", "reason": "not_makeable"},
+    ]
+    assert plan["estimate_usd"] == 1.85
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
     assert plan["country"] == "Australia"
     assert plan["region_id"] == "au_great_barrier_reef"
-    assert [i["kind"] for i in plan["items"]] == ["home"] + ["animal"] * 4
+    assert [i["kind"] for i in plan["items"]] == (
+        ["home"] + ["animal"] * 7 + ["plant"] * 4
+    )
+    assert by_id["plant_dugong_grass_halodule_uninervis"]["from"] == "wavy_hair_grass"
 
 
 def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
@@ -497,9 +536,7 @@ def test_place_plan_writes_plan_json(
 
     world = _needs_world()
     animals = _animals(world)
-    _reef_counts(
-        monkeypatch, {"clownfish", "green_sea_turtle", "reef_shark", "manta_ray"}
-    )
+    _reef_counts(monkeypatch, _LIVE_GBR)
     survey = _replay_survey(
         tmp_path,
         "gbr-survey.jsonl",
@@ -563,7 +600,7 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
     assert region_path == job_dir / "regions" / "au_great_barrier_reef.json"
     region = json.loads(region_path.read_text())
     assert region["id"] == "au_great_barrier_reef"
-    assert region["name"] == "Green Island Reef"
+    assert region["name"] == "Great Barrier Reef"
     assert region["status"] == "draft"
     assert region["animals"]["playable"] == []
     assert check_region_file(region_path, world) == []

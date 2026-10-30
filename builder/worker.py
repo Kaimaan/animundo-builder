@@ -15,12 +15,18 @@ import subprocess
 import sys
 import threading
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
 from .config import Config
+from .pipeline import StaleOwner
 from .plan import plan_tile
+
+#: How long a claim owns its job without a renewal (#155). Renewals
+#: ride every status, progress and spend write, plus each item, each
+#: stage and each publish, so only a silent worker loses its lease.
+LEASE_TTL_MINUTES = 30
 
 #: A document update value that deletes the field.
 DELETE = object()
@@ -43,6 +49,10 @@ class Store(Protocol):
     def get_build_job(self, job_id: str) -> dict[str, Any] | None: ...
     def update_build_job(self, job_id: str, fields: dict[str, Any]) -> None: ...
     def claim_build_job(self, job_id: str, worker_id: str) -> bool: ...
+    def renew_build_job(self, job_id: str, worker_id: str) -> bool: ...
+    def update_build_job_if_owner(
+        self, job_id: str, worker_id: str, fields: dict[str, Any]
+    ) -> bool: ...
     def pending_build_jobs(self) -> list[tuple[str, dict[str, Any]]]: ...
     def add_alert(self, item: dict[str, Any]) -> str: ...
     def get_job(self, job_id: str) -> dict[str, Any] | None: ...
@@ -57,6 +67,16 @@ def default_worker_id() -> str:
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def lease_fresh_iso() -> str:
+    """A fresh lease: now plus the TTL, as the store holds it (#155)."""
+    return (datetime.now(UTC) + timedelta(minutes=LEASE_TTL_MINUTES)).isoformat()
+
+
+def lease_expired(lease_until: Any) -> bool:
+    """A missing or past lease no longer owns its job."""
+    return not isinstance(lease_until, str) or lease_until <= now_iso()
 
 
 class _Off(Exception):
@@ -112,6 +132,7 @@ class Worker:
     build: Any | None = None
     _grid_cache: dict[str, Any] | None = field(default=None, repr=False)
     _was_enabled: bool = field(default=True, repr=False)
+    _guard_job: str | None = field(default=None, repr=False)
 
     # -- events ----------------------------------------------------
 
@@ -175,10 +196,73 @@ class Worker:
         job = self.store.get_build_job(job_id)
         if job is None or job.get("status") in ("published", "failed"):
             return
-        if job.get("status") == "checking":
-            self.review_job(job_id, job)
+        try:
+            if job.get("status") == "checking":
+                self.review_job(job_id, job)
+            else:
+                self.build_job(job_id, job)
+        except StaleOwner:
+            print(f"build job {job_id}: another worker owns it; stopping")
+
+    def _claim(self, job_id: str) -> bool:
+        """Own this job or stand down: one live owner, takeovers allowed.
+
+        Follows a dead same-host owner at once (a restart's new pid);
+        otherwise only an expired lease can be taken. Terminal jobs
+        are never claimed.
+        """
+        job = self.store.get_build_job(job_id)
+        if job is None or job.get("status") in ("published", "failed"):
+            return False
+        self._takeover_if_dead(job_id, job)
+        return self.store.claim_build_job(job_id, self.worker_id)
+
+    def _takeover_if_dead(self, job_id: str, job: dict[str, Any]) -> None:
+        """Expire a dead same-host owner's lease, so the claim can take it.
+
+        The expiry itself is conditional on the owner still holding
+        the job, so two workers racing a dead lease still agree on
+        one winner in the claim. A live pid, another host, or an
+        unparsable id never expires: those wait out the lease.
+        """
+        owner = job.get("worker_id") or ""
+        host, sep, pid = owner.rpartition(":")
+        if not sep or host != socket.gethostname():
+            return
+        try:
+            dead_pid = int(pid)
+        except ValueError:
+            return
+        try:
+            os.kill(dead_pid, 0)
+        except OSError:
+            pass
         else:
-            self.build_job(job_id, job)
+            return
+        self.store.update_build_job_if_owner(
+            job_id,
+            owner,
+            {"lease_until": "1970-01-01T00:00:00+00:00", "updated_at": now_iso()},
+        )
+
+    def _require_lease(self, job_id: str) -> None:
+        """Hold the lease across this phase, or stop as stale (#155)."""
+        if not self.store.renew_build_job(job_id, self.worker_id):
+            raise StaleOwner(f"build job {job_id}: the lease is gone")
+
+    def _update(self, job_id: str, fields: dict[str, Any]) -> None:
+        """Write this job's doc only while owning it, renewing the lease.
+
+        Every status, progress and spend write rides here, so a
+        stale owner that resumes after takeover aborts instead of
+        overwriting the new owner's work.
+        """
+        if not self.store.update_build_job_if_owner(
+            job_id,
+            self.worker_id,
+            {**fields, "lease_until": lease_fresh_iso(), "updated_at": now_iso()},
+        ):
+            raise StaleOwner(f"build job {job_id}: owned by another worker")
 
     def build_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Claim the job and build it: code directly, items each alone."""
@@ -186,11 +270,9 @@ class Worker:
         from .tiles import make_tile
 
         assert self.world is not None
-        if job.get("status") == "queued":
-            if not self.store.claim_build_job(job_id, self.worker_id):
-                return
-            self._set_status(job_id, "building")
-            job = self.store.get_build_job(job_id) or job
+        if not self._claim(job_id):
+            return
+        job = self.store.get_build_job(job_id) or job
         tile = self._job_tile(job_id, job)
         if tile is None:
             return
@@ -218,6 +300,7 @@ class Worker:
                 reason = (blocked or {}).get("reason", "no_home")
                 self._fail(job_id, reason)
                 return
+            self._require_lease(job_id)
             path = publish_group(tile, made, self.store, self.world_commit or "unknown")
             print(f"build job {job_id}: published {path}")
             # The published copy's own version, so areas/{tile} shows it (#143.5).
@@ -354,6 +437,7 @@ class Worker:
             if not self._fits_budget(item, job, budget):
                 stopped = "budget"
                 break
+            self._require_lease(job_id)
             try:
                 self.run_item(job_id, job, tile, plan, item, budget)
             except _Off:
@@ -365,7 +449,7 @@ class Worker:
                 break
             job = self.store.get_build_job(job_id) or job
         if stopped:
-            self.store.update_build_job(job_id, {"error": stopped})
+            self._update(job_id, {"error": stopped})
         progress = (self.store.get_build_job(job_id) or {}).get("progress", [])
         expand_ids = {i["id"] for i in expand}
         expand_failed = [
@@ -413,6 +497,7 @@ class Worker:
         if self.chat is not None:
             ctx.client = self.chat
         start = ctx.tracker.spent_usd
+        self._guard_job = job_id
         try:
             if item["kind"] == "food":
                 home = self._tile_home(tile, plan, job_id)
@@ -436,10 +521,10 @@ class Worker:
             raise _BudgetOut(code) from error
         except OffSwitch:
             spent = round(ctx.tracker.spent_usd - start, 6)
-            self.store.update_build_job(
-                job_id, {"cost_usd": before + spent, "updated_at": now_iso()}
-            )
+            self._update(job_id, {"cost_usd": before + spent})
             raise _Off()
+        except StaleOwner:
+            raise
         except Exception as error:  # noqa: BLE001 - one item never stops the rest
             need = (
                 self._failed_home_item(plan, job_id)
@@ -467,7 +552,10 @@ class Worker:
             print(f"build job {job_id}: {item['id']} failed: {error}", file=sys.stderr)
             self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
             return
-        self._close_item(job_id, item, item_dir, ctx, start, before, budget, None)
+        else:
+            self._close_item(job_id, item, item_dir, ctx, start, before, budget, None)
+        finally:
+            self._guard_job = None
 
     def review_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Ship or drop reviewed items; publish the tile; finish (T76).
@@ -483,6 +571,8 @@ class Worker:
         assert self.world is not None
         review = job.get("review") or {}
         if not review:
+            return
+        if not self._claim(job_id):
             return
         if job.get("kind") == "enrich":
             self.review_enrich_job(job_id, job)
@@ -529,6 +619,7 @@ class Worker:
         if made is None:
             self._fail(job_id, (blocked or {}).get("reason", "no_home"))
             return
+        self._require_lease(job_id)
         path = publish_group(tile, made, self.store, self.world_commit or "unknown")
         print(f"build job {job_id}: published {path}")
         # The published copy's own version, so areas/{tile} shows it (#143.5).
@@ -574,6 +665,7 @@ class Worker:
             self._flag_place(job_id, item, failed, missing, general)
             self._fail(job_id, "place")
             return
+        self._require_lease(job_id)
         try:
             versions, no_food = self._remake_enrich_tiles(job, item, ship)
         except build_mod.EnrichRemakeError as error:
@@ -589,9 +681,7 @@ class Worker:
         what = (job.get("enrich") or {}).get("what", "")
         self._flag_no_food(job_id, item, no_food, what)
         self._flag_place(job_id, item, failed, missing, [])
-        self.store.update_build_job(
-            job_id, {"versions": versions, "updated_at": now_iso()}
-        )
+        self._update(job_id, {"versions": versions})
         print(f"build job {job_id}: remade {len(versions)} tiles")
         self._set_status(job_id, "published")
 
@@ -787,15 +877,11 @@ class Worker:
     def _set_status(
         self, job_id: str, status: str, extra: dict[str, Any] | None = None
     ) -> None:
-        self.store.update_build_job(
-            job_id, {"status": status, "updated_at": now_iso(), **(extra or {})}
-        )
+        self._update(job_id, {"status": status, **(extra or {})})
 
     def _fail(self, job_id: str, error: str) -> None:
         print(f"build job {job_id}: failed ({error})", file=sys.stderr)
-        self.store.update_build_job(
-            job_id, {"status": "failed", "error": error, "updated_at": now_iso()}
-        )
+        self._update(job_id, {"status": "failed", "error": error})
         self.alert({"kind": "job_failed", "id": job_id, "error": error})
 
     def _job_tile(self, job_id: str, job: dict[str, Any]) -> str | None:
@@ -973,6 +1059,8 @@ class Worker:
 
         if not self.store.get_enabled():
             raise OffSwitch(f"off switch stopped {stage}")
+        if self._guard_job is not None:
+            self._require_lease(self._guard_job)
 
     def _close_item(
         self,
@@ -1015,10 +1103,7 @@ class Worker:
             {"id": item["id"], "status": status, "report": report, "cost_usd": cost}
         )
         total = round(before + cost, 6)
-        self.store.update_build_job(
-            job_id,
-            {"progress": progress, "cost_usd": total, "updated_at": now_iso()},
-        )
+        self._update(job_id, {"progress": progress, "cost_usd": total})
         if budget > 0:
             for pct in (50, 80, 100):
                 if before < budget * pct / 100 <= total:
@@ -1154,12 +1239,9 @@ class Worker:
             self.store.write_blob(
                 f"previews/{job_id}/{version}/{rel}", data, content_type
             )
-        self.store.update_build_job(
+        self._update(
             job_id,
-            {
-                "preview": {"pack": f"previews/{job_id}/{version}/"},
-                "updated_at": now_iso(),
-            },
+            {"preview": {"pack": f"previews/{job_id}/{version}/"}},
         )
         print(f"build job {job_id}: preview {version} for its judge")
 

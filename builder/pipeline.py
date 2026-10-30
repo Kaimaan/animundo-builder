@@ -152,6 +152,10 @@ class OffSwitch(Exception):
     """The off switch went off: stop at the next stage, resume later."""
 
 
+class StaleOwner(Exception):
+    """Another worker owns this job now: stop at once, write nothing (#155)."""
+
+
 @dataclass
 class Pipeline:
     """A fixed list of stages with crash-safe state."""
@@ -172,7 +176,7 @@ class Pipeline:
             _set_stage(ctx, stage.name)
             try:
                 result = stage.run(ctx)
-            except (BudgetExceeded, CapExceeded, MetaAuthError, OffSwitch):
+            except (BudgetExceeded, CapExceeded, MetaAuthError, OffSwitch, StaleOwner):
                 raise
             except Exception as error:  # noqa: BLE001 - recorded, then raised
                 state["failed"] = {"stage": stage.name, "error": str(error)}

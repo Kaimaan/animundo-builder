@@ -55,10 +55,185 @@ def test_claim_build_job_leaves_one_winner() -> None:
     assert store.build_jobs["j1"]["worker_id"] == "w1"
 
 
-def test_claim_build_job_needs_queued() -> None:
+def _owned_job(status: str = "building", owner: str = "wA") -> dict[str, Any]:
+    job = _enrich_job(status=status)
+    job["worker_id"] = owner
+    job["lease_until"] = "2999-01-01T00:00:00+00:00"
+    return job
+
+
+def test_second_worker_runs_no_stages_for_a_live_job(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#155: a job owned live is untouched by another worker."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _owned_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wB"
+    ran: list[str] = []
+
+    def fake_stages(*args: Any, **kwargs: Any) -> None:
+        ran.append("stages")
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    worker.handle_build_job("j1")
+    assert ran == []
+    assert store.build_jobs["j1"]["worker_id"] == "wA"
+    assert store.build_jobs["j1"]["status"] == "building"
+
+
+def test_expired_lease_can_be_recovered(tmp_path: Path, monkeypatch: Any) -> None:
+    """#155: a dead owner's job builds on under the new owner."""
+    store = FakeStore()
+    job = _owned_job()
+    job["lease_until"] = "2020-01-01T00:00:00+00:00"
+    store.build_jobs["j1"] = job
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wB"
+
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+        cast: Any = None,
+        enrich_tiles: Any = None,
+    ) -> None:
+        (item_dir / "animals").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["worker_id"] == "wB"
+    assert store.build_jobs["j1"]["status"] == "checking"
+    assert store.build_jobs["j1"]["progress"][0]["id"] == "enrich_lion"
+
+
+def test_stale_owner_writes_nothing(tmp_path: Path) -> None:
+    """#155: after takeover the old owner neither writes nor publishes."""
+    import pytest
+
+    from builder.pipeline import StaleOwner
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _owned_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+    assert worker._claim("j1") is True
+    store.build_jobs["j1"]["lease_until"] = "2020-01-01T00:00:00+00:00"
+    assert store.claim_build_job("j1", "wB") is True
+    store.update_build_job("j1", {"progress": [{"id": "enrich_lion"}]})
+    before = dict(store.build_jobs["j1"])
+    blobs = dict(store.blobs)
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"] == before
+    assert store.blobs == blobs
+    with pytest.raises(StaleOwner):
+        worker._set_status("j1", "failed")
+
+
+def test_dead_same_host_owner_is_followed_at_once(tmp_path: Path) -> None:
+    """#155: a restart's new pid takes over without waiting out the lease."""
+    import os
+    import socket
+    import subprocess
+
+    proc = subprocess.Popen(["true"])
+    proc.wait()
+    dead = f"{socket.gethostname()}:{proc.pid}"
+    assert dead != f"{socket.gethostname()}:{os.getpid()}"
+    store = FakeStore()
+    store.build_jobs["j1"] = _owned_job(owner=dead)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker._claim("j1") is True
+    assert store.build_jobs["j1"]["worker_id"] == worker.worker_id
+
+
+def test_restart_resumes_without_repeating_finished_items(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#155: the new owner skips finished items; their calls stay spent."""
+    import pytest
+
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "format": 1,
+        "kind": "build",
+        "tile": "n_413_478",
+        "status": "queued",
+        "budget_usd": 10.0,
+        "cost_usd": 0.0,
+        "progress": [],
+        "items": ["animal_fox", "animal_hare"],
+    }
+    store.plans["n_413_478"] = {
+        "tile": "n_413_478",
+        "items": [
+            {"id": "animal_fox", "kind": "animal", "what": "fox", "estimate_usd": 1.0},
+            {
+                "id": "animal_hare",
+                "kind": "animal",
+                "what": "mountain_hare",
+                "estimate_usd": 1.0,
+            },
+        ],
+        "improve": [],
+        "world": "abc123",
+    }
+    calls: list[str] = []
+    seen: set[str] = set()
+
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+        cast: Any = None,
+        enrich_tiles: Any = None,
+    ) -> None:
+        calls.append(item["id"])
+        (item_dir / "animals").mkdir(parents=True, exist_ok=True)
+        if item["id"] == "animal_hare" and "crashed" not in seen:
+            seen.add("crashed")
+            raise KeyboardInterrupt("the worker dies here")
+
+    import dataclasses
+
+    first = _flow_worker(tmp_path, store, boreal_3x3())
+    first.worker_id = "wA"
+    monkeypatch.setattr(first, "_run_stages", fake_stages)
+    with pytest.raises(KeyboardInterrupt):
+        first.handle_build_job("j1")
+    assert calls == ["animal_fox", "animal_hare"]
+    assert [e["id"] for e in store.build_jobs["j1"]["progress"]] == ["animal_fox"]
+    store.build_jobs["j1"]["lease_until"] = "2020-01-01T00:00:00+00:00"
+    second = dataclasses.replace(first, worker_id="wB")
+    monkeypatch.setattr(second, "_run_stages", fake_stages)
+    second.handle_build_job("j1")
+    assert store.build_jobs["j1"]["worker_id"] == "wB"
+    assert calls == ["animal_fox", "animal_hare", "animal_hare"]
+    assert [e["id"] for e in store.build_jobs["j1"]["progress"]] == [
+        "animal_fox",
+        "animal_hare",
+    ]
+
+
+def test_claim_build_job_needs_queued_or_an_expired_lease() -> None:
+    """#155: a live lease refuses; an expired one can be taken."""
     store = FakeStore()
     assert store.claim_build_job("missing", "w1") is False
     store.build_jobs["j1"] = {"status": "building"}
+    assert store.claim_build_job("j1", "w1") is True
+    assert store.build_jobs["j1"]["worker_id"] == "w1"
+    assert store.claim_build_job("j1", "w2") is False
+    assert store.claim_build_job("j1", "w1") is True
+    store.build_jobs["j1"]["lease_until"] = "2020-01-01T00:00:00+00:00"
+    assert store.claim_build_job("j1", "w2") is True
+    assert store.build_jobs["j1"]["worker_id"] == "w2"
+    store.build_jobs["j1"]["status"] = "published"
     assert store.claim_build_job("j1", "w1") is False
 
 
@@ -930,6 +1105,7 @@ def test_enrich_run_item_writes_places_for_its_tiles(
         seen["tiles"] = enrich_tiles
 
     monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    assert store.claim_build_job("j1", worker.worker_id) is True
     job = store.build_jobs["j1"]
     item = {
         "id": "enrich_lion",
@@ -969,6 +1145,7 @@ def test_enrich_item_report_names_its_tile(tmp_path: Path, monkeypatch: Any) -> 
         (item_dir / "animals").mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    assert store.claim_build_job("j1", worker.worker_id) is True
     job = store.build_jobs["j1"]
     item = {
         "id": "enrich_lion",
@@ -1010,6 +1187,7 @@ def test_build_item_report_keeps_old_labels(tmp_path: Path, monkeypatch: Any) ->
         (item_dir / "animals").mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    assert store.claim_build_job("j1", worker.worker_id) is True
     job = store.build_jobs["j1"]
     item = {
         "id": "animal_fox",
@@ -1671,6 +1849,7 @@ def test_close_item_alerts_on_spending_crossings(tmp_path: Path) -> None:
         "cost_usd": 4.0,
     }
     worker = _worker(tmp_path, store)
+    assert store.claim_build_job("j1", worker.worker_id) is True
     item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
     item_dir.mkdir(parents=True)
     tracker = BudgetTracker(budget_usd=10.0)

@@ -90,11 +90,29 @@ class FirebaseStore:
         )
 
     def claim_build_job(self, job_id: str, worker_id: str) -> bool:
-        """Claim a queued job atomically; the loser gets False."""
-        from .worker import now_iso
+        """Claim a job atomically: queued, own, or an expired lease (#155)."""
+        from .worker import lease_fresh_iso, now_iso
 
         ref = self._db.collection("build_jobs").document(job_id)
-        return _claim_queued(self._db.transaction(), ref, worker_id, now_iso())
+        return _claim_lease(
+            self._db.transaction(), ref, worker_id, now_iso(), lease_fresh_iso()
+        )
+
+    def renew_build_job(self, job_id: str, worker_id: str) -> bool:
+        """Extend our own lease atomically; False when it is not ours."""
+        from .worker import lease_fresh_iso, now_iso
+
+        ref = self._db.collection("build_jobs").document(job_id)
+        return _renew_lease(
+            self._db.transaction(), ref, worker_id, now_iso(), lease_fresh_iso()
+        )
+
+    def update_build_job_if_owner(
+        self, job_id: str, worker_id: str, fields: dict[str, Any]
+    ) -> bool:
+        """Write only while owning the job, atomically (#155)."""
+        ref = self._db.collection("build_jobs").document(job_id)
+        return _update_if_owner(self._db.transaction(), ref, worker_id, dict(fields))
 
     def pending_build_jobs(self) -> list[tuple[str, dict[str, Any]]]:
         return [
@@ -157,9 +175,11 @@ STORE_METHODS = (
     "list_requests",
     "pending_build_jobs",
     "read_blob",
+    "renew_build_job",
     "set_job",
     "set_plan",
     "update_build_job",
+    "update_build_job_if_owner",
     "update_job",
     "watch_build_jobs",
     "watch_requests",
@@ -168,13 +188,59 @@ STORE_METHODS = (
 
 
 @firestore.transactional
-def _claim_queued(transaction: Any, ref: Any, worker_id: str, at: str) -> bool:
-    """One transaction: still queued and unclaimed, it is ours."""
+def _claim_lease(
+    transaction: Any, ref: Any, worker_id: str, at: str, fresh: str
+) -> bool:
+    """One transaction: queued, ours already, or an expired lease (#155)."""
+    from .worker import lease_expired
+
     snap = ref.get(transaction=transaction)
     if not snap.exists:
         return False
     data = snap.to_dict() or {}
-    if data.get("status") != "queued" or data.get("worker_id"):
+    if data.get("status") not in ("queued", "building", "checking"):
         return False
-    transaction.update(ref, {"worker_id": worker_id, "updated_at": at})
+    if data.get("status") != "queued":
+        if data.get("worker_id") != worker_id and not lease_expired(
+            data.get("lease_until")
+        ):
+            return False
+    update: dict[str, Any] = {
+        "worker_id": worker_id,
+        "lease_until": fresh,
+        "updated_at": at,
+    }
+    if data.get("status") == "queued":
+        update["status"] = "building"
+    transaction.update(ref, update)
+    return True
+
+
+@firestore.transactional
+def _renew_lease(
+    transaction: Any, ref: Any, worker_id: str, at: str, fresh: str
+) -> bool:
+    """One transaction: still ours, the lease extends."""
+    snap = ref.get(transaction=transaction)
+    if not snap.exists:
+        return False
+    data = snap.to_dict() or {}
+    if data.get("worker_id") != worker_id:
+        return False
+    transaction.update(ref, {"lease_until": fresh, "updated_at": at})
+    return True
+
+
+@firestore.transactional
+def _update_if_owner(
+    transaction: Any, ref: Any, worker_id: str, fields: dict[str, Any]
+) -> bool:
+    """One transaction: still ours, the fields land."""
+    snap = ref.get(transaction=transaction)
+    if not snap.exists:
+        return False
+    data = snap.to_dict() or {}
+    if data.get("worker_id") != worker_id:
+        return False
+    transaction.update(ref, fields)
     return True

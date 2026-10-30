@@ -12,15 +12,45 @@ import pytest
 from builder.cli import NOT_BUILT_YET, main
 
 
-def test_check_accepts_a_directory(tmp_path: Path, capsys) -> None:
-    assert main(["check", "--world", str(tmp_path)]) == 0
-    assert "checkers: none yet" in capsys.readouterr().out
+def test_check_rejects_an_empty_directory(tmp_path: Path, capsys) -> None:
+    assert main(["check", "--world", str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    assert "fail tool tile_region.py" in out
+    assert "failed " in out
 
 
 def test_check_rejects_a_missing_directory(tmp_path: Path, capsys) -> None:
     missing = tmp_path / "no-such-world"
     assert main(["check", "--world", str(missing)]) == 1
     assert "not a directory" in capsys.readouterr().err
+
+
+def _integration_world() -> Path:
+    """The world checkout for the compat integration test (#160.4)."""
+    import os
+
+    override = os.environ.get("ANIMUNDO_WORLD")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parent.parent.parent / "animundo-world"
+
+
+def test_check_world_against_current_checkout(capsys) -> None:
+    """#160.4: the representative current-World check; absence fails loud."""
+    import os
+
+    world = _integration_world()
+    if not (world / "tools" / "tile_region.py").is_file():
+        if os.environ.get("BUILDER_WITHOUT_WORLD") == "1":
+            pytest.skip("BUILDER_WITHOUT_WORLD=1 opts out of the world check")
+        pytest.fail(
+            f"no world checkout at {world}: clone animundo-world there "
+            "(or point ANIMUNDO_WORLD at one) so the compat check runs"
+        )
+    assert main(["check", "--world", str(world)]) == 0
+    out = capsys.readouterr().out
+    assert "revision: " in out
+    assert "failed 0" in out
 
 
 def test_check_needs_world() -> None:

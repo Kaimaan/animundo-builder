@@ -480,13 +480,15 @@ def cmd_place_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_check(world: str) -> int:
-    """Validate the world checkout path. Real checkers land with later tasks."""
+    """Probe one world checkout for compatibility with this builder (#160.1)."""
+    from .compat import check_world, format_report
+
     path = _world_or_error(world)
     if path is None:
         return 1
-    print(f"world: {path.resolve()}")
-    print("checkers: none yet (skeleton)")
-    return 0
+    report = check_world(path.resolve())
+    print(format_report(report), end="")
+    return 0 if report.ok else 1
 
 
 def cmd_report(job_id: str, jobs_dir: str) -> int:

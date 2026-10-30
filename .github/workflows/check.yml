@@ -8,10 +8,23 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      # The world revision the compat check runs against (#160.4).
+      # Bump with the world when it moves; the revision step below
+      # prints the exact commit every run tested.
+      WORLD_REV: 637e742ebfdf2c5b9ed06ae5871cd7996ad170e6
+      ANIMUNDO_WORLD: ${{ github.workspace }}/animundo-world
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: Kaimaan/animundo-world
+          ref: ${{ env.WORLD_REV }}
+          path: animundo-world
+      - run: git -C animundo-world rev-parse HEAD
+        name: Identify the world revision
       - uses: astral-sh/setup-uv@v5
       - uses: actions/setup-python@v5
         with:

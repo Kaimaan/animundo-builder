@@ -483,6 +483,26 @@ def test_choices_offer_the_sea_depth(tmp_path: Path) -> None:
     assert "depth" in schema["required"]
 
 
+def test_code_choices_keeps_a_deep_base_deep(tmp_path: Path) -> None:
+    """#162.1: depth is sticky-deep; the reef keeps its 35 m sea."""
+    deep_base = tmp_path / "reef.json"
+    deep_base.write_text(json.dumps({"depth": "deep"}))
+    shallow_base = tmp_path / "sea.json"
+    shallow_base.write_text(json.dumps({}))
+    brief = {"center": {"lat": -16.6}}
+    research = {"sources": []}
+    choices = {"depth": "shallow", "water_name": "Warm shallow sea"}
+    _code_choices(choices, "sea", brief, research, deep_base)
+    assert choices["depth"] == "deep"
+    assert choices["water_name"] == "Warm deep sea"
+    choices = {"depth": "deep"}
+    _code_choices(choices, "sea", brief, research, shallow_base)
+    assert choices["depth"] == "deep"
+    choices = {"depth": "shallow"}
+    _code_choices(choices, "sea", brief, research, shallow_base)
+    assert choices["depth"] == "shallow"
+
+
 def test_code_whale_sets_the_diving_fields() -> None:
     """#162.4: the humpback's file gets its diving life by code."""
     animal = json.loads(_animal_answer("humpback_whale"))
@@ -1708,6 +1728,7 @@ def test_newhome_prompt_survives_a_choices_shaped_base() -> None:
         brief, research, "sea", world / "homes" / "examples" / "reef.json", [], [], {}
     )
     assert "for the sea looks" in prompt
+    assert '"depth": "deep"' in prompt
 
 
 def test_authored_base_adds_an_author_only_when_missing(tmp_path: Path) -> None:

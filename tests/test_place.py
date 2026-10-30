@@ -428,7 +428,7 @@ def _replay_survey(
     return survey
 
 
-def test_reef_plan_lists_home_fish_shark_and_turtle(
+def test_reef_plan_lists_home_whale_and_plants(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """T98's done-when: the reef plan from the recorded GBR survey."""
@@ -456,28 +456,22 @@ def test_reef_plan_lists_home_fish_shark_and_turtle(
         "from": "examples/reef",
         "estimate_usd": 0.2,
     }
-    assert by_id["animal_clownfish"]["from"] == "perch"
-    assert by_id["animal_reef_shark"]["from"] == "reef_shark"
-    assert by_id["animal_blue_tang"]["from"] == "bream"
-    assert by_id["animal_bottlenose_dolphin"]["from"] == "harbour_porpoise"
-    assert "animal_green_sea_turtle" in by_id
-    turtle = next(a for a in animals if a["id"] == "green_sea_turtle")
-    assert turtle["shape"] == "new"
-    # World a5679e1 (decision 0045): the humpback can be made.
+    # The live reef filed its fish (world f2a9fb3): only the home, the
+    # whale and the survey's Latin-named plants still need making.
     assert by_id["animal_humpback_whale"]["from"] == "harbour_porpoise"
+    whale = next(a for a in animals if a["id"] == "humpback_whale")
+    assert whale["shape"] == "new"
     assert plan["blocked"] == [
         {"what": "whale_shark", "reason": "not_makeable"},
         {"what": "jellyfish", "reason": "not_makeable"},
     ]
-    assert plan["estimate_usd"] == 2.0
+    assert plan["estimate_usd"] == 0.95
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
     assert plan["country"] == "Australia"
     assert plan["region_id"] == "au_great_barrier_reef"
-    assert [i["kind"] for i in plan["items"]] == (
-        ["home"] + ["animal"] * 8 + ["plant"] * 4
-    )
-    assert by_id["plant_dugong_grass_halodule_uninervis"]["from"] == "wavy_hair_grass"
+    assert [i["kind"] for i in plan["items"]] == (["home"] + ["animal"] + ["plant"] * 4)
+    assert by_id["plant_dugong_grass_halodule_uninervis"]["from"] == "dugong_grass"
 
 
 def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
@@ -611,7 +605,7 @@ def test_unmakeable_animals_are_blocked_not_built(
         "animals": [
             {"id": "blue_whale", "source": "x"},
             {"id": "test_newt", "source": "x"},
-            {"id": "clownfish", "source": "x"},
+            {"id": "manta_ray", "source": "x"},
         ],
         "plants": [],
         "food": [],
@@ -621,7 +615,7 @@ def test_unmakeable_animals_are_blocked_not_built(
     plan = plan_place(survey, world, "abc123")
     assert {"what": "blue_whale", "reason": "not_makeable"} in plan["blocked"]
     assert {"what": "test_newt", "reason": "needs_reference"} in plan["blocked"]
-    assert "animal_clownfish" in [i["id"] for i in plan["items"]]
+    assert "animal_manta_ray" in [i["id"] for i in plan["items"]]
 
 
 def test_place_plan_writes_plan_json(
@@ -699,13 +693,28 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
     assert region["id"] == "au_great_barrier_reef"
     assert region["name"] == "Great Barrier Reef"
     assert region["status"] == "draft"
-    assert region["animals"]["playable"] == []
+    # The live reef filed its animals (world f2a9fb3): surveyed and filed
+    # means playable, in survey order.
+    assert region["animals"]["playable"] == [
+        "clownfish",
+        "green_sea_turtle",
+        "blue_tang",
+        "reef_shark",
+        "bottlenose_dolphin",
+        "lionfish",
+        "butterflyfish",
+    ]
     # #149.2: the adapted home's plants as the region's parts.
     assert [p["id"] for p in region["plants"]["water"]] == [
         "branching_staghorn_coral",
         "closed_brain_coral",
         "giant_sea_fan",
     ]
+    # #162.1: the replayed reef home has the deep sea.
+    home = json.loads((job_dir / "home_reef" / "homes" / "reef.json").read_text())
+    assert home["terrain"]["water_level"] == 40
+    assert home["terrain"]["sea_depth"] == 35
+    assert home["lakes"][0]["depth"] == 35
     assert check_region_file(region_path, world) == []
     dest = take_place_job(job_dir, tmp_path / "take", world)
     assert (dest / "regions" / "au_great_barrier_reef.json").is_file()
@@ -731,7 +740,7 @@ def test_write_region_derives_groups_and_fish_from_filed_animals(
             {"id": "perch", "source": "x"},
             {"id": "pike", "source": "x"},
             {"id": "frog", "source": "x"},
-            {"id": "clownfish", "source": "x"},
+            {"id": "manta_ray", "source": "x"},
         ],
         "plants": [],
     }

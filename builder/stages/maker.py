@@ -2705,7 +2705,7 @@ class HomeMakerStage:
             previous = answer
             choices, file_errors = _choices_files(answer)
             if choices is not None:
-                _code_choices(choices, habitat, brief, research)
+                _code_choices(choices, habitat, brief, research, base)
                 file_errors = self._adapt_try(
                     ctx, world, base, choices, habitat, attempt, tag
                 )
@@ -2809,7 +2809,7 @@ class HomeMakerStage:
         closest = json.loads(base.read_text(encoding="utf-8"))
         excerpt = {
             key: closest.get(key, _BASE_FALLBACK[key])
-            for key in ("description", "palette", "trees", "lake_life")
+            for key in ("description", "palette", "trees", "lake_life", "depth")
         }
         center = brief.get("center", {})
         return Template(template).substitute(
@@ -2835,6 +2835,7 @@ _BASE_FALLBACK = {
     "palette": {},
     "trees": {"density": "none", "mix": []},
     "lake_life": {},
+    "depth": "shallow",
 }
 
 
@@ -2965,9 +2966,9 @@ def _home_choices_schema(plants: list[str], trees: list[str]) -> dict[str, Any]:
             "depth": enum(
                 CHOICE_LEVELS["depth"],
                 (
-                    "the sea's depth: deep (about 35 m) where whales "
-                    "swim, shallow (7 m) otherwise; deep needs water "
-                    "sea and land that isn't mountains"
+                    "the base home's depth shown in the prompt; deep "
+                    "only where the research names whales. Deep needs "
+                    "water sea and land that isn't mountains"
                 ),
             ),
             "palette": obj({key: _CHOICE_HEX for key in CHOICE_PALETTE}),
@@ -3129,12 +3130,14 @@ def _code_choices(
     habitat: str,
     brief: dict[str, Any],
     research: dict[str, Any],
+    base: Path | None = None,
 ) -> None:
     """Code's part of the choices: the id, the tropics, the sources (#65.2).
 
     A border home also carries its ecoregion, habitat and the home
     it was adapted from, set by code from the plan item; the model
-    never writes them (#130.4).
+    never writes them (#130.4). Depth is sticky-deep: a base that
+    asks for a deep sea keeps it whatever the model says (#162.1).
     """
     lat = float((brief.get("center") or {}).get("lat", 0.0))
     tropical = abs(lat) < 23
@@ -3153,6 +3156,20 @@ def _code_choices(
     if tropical:
         # No ice in the tropics: no seasons there (#69.3).
         choices["ice"] = "none"
+    if base is not None:
+        try:
+            base_depth = json.loads(base.read_text(encoding="utf-8")).get("depth")
+        except (OSError, ValueError):
+            base_depth = None
+        if choices.get("depth") != "deep" and base_depth == "deep":
+            # Code deepened the sea; its name follows it.
+            name = choices.get("water_name", "")
+            if "shallow" in name.lower():
+                choices["water_name"] = re.sub(
+                    "shallow", "deep", name, flags=re.IGNORECASE
+                )
+        if base_depth == "deep" or choices.get("depth") == "deep":
+            choices["depth"] = "deep"
 
 
 def _place_home(

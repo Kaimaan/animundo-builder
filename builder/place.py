@@ -16,7 +16,7 @@ from typing import Any
 from .grid import GridName, parse_tile, tile_at
 from .habitats import HabitatGrid
 from .plan import closest_plant, home_plant_entries, plant_slug
-from .presence import fetch_raw
+from .presence import fetch_raw, match_kingdom
 from .prompts import load_prompt
 
 #: Headroom past the round, as research: the model doesn't keep
@@ -229,6 +229,12 @@ def gbif_near(tile: str, animals: list[dict[str, Any]]) -> dict[str, int]:
     return totals
 
 
+def _latin(name: str) -> str | None:
+    """The Latin name in trailing parentheses, if the survey gave one."""
+    match = re.search(r"\(([^()]*)\)\s*$", name)
+    return match.group(1).strip() or None if match else None
+
+
 def check_survey(
     data: Any,
     place: str,
@@ -245,7 +251,8 @@ def check_survey(
     `--improve`); `home_from` a home file; every animal on the
     list with a source and GBIF records within 2 tiles (the
     wanted stay first, records or not); plants and food named
-    with sources.
+    with sources. Each plant keeps its GBIF kingdom, matched from
+    the Latin name (#146.2).
     """
     if not isinstance(data, dict):
         raise SurveyError("the survey is not an object")
@@ -306,6 +313,16 @@ def check_survey(
         if entry["id"] in want or counts.get(entry["id"], 0) > 0:
             kept.append({"id": entry["id"], "source": entry["source"]})
     kept.sort(key=lambda e: 0 if e["id"] in want else 1)
+    plants: list[dict[str, Any]] = []
+    for entry in data["plants"]:
+        latin = _latin(entry["name"])
+        plants.append(
+            {
+                "name": entry["name"],
+                "source": entry["source"],
+                "kingdom": match_kingdom(latin) if latin else None,
+            }
+        )
     return {
         "place": place,
         "tile": tile,
@@ -316,7 +333,7 @@ def check_survey(
         "country": data["country"].strip(),
         "region_id": data["region_id"],
         "animals": kept,
-        "plants": [{"name": e["name"], "source": e["source"]} for e in data["plants"]],
+        "plants": plants,
         "food": [{"name": e["name"], "source": e["source"]} for e in data["food"]],
         "wanted": [w for w in want if w in by_id],
         "budget_usd": budget_usd,
@@ -404,7 +421,9 @@ def plan_place(
         made.add(animal_id)
         spent += estimate
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
-    for slug, grounds in _missing_plants(home, survey, have):
+    missing, not_plants = _missing_plants(home, survey, have)
+    blocked.extend(not_plants)
+    for slug, grounds in missing:
         estimate = ITEM_ESTIMATES["plant"]
         if not afford(estimate):
             break
@@ -446,16 +465,23 @@ def plan_place(
     return plan
 
 
+#: Kingdoms a survey plant may be built from (#146.2).
+PLANT_KINGDOMS = ("Plantae", "Fungi")
+
+
 def _missing_plants(
     home: dict[str, Any], survey: dict[str, Any], have: list[str]
-) -> list[tuple[str, list[str]]]:
+) -> tuple[list[tuple[str, list[str]]], list[dict[str, str]]]:
     """Named plants with no model yet: the home's, then the survey's.
 
     Food names stay food (#144.1): only `plants[].model` and the
     survey's `plants` become items, each with the grounds it
-    grows on when the home says.
+    grows on when the home says. A survey plant whose GBIF
+    kingdom is outside Plantae and Fungi is blocked, never
+    built (#146.2).
     """
     missing: list[tuple[str, list[str]]] = []
+    blocked: list[dict[str, str]] = []
     seen: set[str] = set()
 
     def want(slug: str, grounds: list[str]) -> None:
@@ -468,8 +494,15 @@ def _missing_plants(
         on = entry.get("on", [])
         want(model, [on] if isinstance(on, str) else [g for g in on if g])
     for entry in survey.get("plants", []):
-        want(plant_slug(entry.get("name", "")), [])
-    return missing
+        slug = plant_slug(entry.get("name", ""))
+        kingdom = entry.get("kingdom")
+        if kingdom is not None and kingdom not in PLANT_KINGDOMS:
+            if slug and slug not in have and slug not in seen:
+                seen.add(slug)
+                blocked.append({"what": slug, "reason": "not_a_plant"})
+            continue
+        want(slug, [])
+    return missing, blocked
 
 
 def write_plan(out_dir: Path, plan: dict[str, Any]) -> Path:

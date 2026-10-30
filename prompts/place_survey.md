@@ -23,7 +23,8 @@ A few web searches at most. Answer with JSON only, no prose.
   first, each with `id` (from the list below only) and `source`
   (a URL or a source name). $WANT_LINE
 - `plants`: the plants children will find there, each with `name`
-  and `source`.
+  (the common name with the Latin name in parentheses, like
+  `Brown seaweed (Sargassum)`) and `source`.
 - `food`: what the animals eat there, each with `name` and `source`.
 
 ## Homes

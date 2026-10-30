@@ -20,6 +20,7 @@ from .animal_list import find_list, load_list
 from .grid import CELL_M, HALF_M, neighbours, parse_tile
 
 GBIF_SEARCH = "https://api.gbif.org/v1/occurrence/search"
+GBIF_MATCH = "https://api.gbif.org/v1/species/match"
 GBIF_TRIES = 3
 GBIF_PAUSE = 1.0
 
@@ -49,14 +50,14 @@ def cell_wkt(tile: str) -> str:
     return f"POLYGON (({ring}))"
 
 
-def _gbif(params: dict[str, Any]) -> dict[str, Any]:
-    """One GBIF occurrence call, retried; raises when it stays down."""
+def _gbif(params: dict[str, Any], base: str = GBIF_SEARCH) -> dict[str, Any]:
+    """One GBIF call, retried; raises when it stays down."""
     query = urllib.parse.urlencode(params, doseq=True)
     last_error = ""
     for _ in range(GBIF_TRIES):
         try:
             request = urllib.request.Request(
-                f"{GBIF_SEARCH}?{query}",
+                f"{base}?{query}",
                 headers={"User-Agent": "animundo-builder-presence/0.1"},
             )
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -65,6 +66,14 @@ def _gbif(params: dict[str, Any]) -> dict[str, Any]:
             last_error = str(error)
             time.sleep(GBIF_PAUSE)
     raise ConnectionError(f"GBIF stayed down: {last_error}")
+
+
+def match_kingdom(name: str) -> str | None:
+    """The GBIF kingdom a Latin name matches, or nothing (#146.2)."""
+    data = _gbif({"name": name}, GBIF_MATCH)
+    if data.get("matchType", "NONE") == "NONE":
+        return None
+    return data.get("kingdom")
 
 
 #: GBIF answers 50 taxon keys per call; more is a 400.

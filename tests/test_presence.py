@@ -36,6 +36,21 @@ def test_animals_for_habitat_filters() -> None:
     assert [a["id"] for a in animals_for_habitat(animals, "boreal_forest")] == ["fox"]
 
 
+def test_match_kingdom_reads_the_gbif_match(monkeypatch: Any) -> None:
+    """#146.2: a Latin name resolves to its GBIF kingdom, or nothing."""
+    import builder.presence as presence
+
+    def fake_gbif(params: dict[str, Any], base: str) -> dict[str, Any]:
+        assert base == presence.GBIF_MATCH
+        if params["name"] == "Sargassum":
+            return {"matchType": "EXACT", "kingdom": "Chromista"}
+        return {"matchType": "NONE"}
+
+    monkeypatch.setattr(presence, "_gbif", fake_gbif)
+    assert presence.match_kingdom("Sargassum") == "Chromista"
+    assert presence.match_kingdom("Not a name") is None
+
+
 def test_fetch_raw_reads_species_facets(monkeypatch: Any) -> None:
     import builder.presence as presence
 

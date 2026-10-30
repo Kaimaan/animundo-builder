@@ -81,7 +81,7 @@
             "required": ["what", "reason"],
             "properties": {
               "what": {"type": "string", "minLength": 1},
-              "reason": {"enum": ["needs_reference", "not_makeable"]}
+              "reason": {"enum": ["needs_reference", "not_makeable", "not_a_plant"]}
             }
           }
         }

@@ -18,6 +18,7 @@ from builder.place import (
     check_survey,
     gbif_near,
     improve_tile,
+    plan_place,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "place"
@@ -89,6 +90,7 @@ def _reef_counts(monkeypatch: pytest.MonkeyPatch, recorded: set[str]) -> list[st
         return {a["id"]: 5 for a in animals if a["id"] in recorded}
 
     monkeypatch.setattr(place_mod, "fetch_raw", fake_fetch)
+    monkeypatch.setattr(place_mod, "match_kingdom", lambda latin: "Plantae")
     return seen
 
 
@@ -151,6 +153,99 @@ def test_recorded_gbr_survey_surveys_the_reef(
         "Brown seaweed (Sargassum)",
     ]
     client.verify_consumed()
+
+
+def test_survey_blocks_a_plant_outside_plantae_and_fungi(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#146.2: Sargassum is Chromista, so the plan blocks it, not builds it."""
+    import shutil
+
+    import builder.place as place_mod
+    from builder.pipeline import BudgetTracker, JobContext
+    from builder.records import ReplayClient
+
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(monkeypatch, _LIVE_GBR)
+    matched: list[str] = []
+
+    def fake_match(latin: str) -> str | None:
+        matched.append(latin)
+        return "Chromista" if latin == "Sargassum" else "Plantae"
+
+    monkeypatch.setattr(place_mod, "match_kingdom", fake_match)
+    records = tmp_path / "records"
+    records.mkdir()
+    shutil.copy(FIXTURES / "gbr-survey.jsonl", records / "survey.jsonl")
+    client = ReplayClient(records)
+    client.set_stage("survey")
+    ctx = JobContext(
+        job_id="gbr",
+        job_dir=tmp_path,
+        client=client,
+        tracker=BudgetTracker(budget_usd=8.0),
+        world_path=world,
+    )
+    from builder.place import list_homes
+
+    data, _ = ask_survey(
+        ctx, "Great Barrier Reef", animals, list_homes(world), [], None
+    )
+    survey = check_survey(
+        data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+    )
+    assert matched == [
+        "Halodule uninervis",
+        "Halophila ovalis",
+        "Halimeda",
+        "Sargassum",
+    ]
+    assert [p["kingdom"] for p in survey["plants"]] == [
+        "Plantae",
+        "Plantae",
+        "Plantae",
+        "Chromista",
+    ]
+    plan = plan_place(survey, world, "abc123")
+    assert {"what": "brown_seaweed_sargassum", "reason": "not_a_plant"} in plan[
+        "blocked"
+    ]
+    assert "brown_seaweed_sargassum" not in [i["what"] for i in plan["items"]]
+    client.verify_consumed()
+
+
+def test_plan_keeps_plants_without_a_matched_kingdom(tmp_path: Path) -> None:
+    """#146.2: a plant no Latin name matched stays buildable."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    survey = {
+        "place": "Nuuksio",
+        "tile": "n_413_478",
+        "habitat": "boreal forest",
+        "home_from": "boreal_forest",
+        "name": {"en": "Nuuksio", "fi": "Nuuksio"},
+        "country": "Finland",
+        "region_id": "fi_nuuksio",
+        "animals": [],
+        "plants": [
+            {"name": "arctic raspberry", "source": "x", "kingdom": None},
+            {
+                "name": "Bilberry (Vaccinium myrtillus)",
+                "source": "x",
+                "kingdom": "Plantae",
+            },
+        ],
+        "food": [],
+        "wanted": [],
+        "budget_usd": 8.0,
+    }
+    plan = plan_place(survey, world, "abc123")
+    whats = [i["what"] for i in plan["items"]]
+    assert "arctic_raspberry" in whats
+    assert "bilberry_vaccinium_myrtillus" in whats
+    assert plan["blocked"] == []
 
 
 def test_survey_drops_animals_without_gbif_records(

@@ -77,6 +77,97 @@ def available_homes(world: Path) -> dict[str, dict[str, Any]]:
     return homes
 
 
+def available_biomes(world: Path) -> dict[str, dict[str, Any]]:
+    """Every biome in the world checkout, by id (#148.1).
+
+    Biomes are the layered source of truth (habitat, ecoregions,
+    land style); checkouts without `biomes/` read as their
+    `homes/` files, which carry no land style.
+    """
+    folder = world / "biomes"
+    if not folder.is_dir():
+        return available_homes(world)
+    biomes: dict[str, dict[str, Any]] = {}
+    for path in sorted(folder.glob("*.json")):
+        try:
+            biomes[path.stem] = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+    return biomes
+
+
+def land_style_for(world: Path, biome: int | None) -> str | None:
+    """The cell's land style by code, or None without one (#148.2).
+
+    The first `lands/index.json` entry whose RESOLVE biome number
+    matches; entries naming realms never match, since a cell
+    carries no realm. None when the checkout has no index or the
+    biome has no style yet.
+    """
+    if biome is None:
+        return None
+    try:
+        index = json.loads((world / "lands" / "index.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    for entry in index.get("styles", []):
+        if entry.get("biome") == biome and not entry.get("realms"):
+            land = entry.get("land")
+            return str(land) if land else None
+    return None
+
+
+def ring_cells(habitat_grid: Any, col: int, row: int) -> Any:
+    """Neighbour cells in expanding rings, as (ecoregion, habitat)."""
+    for radius in range(1, 6):
+        for dcol in range(-radius, radius + 1):
+            for drow in range(-radius, radius + 1):
+                if max(abs(dcol), abs(drow)) != radius:
+                    continue
+                ncol = min(max(col + dcol, 0), CELLS - 1)
+                nrow = min(max(row + drow, 0), CELLS - 1)
+                try:
+                    yield (
+                        habitat_grid.cell_data(ncol, nrow)[0],
+                        habitat_grid.habitat(ncol, nrow),
+                    )
+                except KeyError:
+                    continue
+
+
+def default_bundle(
+    tile: str,
+    grids: dict[GridName, HabitatGrid],
+    biomes: dict[str, dict[str, Any]],
+    habitat: str,
+    style: str,
+) -> str | None:
+    """The nearest biome of this habitat with this land style (#148.3).
+
+    A cell whose ecoregion no biome lists builds from this default
+    bundle, with its real plants from the survey; the neighbours
+    come first in expanding rings, then the first anywhere. None
+    when no filed biome pairs this habitat with this style.
+    """
+    grid, col, row = parse_tile(tile)
+    habitat_grid = grids[grid]
+    rings = list(ring_cells(habitat_grid, col, row))
+    for eco, neighbour in rings:
+        found = home_for_cell(eco, neighbour, biomes)
+        if (
+            found is not None
+            and biomes[found].get("habitat") == habitat
+            and biomes[found].get("land") == style
+        ):
+            return found
+    same = sorted(
+        biome_id
+        for biome_id, data in biomes.items()
+        if data.get("habitat") == habitat and data.get("land") == style
+    )
+    return same[0] if same else None
+
+
 def excluded_tiles(builder_root: Path | None = None) -> set[str]:
     """Tile ids the core team blocked in `exclusions.json` (safety spec).
 
@@ -1041,11 +1132,20 @@ def make_tile(
             None,
         )
     homes = available_homes(world)
-    home = home_for_cell(eco1, habitat, homes)
+    biomes = available_biomes(world)
+    home = home_for_cell(eco1, habitat, biomes)
     if home is None:
-        return None, {"reason": "no_home", "habitat": habitat}
+        if eco1 is None or not (world / "lands" / "index.json").is_file():
+            return None, {"reason": "no_home", "habitat": habitat}
+        style = land_style_for(world, biome)
+        if style is None:
+            return None, {"reason": "no_land", "habitat": habitat}
+        home = default_bundle(tile, grids, biomes, habitat, style)
+        if home is None:
+            return None, {"reason": "no_home", "habitat": habitat}
+    house = homes.get(home, biomes[home])
     blend: dict[str, Any] | None = None
-    blend_home = home_for_cell(eco2, habitat, homes) if eco2 is not None else None
+    blend_home = home_for_cell(eco2, habitat, biomes) if eco2 is not None else None
     if blend_home is not None and blend_home != home and share2 >= 0.1:
         blend = {
             "home": blend_home,
@@ -1138,7 +1238,7 @@ def make_tile(
     filed = [s for s in ranked if (animals_dir / f"{s}.json").is_file()]
     converted = select_species(provisional, filed, world)
     if converted is None:
-        playable, prey, predators = pick_species(present, world, homes[home], greens)
+        playable, prey, predators = pick_species(present, world, house, greens)
     else:
         kept, fish_hunts = converted
         candidates = {s: _animal(animals_dir / f"{s}.json") for s in filed}

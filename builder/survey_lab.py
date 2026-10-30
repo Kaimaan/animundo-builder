@@ -27,7 +27,7 @@ from .species import (
     list_fingerprint,
     list_library,
 )
-from .tiles import available_homes, home_for_cell, tile_facts
+from .tiles import available_biomes, home_for_cell, tile_facts
 
 #: The six tiles we have: five border tiles and a Saimaa-side one.
 TILES = (
@@ -54,7 +54,7 @@ def run_lab(
     greens = list_library(world, "plants")
     trees = list_library(world, "trees")
     plants_print = library_fingerprint(greens, trees)
-    homes = available_homes(world)
+    homes = available_biomes(world)
     results: list[dict[str, Any]] = []
     for tile in tiles:
         grid, col, row = parse_tile(tile)

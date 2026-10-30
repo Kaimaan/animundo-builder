@@ -1403,6 +1403,99 @@ def test_helsinki_shore_remakes_from_layered_plants(tmp_path: Path) -> None:
     assert check_with_world(made, world) == []
 
 
+def _lands(world: Path) -> None:
+    (world / "lands").mkdir(exist_ok=True)
+    (world / "lands" / "index.json").write_text(
+        json.dumps({"styles": [{"land": "boreal", "biome": 6}]})
+    )
+
+
+def _biomes(world: Path) -> None:
+    (world / "biomes").mkdir(exist_ok=True)
+    (world / "biomes" / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "boreal_forest",
+                "ecoregions": [717],
+                "land": "boreal",
+            }
+        )
+    )
+
+
+def test_land_style_comes_from_the_index(tmp_path: Path) -> None:
+    """#148.2: the RESOLVE biome number picks the land style by code."""
+    from builder.tiles import land_style_for
+
+    world = _world(tmp_path)
+    assert land_style_for(world, 6) is None
+    _lands(world)
+    assert land_style_for(world, 6) == "boreal"
+    assert land_style_for(world, 13) is None
+    assert land_style_for(world, None) is None
+
+
+def test_default_bundle_takes_the_nearest_matching_biome(tmp_path: Path) -> None:
+    """#148.3: an unlisted ecoregion builds from the matching neighbour."""
+    from builder.tiles import available_biomes, default_bundle
+
+    world = _world(tmp_path)
+    _biomes(world)
+    cells = _boreal_3x3(413, 478)
+    cells["413,478"] = [999, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    grids = _grids(tmp_path, cells)
+    biomes = available_biomes(world)
+    assert (
+        default_bundle("n_413_478", grids, biomes, "boreal_forest", "boreal")  # type: ignore[arg-type]
+        == "boreal_forest"
+    )
+    assert (
+        default_bundle("n_413_478", grids, biomes, "boreal_forest", "tundra")  # type: ignore[arg-type]
+        is None
+    )
+
+
+def test_make_tile_blocks_no_land_without_a_style(tmp_path: Path) -> None:
+    """#148.3: a styled index without this biome blocks the tile as no_land."""
+    world = _world(tmp_path)
+    _lands(world)
+    cells = _boreal_3x3(413, 478)
+    cells["413,478"] = [999, 1.0, None, 0.0, 13, 1.0, 0.0, 80.0]
+    grids = _grids(tmp_path, cells)
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        presence={"fox": 5.0},
+        builder_root=tmp_path,
+    )
+    assert made is None
+    assert blocked is not None
+    assert blocked["reason"] == "no_land"
+
+
+def test_make_tile_builds_from_the_default_bundle(tmp_path: Path) -> None:
+    """#148.3: an unlisted ecoregion with a style builds, no new home."""
+    world = _world(tmp_path)
+    _lands(world)
+    _biomes(world)
+    cells = _boreal_3x3(413, 478)
+    cells["413,478"] = [999, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    grids = _grids(tmp_path, cells)
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        presence={"fox": 5.0, "mountain_hare": 9.0, "vole": 20.0},
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["home"] == "boreal_forest"
+    assert made["biome"] == "boreal_forest"
+    assert "fox" in made["species"]["playable"]
+
+
 def test_remade_nuuksio_tile_keeps_squirrel_and_bee(tmp_path: Path) -> None:
     """#152: a code re-make of n_414_480 keeps the squirrel and the bee."""
     from builder.schemas import ROOT

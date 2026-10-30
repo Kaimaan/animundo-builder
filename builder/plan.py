@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .grid import CELLS, GridName, center, parse_tile
+from .grid import GridName, center, parse_tile
 from .habitats import HabitatGrid
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
 from .prices import ITEM_ESTIMATES
@@ -36,12 +36,16 @@ from .species import (
     list_library,
 )
 from .tiles import (
+    available_biomes,
     available_homes,
+    default_bundle,
     excluded_tiles,
     home_for_cell,
+    land_style_for,
     make_tile,
     pick_species,
     place_cells,
+    ring_cells,
     tile_facts,
 )
 
@@ -142,7 +146,7 @@ def nearest_home(
         raise ValueError("the world has no homes to adapt from")
     grid, col, row = parse_tile(tile)
     habitat_grid = grids[grid]
-    rings = list(_ring_cells(habitat_grid, col, row))
+    rings = list(ring_cells(habitat_grid, col, row))
     for eco, neighbour in rings:
         found = home_for_cell(eco, neighbour, homes)
         if found is not None and homes[found].get("habitat") == habitat:
@@ -167,24 +171,6 @@ def nearest_home(
         if found is not None:
             return found
     return sorted(homes)[0]
-
-
-def _ring_cells(habitat_grid: Any, col: int, row: int) -> Any:
-    """Neighbour cells in expanding rings, as (ecoregion, habitat)."""
-    for radius in range(1, 6):
-        for dcol in range(-radius, radius + 1):
-            for drow in range(-radius, radius + 1):
-                if max(abs(dcol), abs(drow)) != radius:
-                    continue
-                ncol = min(max(col + dcol, 0), CELLS - 1)
-                nrow = min(max(row + drow, 0), CELLS - 1)
-                try:
-                    yield (
-                        habitat_grid.cell_data(ncol, nrow)[0],
-                        habitat_grid.habitat(ncol, nrow),
-                    )
-                except KeyError:
-                    continue
 
 
 def _unfiled(
@@ -359,6 +345,7 @@ def plan_tile(
     grid, col, row = parse_tile(tile)
     habitat_grid = grids[grid]
     eco1 = habitat_grid.cell_data(col, row)[0]
+    biome_number = habitat_grid.cell_data(col, row)[4]
     habitat = habitat_grid.habitat(col, row)
     lat, lon = center(tile)
     if tile in excluded_tiles(builder_root):
@@ -383,7 +370,8 @@ def plan_tile(
             f"place:{placed[0]}",
         )
     homes = available_homes(world)
-    home = home_for_cell(eco1, habitat, homes)
+    biomes = available_biomes(world)
+    home = home_for_cell(eco1, habitat, biomes)
     entries = library_animals(world)
     unfiled = _unfiled(world, habitat, entries)
     if unfiled_presence is None:
@@ -411,10 +399,47 @@ def plan_tile(
             None,
             "open_water",
         )
+    bundle: str | None = None
     if home is None:
         assert eco1 is not None  # narrowed above; mypy can't see it
-        home_id = nearest_home(tile, grids, homes, habitat)
-        adapt = True
+        if not (world / "lands" / "index.json").is_file():
+            home_id = nearest_home(tile, grids, biomes, habitat)
+            adapt = True
+        else:
+            style = land_style_for(world, biome_number)
+            if style is None:
+                return _finish(
+                    tile,
+                    False,
+                    [],
+                    unfiled,
+                    unfiled_counts,
+                    request,
+                    habitat,
+                    lat,
+                    lon,
+                    world_commit,
+                    None,
+                    "no_land",
+                )
+            bundle = default_bundle(tile, grids, biomes, habitat, style)
+            if bundle is None:
+                return _finish(
+                    tile,
+                    False,
+                    [],
+                    unfiled,
+                    unfiled_counts,
+                    request,
+                    habitat,
+                    lat,
+                    lon,
+                    world_commit,
+                    None,
+                    "no_home",
+                )
+            home_id = bundle
+            adapt = False
     else:
         home_id = home
         adapt = False
@@ -429,7 +454,7 @@ def plan_tile(
         species_source,
         tile_facts(tile, grids, world, home_id, adapt),
     )
-    if home is None:
+    if home is None and bundle is None:
         items.append(
             {
                 "id": f"home_{eco1}",
@@ -468,7 +493,7 @@ def plan_tile(
             )
     # Expanding: each missing thing on its own (spec 04, minimum).
     # The home below is real, or the one the new home adapts from.
-    house = homes[home_id]
+    house = homes.get(home_id, biomes[home_id])
     if presence is not None:
         present = {s: n for s, n in presence.items() if n > 0}
     else:

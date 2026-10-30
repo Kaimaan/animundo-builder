@@ -289,7 +289,7 @@ def test_nearest_home_prefers_water_for_the_sea(tmp_path: Path) -> None:
 
 
 def test_tallinn_adapts_from_the_land_home() -> None:
-    """#141.4: n_416_482 plans home_679 from boreal_forest, not sea."""
+    """#141.4: n_416_482 adapts from boreal_forest, not sea."""
     import pytest
 
     from builder.tiles import available_homes
@@ -307,6 +307,109 @@ def test_tallinn_adapts_from_the_land_home() -> None:
         nearest_home("n_416_482", grids, homes, "forest")  # type: ignore[arg-type]
         == "boreal_forest"
     )
+
+
+def test_plan_blocks_no_land_without_a_style(tmp_path: Path) -> None:
+    """#148.3: a biome the index never styled blocks the plan as no_land."""
+    world = _world(tmp_path)
+    (world / "lands").mkdir()
+    (world / "lands" / "index.json").write_text(
+        json.dumps({"styles": [{"land": "boreal", "biome": 6}]})
+    )
+    cells = _boreal()
+    cells["413,478"] = [999, 1.0, None, 0.0, 13, 1.0, 0.0, 80.0]
+    grids = _grids(tmp_path, cells)
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    assert plan["blocked"] == "no_land"
+    assert plan["items"] == []
+
+
+def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
+    """#148.3: 717 by the sea plans code-only on sea_717, no home item."""
+    import pytest
+
+    from builder.tiles import make_tile
+
+    world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (world / "homes" / "sea_717.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed sea home")
+    grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+    grids = {
+        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
+        for name in ("ease2_n25", "ease2_s25")
+    }
+    answer = {
+        "place": "Helsinki shore on the Gulf of Finland",
+        "parts": [
+            {"kind": "sea", "species": ["herring_gull"]},
+            {
+                "kind": "shore",
+                "species": [
+                    "fox",
+                    "mountain_hare",
+                    "squirrel",
+                    "vole",
+                    "chaffinch",
+                    "frog",
+                ],
+            },
+        ],
+        "plants": [
+            {"id": "white_clover", "count": 10},
+            {"id": "porcini", "count": 4},
+            {"id": "crowberry", "count": 10},
+        ],
+        "trees": [
+            {"id": "scots_pine", "count": 20},
+            {"id": "birch", "count": 10},
+        ],
+        "name_en": "Helsinki Shore",
+        "name_fi": "Helsingin ranta",
+    }
+    plan = plan_tile(
+        "n_415_479",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence=None,
+        unfiled_presence={},
+        species=answer,
+    )
+    assert plan["code_only"] is True
+    assert plan["items"] == []
+    made, blocked = make_tile(
+        "n_415_479",
+        grids,  # type: ignore[arg-type]
+        world,
+        species=answer,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["biome"] == "sea_717"
+    assert (made.get("plants") or {}).get("cover")
+
+
+def test_tallinn_blocks_without_a_matching_bundle() -> None:
+    """#148.3: styled but unmatched, n_416_482 blocks instead of a home item."""
+    import pytest
+
+    world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs an animundo-world checkout")
+    grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+    grids = {
+        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
+        for name in ("ease2_n25", "ease2_s25")
+    }
     plan = plan_tile(
         "n_416_482",
         None,
@@ -316,15 +419,8 @@ def test_tallinn_adapts_from_the_land_home() -> None:
         presence={},
         unfiled_presence={},
     )
-    home_item = next(i for i in plan["items"] if i["kind"] == "home")
-    assert home_item == {
-        "id": "home_679",
-        "kind": "home",
-        "what": "679",
-        "from": "boreal_forest",
-        "estimate_usd": 0.2,
-    }
-    assert all(i["what"] != "kelp" for i in plan["items"] if i["kind"] == "plant")
+    assert plan["blocked"] == "no_home"
+    assert plan["items"] == []
 
 
 def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:

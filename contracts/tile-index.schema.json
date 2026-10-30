@@ -22,7 +22,7 @@
         "ready": {"type": "integer", "minimum": 0},
         "blocked": {
           "type": "object",
-          "propertyNames": {"enum": ["no_home", "no_animal", "excluded"]},
+          "propertyNames": {"enum": ["no_home", "no_land", "no_animal", "excluded"]},
           "additionalProperties": {"type": "integer", "minimum": 0}
         }
       }

@@ -44,7 +44,7 @@
     "border": {
       "type": "object",
       "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
-      "additionalProperties": {"enum": ["no_home", "no_animal", "excluded"]}
+      "additionalProperties": {"enum": ["no_home", "no_land", "no_animal", "excluded"]}
     },
     "areas": {
       "type": "object",

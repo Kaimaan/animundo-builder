@@ -19,7 +19,7 @@
   "properties": {
     "format": {"const": 1},
     "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
-    "reason": {"enum": ["no_home", "no_animal", "excluded", "unmade"]},
+    "reason": {"enum": ["no_home", "no_land", "no_animal", "excluded", "unmade"]},
     "habitat": {
       "enum": [
         "boreal_forest",

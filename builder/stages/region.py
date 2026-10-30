@@ -30,6 +30,63 @@ HOSTED_AUTHOR = "Animundo Builder"
 MIN_SOURCES = 3
 MAX_NEW_PLANTS = 3
 
+#: Named waters and places, and the placeholder names that fail them (#151).
+NAMED_KEYS = ("lakes", "bogs", "places", "landmarks")
+PLACEHOLDER_NAMES = frozenset({"none", "null", "unknown", "-"})
+
+
+def nameless_errors(region: dict[str, Any]) -> list[str]:
+    """Every lake, bog, place and landmark without a real name (#151).
+
+    A missing or blank name, or a placeholder ("none", "null",
+    "unknown", "-"), is an error: what the research can't name is
+    left out, never written nameless. The same shape checks a made
+    home or a region.
+    """
+    errors = []
+    for key in NAMED_KEYS:
+        entries = region.get(key)
+        if not isinstance(entries, list):
+            continue
+        for pos, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            if not isinstance(name, str) or not name.strip():
+                errors.append(f"{key}[{pos}] has no name; leave it out")
+            elif name.strip().lower() in PLACEHOLDER_NAMES:
+                errors.append(
+                    f"{key}[{pos}] is named {name.strip()!r}; leave it out "
+                    "or give its real name"
+                )
+    return errors
+
+
+def drop_nameless(region: dict[str, Any]) -> dict[str, Any]:
+    """The region without its nameless waters and places (#151).
+
+    Code-written regions (the place path) can't ask the model, so
+    they leave out what `nameless_errors` would fail.
+    """
+    for key in NAMED_KEYS:
+        entries = region.get(key)
+        if not isinstance(entries, list):
+            continue
+        kept = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            if (
+                isinstance(name, str)
+                and name.strip()
+                and name.strip().lower() not in PLACEHOLDER_NAMES
+            ):
+                kept.append(entry)
+        if len(kept) != len(entries):
+            region[key] = kept
+    return region
+
 
 class RegionStage:
     """Write and validate `regions/<area_id>.json` in the job folder."""
@@ -154,9 +211,10 @@ class RegionStage:
         self, world: Path, ctx: Any, region_path: Path, planned: set[str]
     ) -> list[str]:
         result = check_draft(world, ctx.job_dir, "region")
+        region = json.loads(region_path.read_text(encoding="utf-8"))
         return draft_region_errors(
             result, planned, _used_species(region_path), _known_animals(world)
-        )
+        ) + nameless_errors(region)
 
 
 def draft_region_errors(

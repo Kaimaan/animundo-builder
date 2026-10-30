@@ -12,6 +12,8 @@ import pytest
 from builder.pipeline import BudgetTracker, JobContext, Pipeline, StageFailedError
 from builder.stages.region import (
     RegionStage,
+    drop_nameless,
+    nameless_errors,
     seed_for_area,
     sensitive_place_errors,
 )
@@ -368,3 +370,31 @@ def test_unbuilt_checkout_plant_sent_back(tmp_path: Path) -> None:
     client = ScriptClient([draft, _answer()])
     RegionStage().run(_ctx(tmp_path, client, world))
     assert "not built" in client.prompts[1]
+
+
+def test_nameless_waters_fail_the_check() -> None:
+    """#151: a made home or region with a nameless lake fails."""
+    region = {
+        "lakes": [{"name": "none"}, {"name": "Suomenlahti"}],
+        "bogs": [{"x": 0.1, "z": 0.2, "radius": 5}],
+        "places": [{"name": "  "}],
+        "landmarks": [{"name": "null"}],
+    }
+    errors = nameless_errors(region)
+    assert len(errors) == 4
+    assert any("lakes[0]" in e for e in errors)
+    assert not any("lakes[1]" in e for e in errors)
+    home = {"based_on": "sea", **region}
+    assert nameless_errors(home) == errors
+    assert nameless_errors({"lakes": [{"name": "Suomenlahti"}]}) == []
+
+
+def test_code_region_leaves_out_nameless_waters() -> None:
+    """#151: the code path leaves out what it can't name."""
+    region = drop_nameless(
+        {
+            "lakes": [{"name": "none"}, {"name": "Suomenlahti"}],
+            "places": [{"name": "unknown"}],
+        }
+    )
+    assert region == {"lakes": [{"name": "Suomenlahti"}], "places": []}

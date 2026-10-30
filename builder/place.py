@@ -549,16 +549,17 @@ def write_region(
 
     The land is the home's own sections (terrain, palette, trees,
     ground cover, lakes, food); the meta is the survey's (name,
-    country, centre). Playable is every surveyed animal already
+    country, centre). Nameless waters and places are left out
+    (#151). Playable is every surveyed animal already
     filed or made by this job, in survey order; predators hunt a
     place animal, prey are hunted by one, fish swim. The seed is
     the region id's own, so the land stays put; the status is
     draft until a person reviews it.
     """
     from .grid import center
-    from .stages.region import seed_for_area
+    from .stages.region import drop_nameless, seed_for_area
 
-    region = {k: v for k, v in home.items() if k in _region_keys(world)}
+    region = drop_nameless({k: v for k, v in home.items() if k in _region_keys(world)})
     region_id = survey["region_id"]
     region["id"] = region_id
     region["name"] = survey["name"]["en"]

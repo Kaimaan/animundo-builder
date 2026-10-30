@@ -747,6 +747,25 @@ def test_write_region_derives_groups_and_fish_from_filed_animals(
     assert check_region_file(path, world) == []
 
 
+def test_write_region_leaves_out_a_nameless_lake() -> None:
+    """#151: a home lake named "none" never reaches the region."""
+    from builder.place import write_region
+
+    world = _needs_world()
+    home = json.loads((world / "homes" / "sea.json").read_text())
+    home["lakes"] = [{"name": "none", "x": 0.5, "z": 0.36}]
+    survey = {
+        "tile": "n_415_479",
+        "name": {"en": "Helsinki shore", "fi": "Helsingin ranta"},
+        "country": "Finland",
+        "region_id": "fi_test_shore",
+        "animals": [],
+        "plants": [],
+    }
+    region = write_region(home, survey, Path.cwd(), world)
+    assert region["lakes"] == []
+
+
 def test_request_build_local_rejects_a_split_answers_dir(tmp_path: Path) -> None:
     """T99: with --local the answers live under the place folder itself."""
     from builder.cli import main

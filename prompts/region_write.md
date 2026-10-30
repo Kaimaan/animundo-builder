@@ -93,6 +93,13 @@ None. Write from the inputs only.
 
 - `food[].kind` uses only kinds from the capabilities input.
 - `trees.mix[].shape` uses only the five shapes the rules name.
+- Every lake, bog, place and landmark carries its real name. One
+  the research can't name is left out entirely: never write it
+  without a name, and never a placeholder ("none", "null",
+  "unknown", "-").
+- A sea home's water shape is the sea itself: name it after the
+  real sea at the place (the Gulf of Finland off Helsinki, not
+  "Grey open sea"), and keep it when the research finds no lake.
 - Sensitive species (the survey says which) get no real breeding,
   nesting, denning or resting site: `places` stay general.
 - Every animal, fish and food must be one the survey found really living

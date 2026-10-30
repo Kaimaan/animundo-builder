@@ -1347,21 +1347,42 @@ class Worker:
             return False
         return git_commit(self.world) != before
 
-    def poll(self) -> list[str]:
+    def poll(self) -> list[tuple[str, str]]:
         """One world-poll round: pull, re-plan, retry ships, resume builds."""
-        queued: list[str] = []
+        queued: list[tuple[str, str]] = []
         if self.pull_world():
             self.sync_world()
             for job_id, doc in self.store.pending_build_jobs():
                 if doc.get("status") == "checking" and doc.get("review"):
-                    queued.append(job_id)
+                    queued.append(("build_job", job_id))
         enabled = self.store.get_enabled()
         if enabled and not self._was_enabled:
-            for job_id, doc in self.store.pending_build_jobs():
-                if doc.get("status") == "building" and job_id not in queued:
-                    queued.append(job_id)
+            self._reconcile(queued)
         self._was_enabled = enabled
         return queued
+
+    def _reconcile(self, queued: list[tuple[str, str]]) -> None:
+        """Re-enqueue work skipped while disabled, from the store (#158).
+
+        Events consumed while the switch was off never come back,
+        so the off-to-on transition reconciles: eligible queued
+        jobs, interrupted builds, reviews that landed, and requests
+        still needing a plan. Ownership stays with the handlers
+        (#155); this only re-queues, deduplicated, never runs.
+        """
+        for job_id, doc in self.store.pending_build_jobs():
+            status = doc.get("status")
+            if status in ("queued", "building") or (
+                status == "checking" and doc.get("review")
+            ):
+                key = ("build_job", job_id)
+                if key not in queued:
+                    queued.append(key)
+        for tile, _doc in self.store.list_requests():
+            if self.store.get_plan(tile) is None:
+                key = ("request", tile)
+                if key not in queued:
+                    queued.append(key)
 
     def sync_world(self, commit: str | None = None) -> None:
         """Re-plan every request when the world commit moved (T74).
@@ -1444,8 +1465,8 @@ class Listener:
         """The world commit, every few minutes: pull, re-plan, retry."""
         while not self.stop.wait(self.poll_seconds):
             try:
-                for job_id in self.worker.poll():
-                    self.events.put(("build_job", job_id))
+                for kind, doc_id in self.worker.poll():
+                    self.events.put((kind, doc_id))
             except Exception as error:  # noqa: BLE001 - the loop must live
                 print(f"worker: poll failed: {error!r}", file=sys.stderr)
 

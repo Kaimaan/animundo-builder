@@ -1877,7 +1877,7 @@ def test_poll_resumes_builds_on_reenable(tmp_path: Path, monkeypatch: Any) -> No
     store.enabled = False
     assert worker.poll() == []
     store.enabled = True
-    assert worker.poll() == ["j1"]
+    assert worker.poll() == [("build_job", "j1")]
     assert worker.poll() == []
 
 
@@ -2335,6 +2335,95 @@ def test_timeout_pauses_item_and_resume_recovers(
         data = json.loads(pool.path.read_text(encoding="utf-8"))
         assert side.id in data["settled"]
         assert pool.job_spent("j1") == pytest.approx(0.05)
+
+
+def test_reenable_recovers_queued_job_and_request_once(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#158: consumed-while-disabled work proceeds exactly once on re-enable."""
+    from builder.worker import Listener
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(status="queued")
+    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.worker_id = "wA"
+    listener = Listener(worker=worker, store=store)
+    runs: list[str] = []
+
+    def fake_stages(*args: Any, **kwargs: Any) -> None:
+        runs.append("stages")
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    monkeypatch.setattr(Worker, "pull_world", lambda self: False)
+    planned: list[str] = []
+    orig_set_plan = store.set_plan
+
+    def counting_set_plan(tile: str, plan: dict[str, Any]) -> None:
+        planned.append(tile)
+        orig_set_plan(tile, plan)
+
+    monkeypatch.setattr(store, "set_plan", counting_set_plan)
+
+    store.enabled = False
+    listener._dispatch("build_job", "j1")
+    listener._dispatch("request", "n_413_478")
+    assert worker.poll() == []
+    assert store.build_jobs["j1"]["status"] == "queued"
+    assert "n_413_478" not in store.plans
+    assert runs == []
+    assert planned == []
+
+    store.enabled = True
+    found = worker.poll()
+    assert ("build_job", "j1") in found
+    assert ("request", "n_413_478") in found
+    assert worker.poll() == []
+    for kind, doc_id in found:
+        listener._dispatch(kind, doc_id)
+    assert store.build_jobs["j1"]["status"] == "checking"
+    assert "n_413_478" in store.plans
+    assert runs == ["stages"]
+    assert planned == ["n_413_478"]
+
+
+def test_reenable_protects_owned_terminal_and_planned(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#158: live-owned, terminal and planned work survives the reconcile."""
+    from builder.worker import Listener
+
+    store = FakeStore()
+    store.build_jobs["live"] = _owned_job(owner="wB")
+    store.build_jobs["pub"] = _enrich_job(status="published")
+    store.build_jobs["fail"] = _enrich_job(status="failed")
+    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    store.plans["n_413_478"] = {"tile": "n_413_478"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.worker_id = "wA"
+    listener = Listener(worker=worker, store=store)
+    runs: list[str] = []
+
+    def fake_stages(*args: Any, **kwargs: Any) -> None:
+        runs.append("stages")
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    monkeypatch.setattr(Worker, "pull_world", lambda self: False)
+
+    store.enabled = False
+    assert worker.poll() == []
+    store.enabled = True
+    found = worker.poll()
+    ids = [doc_id for kind, doc_id in found if kind == "build_job"]
+    assert "live" in ids
+    assert "pub" not in ids
+    assert "fail" not in ids
+    assert ("request", "n_413_478") not in found
+    for kind, doc_id in found:
+        listener._dispatch(kind, doc_id)
+    assert runs == []
+    assert store.build_jobs["live"]["worker_id"] == "wB"
+    assert store.build_jobs["live"]["status"] == "building"
 
 
 def test_resume_settles_superseded_timeout_at_estimate(tmp_path: Path) -> None:

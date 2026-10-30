@@ -587,15 +587,19 @@ class Worker:
 
         from . import build as build_mod
         from .grid import group_path
-        from .tiles import make_tile
+        from .tiles import make_tile, place_cells
 
         assert self.world is not None
+        placed = place_cells(self.world)
         source = dataclasses.replace(self._species_source(), client=None)
         groups: dict[str, dict[str, Any]] = {}
         decisions: dict[str, build_mod.Remake] = {}
         no_food: list[str] = []
         what = str(item["what"])
         for tile in job.get("tiles", []):
+            if tile in placed:
+                print(f"{tile} is a place cell; left to its region")
+                continue
             blob_path = group_path(tile)
             if blob_path not in groups:
                 raw = self.store.read_blob(blob_path)

@@ -17,6 +17,7 @@ from builder.tiles import (
     home_for_cell,
     make_tile,
     pick_species,
+    place_cells,
     tile_edges,
     tile_facts,
     tile_height,
@@ -429,6 +430,113 @@ def test_blocked_no_animal_carries_the_opener(tmp_path: Path) -> None:
     assert data["blocked"]["n_413_478"]["wanted"][0]["what"] == "lion"
 
 
+def _region(world: Path, region_id: str, cells: list[list[int]]) -> None:
+    folder = world / "regions"
+    folder.mkdir(exist_ok=True)
+    (folder / f"{region_id}.json").write_text(
+        json.dumps({"id": region_id, "grid": {"grid": "ease2_n25", "tiles": cells}})
+    )
+
+
+def test_place_cells_read_region_grids(tmp_path: Path) -> None:
+    """#147.1: place cells map to their region and part."""
+    world = _world(tmp_path)
+    assert place_cells(world) == {}
+    _region(world, "fi_test", [[413, 478], [414, 478], [413, 479], [414, 479]])
+    _region(world, "fi_pool", [[418, 468]])
+    assert place_cells(world) == {
+        "n_413_478": ("fi_test", [0, 0]),
+        "n_414_478": ("fi_test", [1, 0]),
+        "n_413_479": ("fi_test", [0, 1]),
+        "n_414_479": ("fi_test", [1, 1]),
+        "n_418_468": ("fi_pool", [0, 0]),
+    }
+
+
+def test_place_cells_refuse_bad_grids(tmp_path: Path) -> None:
+    """#147.1: a malformed or overlapping grid fails loudly."""
+    world = _world(tmp_path)
+    folder = world / "regions"
+    folder.mkdir()
+    (folder / "fi_bad.json").write_text(
+        json.dumps({"id": "fi_bad", "grid": {"grid": "ease2_n25", "tiles": "x"}})
+    )
+    with pytest.raises(ValueError, match="malformed grid section"):
+        place_cells(world)
+    (folder / "fi_bad.json").write_text(
+        json.dumps(
+            {"id": "fi_bad", "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]}}
+        )
+    )
+    _region(world, "fi_test", [[413, 478]])
+    with pytest.raises(ValueError, match="two place regions"):
+        place_cells(world)
+
+
+def _baked_grids() -> dict[str, HabitatGrid]:
+    path = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "habitat-grid"
+        / "ease2_n25.json.gz"
+    )
+    if not path.is_file():
+        pytest.skip("needs the baked habitat grid")
+    return {"ease2_n25": HabitatGrid.load(path, "ease2_n25")}  # type: ignore[dict-item]
+
+
+def test_make_tile_returns_a_place_entry(tmp_path: Path) -> None:
+    """#147.1: n_414_479 is fi_nuuksio part [1, 1], edges agreeing east."""
+    world = _world(tmp_path)
+    _region(world, "fi_nuuksio", [[413, 478], [414, 478], [413, 479], [414, 479]])
+    grids = _baked_grids()
+    made, blocked = make_tile(
+        "n_414_479",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    validate("tile", made)
+    assert made["kind"] == "place"
+    assert made["place"] == "fi_nuuksio"
+    assert made["part"] == [1, 1]
+    for key in ("habitat", "home", "seed", "water", "species"):
+        assert key not in made
+    assert made["requires"] == {"homes": [], "animals": []}
+    east = tile_edges(
+        "n_415_479",
+        grids,  # type: ignore[arg-type]
+    )["w"]
+    assert made["edges"]["e"] == east
+
+
+def test_place_entry_replaces_a_published_code_tile(tmp_path: Path) -> None:
+    """#147.1: the place entry wins over a stale code tile."""
+    world = _world(tmp_path)
+    _region(world, "fi_test", [[413, 478]])
+    grids = _grids(tmp_path, _boreal_3x3(413, 478))
+    out = tmp_path / "out"
+    write_group(
+        out,
+        "n_413_478",
+        {"id": "n_413_478", "kind": "code", "version": 1},
+        None,
+    )
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+    )
+    assert blocked is None and made is not None
+    path = write_group(out, "n_413_478", made, None)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["tiles"]["n_413_478"]["kind"] == "place"
+    assert data["tiles"]["n_413_478"]["place"] == "fi_test"
+
+
 def test_make_tile_validates(tmp_path: Path) -> None:
     world = _world(tmp_path)
     grids = _grids(tmp_path, _boreal_3x3(413, 478))
@@ -465,14 +573,18 @@ def _real_world() -> Path | None:
 
 
 def test_nuuksio_tile_keeps_hunters_playable(tmp_path: Path) -> None:
-    """Spec 04 roles on the Nuuksio tile: every kept playable file plays."""
+    """Spec 04 roles by Nuuksio: every kept playable file plays.
+
+    n_413_478 itself is a place cell now (#147.1); the roles
+    are tried on the forest cell west of it.
+    """
     world = _real_world()
     if world is None:
         pytest.skip("needs the committed grid and a real world checkout")
     grid = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
     grids = {"ease2_n25": HabitatGrid.load(grid / "ease2_n25.json.gz", "ease2_n25")}
     made, blocked = make_tile(
-        "n_413_478",
+        "n_412_478",
         grids,  # type: ignore[dict-item]
         world,
         presence={

@@ -779,6 +779,72 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     assert index["counts"]["ready"] == 3
 
 
+def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> None:
+    """#147.1: a remake never touches a place cell."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+
+    P = "n_413_478"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    regions = worker.world / "regions"
+    regions.mkdir()
+    (regions / "fi_test.json").write_text(
+        json.dumps(
+            {"id": "fi_test", "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]}}
+        )
+    )
+    _named_list(worker.world)
+    _file_lion(worker.world, ["grass"])
+    blob = group_path(P)
+    store.blobs[blob] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": {P: {"id": P, "kind": "code", "version": 1}},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    before = store.blobs[blob]
+    store.blobs["tiles/v1/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {},
+            "counts": {"ready": 1, "blocked": {}},
+        }
+    ).encode("utf-8")
+    store.build_jobs["j1"] = _enrich_job(
+        tile=P,
+        tiles=[P],
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=tmp_path / "cache"),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["versions"] == {}
+    assert store.blobs[blob] == before
+
+
 def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) -> None:
     """#143.4: the wanted opener publishes its tile at version 1."""
     import json

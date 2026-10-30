@@ -120,6 +120,32 @@ def _boreal(cell: list[Any] | None = None) -> dict[str, list[Any]]:
     return {f"{c},{r}": list(base) for r in (477, 478, 479) for c in (412, 413, 414)}
 
 
+def test_plan_skips_place_cells(tmp_path: Path) -> None:
+    """#147.1: a place cell plans nothing, and says whose it is."""
+    world = _world(tmp_path)
+    (world / "regions").mkdir()
+    (world / "regions" / "fi_test.json").write_text(
+        json.dumps(
+            {"id": "fi_test", "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]}}
+        )
+    )
+    grids = _grids(tmp_path, _boreal())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    validate("plan", plan)
+    assert plan["items"] == []
+    assert plan["improve"] == []
+    assert plan["coming"] == []
+    assert plan["blocked"] == "place:fi_test"
+
+
 def test_plan_is_code_only_when_tile_makes(tmp_path: Path) -> None:
     world = _world(tmp_path)
     grids = _grids(tmp_path, _boreal())

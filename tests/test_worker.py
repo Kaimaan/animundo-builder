@@ -465,12 +465,116 @@ def test_build_job_fails_without_its_tile(tmp_path: Path) -> None:
 
 
 def test_build_job_fails_without_its_plan(tmp_path: Path) -> None:
+    job = _code_job()
+    job["kind"] = "build"
     store = FakeStore()
-    store.build_jobs["j1"] = _code_job()
+    store.build_jobs["j1"] = job
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.handle_build_job("j1")
     assert store.build_jobs["j1"]["status"] == "failed"
     assert store.build_jobs["j1"]["error"] == "no_plan"
+
+
+def test_code_job_needs_no_plan(tmp_path: Path) -> None:
+    """#143.3: a code job makes its tile straight from the world."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "published"
+
+
+def _enrich_job(**over: Any) -> dict[str, Any]:
+    job: dict[str, Any] = {
+        "format": 1,
+        "kind": "enrich",
+        "tile": "n_413_478",
+        "tiles": ["n_413_478", "n_413_479"],
+        "items": ["enrich_lion"],
+        "enrich": {"kind": "animal", "what": "lion", "from": "fox"},
+        "budget_usd": 1.0,
+        "visibility": "public",
+        "created_by": "enrich",
+        "status": "queued",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    job.update(over)
+    return job
+
+
+def test_enrich_job_builds_its_item_to_checking(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#143.3: no plan document; the item comes from the job."""
+    import json
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+    ) -> None:
+        assert tile == "n_413_478"
+        assert item["id"] == "enrich_lion"
+        folder = item_dir / "animals"
+        folder.mkdir(parents=True)
+        (folder / "lion.json").write_bytes(b'{"id": "lion"}')
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"
+    assert [(e["id"], e["status"]) for e in job["progress"]] == [
+        ("enrich_lion", "checking")
+    ]
+    assert "review/j1/enrich_lion/report.html" in store.blobs
+    snapshot = json.loads((tmp_path / "jobs" / "j1" / "plan.json").read_text())
+    assert snapshot["items"] == [
+        {
+            "id": "enrich_lion",
+            "kind": "animal",
+            "what": "lion",
+            "from": "fox",
+            "estimate_usd": 1.0,
+        }
+    ]
+
+
+def test_enrich_item_finds_its_own_from(tmp_path: Path) -> None:
+    """#143.3: the list's start_from, or the closest plant."""
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    item = worker._enrich_item(_enrich_job(enrich={"kind": "animal", "what": "lion"}))
+    assert item["id"] == "enrich_lion"
+    assert item["from"] == "fox"
+    item = worker._enrich_item(
+        _enrich_job(
+            items=["enrich_arctic_willow"],
+            enrich={"kind": "plant", "what": "arctic_willow"},
+        )
+    )
+    assert item["id"] == "enrich_arctic_willow"
+    assert item["from"] == "bilberry"
+
+
+def test_enrich_job_fails_cleanly_when_malformed(tmp_path: Path) -> None:
+    """#143.3: a bad enrich spec fails the job, never crashes it."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(enrich={"kind": "animal"})
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "bad_enrich"
+    store.build_jobs["j2"] = _enrich_job(items=["enrich_tiger"])
+    worker.handle_build_job("j2")
+    assert store.build_jobs["j2"]["error"] == "bad_enrich"
 
 
 def test_build_job_refuses_a_blocked_plan(tmp_path: Path) -> None:

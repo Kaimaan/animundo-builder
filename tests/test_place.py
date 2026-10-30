@@ -470,18 +470,19 @@ def test_plant_from_prefers_words_then_grounds_then_first() -> None:
     """#144.2: a coral from a coral, seabed from seabed, else first."""
     import json
 
-    from builder.place import _plant_from
+    from builder.plan import closest_plant
 
     world = _needs_world()
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
-    assert _plant_from("ghost_coral", [], {}, have) == "brain_coral"
+    assert closest_plant("ghost_coral", [], {}, have) == "brain_coral"
     reef = json.loads(
         (world / "homes" / "examples" / "reef.json").read_text(encoding="utf-8")
     )
     assert (
-        _plant_from("neptune_cup", ["seabed"], reef, have) == "branching_staghorn_coral"
+        closest_plant("neptune_cup", ["seabed"], reef, have)
+        == "branching_staghorn_coral"
     )
-    assert _plant_from("neptune_cup", [], {}, have) == have[0]
+    assert closest_plant("neptune_cup", [], {}, have) == have[0]
 
 
 def test_unmakeable_animals_are_blocked_not_built(

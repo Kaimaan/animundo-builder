@@ -20,15 +20,38 @@
   "properties": {
     "format": {"const": 1},
     "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
-    "kind": {"enum": ["code", "build"]},
+    "kind": {"enum": ["code", "build", "enrich"]},
     "items": {
       "type": "array",
       "items": {"type": "string", "minLength": 1}
     },
+    "tiles": {
+      "type": "array",
+      "description": "For enrich: every tile that lists the thing in wanted, most played first, at most 200.",
+      "maxItems": 200,
+      "items": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"}
+    },
+    "enrich": {
+      "type": "object",
+      "description": "For enrich: the one wanted thing to make.",
+      "additionalProperties": false,
+      "required": ["kind", "what"],
+      "properties": {
+        "kind": {"enum": ["animal", "plant"]},
+        "what": {"type": "string", "minLength": 1},
+        "from": {"type": "string", "minLength": 1}
+      }
+    },
+    "versions": {
+      "type": "object",
+      "description": "For enrich, when published: each remade tile's new version.",
+      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
     "budget_usd": {"type": "number", "minimum": 0},
     "visibility": {"enum": ["public", "private"]},
     "private_to": {"type": "string", "minLength": 1},
-    "created_by": {"enum": ["policy", "admin"]},
+    "created_by": {"enum": ["policy", "admin", "enrich"]},
     "status": {
       "enum": ["queued", "building", "checking", "published", "failed"]
     },

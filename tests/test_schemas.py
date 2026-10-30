@@ -122,6 +122,25 @@ def test_build_job_needs_private_to_when_private() -> None:
     validate("build-job", job)
 
 
+def test_build_job_takes_an_enrich_job() -> None:
+    job = _valid("build-job")
+    job.update(
+        {
+            "kind": "enrich",
+            "tiles": ["n_414_478", "n_414_479"],
+            "items": ["enrich_lynx"],
+            "enrich": {"kind": "animal", "what": "lynx", "from": "fox"},
+            "created_by": "enrich",
+        }
+    )
+    validate("build-job", job)
+    job["versions"] = {"n_414_478": 2, "n_414_479": 3}
+    validate("build-job", job)
+    job["enrich"] = {"kind": "animal"}
+    with pytest.raises(jsonschema.ValidationError):
+        validate("build-job", job)
+
+
 def test_tile_height_is_32_or_64() -> None:
     tile = _valid("tile")
     tile["height"] = 48

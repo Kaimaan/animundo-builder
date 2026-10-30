@@ -194,7 +194,15 @@ class Worker:
         tile = self._job_tile(job_id, job)
         if tile is None:
             return
-        self._snapshot_plan(job_id, job, tile)
+        if job.get("kind") == "enrich":
+            try:
+                self._snapshot_plan(job_id, job, tile)
+            except ValueError as error:
+                print(f"build job {job_id}: bad enrich spec: {error}")
+                self._fail(job_id, "bad_enrich")
+                return
+        else:
+            self._snapshot_plan(job_id, job, tile)
         if job.get("kind") == "code":
             if self.pull_world():  # a merged change reaches this tile (#99.4)
                 self.world_commit = git_commit(self.world)
@@ -221,12 +229,19 @@ class Worker:
 
         A re-plan (the world moved, the home shipped) must never
         strand a claimed job, so the claim's snapshot stands: the
-        first write wins, and build, ship and preview read it.
+        first write wins, and build, ship and preview read it. An
+        `enrich` job has no plan document: its item is frozen from
+        the job itself.
         """
         import json
 
         path = self.jobs_dir / job_id / "plan.json"
         if path.is_file():
+            return
+        if job.get("kind") == "enrich":
+            snapshot = self._enrich_plan(job, tile)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(snapshot, indent=1), encoding="utf-8")
             return
         plan = self.store.get_plan(tile) or {}
         wanted = set(job.get("items", []))
@@ -245,13 +260,16 @@ class Worker:
         """The job's plan: the claim snapshot, else the live plan filtered.
 
         Jobs claimed before the snapshot landed fall back to the live
-        plan; everything claimed since reads its frozen items.
+        plan; everything claimed since reads its frozen items. An
+        `enrich` job's plan is its job's item, snapshot or live.
         """
         import json
 
         path = self.jobs_dir / job_id / "plan.json"
         if path.is_file():
             return json.loads(path.read_text(encoding="utf-8"))
+        if job.get("kind") == "enrich":
+            return self._enrich_plan(job, tile)
         plan = self.store.get_plan(tile) or {}
         wanted = set(job.get("items", []))
         return {
@@ -261,6 +279,56 @@ class Worker:
             "world": plan.get("world", "unknown"),
             "blocked": plan.get("blocked"),
             "snapshot_at": None,
+        }
+
+    def _enrich_plan(self, job: dict[str, Any], tile: str) -> dict[str, Any]:
+        """An enrich job's plan: its one item, no improve, never blocked."""
+        return {
+            "tile": tile,
+            "items": [self._enrich_item(job)],
+            "improve": [],
+            "world": self.world_commit or "unknown",
+            "blocked": None,
+            "snapshot_at": now_iso(),
+        }
+
+    def _enrich_item(self, job: dict[str, Any]) -> dict[str, Any]:
+        """The enrich job's one item, from the job's own `enrich` spec.
+
+        `from` is the job's when given; else the list's `start_from`
+        for an animal, the closest plant for a plant. An animal off
+        the list keeps `from` empty and fails in its stages, like a
+        build item naming one.
+        """
+        from .animal_list import find_list, load_list
+
+        assert self.world is not None
+        spec = job.get("enrich") or {}
+        kind = spec.get("kind")
+        what = spec.get("what")
+        if kind not in ("animal", "plant") or not what:
+            raise ValueError("an enrich job needs enrich.kind and enrich.what")
+        item_id = f"enrich_{what}".replace(":", "_")
+        if item_id not in set(job.get("items", [])):
+            raise ValueError(f"an enrich job's items holds {item_id}")
+        start = spec.get("from")
+        if not start and kind == "animal":
+            animals = load_list(find_list(self.world))["animals"]
+            entry = next((e for e in animals if e["id"] == what), None)
+            start = (entry or {}).get("start_from")
+        if not start and kind == "plant":
+            from .plan import closest_plant
+
+            have = sorted(
+                p.stem for p in (self.world / "models" / "plants").glob("*.json")
+            )
+            start = closest_plant(str(what), [], {}, have) if have else None
+        return {
+            "id": item_id,
+            "kind": kind,
+            "what": what,
+            "from": start,
+            "estimate_usd": float(job.get("budget_usd") or 0.0),
         }
 
     def build_items(self, job_id: str, job: dict[str, Any], tile: str) -> None:
@@ -466,14 +534,19 @@ class Worker:
         self.alert({"kind": "job_failed", "id": job_id, "error": error})
 
     def _job_tile(self, job_id: str, job: dict[str, Any]) -> str | None:
-        """The job's tile, straight from the job (spec/02 §build job)."""
+        """The job's tile, straight from the job (spec/02 §build job).
+
+        Only a `build` job needs its plan; `code` makes the tile
+        straight from the world, and `enrich` carries its own item.
+        """
         tile = job.get("tile")
         if not tile:
             self._fail(job_id, "no_tile")
             return None
-        if self.store.get_plan(tile) is None:
-            self._fail(job_id, "no_plan")
-            return None
+        if job.get("kind") not in ("code", "enrich"):
+            if self.store.get_plan(tile) is None:
+                self._fail(job_id, "no_plan")
+                return None
         return tile
 
     def _item_done(self, job: dict[str, Any], item_id: str) -> bool:

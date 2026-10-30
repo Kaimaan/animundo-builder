@@ -288,6 +288,45 @@ def _plant_ref(home: dict[str, Any], kind: str | None, have: list[str]) -> str:
     return have[0]
 
 
+def home_plant_entries(home: dict[str, Any]) -> list[dict[str, Any]]:
+    """The home's named plants in either shape: an example's
+    `plants` or a filed home's `ground_cover.plants`."""
+    if isinstance(home.get("plants"), list):
+        return [p for p in home["plants"] if isinstance(p, dict)]
+    return [
+        p for p in home.get("ground_cover", {}).get("plants", []) if isinstance(p, dict)
+    ]
+
+
+def closest_plant(
+    slug: str, grounds: list[str], home: dict[str, Any], have: list[str]
+) -> str:
+    """A filed plant of the same kind to start from (#144.2).
+
+    The name's words first (a coral from a coral); then a filed
+    plant off the same grounds (seabed grows corals); then the
+    first file, when nothing says what it is like.
+    """
+    words = set(slug.split("_"))
+    shared = [
+        (len(words & set(filed.split("_"))), filed)
+        for filed in have
+        if words & set(filed.split("_"))
+    ]
+    if shared:
+        best = max(count for count, _ in shared)
+        return min(filed for count, filed in shared if count == best)
+    for entry in home_plant_entries(home):
+        model = entry.get("model") or ""
+        if model not in have:
+            continue
+        on = entry.get("on", [])
+        grounds_here = [on] if isinstance(on, str) else [g for g in on if g]
+        if grounds and set(grounds) & set(grounds_here):
+            return model
+    return have[0]
+
+
 def plan_tile(
     tile: str,
     request: dict[str, Any] | None,

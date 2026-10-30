@@ -737,6 +737,8 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
         moved,
     )
     assert client.calls == 2
+    # A changed plants fingerprint alone reuses the cache while
+    # every cached pick is still listed (#153.4).
     fetch_species(
         "n_413_478",
         animals,
@@ -750,7 +752,76 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
         "pp2",
         moved,
     )
-    assert client.calls == 3
+    assert client.calls == 2
+
+
+def test_species_recaches_when_a_cached_pick_leaves_the_library(
+    tmp_path: Path,
+) -> None:
+    """#153.4: cached picks survive library growth, not removal."""
+    from builder.grid import center as tile_center
+
+    animals = [
+        {"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"},
+        {"id": "vole", "name": "Vole", "latin": "Microtus agrestis"},
+    ]
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+        "plants": [{"id": "bilberry", "count": 10}],
+        "trees": [],
+        "name_en": "Nuuksio forest",
+        "name_fi": "Nuuksion metsä",
+    }
+    client = _StubClient([answer, {**answer, "plants": []}])
+    source = Source(client=client, cache_dir=tmp_path / "cache")
+    lat, lon = tile_center("n_413_478")
+    fetch_species(
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        _facts(),
+    )
+    assert client.calls == 1
+    grown = [
+        *_GREENS,
+        {"id": "cloudberry", "name": "Cloudberry", "latin": "Rubus chamaemorus"},
+    ]
+    fetch_species(
+        "n_413_478",
+        animals,
+        grown,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp2",
+        _facts(),
+    )
+    assert client.calls == 1
+    fetch_species(
+        "n_413_478",
+        animals,
+        [],
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp3",
+        _facts(),
+    )
+    assert client.calls == 2
 
 
 def test_model_order_ranks_species(tmp_path: Path) -> None:

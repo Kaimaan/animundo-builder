@@ -720,6 +720,26 @@ def write_cache(
     )
 
 
+def _library_covers(
+    cached: dict[str, Any],
+    plants: list[dict[str, str]],
+    trees: list[dict[str, str]],
+) -> bool:
+    """Every cached plant and tree pick still in the library (#153.4).
+
+    The library grows whenever a plant ships; the cached picks
+    stay valid picks, so the cache survives growth and only a
+    removed id forces a new survey.
+    """
+    greens = {plant["id"] for plant in plants}
+    kinds = {tree["id"] for tree in trees}
+    picks = cached.get("plants", []) or []
+    timbers = cached.get("trees", []) or []
+    return all(pick.get("id") in greens for pick in picks) and all(
+        pick.get("id") in kinds for pick in timbers
+    )
+
+
 def fetch_species(
     tile: str,
     animals: list[dict[str, Any]],
@@ -736,7 +756,8 @@ def fetch_species(
     """One tile's survey: the cache, else one call, else a retry.
 
     A cached survey is checked again (cheap, no network) and used
-    only when the lists and the facts are unchanged. On a mismatch
+    only when the animal list and the facts are unchanged and the
+    library still holds every cached plant pick. On a mismatch
     the call goes out once more, carrying the refusal; a second
     mismatch blocks the tile.
     """
@@ -745,7 +766,7 @@ def fetch_species(
     if (
         cached is not None
         and cached.get("list") == fingerprint
-        and cached.get("plants_list") == plants_print
+        and _library_covers(cached, plants, trees)
         and cached.get("facts") == facts_print
     ):
         try:

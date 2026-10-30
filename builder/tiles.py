@@ -30,7 +30,7 @@ from .grid import (
     tile_at,
     tile_id,
 )
-from .habitats import HabitatGrid
+from .habitats import HabitatGrid, habitat_for
 from .presence import animals_for_habitat
 from .schemas import validate
 from .species import MODEL as SPECIES_MODEL
@@ -672,6 +672,34 @@ def select_species(
         kept -= failing
 
 
+def _candidate_habitats(
+    habitat: str, eco1: Any, biome: Any, land: float, water: float
+) -> set[str]:
+    """Habitats a tile takes candidates from: its own and its other side.
+
+    A coast cell (any land share above 0) also takes its land's
+    animals: the dry habitat its ecoregion's biome would give it
+    with more land, and the wet one where the cell has lakes
+    (#153). An inland cell with a coast or lakes also takes sea
+    or lake animals. Sea tiles take open-ocean swimmers and vice
+    versa, as before. The survey and the food check decide from
+    there, as now.
+    """
+    out = {habitat}
+    if habitat in ("sea", "open_ocean"):
+        out.add("open_ocean" if habitat == "sea" else "sea")
+        if land > 0:
+            out.add(habitat_for(eco1, biome, 1.0, 0.0))
+            if water > 0:
+                out.add(habitat_for(eco1, biome, 1.0, 1.0))
+    else:
+        if land < 1.0:
+            out.add("sea")
+        if water > 0:
+            out.add(habitat_for(eco1, biome, 1.0, 1.0))
+    return out
+
+
 def _split_species(
     ranked: list[str],
     kept: set[str],
@@ -999,7 +1027,7 @@ def make_tile(
 
     grid, col, row = parse_tile(tile)
     habitat_grid = grids[grid]
-    eco1, _share1, eco2, share2, _biome, land, water, elev = habitat_grid.cell_data(
+    eco1, _share1, eco2, share2, biome, land, water, elev = habitat_grid.cell_data(
         col, row
     )
     habitat = habitat_grid.habitat(col, row)
@@ -1031,14 +1059,13 @@ def make_tile(
             coast = [mask[r * 5 : (r + 1) * 5] for r in range(5)]
     lat, lon = center(tile)
     animals = list_animals(world)
-    candidates = animals_for_habitat(animals, habitat)
-    # Sea tiles also take open-ocean swimmers and vice versa.
-    if habitat in ("sea", "open_ocean"):
-        others = animals_for_habitat(
-            animals, "open_ocean" if habitat == "sea" else "sea"
-        )
-        seen = {a["id"] for a in candidates}
-        candidates += [a for a in others if a["id"] not in seen]
+    candidates = []
+    seen: set[str] = set()
+    for label in sorted(_candidate_habitats(habitat, eco1, biome, land, water)):
+        for entry in animals_for_habitat(animals, label):
+            if entry["id"] not in seen:
+                seen.add(entry["id"])
+                candidates.append(entry)
     wanted: list[dict[str, str]] | None = None
     greens: dict[str, Any] | None = None
     if presence is not None:

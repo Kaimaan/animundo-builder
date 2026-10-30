@@ -1274,6 +1274,76 @@ def test_replacing_plants_drops_animals_the_biome_fed(tmp_path: Path) -> None:
     assert check_with_world(made, world) == []
 
 
+def test_helsinki_shore_keeps_forest_animals_and_gull(tmp_path: Path) -> None:
+    """#153: n_415_479 keeps fox, hare, squirrel and gull with shore plants."""
+    from builder.schemas import ROOT
+    from builder.tiles import check_with_world
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "homes" / "sea_717.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed sea home")
+    if not (world / "tools" / "tile_region.py").is_file():
+        pytest.skip("needs a world with the converter")
+    grids = _live_grids()
+    made, blocked = make_tile(
+        "n_415_479",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species={
+            "place": "Helsinki shore on the Gulf of Finland",
+            "parts": [
+                {"kind": "sea", "species": ["herring_gull"]},
+                {
+                    "kind": "shore",
+                    "species": [
+                        "fox",
+                        "mountain_hare",
+                        "squirrel",
+                        "vole",
+                        "chaffinch",
+                        "frog",
+                    ],
+                },
+            ],
+            "plants": [
+                {"id": "white_clover", "count": 10},
+                {"id": "porcini", "count": 4},
+                {"id": "crowberry", "count": 10},
+            ],
+            "trees": [
+                {"id": "scots_pine", "count": 20},
+                {"id": "birch", "count": 10},
+            ],
+            "name_en": "Helsinki Shore",
+            "name_fi": "Helsingin ranta",
+        },
+    )
+    assert blocked is None
+    assert made is not None
+    species = made["species"]
+    kept = set(species["playable"]) | set(species["prey"]) | set(species["predators"])
+    for name in ("fox", "mountain_hare", "squirrel", "herring_gull"):
+        assert name in kept
+    assert check_with_world(made, world) == []
+
+
+def test_candidate_habitats_cover_both_sides_of_a_coast() -> None:
+    """#153: a 717 coast cell offers forest animals; pure ocean offers none."""
+    from builder.tiles import _candidate_habitats
+
+    coast = _candidate_habitats("sea", 717, 6, 0.48, 0.0)
+    assert {"sea", "open_ocean", "boreal_forest"} <= coast
+    assert "boreal_lake" not in coast
+    wet = _candidate_habitats("sea", 717, 6, 0.3, 0.2)
+    assert {"boreal_forest", "boreal_lake"} <= wet
+    inland = _candidate_habitats("boreal_forest", 717, 6, 0.9, 0.0)
+    assert "sea" in inland
+    assert "boreal_forest" in inland
+    ocean = _candidate_habitats("open_ocean", None, None, 0.0, 0.0)
+    assert ocean == {"open_ocean", "sea"}
+
+
 def test_remade_nuuksio_tile_keeps_squirrel_and_bee(tmp_path: Path) -> None:
     """#152: a code re-make of n_414_480 keeps the squirrel and the bee."""
     from builder.schemas import ROOT

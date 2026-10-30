@@ -265,8 +265,43 @@ def _food_kind(food: Any) -> str:
     return str(food or "")
 
 
-def tile_food_kinds(world: Path, home: dict[str, Any]) -> set[str]:
-    """Food kinds the 0043 rules work out for this home (#147.4).
+def _tile_ground_plants(
+    ground: dict[str, Any], greens: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """The ground plants the world's derive would read (#152).
+
+    Without the tile's own cover or water lists, the home's. With
+    them, the picks as models, keeping the home's plants only on
+    a side the tile doesn't list — as `use_plants` does.
+    """
+    cover = (greens or {}).get("cover")
+    water = (greens or {}).get("water")
+    if not isinstance(cover, list) and not isinstance(water, list):
+        return [p for p in ground.get("plants", []) or [] if isinstance(p, dict)]
+    kept = [
+        p
+        for p in ground.get("plants", []) or []
+        if isinstance(p, dict)
+        and (
+            ("seabed" in (p.get("on") or []) and not isinstance(water, list))
+            or ("seabed" not in (p.get("on") or []) and not isinstance(cover, list))
+        )
+    ]
+    sides = [
+        cover if isinstance(cover, list) else [],
+        water if isinstance(water, list) else [],
+    ]
+    for part in sides:
+        for pick in part:
+            if isinstance(pick, dict) and pick.get("id"):
+                kept.append({"model": pick["id"]})
+    return kept
+
+
+def tile_food_kinds(
+    world: Path, home: dict[str, Any], greens: dict[str, Any] | None = None
+) -> set[str]:
+    """Food kinds the 0043 rules work out for this tile (#147.4).
 
     Reads `food/rules.json`, the plants' and trees' own grows,
     the land and the water — never the home's written food list,
@@ -275,21 +310,21 @@ def tile_food_kinds(world: Path, home: dict[str, Any]) -> set[str]:
     food entries, flowers nectar); the tile check still has the
     last word. A world without rules is pre-layer: the written
     list, as before.
+
+    A tile with its own plants eats from those (#152): the game
+    grows the tile's picks over the home (`use_plants`), so the
+    food comes from the picks, with the home's plants kept only
+    on a side the tile doesn't list.
     """
     rules_path = world / "food" / "rules.json"
     if not rules_path.is_file():
         return home_food_kinds(home)
     rules = json.loads(rules_path.read_text(encoding="utf-8"))
     kinds: set[str] = set()
-
-    def listed(kind: str) -> bool:
-        rule = rules.get("kinds", {}).get(kind, {})
-        return "amount" in rule or "weight" in rule
-
     ground = home.get("ground_cover", {}) or {}
     if not isinstance(ground, dict):
         ground = {}
-    for plant in ground.get("plants", []) or []:
+    for plant in _tile_ground_plants(ground, greens):
         if not isinstance(plant, dict):
             continue
         if "food" in plant:
@@ -298,12 +333,17 @@ def tile_food_kinds(world: Path, home: dict[str, Any]) -> set[str]:
                 kinds.add(kind)
         else:
             kind = _food_kind(_grows(world, "plants", plant.get("model")).get("food"))
-            if kind and listed(kind):
+            # No weight gate: derive counts every grown food, even
+            # weightless ones like mushrooms (#152).
+            if kind:
                 kinds.add(kind)
     trees = home.get("trees", {}) or {}
     if not isinstance(trees, dict):
         trees = {}
-    for entry in trees.get("mix", []) or []:
+    mix = trees.get("mix", []) or []
+    if isinstance((greens or {}).get("trees"), list):
+        mix = [{"plant": p["id"]} for p in greens["trees"] if isinstance(p, dict)]
+    for entry in mix:
         if not isinstance(entry, dict):
             continue
         kind = _food_kind(entry.get("food"))
@@ -322,11 +362,10 @@ def tile_food_kinds(world: Path, home: dict[str, Any]) -> set[str]:
                     sid = shape
         grows = _grows(world, "trees", sid)
         kind = _food_kind(grows.get("food"))
-        if kind and listed(kind):
+        if kind:
             kinds.add(kind)
         for key in grows.get("more_food", {}) or {}:
-            if listed(key):
-                kinds.add(key)
+            kinds.add(key)
         if grows.get("bark"):
             kinds.add("bark")
     life = home.get("lake_life", {}) or {}
@@ -538,13 +577,16 @@ def pick_species(
     counts: dict[str, float],
     world: Path,
     home: dict[str, Any],
+    greens: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """Playable, prey and predators, most present first, food first.
 
     An animal stays only if the worked-out food has every kind it needs,
     and a hunter only if at least one of its prey stays too. The
-    home's fish hunt in the region as well, so their prey must stay
-    too. Playable is every kept animal whose file is playable;
+    food is worked out from the tile's own plants when it has them
+    (#152), else the home's. The home's fish hunt in the region as
+    well, so their prey must stay too. Playable is every kept animal
+    whose file is playable;
     predators every kept hunter; prey every kept animal someone
     hunts, plus every kept animal in neither other list, so an
     animal can be both playable and someone's prey. When nothing
@@ -558,7 +600,7 @@ def pick_species(
         path = animals_dir / f"{species}.json"
         if path.is_file():
             candidates[species] = _animal(path)
-    food = tile_food_kinds(world, home)
+    food = tile_food_kinds(world, home, greens)
     fish = home_fish(world, home)
     for data in fish.values():
         if not (data.get("diet") or data.get("hunts")):
@@ -919,7 +961,7 @@ def make_tile(
         species_tag = f"{SPECIES_MODEL}:{date}"
         wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
         greens, needs, wants = tile_plants(world, answer)
-    playable, prey, predators = pick_species(present, world, homes[home])
+    playable, prey, predators = pick_species(present, world, homes[home], greens)
     if not playable:
         return None, _blocked("no_animal", habitat, wanted)
     level = cell_level(habitat, elev)

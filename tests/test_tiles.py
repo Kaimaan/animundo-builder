@@ -178,14 +178,15 @@ def test_tile_food_kinds_works_out_food_from_rules(tmp_path: Path) -> None:
         "water_bugs",
         "bottom_bugs",
         "carrion",
+        "mushrooms",
     }
 
 
-def test_tile_food_kinds_lists_entry_mushrooms_only(tmp_path: Path) -> None:
-    """#147.4: mushrooms list only from a ground entry, as the game does."""
+def test_tile_food_kinds_counts_grown_mushrooms(tmp_path: Path) -> None:
+    """#152: mushrooms count from grows, as the world's derive does."""
     world = _world(tmp_path)
     home = _layered(world)
-    assert "mushrooms" not in tile_food_kinds(world, home)
+    assert "mushrooms" in tile_food_kinds(world, home)
     home["ground_cover"]["plants"].append({"model": "morel", "food": "mushrooms"})
     assert "mushrooms" in tile_food_kinds(world, home)
 
@@ -1184,3 +1185,29 @@ def test_make_tile_raises_when_world_check_fails_land(tmp_path: Path) -> None:
             presence={"fox": 5.0, "vole": 20.0},
             builder_root=tmp_path,
         )
+
+
+def test_remade_nuuksio_tile_keeps_squirrel_and_bee(tmp_path: Path) -> None:
+    """#152: a code re-make of n_414_480 keeps the squirrel and the bee."""
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "food" / "rules.json").is_file():
+        pytest.skip("needs a layered world with food rules")
+    if not (world / "animals" / "bee.json").is_file():
+        pytest.skip("needs world main with the bee filed")
+    grids = _live_grids()
+    answer = json.loads(
+        (ROOT / "tests" / "fixtures" / "tiles" / "n_414_480-survey.json").read_text()
+    )
+    made, blocked = make_tile(
+        "n_414_480",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species=answer,
+    )
+    assert blocked is None
+    assert made is not None
+    assert "squirrel" in made["species"]["playable"]
+    assert "bee" in made["species"]["playable"]

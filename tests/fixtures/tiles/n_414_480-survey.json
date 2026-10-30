@@ -1,0 +1,263 @@
+{
+ "place": "Baltic archipelago coast with boreal forest",
+ "parts": [
+  {
+   "kind": "sea",
+   "species": [
+    "grey_seal",
+    "ringed_seal",
+    "mallard",
+    "mute_swan",
+    "whooper_swan",
+    "canada_goose",
+    "goldeneye",
+    "black_throated_loon",
+    "common_tern",
+    "arctic_tern",
+    "herring_gull",
+    "grey_heron",
+    "white_tailed_eagle",
+    "osprey",
+    "perch",
+    "pike",
+    "roach",
+    "bream",
+    "zander",
+    "burbot",
+    "eel",
+    "brown_trout",
+    "atlantic_salmon",
+    "herring",
+    "jellyfish"
+   ]
+  },
+  {
+   "kind": "skerries",
+   "species": [
+    "grey_seal",
+    "ringed_seal",
+    "mute_swan",
+    "canada_goose",
+    "common_tern",
+    "arctic_tern",
+    "herring_gull",
+    "white_tailed_eagle",
+    "eagle_owl",
+    "peregrine"
+   ]
+  },
+  {
+   "kind": "shore",
+   "species": [
+    "fox",
+    "otter",
+    "badger",
+    "raccoon_dog",
+    "muskrat",
+    "white_tailed_deer",
+    "roe_deer",
+    "mallard",
+    "mute_swan",
+    "whooper_swan",
+    "canada_goose",
+    "goldeneye",
+    "common_tern",
+    "herring_gull",
+    "grey_heron",
+    "white_tailed_eagle",
+    "osprey",
+    "kingfisher",
+    "dipper",
+    "frog",
+    "common_toad",
+    "moor_frog",
+    "smooth_newt",
+    "adder",
+    "grass_snake",
+    "bee",
+    "wasp",
+    "dragonfly",
+    "snail"
+   ]
+  },
+  {
+   "kind": "forest",
+   "species": [
+    "fox",
+    "moose",
+    "mountain_hare",
+    "squirrel",
+    "flying_squirrel",
+    "vole",
+    "kestrel",
+    "great_tit",
+    "chaffinch",
+    "mallard",
+    "frog",
+    "lizard",
+    "bee",
+    "lynx",
+    "pine_marten",
+    "otter",
+    "badger",
+    "stoat",
+    "raccoon_dog",
+    "beaver",
+    "roe_deer",
+    "white_tailed_deer",
+    "wild_boar",
+    "hedgehog",
+    "brown_hare",
+    "shrew",
+    "wood_mouse",
+    "muskrat",
+    "ural_owl",
+    "eagle_owl",
+    "white_tailed_eagle",
+    "osprey",
+    "buzzard",
+    "goshawk",
+    "peregrine",
+    "raven",
+    "magpie",
+    "jay",
+    "robin",
+    "blue_tit",
+    "bullfinch",
+    "blackbird",
+    "swallow",
+    "great_spotted_woodpecker",
+    "black_woodpecker",
+    "crossbill",
+    "waxwing",
+    "cuckoo",
+    "capercaillie",
+    "black_grouse",
+    "whooper_swan",
+    "canada_goose",
+    "goldeneye",
+    "common_tern",
+    "herring_gull",
+    "kingfisher",
+    "brown_trout",
+    "burbot",
+    "common_toad",
+    "moor_frog",
+    "smooth_newt",
+    "adder",
+    "grass_snake",
+    "slow_worm",
+    "sand_lizard",
+    "wasp",
+    "peacock_butterfly",
+    "brimstone",
+    "swallowtail",
+    "small_tortoiseshell",
+    "bat",
+    "dragonfly",
+    "ladybird",
+    "ant",
+    "spider",
+    "snail"
+   ]
+  }
+ ],
+ "plants": [
+  {
+   "id": "bilberry",
+   "count": 25
+  },
+  {
+   "id": "lingonberry",
+   "count": 20
+  },
+  {
+   "id": "crowberry",
+   "count": 10
+  },
+  {
+   "id": "heather",
+   "count": 15
+  },
+  {
+   "id": "wavy_hair_grass",
+   "count": 20
+  },
+  {
+   "id": "red_stemmed_feathermoss",
+   "count": 25
+  },
+  {
+   "id": "juniper",
+   "count": 8
+  },
+  {
+   "id": "fireweed",
+   "count": 10
+  },
+  {
+   "id": "wood_anemone",
+   "count": 12
+  },
+  {
+   "id": "lily_of_the_valley",
+   "count": 8
+  },
+  {
+   "id": "wild_raspberry",
+   "count": 6
+  },
+  {
+   "id": "goat_willow",
+   "count": 5
+  },
+  {
+   "id": "spiny_wood_fern",
+   "count": 8
+  },
+  {
+   "id": "bracken",
+   "count": 5
+  },
+  {
+   "id": "chanterelle",
+   "count": 4
+  },
+  {
+   "id": "porcini",
+   "count": 4
+  },
+  {
+   "id": "fly_agaric",
+   "count": 5
+  },
+  {
+   "id": "reindeer_lichen",
+   "count": 3
+  }
+ ],
+ "trees": [
+  {
+   "id": "scots_pine",
+   "count": 30
+  },
+  {
+   "id": "norway_spruce",
+   "count": 30
+  },
+  {
+   "id": "birch",
+   "count": 20
+  },
+  {
+   "id": "aspen",
+   "count": 6
+  },
+  {
+   "id": "rowan",
+   "count": 5
+  }
+ ],
+ "name_en": "Rocky Islands and Pine Forest Shore",
+ "name_fi": "Kalliosaaret ja M\u00e4ntymets\u00e4n Ranta"
+}

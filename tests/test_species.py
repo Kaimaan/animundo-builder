@@ -330,6 +330,18 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
     assert client.calls == 2
 
 
+def test_list_fingerprint_ignores_library_status() -> None:
+    """#143.2: shipping an animal keeps the survey cache key."""
+    from builder.species import list_fingerprint
+
+    base = [
+        {"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"},
+        {"id": "lynx", "name": "Eurasian lynx", "latin": "Lynx lynx"},
+    ]
+    shipped = [dict(base[0]), {**base[1], "in_library": "lynx"}]
+    assert list_fingerprint(shipped) == list_fingerprint(base)
+
+
 def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
     """#131.4: a broken cache file never poisons a tile."""
     from builder.grid import center as tile_center

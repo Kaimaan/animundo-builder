@@ -234,6 +234,87 @@ def test_tile_height() -> None:
     assert tile_height(12, tall) == 64
 
 
+def test_remake_after_ship_adds_the_animal_with_no_new_call(
+    tmp_path: Path,
+) -> None:
+    """#143.2: the cached survey survives `in_library`; the fed animal joins."""
+    import json
+    from types import SimpleNamespace
+
+    from builder.species import Source as SpeciesSource
+
+    world = _world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    names = {
+        "fox": ("Red fox", "Vulpes vulpes"),
+        "mountain_hare": ("Mountain hare", "Lepus timidus"),
+        "vole": ("Vole", "Microtus agrestis"),
+    }
+    for entry in listed["animals"]:
+        entry["name"], entry["latin"] = names[entry["id"]]
+    listed["animals"].append(
+        {
+            "id": "lion",
+            "name": "Lion",
+            "latin": "Panthera leo",
+            "gbif_key": 5219404,
+            "habitats": ["boreal_forest"],
+        }
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    grids = _grids(tmp_path, _boreal_3x3(413, 478))
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [
+            {"kind": "forest", "species": ["fox", "mountain_hare", "vole", "lion"]}
+        ],
+        "find": None,
+        "name_en": "Fox and lion woods",
+        "name_fi": "Kettujen ja leijonien metsä",
+    }
+
+    class _Stub:
+        calls = 0
+
+        def chat(self, **kwargs: object) -> object:
+            _Stub.calls += 1
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))
+                ]
+            )
+
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=_Stub(), cache_dir=cache),
+    )
+    assert blocked is None
+    assert made is not None
+    assert "lion" not in made["species"]["playable"]
+    assert _Stub.calls == 1
+    (world / "animals" / "lion.json").write_text(
+        json.dumps({"playable": True, "tags": ["big_cat"], "diet": ["grass"]})
+    )
+    listed["animals"][-1]["in_library"] = "lion"
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    again, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=None, cache_dir=cache),
+    )
+    assert blocked is None
+    assert again is not None
+    assert "lion" in again["species"]["playable"]
+    assert "lion" in again["requires"]["animals"]
+    assert _Stub.calls == 1
+
+
 def test_make_tile_validates(tmp_path: Path) -> None:
     world = _world(tmp_path)
     grids = _grids(tmp_path, _boreal_3x3(413, 478))

@@ -1344,6 +1344,65 @@ def test_candidate_habitats_cover_both_sides_of_a_coast() -> None:
     assert ocean == {"open_ocean", "sea"}
 
 
+def test_helsinki_shore_remakes_from_layered_plants(tmp_path: Path) -> None:
+    """#147.5: the surveyed shore plants give a ready tile, gull playable."""
+    from builder.schemas import ROOT
+    from builder.tiles import check_with_world
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "homes" / "sea_717.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed sea home")
+    if not (world / "tools" / "tile_region.py").is_file():
+        pytest.skip("needs a world with the converter")
+    grids = _live_grids()
+    made, blocked = make_tile(
+        "n_415_479",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species={
+            "place": "Helsinki shore on the Gulf of Finland",
+            "parts": [{"kind": "sea", "species": ["herring_gull"]}],
+            "plants": [
+                {"id": "juniper", "count": 8},
+                {"id": "crowberry", "count": 10},
+                {"id": "heather", "count": 15},
+                {"id": "reindeer_lichen", "count": 6},
+                {"id": "wavy_hair_grass", "count": 20},
+                {"id": "fireweed", "count": 10},
+            ],
+            "trees": [
+                {"id": "scots_pine", "count": 30},
+                {"id": "birch", "count": 20},
+                {"id": "rowan", "count": 5},
+            ],
+            "name_en": "Helsinki Shore",
+            "name_fi": "Helsingin ranta",
+        },
+    )
+    assert blocked is None
+    assert made is not None
+    assert "herring_gull" in made["species"]["playable"]
+    plants = made.get("plants") or {}
+    cover = {entry["id"] for entry in plants.get("cover", [])}
+    assert cover == {
+        "juniper",
+        "crowberry",
+        "heather",
+        "reindeer_lichen",
+        "wavy_hair_grass",
+        "fireweed",
+    }
+    assert "lingonberry" not in cover
+    assert "bilberry" not in cover
+    assert {entry["id"] for entry in plants.get("trees", [])} == {
+        "scots_pine",
+        "birch",
+        "rowan",
+    }
+    assert check_with_world(made, world) == []
+
+
 def test_remade_nuuksio_tile_keeps_squirrel_and_bee(tmp_path: Path) -> None:
     """#152: a code re-make of n_414_480 keeps the squirrel and the bee."""
     from builder.schemas import ROOT

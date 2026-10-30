@@ -15,6 +15,9 @@ A few web searches at most. Answer with JSON only, no prose.
   one of the homes below.
 - `name`: the place's short child-friendly name in English (`en`)
   and in Finnish (`fi`).
+- `country`: the country it is in, in English.
+- `region_id`: the region file's id: `<two-letter country>_<place>`,
+  lowercase, like `au_great_barrier_reef`.
 - `animals`: the animals living there, best known to children
   first, each with `id` (from the list below only) and `source`
   (a URL or a source name). $WANT_LINE

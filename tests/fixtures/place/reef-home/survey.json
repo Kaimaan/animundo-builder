@@ -1,0 +1,53 @@
+{
+  "place": "Great Barrier Reef",
+  "tile": "s_530_612",
+  "habitat": "coral reef",
+  "grid_habitat": "open_ocean",
+  "home_from": "examples/reef",
+  "name": {
+    "en": "Green Island Reef",
+    "fi": "Green Islandin riutta"
+  },
+  "country": "Australia",
+  "region_id": "au_great_barrier_reef",
+  "animals": [
+    {
+      "id": "clownfish",
+      "source": "https://example.org/gbr/clownfish"
+    },
+    {
+      "id": "green_sea_turtle",
+      "source": "https://example.org/gbr/turtle"
+    },
+    {
+      "id": "reef_shark",
+      "source": "https://example.org/gbr/shark"
+    },
+    {
+      "id": "manta_ray",
+      "source": "https://example.org/gbr/manta"
+    }
+  ],
+  "plants": [
+    {
+      "name": "staghorn coral",
+      "source": "https://example.org/gbr/corals"
+    },
+    {
+      "name": "sea fan",
+      "source": "https://example.org/gbr/corals"
+    }
+  ],
+  "food": [
+    {
+      "name": "algae",
+      "source": "https://example.org/gbr/food"
+    },
+    {
+      "name": "zooplankton",
+      "source": "https://example.org/gbr/food"
+    }
+  ],
+  "wanted": [],
+  "budget_usd": 0.2
+}

@@ -71,6 +71,26 @@ def test_write_home_brief_carries_plan_item(tmp_path: Path) -> None:
     assert json.loads((tmp_path / "home.json").read_text()) == brief
 
 
+def test_write_place_home_brief_carries_the_example(tmp_path: Path) -> None:
+    item = {
+        "id": "home_reef",
+        "kind": "home",
+        "what": "reef",
+        "from": "examples/reef",
+    }
+    brief = build_mod.write_brief(tmp_path, item, "sea", -16.6, 146.0, None)
+    assert brief == {
+        "home": "sea",
+        "home_id": "reef",
+        "ecoregion": None,
+        "base_home": "examples/reef",
+        "based_on": "examples/reef",
+        "needs_home": True,
+        "center": {"lat": -16.6, "lon": 146.0},
+    }
+    assert json.loads((tmp_path / "home.json").read_text()) == brief
+
+
 def test_write_animal_brief_carries_list_entry(tmp_path: Path) -> None:
     item = {"id": "animal_lion", "kind": "animal", "what": "lion"}
     entry = {"id": "lion", "gbif_key": 5219404, "latin": "Panthera leo", "name": "Lion"}

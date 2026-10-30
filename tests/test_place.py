@@ -108,6 +108,8 @@ def test_recorded_gbr_survey_surveys_the_reef(
     assert survey["tile"] == "s_530_612"
     assert survey["home_from"] == "examples/reef"
     assert survey["name"] == {"en": "Green Island Reef", "fi": "Green Islandin riutta"}
+    assert survey["country"] == "Australia"
+    assert survey["region_id"] == "au_great_barrier_reef"
     first = [a["id"] for a in survey["animals"]][:3]
     assert first == ["clownfish", "green_sea_turtle", "reef_shark"]
     assert all(a["source"] for a in survey["animals"])
@@ -338,6 +340,8 @@ def test_reef_plan_lists_home_fish_shark_and_turtle(
     assert plan["estimate_usd"] == 0.8
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
+    assert plan["country"] == "Australia"
+    assert plan["region_id"] == "au_great_barrier_reef"
     assert [i["kind"] for i in plan["items"]] == ["home"] + ["animal"] * 4
 
 
@@ -466,6 +470,8 @@ def test_unmakeable_animals_are_blocked_not_built(
         "habitat": "coral reef",
         "home_from": "examples/reef",
         "name": {"en": "Green Island Reef", "fi": "Green Islandin riutta"},
+        "country": "Australia",
+        "region_id": "au_great_barrier_reef",
         "animals": [
             {"id": "blue_whale", "source": "x"},
             {"id": "test_newt", "source": "x"},
@@ -533,3 +539,98 @@ def test_improve_tile_from_region() -> None:
     assert 405 <= col <= 420 and 470 <= row <= 485
     with pytest.raises(SurveyError, match="neither a tile nor a region"):
         improve_tile("atlantis", world)
+
+
+def _grid_dir() -> Path:
+    return Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+
+
+def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
+    tmp_path: Path,
+) -> None:
+    """T99's done-when: the reef home replays, the region passes, take lays out."""
+    from builder.place import check_region_file, replay_place, take_place_job
+
+    world = _needs_world()
+    reports, region_path = replay_place(
+        FIXTURES / "reef-home", tmp_path / "out", world, _grid_dir()
+    )
+    assert list(reports) == ["home_reef"]
+    assert reports["home_reef"].is_file()
+    job_dir = tmp_path / "out" / "replay"
+    assert (job_dir / "home_reef" / "homes" / "reef.json").is_file()
+    assert (job_dir / "home_reef" / "checks" / "newhome.json").is_file()
+    assert region_path == job_dir / "regions" / "au_great_barrier_reef.json"
+    region = json.loads(region_path.read_text())
+    assert region["id"] == "au_great_barrier_reef"
+    assert region["name"] == "Green Island Reef"
+    assert region["status"] == "draft"
+    assert region["animals"]["playable"] == []
+    assert check_region_file(region_path, world) == []
+    dest = take_place_job(job_dir, tmp_path / "take", world)
+    assert (dest / "regions" / "au_great_barrier_reef.json").is_file()
+    assert (dest / "homes" / "reef.json").is_file()
+    assert (dest / "report.html").is_file()
+
+
+def test_write_region_derives_groups_and_fish_from_filed_animals(
+    tmp_path: Path,
+) -> None:
+    """T99: playable in survey order, hunters and hunted, fish swim."""
+    from builder.place import check_region_file, write_region
+    from builder.stages.region import seed_for_area
+
+    world = _needs_world()
+    home = json.loads((world / "homes" / "sea.json").read_text())
+    survey = {
+        "tile": "n_415_479",
+        "name": {"en": "Helsinki shore", "fi": "Helsingin ranta"},
+        "country": "Finland",
+        "region_id": "fi_test_shore",
+        "animals": [
+            {"id": "perch", "source": "x"},
+            {"id": "pike", "source": "x"},
+            {"id": "frog", "source": "x"},
+            {"id": "clownfish", "source": "x"},
+        ],
+        "plants": [],
+    }
+    region = write_region(home, survey, tmp_path, world)
+    assert region["animals"] == {
+        "playable": ["perch", "pike", "frog"],
+        "predators": ["pike"],
+        "prey": ["frog"],
+    }
+    assert region["fish"] == [
+        {"kind": "perch", "count": 6},
+        {"kind": "pike", "count": 6},
+    ]
+    assert region["terrain"]["seed"] == seed_for_area("fi_test_shore")
+    assert region["status"] == "draft"
+    for stale in ("about", "based_on", "ecoregions", "habitat"):
+        assert stale not in region
+    path = tmp_path / "fi_test_shore.json"
+    path.write_text(json.dumps(region, indent=2))
+    assert check_region_file(path, world) == []
+
+
+def test_request_build_local_rejects_a_split_answers_dir(tmp_path: Path) -> None:
+    """T99: with --local the answers live under the place folder itself."""
+    from builder.cli import main
+
+    world = _needs_world()
+    code = main(
+        [
+            "request",
+            "build",
+            "--local",
+            str(FIXTURES / "reef-home"),
+            "--replay",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "out"),
+            "--world",
+            str(world),
+        ]
+    )
+    assert code == 1

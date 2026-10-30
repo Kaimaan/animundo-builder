@@ -1601,6 +1601,35 @@ def test_newhome_prompt_adds_the_plant_looks(tmp_path: Path) -> None:
     assert "  - water lettuce: light green; floating rosette" in client.prompts[0]
 
 
+def test_newhome_prompt_survives_a_choices_shaped_base() -> None:
+    """T99: a place example has no filed keys; the prompt shows empties."""
+    world = _sibling_world()
+    brief = {"center": {"lat": -16.6, "lon": 146.0}}
+    research = {
+        "surroundings": [{"name": "White sand", "kind": "ground"}],
+        "main_food": {"name": "algae", "kind": "water_plants"},
+        "other_foods": [],
+    }
+    prompt = HomeMakerStage()._prompt(
+        brief, research, "sea", world / "homes" / "examples" / "reef.json", [], [], {}
+    )
+    assert "for the sea looks" in prompt
+
+
+def test_authored_base_adds_an_author_only_when_missing(tmp_path: Path) -> None:
+    """T99: the adapt check needs an author; an example base has none."""
+    from builder.stages.maker import _authored_base
+
+    world = _sibling_world()
+    example = world / "homes" / "examples" / "reef.json"
+    authored = _authored_base(example, tmp_path)
+    assert authored != example
+    assert json.loads(authored.read_text())["author"] == "Animundo Builder"
+    assert "author" not in json.loads(example.read_text())
+    filed = world / "homes" / "sea.json"
+    assert _authored_base(filed, tmp_path) == filed
+
+
 def test_newhome_picks_the_lake_home_for_lake_habitats(tmp_path: Path) -> None:
     world = _home_world(tmp_path)
     _home_inputs(tmp_path, habitat="boreal_lake")

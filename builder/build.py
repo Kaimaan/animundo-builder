@@ -37,7 +37,8 @@ from .stages.research import ResearchStage
 ITEM_STAGES = ("research", "minimum", "looks", "newhome", "oneshot", "plants")
 
 #: What take downloads and previews carry, laid out like the world.
-TAKE_DIRS = ("homes", "animals", "models", "plants", "locale")
+#: Border jobs never write `regions/`, so it travels only for places.
+TAKE_DIRS = ("homes", "animals", "models", "plants", "locale", "regions")
 
 
 def item_pipeline(
@@ -69,6 +70,40 @@ def order_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(items, key=lambda i: (rank.get(i.get("kind", ""), 9), i["id"]))
 
 
+def _home_brief(
+    item: dict[str, Any], habitat: str, lat: float, lon: float
+) -> dict[str, Any]:
+    """A home item's brief: a border ecoregion or a place's example.
+
+    A border home's `what` is an ecoregion number; a place
+    home's `what` names the example it adapts and carries no
+    ecoregion, so the choices keep none either.
+    """
+    try:
+        eco: int | None = int(item["what"])
+    except (TypeError, ValueError):
+        eco = None
+    if eco is None:
+        return {
+            "home": habitat,
+            "home_id": str(item["what"]),
+            "ecoregion": None,
+            "base_home": item["from"],
+            "based_on": item["from"],
+            "needs_home": True,
+            "center": {"lat": lat, "lon": lon},
+        }
+    return {
+        "home": habitat,
+        "home_id": f"{habitat}_{eco}",
+        "ecoregion": eco,
+        "base_home": item["from"],
+        "based_on": item["from"],
+        "needs_home": True,
+        "center": {"lat": lat, "lon": lon},
+    }
+
+
 def write_brief(
     item_dir: Path,
     item: dict[str, Any],
@@ -87,16 +122,7 @@ def write_brief(
     the player.
     """
     if item["kind"] == "home":
-        eco = int(item["what"])
-        brief = {
-            "home": habitat,
-            "home_id": f"{habitat}_{eco}",
-            "ecoregion": eco,
-            "base_home": item["from"],
-            "based_on": item["from"],
-            "needs_home": True,
-            "center": {"lat": lat, "lon": lon},
-        }
+        brief = _home_brief(item, habitat, lat, lon)
     elif item["kind"] == "plant":
         brief = {
             "plant": item["what"],

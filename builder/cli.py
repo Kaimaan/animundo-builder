@@ -192,7 +192,15 @@ def build_parser() -> argparse.ArgumentParser:
     build = request_sub.add_parser("build", help="Run one build round for a job.")
     build.add_argument(
         "job",
+        nargs="?",
+        default=None,
         help="The build job id, or a tile id with --replay/--record.",
+    )
+    build.add_argument(
+        "--local",
+        default=None,
+        metavar="DIR",
+        help="A place folder (survey.json, plan.json): build it locally.",
     )
     build.add_argument(
         "--replay",
@@ -229,7 +237,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--jobs-dir", default="jobs", help="Job folders (default: jobs)."
     )
     take = sub.add_parser("take", help="Take a job's checked items for review.")
-    take.add_argument("job", help="The build job id.")
+    take.add_argument("job", nargs="?", default=None, help="The build job id.")
+    take.add_argument(
+        "--local",
+        default=None,
+        metavar="DIR",
+        help="A local job folder: take it instead of a Storage job.",
+    )
     take.add_argument("--out", required=True, help="Directory for the taken files.")
     take.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
@@ -706,10 +720,10 @@ def cmd_request_build(args: argparse.Namespace) -> int:
     world = _world_or_error(args.world)
     if world is None:
         return 1
-    if args.replay is not None or args.record is not None:
+    if args.replay is not None or args.record is not None or args.local is not None:
         return cmd_request_build_local(args, world)
     if args.out is not None:
-        print("error: --out needs --replay or --record", file=sys.stderr)
+        print("error: --out needs --replay, --record or --local", file=sys.stderr)
         return 1
     try:
         store = FirebaseStore(args.project, args.storage_bucket)
@@ -737,6 +751,11 @@ def cmd_request_build_local(args: argparse.Namespace, world: Path) -> int:
 
     if args.replay is not None and args.record is not None:
         print("error: --replay and --record do not mix", file=sys.stderr)
+        return 1
+    if args.local is not None:
+        return cmd_place_build(args, world)
+    if args.job is None:
+        print("error: a job id or --local DIR", file=sys.stderr)
         return 1
     out = Path(args.out) if args.out is not None else Path(f"replay-{args.job}")
     try:
@@ -767,12 +786,62 @@ def cmd_request_build_local(args: argparse.Namespace, world: Path) -> int:
     return 0
 
 
+def cmd_place_build(args: argparse.Namespace, world: Path) -> int:
+    """One place job locally: replay its own answers, or record them live."""
+    from .ledger import CapExceeded
+    from .meta import MetaAuthError
+    from .pipeline import StageFailedError
+    from .place import record_place, replay_place
+    from .records import ReplayError
+
+    place_dir = Path(args.local)
+    for flag in (args.replay, args.record):
+        if flag is not None and Path(flag) != place_dir:
+            print(
+                "error: with --local the answers live under DIR itself",
+                file=sys.stderr,
+            )
+            return 1
+    out = Path(args.out) if args.out is not None else Path(f"replay-{place_dir.name}")
+    try:
+        if args.record is not None:
+            reports, region = record_place(
+                place_dir, out, world, Path(args.habitat_grid), load_config()
+            )
+        else:
+            reports, region = replay_place(
+                place_dir, out, world, Path(args.habitat_grid)
+            )
+    except (StageFailedError, CapExceeded, MetaAuthError, ReplayError) as error:
+        return _explain_stop(f"replay-{place_dir.name}", error)
+    except (ValueError, FileNotFoundError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    for item_id, report in sorted(reports.items()):
+        print(f"{item_id}: report {report}")
+    print(f"region: {region}")
+    return 0
+
+
 def cmd_take(args: argparse.Namespace) -> int:
     from .build import check_draft, take_bundle, take_report
     from .worker_store import FirebaseStore, StoreError
 
     world = _world_or_error(args.world)
     if world is None:
+        return 1
+    if args.local is not None:
+        from .place import take_place_job
+
+        try:
+            dest = take_place_job(Path(args.local), Path(args.out), world)
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        print(f"{Path(args.local).name}: taken to {dest}")
+        return 0
+    if args.job is None:
+        print("error: a job id or --local DIR", file=sys.stderr)
         return 1
     try:
         store = FirebaseStore(args.project, args.storage_bucket)

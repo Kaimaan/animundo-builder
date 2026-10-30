@@ -61,6 +61,8 @@
         "fi": {"type": "string", "minLength": 1}
       }
     },
+    "country": {"type": "string", "minLength": 1},
+    "region_id": {"type": "string", "pattern": "^[a-z]{2}_[a-z0-9_]+$"},
     "coming": {
       "type": "array",
       "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}

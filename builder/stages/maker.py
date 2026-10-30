@@ -2463,6 +2463,7 @@ class HomeMakerStage:
         """The try's choices through the world's adapt tool, with its checks."""
         folder = ctx.job_dir / "tries" / habitat / f"{tag}{attempt}"
         folder.mkdir(parents=True, exist_ok=True)
+        base = _authored_base(base, folder)
         choices_path = folder / "choices.json"
         choices_path.write_text(json.dumps(choices, indent=2), encoding="utf-8")
         plant_ids = [
@@ -2515,7 +2516,7 @@ class HomeMakerStage:
         template = (PROMPTS_DIR / "home_choices.md").read_text(encoding="utf-8")
         closest = json.loads(base.read_text(encoding="utf-8"))
         excerpt = {
-            key: closest[key]
+            key: closest.get(key, _BASE_FALLBACK[key])
             for key in ("description", "palette", "trees", "lake_life")
         }
         center = brief.get("center", {})
@@ -2533,6 +2534,33 @@ class HomeMakerStage:
                 "TREES": "".join(f", {tree}" for tree in trees),
             }
         )
+
+
+#: A choices-shaped base (a place example) lacks the filed
+#: excerpt keys; the prompt shows empties instead of crashing.
+_BASE_FALLBACK = {
+    "description": "",
+    "palette": {},
+    "trees": {"density": "none", "mix": []},
+    "lake_life": {},
+}
+
+
+def _authored_base(base: Path, folder: Path) -> Path:
+    """The base with an author: an example base has none, and the
+    region checks the adapt tool runs need one."""
+    from .region import HOSTED_AUTHOR
+
+    try:
+        data = json.loads(base.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return base
+    if isinstance(data.get("author"), str) and data["author"].strip():
+        return base
+    data["author"] = HOSTED_AUTHOR
+    authored = folder / "base.json"
+    authored.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return authored
 
 
 def _library_trees(world: Path) -> list[str]:

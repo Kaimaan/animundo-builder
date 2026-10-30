@@ -12,6 +12,7 @@ matches the code.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -67,9 +68,16 @@ def run_request(
 
     `make_ctx(item, item_dir)` returns the item's context; food
     builds by code, like live. A client with `verify_consumed`
-    must have played every answer it holds.
+    must have played every answer it holds. Like a border job
+    (#135.3), one failed item never stops the rest (#146.1):
+    every item that doesn't need it still runs, the failed one is
+    reported, and only a run where nothing built raises.
     """
+    from .ledger import CapExceeded, LedgerError
+    from .meta import MetaAuthError
+    from .pipeline import BudgetExceeded, OffSwitch
     from .report import build_report
+    from .worker import _NoHome
 
     worker = _worker(out_dir, world, grid_dir)
     job_dir = out_dir / JOB_ID
@@ -79,35 +87,76 @@ def run_request(
     habitat = worker._grids()[grid].habitat(col, row)
     lat, lon = center(tile)
     reports: dict[str, Path] = {}
+    built: dict[str, Path] = {}
+    failures: dict[str, Exception] = {}
+    skipped: dict[str, Exception] = {}
     for item in build_mod.order_items(plan.get("items", [])):
         item_dir = job_dir / item["id"]
         item_dir.mkdir(parents=True, exist_ok=True)
         state = item_dir / "state.json"
         if state.is_file():
             state.unlink()
-        if item["kind"] == "food":
-            home = worker._tile_home(tile, plan, JOB_ID)
-            build_mod.build_food_item(item_dir, item, home)
-        else:
-            entry = _entry_for(world, item)
-            home = (
-                worker._tile_home(tile, plan, JOB_ID)
-                if item["kind"] in ("plant", "animal")
-                else None
-            )
-            build_mod.prepare_item(item_dir, item, habitat, lat, lon, entry, home)
-            ctx = make_ctx(item, item_dir)
-            pipeline = build_mod.item_pipeline(state_path=item_dir / "state.json")
-            try:
+        try:
+            if item["kind"] == "food":
+                home = worker._tile_home(tile, plan, JOB_ID)
+                build_mod.build_food_item(item_dir, item, home)
+            else:
+                entry = _entry_for(world, item)
+                home = (
+                    worker._tile_home(tile, plan, JOB_ID)
+                    if item["kind"] in ("plant", "animal")
+                    else None
+                )
+                build_mod.prepare_item(item_dir, item, habitat, lat, lon, entry, home)
+                ctx = make_ctx(item, item_dir)
+                pipeline = build_mod.item_pipeline(state_path=item_dir / "state.json")
                 build_mod.run_item_stages(ctx, item_dir, pipeline)
-            except StageFailedError as error:
-                if isinstance(error.__cause__, ReplayError):
-                    raise error.__cause__ from error
-                raise
-            verify = getattr(ctx.client, "verify_consumed", None)
-            if verify is not None:
-                verify()
-        reports[item["id"]] = build_report(item_dir)
+                verify = getattr(ctx.client, "verify_consumed", None)
+                if verify is not None:
+                    verify()
+        except _NoHome as error:
+            need = next(
+                (i["id"] for i in plan.get("items", []) if i.get("kind") == "home"),
+                "a home",
+            )
+            skipped[item["id"]] = error
+            print(f"{item['id']} skipped: needs {need}", file=sys.stderr)
+            continue
+        except ReplayError:
+            raise
+        except StageFailedError as error:
+            if isinstance(error.__cause__, ReplayError):
+                raise error.__cause__ from error
+            failures[item["id"]] = error
+            print(f"{item['id']} failed: {error}", file=sys.stderr)
+            try:
+                reports[item["id"]] = build_report(item_dir)
+            except Exception:  # noqa: BLE001 - the failure itself is the report
+                pass
+            continue
+        except (CapExceeded, LedgerError, MetaAuthError, BudgetExceeded, OffSwitch):
+            raise
+        except Exception as error:  # noqa: BLE001 - one item never stops the rest
+            failures[item["id"]] = error
+            print(f"{item['id']} failed: {error}", file=sys.stderr)
+            try:
+                reports[item["id"]] = build_report(item_dir)
+            except Exception:  # noqa: BLE001 - the failure itself is the report
+                pass
+            continue
+        try:
+            built[item["id"]] = reports[item["id"]] = build_report(item_dir)
+        except Exception as error:  # noqa: BLE001 - one item never stops the rest
+            failures[item["id"]] = error
+            print(f"{item['id']} failed: {error}", file=sys.stderr)
+    if not built:
+        if failures:
+            raise next(iter(failures.values()))
+        if skipped:
+            raise next(iter(skipped.values()))
+    if failures:
+        total = len(failures) + len(skipped) + len(built)
+        print(f"{len(failures)} of {total} items failed", file=sys.stderr)
     return reports
 
 

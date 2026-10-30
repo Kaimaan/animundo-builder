@@ -12,6 +12,7 @@ from builder.habitats import (
     BIOME_TO_HABITAT,
     HabitatGrid,
     bake,
+    coast_mask,
     habitat_for,
 )
 
@@ -90,6 +91,38 @@ def test_bake_keeps_two_ecoregions_with_shares(tmp_path: Path) -> None:
     assert share1 == pytest.approx(0.76, abs=0.01)
     assert eco2 == 2
     assert share2 == pytest.approx(0.24, abs=0.01)
+
+
+def test_coast_mask_runs_rows_north_to_south() -> None:
+    """#142: bake order (columns) becomes coast rows along n to s."""
+    west = [ix < 2 for ix in range(5) for _iy in range(5)]
+    assert coast_mask(west) == "11000" * 5
+    north = [iy < 2 for _ix in range(5) for iy in range(5)]
+    assert coast_mask(north) == "11111" * 2 + "00000" * 3
+    assert coast_mask([True] * 25) == "1" * 25
+    assert coast_mask([False] * 25) == "0" * 25
+
+
+def test_bake_keeps_the_mask_with_the_land_share(tmp_path: Path) -> None:
+    """#142: every baked cell carries 25 samples; ones are the land."""
+    bake(
+        FIXTURES / "resolve.geojson",
+        FIXTURES / "land.geojson",
+        FIXTURES / "lakes.geojson",
+        None,
+        tmp_path,
+        grids=("ease2_n25",),
+        bbox=(413, 478, 414, 479),
+    )
+    grid = HabitatGrid.load(tmp_path / "ease2_n25.json.gz", "ease2_n25")
+    for col in (413, 414):
+        for row in (478, 479):
+            mask = grid.coast(col, row)
+            assert mask is not None
+            assert len(mask) == 25
+            assert set(mask) <= {"0", "1"}
+            land = grid.cell_data(col, row)[5]
+            assert mask.count("1") / 25 == land
 
 
 def test_habitat_grid_reads_tiles(tmp_path: Path) -> None:

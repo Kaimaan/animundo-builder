@@ -489,6 +489,84 @@ def test_tile_facts_come_from_the_grids(tmp_path: Path) -> None:
     assert facts["plants"] == ["bilberry"]
 
 
+def _live_grids() -> dict[str, HabitatGrid]:
+    from builder.schemas import ROOT
+
+    grid_dir = ROOT / "data" / "habitat-grid"
+    return {
+        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
+        for name in ("ease2_n25", "ease2_s25")
+    }
+
+
+def test_helsinki_mask_has_land_north_and_sea_south() -> None:
+    """#142: n_415_479's mask from the re-baked grid, about 12 ones."""
+    from builder.grid import parse_tile
+
+    grids = _live_grids()
+    grid, col, row = parse_tile("n_415_479")
+    mask = grids[grid].coast(col, row)
+    if mask is None:
+        pytest.skip("needs the re-baked grid with coast masks")
+    rows = [mask[r * 5 : (r + 1) * 5] for r in range(5)]
+    assert rows[0].count("1") >= 4, rows
+    assert rows[4] == "00000", rows
+    assert 10 <= mask.count("1") <= 14, rows
+
+
+def test_neighbour_masks_agree_along_the_shared_side() -> None:
+    """#142: touching mask sides turn within a sample of each other."""
+    from builder.grid import parse_tile
+
+    grids = _live_grids()
+    grid, col, row = parse_tile("n_415_479")
+    mine = grids[grid].coast(col, row)
+    west = grids[grid].coast(col - 1, row)
+    north = grids[grid].coast(col, row - 1)
+    if mine is None or west is None or north is None:
+        pytest.skip("needs the re-baked grid with coast masks")
+
+    def turn(bits: list[str]) -> int:
+        return bits.index("0")
+
+    mine_west = [mine[r * 5] for r in range(5)]
+    west_east = [west[r * 5 + 4] for r in range(5)]
+    assert abs(turn(mine_west) - turn(west_east)) <= 1
+    mine_north = list(mine[:5])
+    north_south = list(north[20:25])
+    matching = sum(1 for a, b in zip(mine_north, north_south) if a == b)
+    assert matching >= 4
+
+
+def test_helsinki_tile_carries_its_coast() -> None:
+    """#142: the remade n_415_479 writes `coast` from the mask."""
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "homes" / "sea_717.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed sea home")
+    if not (world / "animals" / "herring_gull.json").is_file():
+        pytest.skip("needs world d009df2 with the reviewed gull")
+    grids = _live_grids()
+    from builder.grid import parse_tile
+
+    grid, col, row = parse_tile("n_415_479")
+    mask = grids[grid].coast(col, row)
+    if mask is None:
+        pytest.skip("needs the re-baked grid with coast masks")
+    made, blocked = make_tile(
+        "n_415_479",
+        grids,  # type: ignore[arg-type]
+        world,
+        presence={"herring_gull": 30.0},
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["coast"] == [mask[r * 5 : (r + 1) * 5] for r in range(5)]
+    assert made["coast"][0].count("1") >= 4
+    assert made["coast"][4] == "00000"
+
+
 def test_make_tile_uses_sea_home_for_sea(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (world / "animals" / "herring.json").write_text(
@@ -508,6 +586,64 @@ def test_make_tile_uses_sea_home_for_sea(tmp_path: Path) -> None:
     assert made["ecoregion"] == 651
     assert made["home"] == "sea"
     assert made["level"] == 5
+
+
+def test_make_tile_writes_coast_for_coastal_cells(tmp_path: Path) -> None:
+    """#142: a cell part land part sea carries its 5 mask rows."""
+    world = _world(tmp_path)
+    (world / "animals" / "herring.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    cell = [651, 1.0, None, 0.0, 4, 0.48, 0.0, 0.0, "1" * 12 + "0" * 13]
+    cells = {f"{c},{r}": list(cell) for r in (499, 500, 501) for c in (99, 100, 101)}
+    grids = _grids(tmp_path, cells)
+    made, blocked = make_tile(
+        "n_100_500",
+        grids,
+        world,  # type: ignore[arg-type]
+        presence={"herring": 30.0},
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["coast"] == ["11111", "11111", "11000", "00000", "00000"]
+
+
+def test_make_tile_skips_coast_without_a_mask(tmp_path: Path) -> None:
+    """#142: cells from before the coast carry no mask and no `coast`."""
+    world = _world(tmp_path)
+    (world / "animals" / "herring.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    grids = _grids(tmp_path, _sea_3x3(100, 500))
+    made, blocked = make_tile(
+        "n_100_500",
+        grids,  # type: ignore[arg-type]
+        world,
+        presence={"herring": 30.0},
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert "coast" not in made
+
+
+def test_make_tile_skips_coast_for_whole_land(tmp_path: Path) -> None:
+    """#142: an all-land cell has no `coast`, mask or not."""
+    world = _world(tmp_path)
+    cell = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0, "1" * 25]
+    cells = {f"{c},{r}": list(cell) for r in (477, 478, 479) for c in (412, 413, 414)}
+    grids = _grids(tmp_path, cells)
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        presence={"fox": 5.0, "mountain_hare": 5.0, "vole": 20.0},
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert "coast" not in made
 
 
 def test_make_tile_blends_second_home(tmp_path: Path) -> None:

@@ -3,11 +3,14 @@
 Which habitat each tile cell holds, baked from public maps with no AI.
 Two files, one per grid: `ease2_n25.json.gz` and `ease2_s25.json.gz`.
 Each maps `"col,row"` to
-`[eco1, share1, eco2, share2, biome, land, water, elevation_m]`: the
-two most common RESOLVE ecoregion ids on land with their shares of
-the land points, the biome of the first, the share of sample points
-on land, the share of land points in a lake, and the mean elevation
-in metres over the cell's land points.
+`[eco1, share1, eco2, share2, biome, land, water, elevation_m, coast]`:
+the two most common RESOLVE ecoregion ids on land with their shares
+of the land points, the biome of the first, the share of sample
+points on land, the share of land points in a lake, the mean
+elevation in metres over the cell's land points, and the 25 land
+samples as a string in coast order (`1` land, `0` sea): row 0 runs
+along the `n` side, character 0 is west. Lakes count as land in the
+mask; `coast` is only land against sea.
 
 ## Sources and licence
 

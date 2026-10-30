@@ -485,7 +485,7 @@ def make_tile(
 
     grid, col, row = parse_tile(tile)
     habitat_grid = grids[grid]
-    eco1, _share1, eco2, share2, _biome, _land, water, elev = habitat_grid.cell_data(
+    eco1, _share1, eco2, share2, _biome, land, water, elev = habitat_grid.cell_data(
         col, row
     )
     habitat = habitat_grid.habitat(col, row)
@@ -499,6 +499,11 @@ def make_tile(
     blend_home = home_for_cell(eco2, habitat, homes) if eco2 is not None else None
     if blend_home is not None and blend_home != home and share2 >= 0.1:
         blend = {"home": blend_home, "share": round(share2, 2)}
+    coast: list[str] | None = None
+    if 0.0 < land < 1.0:
+        mask = habitat_grid.coast(col, row)
+        if mask is not None:
+            coast = [mask[r * 5 : (r + 1) * 5] for r in range(5)]
     lat, lon = center(tile)
     animals = list_animals(world)
     candidates = animals_for_habitat(animals, habitat)
@@ -585,6 +590,8 @@ def make_tile(
     }
     if blend is not None:
         made_tile["blend"] = blend
+    if coast is not None:
+        made_tile["coast"] = coast
     validate("tile", made_tile)
     failures = check_with_world(made_tile, world)
     if failures:

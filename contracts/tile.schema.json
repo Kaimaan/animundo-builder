@@ -56,6 +56,13 @@
         "open_ocean"
       ]
     },
+    "coast": {
+      "type": "array",
+      "description": "Land against sea, only on a cell that is part land and part sea or open ocean: 5 strings of 5, `1` land and `0` sea. Row 0 runs along the `n` side, row 4 along `s`; character 0 is west, 4 east.",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"type": "string", "pattern": "^[01]{5}$"}
+    },
     "ecoregion": {"type": "integer", "minimum": 0},
     "home": {"type": "string", "minLength": 1},
     "blend": {

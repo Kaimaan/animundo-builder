@@ -4,8 +4,9 @@ RESOLVE Ecoregions 2017 gives the ecoregions and biome; Natural Earth
 gives land and lakes; ETOPO 2022 gives elevation. `bake()` samples
 5 by 5 points per cell and writes one compact file per grid: each
 cell keeps `[eco1, share1, eco2, share2, biome, land, water,
-elevation_m]`. `HabitatGrid` reads them back and `habitat_for()`
-maps one cell to a habitat id.
+elevation_m, coast]`, the last the 25 land samples in coast order
+(`1` land, `0` sea). `HabitatGrid` reads them back and
+`habitat_for()` maps one cell to a habitat id.
 """
 
 from __future__ import annotations
@@ -96,9 +97,8 @@ class HabitatGrid:
         self, col: int, row: int
     ) -> tuple[Any, Any, Any, Any, Any, float, float, float]:
         """The baked `[eco1, share1, eco2, share2, biome, land, water, elevation_m]`."""
-        eco1, share1, eco2, share2, biome, land, water, elevation = self._cells[
-            f"{col},{row}"
-        ]
+        entry = self._cells[f"{col},{row}"]
+        eco1, share1, eco2, share2, biome, land, water, elevation = entry[:8]
         return (
             eco1,
             float(share1),
@@ -109,6 +109,17 @@ class HabitatGrid:
             float(water),
             float(elevation),
         )
+
+    def coast(self, col: int, row: int) -> str | None:
+        """The cell's 25 land samples in coast order, or None (#142).
+
+        Cells baked before the coast carry no mask; the maker
+        writes no `coast` for them.
+        """
+        entry = self._cells[f"{col},{row}"]
+        if len(entry) <= 8:
+            return None
+        return str(entry[8])
 
     def habitat(self, col: int, row: int) -> str:
         """The habitat id for one cell."""
@@ -373,10 +384,13 @@ def _bake_grid(
         by_cell: dict[tuple[int, int], dict[str, Any]] = {}
         land_points: dict[tuple[int, int], list[tuple[float, float]]] = {}
         for idx, owner in enumerate(owners):
-            slot = by_cell.setdefault(owner, {"land": 0, "lake": 0, "ecos": [], "n": 0})
+            slot = by_cell.setdefault(
+                owner, {"land": 0, "lake": 0, "ecos": [], "n": 0, "pts": []}
+            )
             slot["n"] += 1
             if idx in coarse:
                 land, eco, biome = coarse[idx]
+                slot["pts"].append(bool(land))
                 if not land:
                     continue
                 slot["land"] += 1
@@ -388,7 +402,9 @@ def _bake_grid(
                 )
                 continue
             if not land_hits[exact_pos[idx]]:
+                slot["pts"].append(False)
                 continue
+            slot["pts"].append(True)
             slot["land"] += 1
             if lake_by_point.get(idx):
                 slot["lake"] += 1
@@ -419,8 +435,26 @@ def _bake_grid(
                 round(land, 4),
                 round(water, 4),
                 round(elevations.get((col, row), 0.0), 1),
+                coast_mask(slot["pts"]),
             ]
     return cells
+
+
+def coast_mask(pts: list[bool]) -> str:
+    """The cell's 25 land samples as coast rows (#142).
+
+    `pts` runs the bake's point order (west to east, north to
+    south within each column); the mask runs the tile's coast
+    order (row 0 along the `n` side to row 4 along `s`, west to
+    east within each row). `1` is land, `0` sea.
+    """
+    if len(pts) != SAMPLES * SAMPLES:
+        raise ValueError(f"a coast mask needs 25 samples, not {len(pts)}")
+    return "".join(
+        "1" if pts[ix * SAMPLES + iy] else "0"
+        for iy in range(SAMPLES)
+        for ix in range(SAMPLES)
+    )
 
 
 def _elevations(

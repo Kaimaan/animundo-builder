@@ -45,12 +45,18 @@ The schema arrives with the call; its shape:
 - `repaint`: parts to paint another colour, as
   `{"part", "color"}` with the part and colour names above.
 - `unmakable`: marks the animal has that no edit above can
-  make (stripes, a mane, antlers), as plain words. They go to
+  make (a mane, antlers), as plain words. They go to
   the build report for the reviewer to add to the tool; never
   fake them with factors or repaints.
+- `key_marks`: the one or two marks that make the species
+  known, from the looks above, as plain words (like "three
+  white body bands"); empty only when the looks name none.
+  Code maps them to the tool's marks with the rest, and the
+  render is checked for them before the model passes.
 
-Marks need no entry: code adds ear tufts, ruffs and tail tips
-from the research's own words.
+Marks need no entry: code adds ear tufts, ruffs, tail tips,
+bars and stripes, spots, spines and hammer heads from the
+research's own words.
 
 ## Tools
 

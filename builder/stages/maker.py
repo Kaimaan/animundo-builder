@@ -17,6 +17,7 @@ into the job's own folder, never into the world checkout.
 
 from __future__ import annotations
 
+import base64
 import json
 import math
 import re
@@ -37,6 +38,7 @@ from ..prompts import (
     fix_messages,
     for_children,
     improve_blocks,
+    load_prompt,
     place_line,
 )
 from ..taxa import match_entry, taxon_block
@@ -443,6 +445,13 @@ class AnimalMakerStage:
                         if isinstance(mark, dict) and "mark" in mark
                     ]
                 marks, unmatched = _tool_marks(words)
+                key_marks = [
+                    mark
+                    for mark in (edits.get("key_marks") or [])
+                    if isinstance(mark, str) and mark.strip()
+                ][:2]
+                keyed, _ = _tool_marks(key_marks)
+                marks = [*marks, *[m for m in keyed if m not in marks]]
                 edits["marks"] = marks
                 edits["unmakable"] = list(
                     dict.fromkeys([*(edits.get("unmakable") or []), *unmatched])
@@ -486,6 +495,10 @@ class AnimalMakerStage:
                                 f"{animal_id}: {'; '.join(file_errors)}: the tool "
                                 "saturated its range; a person looks"
                             )
+                    if spec is not None:
+                        file_errors += self._marks_errors(
+                            ctx, animal_id, target, key_marks, attempt
+                        )
             self._save_try(
                 ctx, animal_id, f"edits{tag}", attempt, answer, edits, file_errors
             )
@@ -532,6 +545,92 @@ class AnimalMakerStage:
         chat = self._chat or ctx.chat
         response = _ask_with_room(chat, messages, response_format=request)
         return (response.choices[0].message.content or "").strip()
+
+    def _marks_errors(
+        self,
+        ctx: Any,
+        animal_id: str,
+        target: dict[str, Any],
+        key_marks: list[str],
+        attempt: int,
+    ) -> list[str]:
+        """The key marks the built render lacks, if any (#146.3).
+
+        Nothing to judge without key marks or without a
+        render. Otherwise one look at the preview in the same
+        round that checks the sizes; a missing mark fails the
+        try like a missed size, so the fix round paints it.
+        """
+        if not key_marks:
+            return []
+        preview = ctx.job_dir / "models" / f"{animal_id}.png"
+        if not preview.is_file():
+            return []
+        title = target["entry"].get("name", animal_id)
+        prompt = load_prompt(
+            "model_marks",
+            {
+                "TITLE": title,
+                "MARKS": "\n".join(f"- {mark}" for mark in key_marks),
+            },
+        )
+        encoded = base64.b64encode(preview.read_bytes()).decode()
+        first = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                },
+            ],
+        }
+        request = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "MarksReview",
+                "schema": _marks_schema(),
+                "strict": True,
+            },
+        }
+        problems = ""
+        previous: str | None = None
+        for _ in range(2):
+            ctx.check_budget()
+            messages = (
+                fix_messages(first, previous, problems)
+                if problems and previous is not None
+                else [first]
+            )
+            chat = self._chat or ctx.chat
+            answer = (
+                _ask_with_room(chat, messages, response_format=request)
+                .choices[0]
+                .message.content
+                or ""
+            ).strip()
+            previous = answer
+            try:
+                review = json.loads(_unfence(answer))
+                shown = review["shown"]
+                missing = review["missing"]
+                if not isinstance(shown, list) or not isinstance(missing, list):
+                    raise ValueError("shown and missing are lists")
+                if not all(isinstance(m, str) for m in shown + missing):
+                    raise ValueError("shown and missing hold plain words")
+            except (ValueError, KeyError, TypeError) as error:
+                problems = f"PREVIOUS TRY was no marks review: {error}"
+                continue
+            folder = ctx.job_dir / "tries" / animal_id / "edits" / str(attempt)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "marks_review.json").write_text(
+                json.dumps({"shown": shown, "missing": missing}, indent=2),
+                encoding="utf-8",
+            )
+            return [_mark_miss(mark) for mark in missing if isinstance(mark, str)]
+        raise _Stopped(
+            f"{animal_id}: the marks review never wrote valid JSON: {problems}"
+        )
 
     def _animal_files(
         self, world: Path, answer: str
@@ -1907,6 +2006,7 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
             *offered,
             "repaint",
             "unmakable",
+            "key_marks",
         ],
         "properties": {
             "colors": {
@@ -1954,8 +2054,38 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
                 "type": "array",
                 "description": (
                     "Marks the animal has that no edit above can make "
-                    "(stripes, a mane, antlers), as plain words"
+                    "(a mane, antlers), as plain words"
                 ),
+                "items": {"type": "string"},
+            },
+            "key_marks": {
+                "type": "array",
+                "description": (
+                    "The one or two marks that make the species known, "
+                    "from the research's looks, as plain words; empty "
+                    "only when the looks name none"
+                ),
+                "items": {"type": "string"},
+            },
+        },
+    }
+
+
+def _marks_schema() -> dict[str, Any]:
+    """The marks review's strict schema: which key marks show (#146.3)."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["shown", "missing"],
+        "properties": {
+            "shown": {
+                "type": "array",
+                "description": "The key marks the render shows",
+                "items": {"type": "string"},
+            },
+            "missing": {
+                "type": "array",
+                "description": "The key marks the render lacks",
                 "items": {"type": "string"},
             },
         },
@@ -1996,8 +2126,11 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
     """Look-mark words to the tool's marks (#63.1).
 
     "ruff" gives `ruff`, "tuft" gives `ear_tufts`, "tail"
-    plus "tip" gives `tail_tip`. The rest go unmakable, for
-    the report.
+    plus "tip" gives `tail_tip`; bars, bands and stripes
+    give `stripes`, spots give `spots`, a hammer head gives
+    `hammer`, and spines give `spines` unless they are fin
+    spines, which the tool's hedgehog coat can't make
+    (#146.3). The rest go unmakable, for the report.
     """
     marks: list[str] = []
     unmatched: list[str] = []
@@ -2010,11 +2143,40 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
             found.append("ear_tufts")
         if "tail" in low and "tip" in low:
             found.append("tail_tip")
+        if re.search(r"\b(bars?|bands?|banded|stripes?|striped)\b", low):
+            found.append("stripes")
+        if re.search(r"\bspots?\b|\bspotted\b", low):
+            found.append("spots")
+        if "hammer" in low:
+            found.append("hammer")
+        spiny = re.search(r"\bspines?\b|\bspiny\b", low) is not None
+        finny = "fin" in low or re.search(r"\brays?\b", low) is not None
+        if spiny and not finny:
+            found.append("spines")
         if found:
             marks.extend(mark for mark in found if mark not in marks)
         else:
             unmatched.append(text)
     return marks, unmatched
+
+
+def _mark_miss(mark: str) -> str:
+    """A missing key mark as a fix-round error (#146.3).
+
+    When a tool mark paints it, the fix keeps the mark and
+    its colours; otherwise colours and repaints must.
+    """
+    tools, _ = _tool_marks([mark])
+    if not tools:
+        return (
+            f"the render shows no {mark}: paint it with colours "
+            "and repaints, never with factors"
+        )
+    names = " and ".join(f"the {tool} mark" for tool in tools)
+    return (
+        f"the render shows no {mark}: {names} paints it, so keep "
+        "the mark and its colours, and don't repaint its parts away"
+    )
 
 
 def _looks_sizes(looks: dict[str, Any]) -> dict[str, float]:

@@ -29,6 +29,8 @@ from builder.stages.maker import (
     _foods_text,
     _guide,
     _home_choices_schema,
+    _mark_miss,
+    _marks_schema,
     _measure_errors,
     _measure_spec,
     _measurements,
@@ -2447,10 +2449,53 @@ def test_edits_files_accepts_and_rejects(tmp_path: Path) -> None:
 
 def test_tool_marks_map_words_to_the_tool() -> None:
     marks, unmatched = _tool_marks(
-        ["ear tufts", "cheek ruff", "short black-tipped tail", "stripes"]
+        [
+            "ear tufts",
+            "cheek ruff",
+            "short black-tipped tail",
+            "three white bars across the body",
+            "dark spots",
+            "spiny coat",
+            "hammer-shaped head",
+            "long whiskers",
+        ]
     )
-    assert marks == ["ear_tufts", "ruff", "tail_tip"]
-    assert unmatched == ["stripes"]
+    assert marks == [
+        "ear_tufts",
+        "ruff",
+        "tail_tip",
+        "stripes",
+        "spots",
+        "spines",
+        "hammer",
+    ]
+    assert unmatched == ["long whiskers"]
+
+
+def test_tool_marks_skip_fin_spines() -> None:
+    """#146.3: the tool's hedgehog spines can't make a lionfish's fins."""
+    marks, unmatched = _tool_marks(["long spiny dorsal fin"])
+    assert marks == []
+    assert unmatched == ["long spiny dorsal fin"]
+
+
+def test_mark_miss_points_at_the_tool_mark() -> None:
+    """#146.3: a missing mark's fix keeps what paints it."""
+    assert _mark_miss("three white bars across the body") == (
+        "the render shows no three white bars across the body: "
+        "the stripes mark paints it, so keep the mark and its "
+        "colours, and don't repaint its parts away"
+    )
+    assert _mark_miss("yellow body") == (
+        "the render shows no yellow body: paint it with colours "
+        "and repaints, never with factors"
+    )
+
+
+def test_marks_schema_is_strict() -> None:
+    """#146.3: the marks review answers one closed shape."""
+    assert_strict_subset(_marks_schema())
+    assert "key_marks" in _edits_schema({"colors": {}, "parts": []})["required"]
 
 
 def test_edits_sizes_come_from_the_research() -> None:
@@ -2698,13 +2743,118 @@ def test_unmatched_mark_words_go_unmakable(tmp_path: Path) -> None:
     _write_looks_research(tmp_path)
     research = json.loads((tmp_path / "research.json").read_text())
     research["looks"]["marks"].append(
-        {"mark": "dark stripes", "source": "https://example.org/lynx"}
+        {"mark": "long whiskers", "source": "https://example.org/lynx"}
     )
     (tmp_path / "research.json").write_text(json.dumps(research))
     client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
     _stage().run(_ctx(tmp_path, world, client))
     checks = json.loads((tmp_path / "checks" / "oneshot.json").read_text())
-    assert checks["unmakable"] == {"lynx": ["dark stripes"]}
+    assert checks["unmakable"] == {"lynx": ["long whiskers"]}
+
+
+CLOWNFISH = {
+    "id": "clownfish",
+    "name": "Orange clownfish",
+    "latin": "Amphiprion percula",
+    "gbif_key": 5212094,
+    "start_from": "fox",
+    "habitats": ["reef"],
+    "can_make": True,
+}
+
+
+def _clownfish_inputs(tmp_path: Path, world: Path) -> None:
+    """#146.3: the reef clownfish's brief and research, as recorded."""
+    listing = json.loads((world / "animal-list.json").read_text())
+    listing["animals"].append(CLOWNFISH)
+    (world / "animal-list.json").write_text(json.dumps(listing))
+    _inputs(
+        tmp_path,
+        brief={
+            "species_key": 5212094,
+            "id": "clownfish",
+            "latin": "Amphiprion percula",
+            "name": "Orange clownfish",
+            "in_library": None,
+            "start_from": "fox",
+            "habitats": ["reef"],
+            "home": "boreal_forest",
+            "needs_home": False,
+        },
+    )
+    research = json.loads((tmp_path / "research.json").read_text())
+    research.update(
+        {
+            "size": {"length_cm": 8, "weight_kg": 0.02},
+            "looks": {
+                "shoulder_cm": None,
+                "tail_cm": 3,
+                "coat": {"main": "orange", "belly": "orange"},
+                "marks": [
+                    {"mark": "three white bars across the body"},
+                    {"mark": "white bars edged in black"},
+                    {"mark": "middle bar runs down the middle"},
+                ],
+            },
+        }
+    )
+    (tmp_path / "research.json").write_text(json.dumps(research))
+
+
+def _marks_answer(shown: list[str], missing: list[str]) -> str:
+    return json.dumps({"shown": shown, "missing": missing})
+
+
+def test_marks_review_passes_a_render_with_the_bands(tmp_path: Path) -> None:
+    """#146.3: a recorded clownfish answer with the bands passes."""
+    world = _world(tmp_path)
+    _clownfish_inputs(tmp_path, world)
+    bands = "three white bars across the body"
+    client = ScriptClient(
+        [
+            _animal_answer("clownfish"),
+            _edits_answer(key_marks=[bands]),
+            _marks_answer([bands], []),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    assert len(client.calls) == 3
+    assert bands in client.prompts[2]
+    edits = json.loads(
+        (tmp_path / "tries" / "clownfish" / "edits" / "1" / "edits.json").read_text()
+    )
+    assert "stripes" in edits["marks"]
+    review = json.loads(
+        (
+            tmp_path / "tries" / "clownfish" / "edits" / "1" / "marks_review.json"
+        ).read_text()
+    )
+    assert review == {"shown": [bands], "missing": []}
+
+
+def test_marks_review_sends_a_bandless_render_to_a_fix_round(
+    tmp_path: Path,
+) -> None:
+    """#146.3: a recorded clownfish answer without the bands fixes."""
+    world = _world(tmp_path)
+    _clownfish_inputs(tmp_path, world)
+    bands = "three white bars across the body"
+    client = ScriptClient(
+        [
+            _animal_answer("clownfish"),
+            _edits_answer(key_marks=[bands]),
+            _marks_answer([], [bands]),
+            _edits_answer(key_marks=[bands]),
+            _marks_answer([bands], []),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    assert len(client.calls) == 5
+    errors = json.loads(
+        (tmp_path / "tries" / "clownfish" / "edits" / "1" / "errors.json").read_text()
+    )
+    assert f"the render shows no {bands}" in errors[0]
+    assert f"the render shows no {bands}" in client.prompts[3]
 
 
 def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:

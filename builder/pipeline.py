@@ -19,6 +19,7 @@ from .ledger import CapExceeded, LedgerError
 from .meta import (
     MetaAuthError,
     MetaClient,
+    SpendUncertain,
     Usage,
     is_open_host_refusal,
     usage_from_response,
@@ -176,7 +177,14 @@ class Pipeline:
             _set_stage(ctx, stage.name)
             try:
                 result = stage.run(ctx)
-            except (BudgetExceeded, CapExceeded, MetaAuthError, OffSwitch, StaleOwner):
+            except (
+                BudgetExceeded,
+                CapExceeded,
+                MetaAuthError,
+                OffSwitch,
+                SpendUncertain,
+                StaleOwner,
+            ):
                 raise
             except Exception as error:  # noqa: BLE001 - recorded, then raised
                 state["failed"] = {"stage": stage.name, "error": str(error)}

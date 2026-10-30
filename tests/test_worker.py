@@ -2274,3 +2274,90 @@ def test_no_player_field_anywhere(tmp_path: Path, monkeypatch: Any) -> None:
         "phone",
     }
     assert leaked == set()
+
+
+def _held_pair(tmp_path: Path):  # type: ignore[no-untyped-def]
+    """A combined reservation left outstanding by a timeout (#157)."""
+    from builder.ledger import Caps, CombinedLedger, FileLedger
+
+    provider = FileLedger(tmp_path / "meta-pool.json")
+    allowance = FileLedger(tmp_path / "allowance.json")
+    ledger = CombinedLedger(provider, allowance, Caps(8.0, 20.0, 120.0))
+    receipt = ledger.reserve("j1", 0.05, Caps(8.0, 20.0, 120.0))
+    return provider, allowance, ledger, receipt
+
+
+def test_timeout_pauses_item_and_resume_recovers(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#157: the reservation stays held; a later drive retries the item."""
+    from types import SimpleNamespace
+
+    from builder.meta import SpendUncertain
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _owned_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+    provider, allowance, ledger, receipt = _held_pair(tmp_path)
+    worker.chat = SimpleNamespace(ledger=ledger, model="muse-spark-1.3")
+
+    uncertain = SpendUncertain("chat: sent, spend unknown (timed out)")
+    uncertain.receipt = receipt
+    uncertain.host = "meta"
+    attempts: list[str] = []
+
+    def flaky(*args: Any, **kwargs: Any) -> None:
+        attempts.append("stages")
+        if len(attempts) == 1:
+            raise uncertain
+
+    monkeypatch.setattr(worker, "_run_stages", flaky)
+    worker.handle_build_job("j1")
+    entry = store.build_jobs["j1"]["progress"][0]
+    assert entry["status"] == "paused_spend_uncertain"
+    assert entry["uncertain"]["host"] == "meta"
+    assert entry["uncertain"]["provider"]["id"] == receipt.provider.id
+    assert entry["uncertain"]["allowance"]["id"] == receipt.allowance.id
+    assert store.build_jobs["j1"]["status"] == "building"
+    assert store.build_jobs["j1"]["error"] == "paused_spend_uncertain"
+    assert provider.job_spent("j1") == pytest.approx(0.05)
+    assert allowance.job_spent("j1") == pytest.approx(0.05)
+
+    worker.handle_build_job("j1")
+    entry = store.build_jobs["j1"]["progress"][0]
+    assert entry["status"] == "checking"
+    assert store.build_jobs["j1"]["status"] == "checking"
+    assert store.build_jobs["j1"].get("error") is None
+    assert attempts == ["stages", "stages"]
+    # The resume settled the superseded attempt at its estimate.
+    for pool, side in ((provider, receipt.provider), (allowance, receipt.allowance)):
+        data = json.loads(pool.path.read_text(encoding="utf-8"))
+        assert side.id in data["settled"]
+        assert pool.job_spent("j1") == pytest.approx(0.05)
+
+
+def test_resume_settles_superseded_timeout_at_estimate(tmp_path: Path) -> None:
+    """#157: a second attempt settles the first one's record at estimate."""
+    from types import SimpleNamespace
+
+    from builder.ledger import receipt_refs
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _owned_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    provider, allowance, ledger, receipt = _held_pair(tmp_path)
+    store.build_jobs["j1"]["progress"] = [
+        {
+            "id": "enrich_lion",
+            "status": "paused_spend_uncertain",
+            "uncertain": {"host": "meta", **receipt_refs(receipt)},
+        }
+    ]
+    ctx = SimpleNamespace(client=SimpleNamespace(ledger=ledger), open_client=None)
+    worker._settle_superseded("j1", {"id": "enrich_lion"}, ctx)
+    worker._settle_superseded("j1", {"id": "enrich_lion"}, ctx)
+    for pool, side in ((provider, receipt.provider), (allowance, receipt.allowance)):
+        data = json.loads(pool.path.read_text(encoding="utf-8"))
+        assert side.id in data["settled"]
+        assert pool.job_spent("j1") == pytest.approx(0.05)

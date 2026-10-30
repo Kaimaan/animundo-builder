@@ -83,6 +83,10 @@ class _Off(Exception):
     """The off switch stopped this item; resume when enabled."""
 
 
+class _Paused(Exception):
+    """A timeout left spend unknown; the run pauses, resume retries (#157)."""
+
+
 class _BudgetOut(Exception):
     """Money or access ran out; remaining items don't start."""
 
@@ -443,6 +447,10 @@ class Worker:
             except _Off:
                 print(f"build job {job_id}: off switch stopped {item['id']}")
                 return
+            except _Paused:
+                print(f"build job {job_id}: spend uncertain, {item['id']} paused")
+                self._update(job_id, {"error": "paused_spend_uncertain"})
+                return
             except _BudgetOut as error:
                 stopped = error.code
                 job = self.store.get_build_job(job_id) or job
@@ -465,9 +473,55 @@ class Worker:
         if stopped and not any(e["status"] == "checking" for e in progress):
             self._fail(job_id, stopped)
             return
-        self._set_status(job_id, "checking")
+        recovered = (
+            {"error": None} if job.get("error") == "paused_spend_uncertain" else None
+        )
+        self._set_status(job_id, "checking", recovered)
         if job.get("visibility") == "private":
             self.write_preview(job_id, job, tile)
+
+    def _settle_superseded(self, job_id: str, item: dict[str, Any], ctx: Any) -> None:
+        """Count a paused attempt's unknown spend as spent, at estimate (#157).
+
+        The resume supersedes the timed-out attempt: its held
+        reservation settles at the reserved estimate, so later spend
+        cannot treat the unknown as zero. Settles are idempotent; a
+        missing ledger leaves its side outstanding, still counted,
+        never released.
+        """
+        from .ledger import CombinedLedger, receipt_from_ref
+
+        job = self.store.get_build_job(job_id) or {}
+        refs: dict[str, Any] = {}
+        for entry in job.get("progress", []):
+            if (
+                entry.get("id") == item["id"]
+                and entry.get("status") == "paused_spend_uncertain"
+            ):
+                uncertain = entry.get("uncertain") or {}
+                if isinstance(uncertain, dict):
+                    refs = uncertain
+        if not refs:
+            return
+        timed_out = ctx.open_client if refs.get("host") == "baseten" else ctx.client
+        ledgers: dict[str, Any] = {}
+        if timed_out is not None and timed_out.ledger is not None:
+            provider = timed_out.ledger
+            ledgers["provider"] = (
+                provider.provider if isinstance(provider, CombinedLedger) else provider
+            )
+        for client in (ctx.client, ctx.open_client):
+            ledger = getattr(client, "ledger", None)
+            if isinstance(ledger, CombinedLedger):
+                ledgers["allowance"] = ledger.allowance
+                break
+        for side in ("provider", "allowance"):
+            ref = refs.get(side)
+            ledger = ledgers.get(side)
+            if not isinstance(ref, dict) or ledger is None:
+                continue
+            receipt = receipt_from_ref(ref)
+            ledger.settle(receipt, receipt.reserved_usd)
 
     def run_item(
         self,
@@ -483,8 +537,8 @@ class Worker:
 
         from . import build as build_mod
         from .jobs import make_context
-        from .ledger import CapExceeded, LedgerError
-        from .meta import MetaAuthError
+        from .ledger import CapExceeded, LedgerError, receipt_refs
+        from .meta import MetaAuthError, SpendUncertain
         from .pipeline import BudgetExceeded, OffSwitch
 
         assert self.world is not None
@@ -499,6 +553,7 @@ class Worker:
         start = ctx.tracker.spent_usd
         self._guard_job = job_id
         try:
+            self._settle_superseded(job_id, item, ctx)
             if item["kind"] == "food":
                 home = self._tile_home(tile, plan, job_id)
                 build_mod.build_food_item(item_dir, item, home)
@@ -523,6 +578,25 @@ class Worker:
             spent = round(ctx.tracker.spent_usd - start, 6)
             self._update(job_id, {"cost_usd": before + spent})
             raise _Off()
+        except SpendUncertain as error:
+            self._close_item(
+                job_id,
+                item,
+                item_dir,
+                ctx,
+                start,
+                before,
+                budget,
+                error,
+                status="paused_spend_uncertain",
+                extra={
+                    "uncertain": {
+                        "host": error.host,
+                        **receipt_refs(error.receipt),
+                    }
+                },
+            )
+            raise _Paused() from error
         except StaleOwner:
             raise
         except Exception as error:  # noqa: BLE001 - one item never stops the rest
@@ -1074,6 +1148,7 @@ class Worker:
         error: Exception | None,
         status: str | None = None,
         note: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         """Report, upload, charge and alert one finished item."""
         from . import build as build_mod
@@ -1099,9 +1174,15 @@ class Worker:
         )
         job = self.store.get_build_job(job_id) or {}
         progress = [e for e in job.get("progress", []) if e["id"] != item["id"]]
-        progress.append(
-            {"id": item["id"], "status": status, "report": report, "cost_usd": cost}
-        )
+        entry: dict[str, Any] = {
+            "id": item["id"],
+            "status": status,
+            "report": report,
+            "cost_usd": cost,
+        }
+        if extra:
+            entry.update(extra)
+        progress.append(entry)
         total = round(before + cost, 6)
         self._update(job_id, {"progress": progress, "cost_usd": total})
         if budget > 0:

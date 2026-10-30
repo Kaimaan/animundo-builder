@@ -53,6 +53,44 @@ class PairedReceipt(Receipt):
     allowance: Receipt | None = None
 
 
+def _receipt_ref(receipt: Receipt) -> dict[str, Any]:
+    return {
+        "job_id": receipt.job_id,
+        "day": receipt.day,
+        "reserved_usd": receipt.reserved_usd,
+        "id": receipt.id,
+    }
+
+
+def receipt_refs(receipt: Receipt | PairedReceipt | None) -> dict[str, Any]:
+    """Serializable refs to a held reservation, per side (#157).
+
+    A timed-out call keeps its reservation outstanding; when the
+    item resumes, the refs rebuild the receipts so the superseded
+    reservation settles at its estimate instead of vanishing.
+    """
+    if receipt is None:
+        return {}
+    if isinstance(receipt, PairedReceipt):
+        refs: dict[str, Any] = {}
+        if receipt.provider is not None:
+            refs["provider"] = _receipt_ref(receipt.provider)
+        if receipt.allowance is not None:
+            refs["allowance"] = _receipt_ref(receipt.allowance)
+        return refs
+    return {"provider": _receipt_ref(receipt)}
+
+
+def receipt_from_ref(ref: dict[str, Any]) -> Receipt:
+    """Rebuild a receipt from its refs, for a superseded settle (#157)."""
+    return Receipt(
+        job_id=str(ref["job_id"]),
+        day=str(ref["day"]),
+        reserved_usd=float(ref["reserved_usd"]),
+        id=str(ref["id"]),
+    )
+
+
 class Ledger(Protocol):
     """What `MetaClient` needs from a spending backend."""
 

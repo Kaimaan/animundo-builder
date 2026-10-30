@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from builder.ledger import CapExceeded
-from builder.meta import MetaError, Usage
+from builder.meta import MetaError, SpendUncertain, Usage
 from builder.pipeline import (
     BudgetExceeded,
     BudgetTracker,
@@ -119,6 +119,32 @@ def test_chat_reraises_unrelated_open_errors(tmp_path: Path) -> None:
     with pytest.raises(MetaError, match="failed after 1 tries"):
         ctx.chat([{"role": "user", "content": "hi"}])
     assert meta.calls == 0
+
+
+class UncertainClient(FakeClient):
+    """An open host that timed out: its spend is unknown (#157)."""
+
+    def chat(self, *args: Any, **kwargs: Any) -> Any:
+        raise SpendUncertain("chat: sent, spend unknown")
+
+
+def test_chat_does_not_mask_open_host_uncertainty(tmp_path: Path) -> None:
+    ctx, meta = make_ctx(tmp_path)
+    ctx.open_client = UncertainClient()  # type: ignore[assignment]
+    with pytest.raises(SpendUncertain):
+        ctx.chat([{"role": "user", "content": "hi"}])
+    assert meta.calls == 0, "no fallback may hide the open host's unknown spend"
+
+
+def test_spend_uncertain_passes_through_unwrapped(tmp_path: Path) -> None:
+    class PausingStage(FakeStage):
+        def run(self, ctx: JobContext) -> dict[str, Any]:
+            raise SpendUncertain("chat: sent, spend unknown")
+
+    pipeline = Pipeline([PausingStage("one", tmp_path)], tmp_path / "state.json")
+    ctx, _ = make_ctx(tmp_path)
+    with pytest.raises(SpendUncertain):
+        pipeline.run(ctx)
 
 
 def test_runs_stages_in_order_and_saves_state(tmp_path: Path) -> None:

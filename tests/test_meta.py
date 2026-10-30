@@ -12,7 +12,14 @@ import pytest
 
 import builder.meta as meta_module
 from builder.config import Config
-from builder.ledger import CapExceeded, Caps, LedgerError, Receipt
+from builder.ledger import (
+    CapExceeded,
+    Caps,
+    CombinedLedger,
+    FileLedger,
+    LedgerError,
+    Receipt,
+)
 from builder.meta import (
     BASE_URL,
     BASETEN_BASE_URL,
@@ -21,6 +28,7 @@ from builder.meta import (
     MetaAuthError,
     MetaClient,
     MetaError,
+    SpendUncertain,
     Usage,
     _ApiKeyAuth,
     is_open_host_refusal,
@@ -675,3 +683,87 @@ def test_is_cut_off() -> None:
     assert is_cut_off(resp(usage=usage), 100) is False
     assert is_cut_off(resp(), 100) is False
     assert is_cut_off(resp(), 0) is False
+
+
+class FlakyScript:
+    """A canned sequence that may raise instead of answering (#157)."""
+
+    def __init__(self, answers: list) -> None:
+        self.answers = list(answers)
+        self.requests: list[httpx2.Request] = []
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        self.requests.append(request)
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        status, body = answer
+        return httpx2.Response(status, json=body)
+
+
+def test_timeout_holds_reservation_and_marks_uncertain(tmp_path: Path) -> None:
+    request = httpx2.Request("POST", "https://meta.test/v1/chat/completions")
+    script = FlakyScript([httpx2.ReadTimeout("read timed out", request=request)])
+    provider = FileLedger(tmp_path / "meta-pool.json")
+    allowance = FileLedger(tmp_path / "allowance.json")
+    ledger = CombinedLedger(provider, allowance, Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(
+        script, tmp_path, ledger=ledger, caps=Caps(8.0, 20.0, 120.0)
+    )
+    with pytest.raises(SpendUncertain) as caught:
+        client.chat([{"role": "user", "content": "hi"}], max_tokens=5)
+    assert isinstance(caught.value, TimeoutError)
+    assert len(script.requests) == 1  # never retry after the request went out
+    receipt = caught.value.receipt
+    assert receipt is not None
+    # Both sides still count the estimate: the unknown is not zero.
+    assert provider.job_spent("local") == pytest.approx(receipt.reserved_usd)
+    assert allowance.job_spent("local") == pytest.approx(receipt.reserved_usd)
+    lines = read_log(logger)
+    assert lines[-1]["result"] == "timeout"
+    assert lines[-1]["spend_uncertain"] is True
+    assert lines[-1]["receipts"]["provider"]["id"] == receipt.provider.id
+    assert lines[-1]["receipts"]["allowance"]["id"] == receipt.allowance.id
+
+
+def test_connect_error_still_retries_and_settles_zero(tmp_path: Path) -> None:
+    script = FlakyScript([httpx2.ConnectError("no route to host"), (200, chat_body())])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, logger = make_client(script, tmp_path, ledger=ledger, caps=ledger.caps)
+    response = client.chat([{"role": "user", "content": "hi"}], max_tokens=5)
+    assert response.choices[0].message.content == "twelve"
+    assert len(script.requests) == 2  # never sent: known-zero, safe to retry
+    assert len(ledger.settled) == 1
+    assert all(line["result"] == "ok" for line in read_log(logger))
+
+
+def test_lost_connection_pauses_without_retry(tmp_path: Path) -> None:
+    request = httpx2.Request("POST", "https://meta.test/v1/chat/completions")
+    script = FlakyScript([httpx2.ReadError("connection reset", request=request)])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, _ = make_client(script, tmp_path, ledger=ledger, caps=ledger.caps)
+    with pytest.raises(SpendUncertain):
+        client.chat([{"role": "user", "content": "hi"}], max_tokens=5)
+    assert len(script.requests) == 1
+    assert ledger.settled == []  # held, not released
+
+
+def test_billed_failure_settles_reported_usage(tmp_path: Path) -> None:
+    body = {
+        "error": {"message": "boom", "type": "server_error"},
+        "usage": {"input_tokens": 100, "output_tokens": 50},
+    }
+    script = Script([(500, body)])
+    ledger = FakeLedger(Caps(8.0, 20.0, 120.0))
+    client, _ = make_client(script, tmp_path, ledger=ledger, caps=ledger.caps)
+    with pytest.raises(MetaError, match="billed usage"):
+        client.chat([{"role": "user", "content": "hi"}], max_tokens=5)
+    assert len(script.requests) == 1  # spend occurred: no retry
+    expected = Usage(model=MODEL, input_tokens=100, output_tokens=50).cost_usd(
+        prices_for(MODEL)
+    )
+    assert ledger.settled == [pytest.approx(expected)]
+
+
+def test_open_host_uncertainty_is_not_a_refusal() -> None:
+    assert is_open_host_refusal(SpendUncertain("sent, spend unknown")) is False

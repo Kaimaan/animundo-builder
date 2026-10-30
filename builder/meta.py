@@ -30,7 +30,14 @@ from typing import Any
 import httpx2
 import openai
 
-from .ledger import CapExceeded, Caps, Ledger, LedgerError, Receipt
+from .ledger import (
+    CapExceeded,
+    Caps,
+    Ledger,
+    LedgerError,
+    Receipt,
+    receipt_refs,
+)
 from .prices import Prices, prices_for
 
 BASE_URL = "https://api.meta.ai/v1"
@@ -49,6 +56,25 @@ MAX_SEARCHES_PER_CALL = 5
 
 class MetaError(Exception):
     """Anything the builder cannot fix by retrying."""
+
+    actual_usd: float | None = None
+    """Billed spend a failed attempt reported, if it reported any (#157)."""
+
+
+class SpendUncertain(TimeoutError):
+    """The request went out but its spend is unknown: hold, don't retry (#157).
+
+    A timeout (or a connection lost after sending) may still have
+    billed server-side, so the reservation stays outstanding, the
+    cost log marks the job's spend uncertain, and the item pauses
+    for a later resume instead of retrying into double spend.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.receipt: Any = None
+        """The held reservation, attached by the call site."""
+        self.host = "meta"
 
 
 class MetaAuthError(MetaError):
@@ -107,21 +133,85 @@ class CostLogger:
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(line) + "\n")
 
+    def log_uncertain(
+        self,
+        call: str,
+        model: str,
+        receipt: Any,
+        duration_s: float,
+        host: str = "meta",
+    ) -> None:
+        """Mark a timed-out call's spend uncertain, reservation held (#157)."""
+        refs = receipt_refs(receipt)
+        reserved = round(float(receipt.reserved_usd), 6) if receipt is not None else 0.0
+        line: dict[str, Any] = {
+            "at": datetime.now(UTC).isoformat(),
+            "call": call,
+            "model": model,
+            "host": host,
+            "reserved_usd": reserved,
+            "spend_uncertain": True,
+            "duration_s": round(duration_s, 3),
+            "result": "timeout",
+        }
+        if refs:
+            line["receipts"] = refs
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(line) + "\n")
+
 
 def _backoff_seconds(tries_so_far: int) -> float:
     return min(2.0**tries_so_far, 30.0) + random.uniform(0, 1)
 
 
 def _is_retriable(error: Exception) -> bool:
+    """Only errors where spend is known not to have occurred (#157).
+
+    A refused or answered request the provider did not bill, or a
+    connection that never got far enough to send. Anything that may
+    have billed never retries; _with_retries raises SpendUncertain
+    or a billed MetaError for those before consulting this.
+    """
+    if _spend_unknown(error):
+        return False
     if isinstance(error, openai.RateLimitError):
         return True
     if isinstance(error, openai.APIConnectionError):
+        return True
+    if isinstance(error, openai.APITimeoutError):
         return True
     return (
         isinstance(error, openai.APIStatusError)
         and error.status_code is not None
         and error.status_code >= 500
     )
+
+
+def _spend_unknown(error: Exception) -> bool:
+    """Whether the attempt may have billed: sent without an answer (#157).
+
+    A timeout after the request went out, or a connection lost
+    mid-request, may still have run (and billed) server-side. Only
+    failures still in the connect phase, which provably never sent,
+    are known not to have spent.
+    """
+    if isinstance(error, openai.APITimeoutError):
+        return not isinstance(
+            error.__cause__, (httpx2.ConnectTimeout, httpx2.PoolTimeout)
+        )
+    if isinstance(error, openai.APIConnectionError):
+        return not isinstance(
+            error.__cause__,
+            (httpx2.ConnectError, httpx2.ConnectTimeout, httpx2.PoolTimeout),
+        )
+    if isinstance(error, httpx2.TimeoutException):
+        return not isinstance(error, (httpx2.ConnectTimeout, httpx2.PoolTimeout))
+    if isinstance(error, httpx2.ConnectError):
+        return False
+    if isinstance(error, httpx2.TransportError):
+        return True
+    return False
 
 
 class MetaClient:
@@ -260,8 +350,8 @@ class MetaClient:
         start = time.monotonic()
         try:
             response = self._with_retries("chat", call)
-        except Exception:
-            self._settle(receipt, 0.0)
+        except Exception as error:
+            self._failed("chat", receipt, error, start)
             raise
         usage = usage_from_response(response, self.model)
         self._settle(receipt, usage.cost_usd(self.prices))
@@ -309,8 +399,8 @@ class MetaClient:
         start = time.monotonic()
         try:
             response = self._with_retries("responses", call)
-        except Exception:
-            self._settle(receipt, 0.0)
+        except Exception as error:
+            self._failed("responses", receipt, error, start)
             raise
         usage = usage_from_response(response, self.model, images)
         self._settle(receipt, usage.cost_usd(self.prices))
@@ -375,8 +465,8 @@ class MetaClient:
         start = time.monotonic()
         try:
             response = self._with_retries("images", call)
-        except Exception:
-            self._settle(receipt, 0.0)
+        except Exception as error:
+            self._failed("images", receipt, error, start)
             raise
         self._settle(receipt, usage.cost_usd(self.prices))
         self._log("images", usage, time.monotonic() - start)
@@ -405,6 +495,7 @@ class MetaClient:
         price = Usage(model=self.model, images=images).cost_usd(self.prices)
         completed = False
         failed = False
+        held = False
         start = time.monotonic()
         try:
             with self._client.responses.stream(
@@ -417,11 +508,22 @@ class MetaClient:
             ) as stream:
                 yield from stream
             completed = True
-        except Exception:
+        except Exception as error:
             failed = True
+            if _spend_unknown(error):
+                held = True
+                uncertain = SpendUncertain(
+                    f"responses: stream failed, spend unknown ({error})"
+                )
+                uncertain.receipt = receipt
+                uncertain.host = self.host
+                self._hold("responses", receipt, time.monotonic() - start)
+                raise uncertain from error
             raise
         finally:
-            if failed:
+            if held:
+                pass
+            elif failed:
                 self._settle(receipt, 0.0)
             else:
                 # Finished, or abandoned mid-stream: the call went out.
@@ -478,6 +580,37 @@ class MetaClient:
                 file=sys.stderr,
             )
 
+    def _usage_usd_from_error(self, error: Exception) -> float | None:
+        """Billed spend a failed attempt reported, from its record (#157)."""
+        candidates: list[dict] = []
+        body = getattr(error, "body", None)
+        if isinstance(body, dict):
+            candidates.append(body)
+        response = getattr(error, "response", None)
+        if response is not None:
+            try:
+                parsed = response.json()
+            except Exception:  # noqa: BLE001 - not a record
+                parsed = None
+            if isinstance(parsed, dict):
+                candidates.append(parsed)
+        for candidate in candidates:
+            usage = candidate.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            try:
+                actual = Usage(
+                    model=self.model,
+                    input_tokens=int(usage.get("input_tokens", 0)),
+                    output_tokens=int(usage.get("output_tokens", 0)),
+                )
+            except (TypeError, ValueError):
+                continue
+            if actual.input_tokens == 0 and actual.output_tokens == 0:
+                continue
+            return actual.cost_usd(self.prices)
+        return None
+
     def _with_retries(self, call: str, call_fn: Any) -> Any:
         last_error: Exception | None = None
         for attempt in range(1, MAX_TRIES + 1):
@@ -486,6 +619,15 @@ class MetaClient:
             except openai.AuthenticationError as error:
                 raise MetaAuthError(f"{call}: not authorised: {error}") from error
             except Exception as error:  # noqa: BLE001 - sorted below
+                actual = self._usage_usd_from_error(error)
+                if actual is not None:
+                    billed = MetaError(f"{call}: failed with billed usage ({error})")
+                    billed.actual_usd = actual
+                    raise billed from error
+                if _spend_unknown(error):
+                    raise SpendUncertain(
+                        f"{call}: sent, spend unknown ({error})"
+                    ) from error
                 if not _is_retriable(error) or attempt == MAX_TRIES:
                     raise MetaError(
                         f"{call}: failed after {attempt} tries ({error})"
@@ -493,6 +635,23 @@ class MetaClient:
                 last_error = error
                 self._sleeper(_backoff_seconds(attempt))
         raise MetaError(f"{call}: failed") from last_error
+
+    def _failed(
+        self, call: str, receipt: Receipt | None, error: Exception, start: float
+    ) -> None:
+        """Account a failed call: hold unknowns, settle knowns (#157)."""
+        if isinstance(error, SpendUncertain):
+            error.receipt = receipt
+            error.host = self.host
+            self._hold(call, receipt, time.monotonic() - start)
+        else:
+            self._settle(receipt, getattr(error, "actual_usd", 0.0) or 0.0)
+
+    def _hold(self, call: str, receipt: Receipt | None, duration_s: float) -> None:
+        """Keep the reservation outstanding and mark spend uncertain (#157)."""
+        if self.logger is None:
+            return
+        self.logger.log_uncertain(call, self.model, receipt, duration_s, self.host)
 
     def _log(self, call: str, usage: Usage, duration_s: float) -> None:
         if self.logger is None:

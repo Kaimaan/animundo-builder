@@ -335,9 +335,10 @@ def test_reef_plan_lists_home_fish_shark_and_turtle(
     turtle = next(a for a in animals if a["id"] == "green_sea_turtle")
     assert turtle["shape"] == "new"
     assert plan["blocked"] == []
-    assert plan["estimate_usd"] == 1.25
+    assert plan["estimate_usd"] == 0.8
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
+    assert [i["kind"] for i in plan["items"]] == ["home"] + ["animal"] * 4
 
 
 def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
@@ -376,6 +377,68 @@ def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
     assert plan["items"][0]["id"] == "animal_brown_bear"
     assert plan["estimate_usd"] == 0.9
     assert len(plan["coming"]) >= 1
+
+
+def test_improve_with_room_plans_the_missing_plant_from_its_kind(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#144: the plant without a model, from a plant of its kind."""
+    from builder.place import plan_place
+
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(
+        monkeypatch,
+        {
+            "brown_bear",
+            "lynx",
+            "wolverine",
+            "arctic_fox",
+            "otter",
+            "beaver",
+            "pine_marten",
+            "raccoon_dog",
+        },
+    )
+    survey = _replay_survey(
+        tmp_path,
+        "nuuksio-survey.jsonl",
+        "Nuuksio National Park",
+        ["brown_bear"],
+        8.0,
+        "n_414_479",
+        world,
+        animals,
+    )
+    plan = plan_place(survey, world, "abc123")
+    plants = [i for i in plan["items"] if i["kind"] == "plant"]
+    assert plants == [
+        {
+            "id": "plant_arctic_raspberry",
+            "kind": "plant",
+            "what": "arctic_raspberry",
+            "from": "wild_raspberry",
+            "estimate_usd": 0.15,
+        }
+    ]
+
+
+def test_plant_from_prefers_words_then_grounds_then_first() -> None:
+    """#144.2: a coral from a coral, seabed from seabed, else first."""
+    import json
+
+    from builder.place import _plant_from
+
+    world = _needs_world()
+    have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
+    assert _plant_from("ghost_coral", [], {}, have) == "brain_coral"
+    reef = json.loads(
+        (world / "homes" / "examples" / "reef.json").read_text(encoding="utf-8")
+    )
+    assert (
+        _plant_from("neptune_cup", ["seabed"], reef, have) == "branching_staghorn_coral"
+    )
+    assert _plant_from("neptune_cup", [], {}, have) == have[0]
 
 
 def test_unmakeable_animals_are_blocked_not_built(

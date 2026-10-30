@@ -1208,6 +1208,72 @@ def test_make_tile_raises_when_world_check_fails_land(tmp_path: Path) -> None:
         )
 
 
+def test_surveyed_plants_keep_the_hare_on_the_tundra(tmp_path: Path) -> None:
+    """#154: surveyed clover and birch feed the hare the biome starves."""
+    from builder.schemas import ROOT
+    from builder.tiles import check_with_world
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "homes" / "tundra.json").is_file():
+        pytest.skip("needs a world with the tundra home")
+    if not (world / "tools" / "tile_region.py").is_file():
+        pytest.skip("needs a world with the converter")
+    grids = _live_grids()
+    made, blocked = make_tile(
+        "n_399_434",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species={
+            "place": "Fell tundra in Enontekiö, Finland",
+            "parts": [{"kind": "forest", "species": ["mountain_hare"]}],
+            "plants": [{"id": "white_clover", "count": 10}],
+            "trees": [{"id": "birch", "count": 5}],
+            "name_en": "Hare Fell",
+            "name_fi": "Jäniksen tunturi",
+        },
+    )
+    assert blocked is None
+    assert made is not None
+    assert "mountain_hare" in made["species"]["playable"]
+    assert check_with_world(made, world) == []
+
+
+def test_replacing_plants_drops_animals_the_biome_fed(tmp_path: Path) -> None:
+    """#154: a grass-only cover starves the squirrel, vole and hare."""
+    from builder.schemas import ROOT
+    from builder.tiles import check_with_world
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "tools" / "tile_region.py").is_file():
+        pytest.skip("needs a world with the converter")
+    grids = _live_grids()
+    answer = json.loads(
+        (ROOT / "tests" / "fixtures" / "tiles" / "n_414_480-survey.json").read_text()
+    )
+    answer["plants"] = [{"id": "wavy_hair_grass", "count": 20}]
+    answer["trees"] = []
+    made, blocked = make_tile(
+        "n_414_480",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species=answer,
+    )
+    assert blocked is None
+    assert made is not None
+    species = made["species"]
+    kept = set(species["playable"]) | set(species["prey"]) | set(species["predators"])
+    assert "squirrel" not in kept
+    assert "vole" not in kept
+    assert "mountain_hare" not in kept
+    # The kestrel follows its vole out; the fox stays on what is left.
+    assert "kestrel" not in kept
+    assert "fox" in kept
+    assert species["playable"]
+    assert check_with_world(made, world) == []
+
+
 def test_remade_nuuksio_tile_keeps_squirrel_and_bee(tmp_path: Path) -> None:
     """#152: a code re-make of n_414_480 keeps the squirrel and the bee."""
     from builder.schemas import ROOT

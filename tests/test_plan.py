@@ -470,6 +470,7 @@ def test_plan_skips_animal_when_one_serves(tmp_path: Path) -> None:
         "{'check': 'food', 'status': 'fail', 'problems': ['hungry']}"
         "]}))\n"
     )
+    (tools / "tile_region.py").write_text('"""A converter new enough.\n"""\n')
     grids = _grids(tmp_path, _boreal())
     plan = plan_tile(
         "n_413_478",

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import subprocess
 import sys
 import tempfile
@@ -573,6 +574,132 @@ def _blocked(
     return blocked
 
 
+_SELECT_ROUND = """
+import json, os, sys
+tools = sys.argv[1]
+sys.path.insert(0, tools)
+root = os.path.dirname(os.path.abspath(tools))
+import check_animals, tile_region
+tile = json.load(sys.stdin)
+place = tile_region.place(tile)
+content = check_animals.Content(root)
+checker = check_animals.Checker(root, built_models=False)
+checker.c = content
+content.region = lambda rid: place
+checker.check_food_web("tl_" + tile["id"])
+fish = {}
+for entry in place.get("fish", []) or []:
+    kind = entry.get("kind", "") if isinstance(entry, dict) else ""
+    if not kind or kind in fish:
+        continue
+    data = content.get_def(kind)
+    if data:
+        fish[kind] = [t for t in data.get("hunts", []) or [] if isinstance(t, str)]
+print(json.dumps({"errors": checker.errors, "fish": fish}))
+"""
+
+_WEB_ANIMAL = re.compile(r"^([A-Za-z0-9_]+) in \S+")
+_WEB_NOFILE = re.compile(r'playable animal "([^"]+)"')
+
+
+def _web_failures(errors: list[str]) -> set[str]:
+    """The animals a food-web round faults, by id."""
+    out = set()
+    for line in errors:
+        match = _WEB_ANIMAL.match(line) or _WEB_NOFILE.search(line)
+        if match is not None:
+            out.add(match.group(1))
+    return out
+
+
+def select_species(
+    tile: dict[str, Any], ranked: list[str], world: Path
+) -> tuple[set[str], dict[str, list[str]]] | None:
+    """The candidates that find food and prey here, the game's way (#154).
+
+    `tile` is the tile so far (home, plants, land, water) with the
+    candidates seated; the world's converter builds its place and
+    the world's food-web check faults whoever can't eat or hunt
+    there. The faults drop out and the round runs again, so a
+    hunter follows its prey out and carrion follows its large
+    animal. Returns the kept ids and the place's fish hunts, or
+    None when the checkout has no converter and food-web check
+    (tests fall back to the builder's own rules). An empty set
+    blocks the tile: either nothing fits, or the place's own
+    fish can't eat here.
+    """
+    tools = world / "tools"
+    if not (tools / "tile_region.py").is_file():
+        return None
+    if not (tools / "check_animals.py").is_file():
+        return None
+    kept = set(ranked)
+    while True:
+        proc = subprocess.run(
+            [sys.executable, "-c", _SELECT_ROUND, str(tools)],
+            input=json.dumps(
+                {
+                    **tile,
+                    "species": {
+                        "playable": sorted(kept),
+                        "prey": [],
+                        "predators": [],
+                    },
+                }
+            ),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"the world's food-web check refused {tile.get('id')}: "
+                f"{(proc.stdout + proc.stderr).strip()[:300]}"
+            )
+        try:
+            verdict = json.loads(proc.stdout)
+        except ValueError:
+            raise RuntimeError(
+                f"the world's food-web check gave no JSON for {tile.get('id')}: "
+                f"{proc.stdout.strip()[:200]}"
+            )
+        fish = verdict.get("fish", {})
+        failing = _web_failures(verdict.get("errors", [])) & kept
+        if _web_failures(verdict.get("errors", [])) - kept:
+            return set(), fish
+        if not failing:
+            return kept, fish
+        kept -= failing
+
+
+def _split_species(
+    ranked: list[str],
+    kept: set[str],
+    candidates: dict[str, dict[str, Any]],
+    fish_hunts: dict[str, list[str]],
+) -> tuple[list[str], list[str], list[str]]:
+    """The kept ids as playable, prey and predators, most present first."""
+    playable = [s for s in ranked if s in kept and candidates[s].get("playable")]
+    if not playable:
+        return [], [], []
+    predators = [s for s in ranked if s in kept and (candidates[s].get("hunts") or [])]
+    hunted: set[str] = set()
+    for species in kept:
+        hunted.update(candidates[species].get("hunts") or [])
+    for hunts in fish_hunts.values():
+        hunted.update(hunts)
+    prey = [
+        s
+        for s in ranked
+        if s in kept
+        and (
+            (s not in playable and s not in predators)
+            or bool(set(candidates[s].get("tags") or []) & hunted)
+        )
+    ]
+    return playable, prey, predators
+
+
 def pick_species(
     counts: dict[str, float],
     world: Path,
@@ -591,7 +718,9 @@ def pick_species(
     hunts, plus every kept animal in neither other list, so an
     animal can be both playable and someone's prey. When nothing
     can live here with its food, all three lists are empty and the
-    tile is blocked with `no_animal`.
+    tile is blocked with `no_animal`. The fallback when the
+    checkout has no converter; make_tile otherwise selects with
+    the world's own food-web check (#154).
     """
     animals_dir = world / "animals"
     ranked = sorted(counts, key=lambda s: (-counts[s], s))
@@ -629,23 +758,12 @@ def pick_species(
         for tag in data.get("hunts") or []
     ):
         return [], [], []
-    playable = [s for s in ranked if s in kept and candidates[s].get("playable")]
-    if not playable:
-        return [], [], []
-    predators = [s for s in ranked if s in kept and (candidates[s].get("hunts") or [])]
-    hunted: set[str] = set()
-    for data in [candidates[s] for s in kept] + list(fish.values()):
-        hunted.update(data.get("hunts") or [])
-    prey = [
-        s
-        for s in ranked
-        if s in kept
-        and (
-            (s not in playable and s not in predators)
-            or bool(set(candidates[s].get("tags") or []) & hunted)
-        )
-    ]
-    return playable, prey, predators
+    return _split_species(
+        ranked,
+        kept,
+        candidates,
+        {kind: list(data.get("hunts") or []) for kind, data in fish.items()},
+    )
 
 
 def _versions(builder_root: Path, world: Path) -> tuple[str, str]:
@@ -969,11 +1087,37 @@ def make_tile(
         species_tag = f"{SPECIES_MODEL}:{date}"
         wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
         greens, needs, wants = tile_plants(world, answer)
-    playable, prey, predators = pick_species(present, world, homes[home], greens)
-    if not playable:
-        return None, _blocked("no_animal", habitat, wanted)
     level = cell_level(habitat, elev)
     edges = tile_edges(tile, grids)
+    provisional: dict[str, Any] = {
+        "id": tile,
+        "home": home,
+        "biome": home,
+        "center": {"lat": round(lat, 2), "lon": round(lon, 2)},
+        "seed": tile_seed(tile),
+        "water": round(water, 2),
+        "level": level,
+        "height": tile_height(level, edges),
+        "edges": edges,
+    }
+    if blend is not None:
+        provisional["blend"] = blend
+    if coast is not None:
+        provisional["coast"] = coast
+    if greens is not None:
+        provisional["plants"] = greens
+    ranked = sorted(present, key=lambda s: (-present[s], s))
+    animals_dir = world / "animals"
+    filed = [s for s in ranked if (animals_dir / f"{s}.json").is_file()]
+    converted = select_species(provisional, filed, world)
+    if converted is None:
+        playable, prey, predators = pick_species(present, world, homes[home], greens)
+    else:
+        kept, fish_hunts = converted
+        candidates = {s: _animal(animals_dir / f"{s}.json") for s in filed}
+        playable, prey, predators = _split_species(ranked, kept, candidates, fish_hunts)
+    if not playable:
+        return None, _blocked("no_animal", habitat, wanted)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
     needed = sorted({home} | ({blend["home"]} if blend else set()))
     requires: dict[str, Any] = {

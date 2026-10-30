@@ -672,11 +672,19 @@ def check_with_world(
 
     Empty when the tile passes, and when the world has no tile check
     (tests with fake worlds). The check runs in the world checkout,
-    which owns it; the builder only reads its verdict.
+    which owns it; the builder only reads its verdict. The checkout
+    must carry the converter too: a tile check that predates it
+    validates against an old copy, so the maker refuses it loudly
+    instead of drifting from the game (#161.3).
     """
     tool = world / "tools" / "check_tile.py"
     if not tool.is_file():
         return []
+    if not (world / "tools" / "tile_region.py").is_file():
+        raise RuntimeError(
+            "the world's tile check predates the converter "
+            "(tools/tile_region.py is missing); update the checkout"
+        )
     with tempfile.NamedTemporaryFile(
         "w", suffix=".json", delete=False, encoding="utf-8"
     ) as handle:

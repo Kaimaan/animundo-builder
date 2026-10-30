@@ -1130,6 +1130,27 @@ def _checker(world: Path, report: dict[str, Any], code: int) -> None:
     (tools / "check_tile.py").write_text(
         f"import json, sys\nprint(json.dumps({report!r}))\nsys.exit({code})\n"
     )
+    (tools / "tile_region.py").write_text('"""A converter new enough.\n"""\n')
+
+
+def test_make_tile_refuses_a_check_that_predates_the_converter(
+    tmp_path: Path,
+) -> None:
+    """#161.3: a tile check without the converter is refused, loudly."""
+    world = _world(tmp_path)
+    (world / "tools").mkdir(exist_ok=True)
+    (world / "tools" / "check_tile.py").write_text(
+        'import json\nprint(json.dumps({"ok": True, "results": []}))\n'
+    )
+    grids = _grids(tmp_path, _boreal_3x3(413, 478))
+    with pytest.raises(RuntimeError, match="predates the converter"):
+        make_tile(
+            "n_413_478",
+            grids,  # type: ignore[arg-type]
+            world,
+            presence={"fox": 5.0, "vole": 20.0},
+            builder_root=tmp_path,
+        )
 
 
 def test_make_tile_blocks_when_world_check_fails_food(tmp_path: Path) -> None:

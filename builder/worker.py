@@ -220,7 +220,8 @@ class Worker:
                 return
             path = publish_group(tile, made, self.store, self.world_commit or "unknown")
             print(f"build job {job_id}: published {path}")
-            self._set_status(job_id, "published")
+            # The published copy's own version, so areas/{tile} shows it (#143.5).
+            self._set_status(job_id, "published", {"version": made["version"]})
             return
         self.build_items(job_id, job, tile)
 
@@ -522,7 +523,8 @@ class Worker:
             return
         path = publish_group(tile, made, self.store, self.world_commit or "unknown")
         print(f"build job {job_id}: published {path}")
-        self._set_status(job_id, "published")
+        # The published copy's own version, so areas/{tile} shows it (#143.5).
+        self._set_status(job_id, "published", {"version": made["version"]})
 
     def review_enrich_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Remake a shipped enrich item's tiles, then publish (#143.4).
@@ -660,8 +662,12 @@ class Worker:
 
     # -- build helpers --------------------------------------------------
 
-    def _set_status(self, job_id: str, status: str) -> None:
-        self.store.update_build_job(job_id, {"status": status, "updated_at": now_iso()})
+    def _set_status(
+        self, job_id: str, status: str, extra: dict[str, Any] | None = None
+    ) -> None:
+        self.store.update_build_job(
+            job_id, {"status": status, "updated_at": now_iso(), **(extra or {})}
+        )
 
     def _fail(self, job_id: str, error: str) -> None:
         print(f"build job {job_id}: failed ({error})", file=sys.stderr)

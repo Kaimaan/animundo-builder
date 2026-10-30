@@ -49,6 +49,11 @@
       "additionalProperties": {"type": "integer", "minimum": 1}
     },
     "budget_usd": {"type": "number", "minimum": 0},
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "When published: the published copy's own tile version."
+    },
     "visibility": {"enum": ["public", "private"]},
     "private_to": {"type": "string", "minLength": 1},
     "created_by": {"enum": ["policy", "admin", "enrich"]},

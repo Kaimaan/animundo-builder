@@ -697,6 +697,9 @@ def write_group(
             "blocked": {},
         }
     if made is not None:
+        # The stored copy's own version: the group file's (#143.5),
+        # so a republished tile reads newer than the one before it.
+        made["version"] = data["version"]
         data["tiles"][tile] = made
         data["blocked"].pop(tile, None)
     elif blocked is not None:

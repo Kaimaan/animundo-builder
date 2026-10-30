@@ -136,6 +136,8 @@ def test_build_job_takes_an_enrich_job() -> None:
     validate("build-job", job)
     job["versions"] = {"n_414_478": 2, "n_414_479": 3}
     validate("build-job", job)
+    job["version"] = 2
+    validate("build-job", job)
     job["enrich"] = {"kind": "animal"}
     with pytest.raises(jsonschema.ValidationError):
         validate("build-job", job)

@@ -275,6 +275,26 @@ def test_code_job_publishes_with_no_model_call(
     assert "tiles/v1/index.json" in store.blobs
 
 
+def test_second_publish_carries_the_newer_version(tmp_path: Path) -> None:
+    """#143.5: a tile published twice stamps 1, then 2 with new content."""
+    import json
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["version"] == 1
+    assert worker.world is not None
+    _file_lion(worker.world, ["grass"])
+    worker.species = _forest_survey("fox", "mountain_hare", "vole", "lion")
+    store.build_jobs["j2"] = _code_job()
+    worker.handle_build_job("j2")
+    assert store.build_jobs["j2"]["version"] == 2
+    data = json.loads(store.blobs["tiles/v1/ease2_n25/51_59.json"].decode("utf-8"))
+    assert data["tiles"]["n_413_478"]["version"] == 2
+    assert "lion" in data["tiles"]["n_413_478"]["species"]["playable"]
+
+
 def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
     store.plans["n_413_478"] = _code_plan("n_413_478")
@@ -1315,6 +1335,10 @@ def test_review_job_publishes_shipped_items(tmp_path: Path, monkeypatch: Any) ->
     assert job["status"] == "published"
     assert [e["id"] for e in job["progress"]] == ["animal_lion"]
     assert "tiles/v1/ease2_n25/51_59.json" in store.blobs
+    import json
+
+    data = json.loads(store.blobs["tiles/v1/ease2_n25/51_59.json"].decode("utf-8"))
+    assert job["version"] == data["tiles"]["n_413_478"]["version"] == 1
 
 
 def test_review_job_drops_not_accepted_and_ships_the_rest(

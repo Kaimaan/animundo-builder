@@ -594,12 +594,18 @@ def test_write_group_merges(tmp_path: Path) -> None:
     data = json.loads(first.read_text())
     assert data["version"] == 1
     assert "n_413_478" in data["tiles"]
+    assert data["tiles"]["n_413_478"]["version"] == 1
+    made["species"]["playable"].append("moose")
+    write_group(out, "n_413_478", made, None)
+    again = json.loads(first.read_text())
+    assert again["version"] == 2
+    assert again["tiles"]["n_413_478"]["version"] == 2
     second = write_group(
         out, "n_414_478", None, {"reason": "no_home", "habitat": "tundra"}
     )
     assert second == first
     data = json.loads(second.read_text())
-    assert data["version"] == 2
+    assert data["version"] == 3
     assert "n_413_478" in data["tiles"]
     assert data["blocked"]["n_414_478"]["reason"] == "no_home"
     validate("tile-group", data)

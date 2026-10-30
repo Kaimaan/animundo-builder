@@ -118,6 +118,24 @@ def test_write_scaffold_uses_home_food(tmp_path: Path) -> None:
     assert scaffold["sources"] == ["https://example.com/meadow"]
 
 
+def test_write_scaffold_seats_the_tiles_cast(tmp_path: Path) -> None:
+    """#150.1: given the tile's species, the scaffold seats them."""
+    home = {"food": [], "fish": []}
+    path = build_mod.write_scaffold(
+        tmp_path,
+        home,
+        lat=68.4,
+        lon=23.6,
+        species={"playable": ["mountain_hare"], "prey": ["vole"], "predators": []},
+    )
+    scaffold = json.loads(path.read_text())
+    assert scaffold["animals"] == {
+        "playable": ["mountain_hare"],
+        "prey": ["vole"],
+        "predators": [],
+    }
+
+
 def test_write_scaffold_falls_back_to_its_own_source(tmp_path: Path) -> None:
     home = {"food": [], "fish": []}
     path = build_mod.write_scaffold(tmp_path, home, lat=68.4, lon=23.6)

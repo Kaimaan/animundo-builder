@@ -154,18 +154,21 @@ def write_scaffold(
     *,
     lat: float,
     lon: float,
+    species: dict[str, Any] | None = None,
 ) -> Path:
     """A working region for the one-shot maker, from the tile's home.
 
-    Real food and fish (the checks mean something), empty casts,
-    no welcome: the region is scaffolding, discarded after the
-    item's animals and models are made. A plant item names its
-    plant in the ground cover for the plants step. It is a valid
-    region file (the checks also read the scaffold): `zz` marks
-    the reserved country, and the centre is the tile's.
+    Real food and fish (the checks mean something), empty casts
+    unless the tile's species are given, no welcome: the region
+    is scaffolding, discarded after the item's animals and
+    models are made. A plant item names its plant in the ground
+    cover for the plants step. It is a valid region file (the
+    checks also read the scaffold): `zz` marks the reserved
+    country, and the centre is the tile's.
     """
     regions = item_dir / "regions"
     regions.mkdir(parents=True, exist_ok=True)
+    casts = species or {}
     region: dict[str, Any] = {
         "id": "zz_work",
         "name": "Work region",
@@ -176,7 +179,11 @@ def write_scaffold(
         "author": "Animundo Builder",
         "center": {"lat": lat, "lon": lon},
         "sources": list(home.get("sources") or ["Scaffolding for one item's checks."]),
-        "animals": {"playable": [], "prey": [], "predators": []},
+        "animals": {
+            "playable": list(casts.get("playable") or []),
+            "prey": list(casts.get("prey") or []),
+            "predators": list(casts.get("predators") or []),
+        },
         "food": home.get("food", []),
         "fish": home.get("fish", []),
     }
@@ -229,27 +236,34 @@ def prepare_item(
     lon: float,
     entry: dict[str, Any] | None,
     home: dict[str, Any] | None,
+    species: dict[str, Any] | None = None,
 ) -> None:
     """Brief and scaffold for one item's stages (the intake).
 
     A plant item carries its names, scaffold and flora survey; an
     animal item its entry and a scaffold from the tile's home; a
     home item only its brief. The worker and the local replay run
-    the same intake.
+    the same intake. Given the tile's species, the scaffold seats
+    them, so a hunter's prey check sees the tile's cast (#150.1).
     """
     if item["kind"] == "plant":
         assert home is not None
         names = find_plant_names(home, item["what"])
         write_brief(item_dir, item, habitat, lat, lon, None, names)
         write_scaffold(
-            item_dir, home, [{"model": item["what"], "names": names}], lat=lat, lon=lon
+            item_dir,
+            home,
+            [{"model": item["what"], "names": names}],
+            lat=lat,
+            lon=lon,
+            species=species,
         )
         write_flora_survey(item_dir, names)
     else:
         write_brief(item_dir, item, habitat, lat, lon, entry)
         if item["kind"] == "animal":
             assert home is not None
-            write_scaffold(item_dir, home, lat=lat, lon=lon)
+            write_scaffold(item_dir, home, lat=lat, lon=lon, species=species)
 
 
 def run_item_stages(ctx: Any, item_dir: Path, pipeline: Pipeline) -> dict[str, Any]:

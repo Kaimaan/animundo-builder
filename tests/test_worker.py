@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fake_store import FakeStore
 from fake_world import boreal_3x3, make_world, write_grids
 
@@ -459,6 +460,7 @@ def test_private_job_writes_judge_preview(tmp_path: Path, monkeypatch: Any) -> N
         plan: dict[str, Any],
         item: dict[str, Any],
         item_dir: Path,
+        cast: Any = None,
     ) -> None:
         folder = item_dir / "animals"
         folder.mkdir(parents=True)
@@ -541,6 +543,7 @@ def test_enrich_job_builds_its_item_to_checking(
         plan: dict[str, Any],
         item: dict[str, Any],
         item_dir: Path,
+        cast: Any = None,
     ) -> None:
         assert tile == "n_413_478"
         assert item["id"] == "enrich_lion"
@@ -777,6 +780,144 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     assert writes.count("tiles/v1/index.json") == 1
     index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
     assert index["counts"]["ready"] == 3
+
+
+def test_enrich_item_seats_the_tiles_animals(tmp_path: Path, monkeypatch: Any) -> None:
+    """#150.1: a hunter's prey check sees the tile's cast."""
+    import json
+    from types import SimpleNamespace
+
+    import builder.build as build_mod
+    from builder.grid import group_path
+    from builder.stages.maker import AnimalMakerStage
+
+    T = "n_413_478"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    cast = {
+        "playable": ["mountain_hare", "vole"],
+        "prey": ["vole"],
+        "predators": [],
+    }
+    store.blobs[group_path(T)] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": {T: {"id": T, "kind": "code", "version": 1, "species": cast}},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    assert worker._tile_cast(T) == cast
+
+    class _Pipe:
+        def run(self, ctx: Any) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.setattr(build_mod, "item_pipeline", lambda **kwargs: _Pipe())
+    item = {
+        "id": "enrich_lion",
+        "kind": "animal",
+        "what": "lion",
+        "from": "fox",
+        "estimate_usd": 1.0,
+    }
+    plan = {
+        "format": 1,
+        "tile": T,
+        "code_only": False,
+        "items": [item],
+        "improve": [],
+        "estimate_usd": 1.0,
+    }
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
+    worker._run_stages(SimpleNamespace(), "j1", T, plan, item, item_dir, cast)
+    region = json.loads((item_dir / "regions" / "zz_work.json").read_text())
+    assert region["animals"] == cast
+    research = {
+        "main_food": {"kind": "prey", "name": "Mountain hare"},
+        "other_foods": [],
+    }
+    tags = AnimalMakerStage()._code_hunts(
+        worker.world, SimpleNamespace(job_dir=item_dir), research, region, "lion"
+    )
+    assert tags == ["small_mammal"]
+
+
+def test_enrich_run_item_passes_the_tiles_cast(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#150.1: an enrich item's intake seats the published cast."""
+    import json
+
+    from builder.grid import group_path
+
+    T = "n_413_478"
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(status="building")
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    cast = {"playable": ["fox"], "prey": [], "predators": ["fox"]}
+    store.blobs[group_path(T)] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_n25",
+            "group": [51, 59],
+            "version": 1,
+            "tiles": {T: {"id": T, "kind": "code", "version": 1, "species": cast}},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    seen: dict[str, Any] = {}
+
+    def fake_stages(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+        cast: Any = None,
+    ) -> None:
+        seen["cast"] = cast
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    job = store.build_jobs["j1"]
+    item = {
+        "id": "enrich_lion",
+        "kind": "animal",
+        "what": "lion",
+        "from": "fox",
+        "estimate_usd": 1.0,
+    }
+    worker.run_item("j1", job, T, {"items": [item]}, item, 1.0)
+    assert seen["cast"] == cast
+
+
+def test_tile_cast_remakes_an_unpublished_tile(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#150.1: with no published entry, the cast remakes by code."""
+    import builder.tiles as tiles_mod
+
+    T = "n_413_478"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    cast = {"playable": ["fox"], "prey": [], "predators": ["fox"]}
+    calls: list[str] = []
+
+    def fake_make(tile: str, *args: Any, **kwargs: Any) -> tuple[Any, Any]:
+        calls.append(tile)
+        return {"id": tile, "kind": "code", "species": cast}, None
+
+    monkeypatch.setattr(tiles_mod, "make_tile", fake_make)
+    assert worker._tile_cast(T) == cast
+    assert calls == [T]
+    monkeypatch.setattr(tiles_mod, "make_tile", lambda *a, **k: (None, {}))
+    with pytest.raises(ValueError, match="remakes blocked"):
+        worker._tile_cast(T)
 
 
 def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> None:
@@ -1133,6 +1274,7 @@ def test_failed_item_does_not_stop_others(tmp_path: Path, monkeypatch: Any) -> N
         plan: dict[str, Any],
         item: dict[str, Any],
         item_dir: Path,
+        cast: Any = None,
     ) -> None:
         calls.append(item["id"])
         if item["id"] == "home_774":
@@ -1195,6 +1337,7 @@ def test_item_needing_a_failed_home_is_skipped(
         plan: dict[str, Any],
         item: dict[str, Any],
         item_dir: Path,
+        cast: Any = None,
     ) -> None:
         if item["id"] == "home_774":
             raise RuntimeError("boom")
@@ -1346,6 +1489,7 @@ def test_build_job_stops_second_item_at_remaining_budget(
         plan: dict[str, Any],
         item: dict[str, Any],
         item_dir: Path,
+        cast: Any = None,
     ) -> None:
         # One $0.60 call, reserved the way MetaClient reserves it:
         # refused when the worst case no longer fits what's left.
@@ -1371,6 +1515,7 @@ def _fake_animal_stages(worker: Worker, monkeypatch: Any, tmp_path: Path) -> Non
         plan: dict[str, Any],
         item: dict[str, Any],
         item_dir: Path,
+        cast: Any = None,
     ) -> None:
         folder = item_dir / "animals"
         folder.mkdir(parents=True)

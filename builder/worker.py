@@ -418,7 +418,16 @@ class Worker:
                 home = self._tile_home(tile, plan, job_id)
                 build_mod.build_food_item(item_dir, item, home)
             else:
-                self._run_stages(ctx, job_id, tile, plan, item, item_dir)
+                cast = None
+                if job.get("kind") == "enrich":
+                    try:
+                        cast = self._tile_cast(tile)
+                    except Exception as error:  # noqa: BLE001 - seats nothing then
+                        print(
+                            f"build job {job_id}: no cast for {tile}: {error}",
+                            file=sys.stderr,
+                        )
+                self._run_stages(ctx, job_id, tile, plan, item, item_dir, cast)
         except BudgetExceeded as error:
             self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
             raise _BudgetOut("budget") from error
@@ -711,6 +720,51 @@ class Worker:
             return True
         return float(job.get("cost_usd", 0.0)) < budget
 
+    def _tile_cast(self, tile: str) -> dict[str, list[str]]:
+        """The tile's species for an enrich item's work region (#150.1).
+
+        The published entry first: what the tile already has, no
+        calls. Else the tile remade by code from its cached
+        survey, keyless, as a remake would. Raises when neither
+        knows the tile; run_item then seats nothing and the
+        stages check what they need.
+        """
+        import dataclasses
+        import json
+
+        from .grid import group_path
+        from .tiles import make_tile
+
+        assert self.world is not None
+        raw = self.store.read_blob(group_path(tile))
+        if raw is not None:
+            try:
+                group = json.loads(raw.decode("utf-8"))
+            except ValueError:
+                group = {}
+            entry = (group.get("tiles") or {}).get(tile)
+            if isinstance(entry, dict) and isinstance(entry.get("species"), dict):
+                return {
+                    name: list(entry["species"].get(name) or [])
+                    for name in ("playable", "prey", "predators")
+                }
+        source = dataclasses.replace(self._species_source(), client=None)
+        made, _blocked = make_tile(
+            tile,
+            self._grids(),
+            self.world,
+            builder_root=self.builder_root,
+            species_source=source,
+        )
+        if made is None:
+            raise ValueError(
+                f"{tile} is unpublished and remakes blocked; a person looks"
+            )
+        return {
+            name: list(made.get("species", {}).get(name) or [])
+            for name in ("playable", "prey", "predators")
+        }
+
     def _run_stages(
         self,
         ctx: Any,
@@ -719,6 +773,7 @@ class Worker:
         plan: dict[str, Any],
         item: dict[str, Any],
         item_dir: Path,
+        cast: dict[str, Any] | None = None,
     ) -> None:
         """Brief, scaffold and the item pipeline, staged to build."""
         from . import build as build_mod
@@ -742,7 +797,7 @@ class Worker:
             home: dict[str, Any] | None = self._tile_home(tile, plan, job_id)
         else:
             home = None
-        build_mod.prepare_item(item_dir, item, habitat, lat, lon, entry, home)
+        build_mod.prepare_item(item_dir, item, habitat, lat, lon, entry, home, cast)
         pipeline = build_mod.item_pipeline(
             chat=self.chat,
             build=self.build,

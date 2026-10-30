@@ -699,6 +699,12 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
     assert region["name"] == "Great Barrier Reef"
     assert region["status"] == "draft"
     assert region["animals"]["playable"] == []
+    # #149.2: the adapted home's plants as the region's parts.
+    assert [p["id"] for p in region["plants"]["water"]] == [
+        "branching_staghorn_coral",
+        "closed_brain_coral",
+        "giant_sea_fan",
+    ]
     assert check_region_file(region_path, world) == []
     dest = take_place_job(job_dir, tmp_path / "take", world)
     assert (dest / "regions" / "au_great_barrier_reef.json").is_file()

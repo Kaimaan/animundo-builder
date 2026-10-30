@@ -539,6 +539,60 @@ def _animal_file(world: Path, job_dir: Path, animal_id: str) -> dict[str, Any] |
     return None
 
 
+#: Density for a region plant whose file names none: modest,
+#: for a draft a person reviews.
+DRAFT_PLANT_DENSITY = 0.05
+
+
+def _plant_file(world: Path, job_dir: Path, model: str) -> dict[str, Any] | None:
+    """The plant's file: the world's, else the job's made one."""
+    filed = world / "models" / "plants" / f"{model}.json"
+    if filed.is_file():
+        return json.loads(filed.read_text(encoding="utf-8"))
+    for path in sorted(job_dir.glob(f"*/models/plants/{model}.json")):
+        return json.loads(path.read_text(encoding="utf-8"))
+    return None
+
+
+def _region_plants(
+    home: dict[str, Any], job_dir: Path, world: Path
+) -> dict[str, Any] | None:
+    """The home's plants as the region's parts (game 0043).
+
+    Each entry keeps its model as the id and takes its part
+    and density from the plant file's grows: seabed grows in
+    water, everything else in cover. A plant with no file
+    follows its entry's grounds; one with no density takes a
+    modest default. Trees stay out: the old home names
+    shapes, never species. A home already in parts passes
+    through; one with no plants leaves the key out.
+    """
+    listed = home.get("plants", [])
+    if isinstance(listed, dict):
+        return listed
+    cover: list[dict[str, Any]] = []
+    water: list[dict[str, Any]] = []
+    for entry in listed:
+        if not isinstance(entry, dict) or not entry.get("model"):
+            continue
+        model = entry["model"]
+        grows = (_plant_file(world, job_dir, model) or {}).get("grows", {})
+        if not isinstance(grows, dict):
+            grows = {}
+        ons = grows.get("on") or ([entry.get("on")] if entry.get("on") else [])
+        part = water if "seabed" in ons else cover
+        density = grows.get("density")
+        if not isinstance(density, (int, float)) or not 0 < density <= 1:
+            density = DRAFT_PLANT_DENSITY
+        part.append({"id": model, "density": density})
+    plants: dict[str, Any] = {}
+    if cover:
+        plants["cover"] = cover
+    if water:
+        plants["water"] = water
+    return plants or None
+
+
 def write_region(
     home: dict[str, Any],
     survey: dict[str, Any],
@@ -550,7 +604,8 @@ def write_region(
     The land is the home's own sections (terrain, palette, trees,
     ground cover, lakes, food); the meta is the survey's (name,
     country, centre). Nameless waters and places are left out
-    (#151). Playable is every surveyed animal already
+    (#151); the home's plants become the region's parts
+    (#149.2). Playable is every surveyed animal already
     filed or made by this job, in survey order; predators hunt a
     place animal, prey are hunted by one, fish swim. The seed is
     the region id's own, so the land stays put; the status is
@@ -560,6 +615,15 @@ def write_region(
     from .stages.region import drop_nameless, seed_for_area
 
     region = drop_nameless({k: v for k, v in home.items() if k in _region_keys(world)})
+    for key in ("ice", "caves"):
+        if not isinstance(region.get(key), dict):
+            # Old homes mark "none"; new regions leave it out.
+            region.pop(key, None)
+    translated = _region_plants(home, job_dir, world)
+    if translated is None:
+        region.pop("plants", None)
+    else:
+        region["plants"] = translated
     region_id = survey["region_id"]
     region["id"] = region_id
     region["name"] = survey["name"]["en"]

@@ -240,6 +240,42 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="The Storage bucket (default: the project's default bucket).",
     )
+    place = sub.add_parser("place", help="Place requests as files (D20).")
+    place_sub = place.add_subparsers(dest="place_command", required=True)
+    survey = place_sub.add_parser("survey", help="Survey one place, write survey.json.")
+    survey.add_argument("place", help="The place to survey, in words.")
+    survey.add_argument(
+        "--want",
+        default="",
+        help="Comma-separated animal ids, kept first.",
+    )
+    survey.add_argument(
+        "--improve",
+        default=None,
+        help="Survey an existing place: a region id or a tile id.",
+    )
+    survey.add_argument(
+        "--budget", type=float, required=True, help="The request's budget in USD."
+    )
+    survey.add_argument("--out", required=True, help="The request folder to write.")
+    survey.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    survey.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grids (default: data/habitat-grid).",
+    )
+    survey.add_argument(
+        "--record",
+        action="store_true",
+        help="Save the survey answer under the request's records/.",
+    )
+    survey.add_argument(
+        "--replay",
+        action="store_true",
+        help="Run on the request's records/ instead of the model API.",
+    )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
 
@@ -323,6 +359,82 @@ def cmd_stage(args: argparse.Namespace) -> int:
     except (StageFailedError, CapExceeded, MetaAuthError, ReplayError) as error:
         return _explain_stop(job_dir.name, error)
     print(json.dumps(results.get(args.name, {}), indent=2))
+    return 0
+
+
+def cmd_place_survey(args: argparse.Namespace) -> int:
+    from .animal_list import find_list, load_list
+    from .grid import GridName
+    from .habitats import HabitatGrid
+    from .jobs import make_context
+    from .place import (
+        SurveyError,
+        ask_survey,
+        check_survey,
+        improve_tile,
+        list_homes,
+        write_survey,
+    )
+
+    if args.record and args.replay:
+        print("error: --record and --replay do not mix", file=sys.stderr)
+        return 1
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    grid_dir = Path(args.habitat_grid)
+    grids: dict[GridName, HabitatGrid] = {}
+    for name in ("ease2_n25", "ease2_s25"):
+        path = grid_dir / f"{name}.json.gz"
+        if not path.is_file():
+            print(f"error: no baked grid: {path}", file=sys.stderr)
+            return 1
+        grids[name] = HabitatGrid.load(path, name)  # type: ignore[arg-type]
+    out = Path(args.out)
+    want = [w for w in args.want.split(",") if w] if args.want else []
+    try:
+        improve = improve_tile(args.improve, world) if args.improve else None
+    except SurveyError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    config = load_config()
+    if args.replay:
+        records = out / "records"
+        if not records.is_dir():
+            print(f"error: no records/ in {args.out}", file=sys.stderr)
+            return 1
+        ctx = _replay_context(out.name, out, world, records, args.budget)
+    else:
+        ctx = make_context(config, out.name, out, world)
+        if ctx.client is None:
+            print("error: MODEL_API_KEY is not set", file=sys.stderr)
+            return 1
+        if args.record:
+            ctx = _recording(ctx, out)
+    ctx.client.set_stage("survey")
+    animals = load_list(find_list(world))["animals"]
+    try:
+        data, searches = ask_survey(
+            ctx, args.place, animals, list_homes(world), want, improve
+        )
+    except SurveyError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        survey = check_survey(
+            data, args.place, grids, world, animals, want, args.budget, improve
+        )
+    except SurveyError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    path = write_survey(out, survey)
+    if args.replay:
+        try:
+            ctx.client.verify_consumed()
+        except ReplayError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+    print(f"wrote {path} ({searches} searches, {len(survey['animals'])} animals)")
     return 0
 
 
@@ -682,6 +794,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_tiles_lab(args)
     if args.command == "survey" and args.survey_command == "lab":
         return cmd_survey_lab(args)
+    if args.command == "place" and args.place_command == "survey":
+        return cmd_place_survey(args)
     if args.command == "request" and args.request_command == "plan":
         return cmd_request_plan(args)
     if args.command == "request" and args.request_command == "build":

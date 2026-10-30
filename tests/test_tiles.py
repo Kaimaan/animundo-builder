@@ -20,6 +20,7 @@ from builder.tiles import (
     place_cells,
     tile_edges,
     tile_facts,
+    tile_food_kinds,
     tile_height,
     tile_seed,
     write_group,
@@ -99,6 +100,124 @@ def _grids(tmp_path: Path, cells: dict[str, list[Any]]) -> dict[str, HabitatGrid
 
 def _home(world: Path, home_id: str = "boreal_forest") -> dict[str, Any]:
     return json.loads((world / "homes" / f"{home_id}.json").read_text())
+
+
+_RULES = {
+    "large_animals": ["large_mammal"],
+    "kinds": {
+        "berries": {"from": "plants", "weight": 30},
+        "mushrooms": {"from": "plants"},
+        "browse": {"from": "plants", "weight": 12},
+        "seeds": {"from": "plants", "weight": 12},
+        "water_plants": {"from": "plants", "or": "lake_life", "weight": 8},
+        "grass": {"from": "grass", "amount": 10},
+        "bark": {"from": "bark", "amount": 15},
+        "insects": {"from": "small_life", "when": "land", "weight": 15},
+        "water_bugs": {"from": "small_life", "when": "fresh_water", "weight": 15},
+        "bottom_bugs": {"from": "small_life", "when": "water", "weight": 8},
+        "carrion": {
+            "from": "large_animals",
+            "or": "small_life",
+            "when": "land",
+            "weight": 4,
+        },
+    },
+}
+
+
+def _layered(world: Path) -> dict[str, Any]:
+    """A layered home: plants and trees with grows, plus a decoy food list."""
+    (world / "food").mkdir(exist_ok=True)
+    (world / "food" / "rules.json").write_text(json.dumps(_RULES))
+    (world / "models" / "plants").mkdir(parents=True, exist_ok=True)
+    (world / "models" / "plants" / "bilberry.json").write_text(
+        json.dumps({"id": "bilberry", "grows": {"food": {"kind": "berries"}}})
+    )
+    (world / "models" / "plants" / "porcini.json").write_text(
+        json.dumps({"id": "porcini", "grows": {"food": {"kind": "mushrooms"}}})
+    )
+    (world / "models" / "trees").mkdir(parents=True, exist_ok=True)
+    (world / "models" / "trees" / "oak.json").write_text(
+        json.dumps(
+            {
+                "id": "oak",
+                "grows": {
+                    "food": {"kind": "seeds"},
+                    "more_food": {"browse": ["oak buds"]},
+                    "bark": True,
+                },
+            }
+        )
+    )
+    return {
+        "habitat": "boreal_forest",
+        "ecoregions": [717],
+        "food": [{"kind": "honey", "names": ["honey"]}],
+        "ground_cover": {
+            "grass": 0.5,
+            "plants": [{"model": "bilberry"}, {"model": "porcini"}],
+        },
+        "trees": {"density": 0.03, "mix": [{"plant": "oak", "share": 1.0}]},
+        "lakes": [{"name": "Bog pond"}],
+        "lake_life": {"pondweed": 0.5},
+    }
+
+
+def test_tile_food_kinds_works_out_food_from_rules(tmp_path: Path) -> None:
+    """#147.4: food comes from grows, land and water, never the list."""
+    world = _world(tmp_path)
+    home = _layered(world)
+    assert tile_food_kinds(world, home) == {
+        "berries",
+        "seeds",
+        "browse",
+        "bark",
+        "grass",
+        "water_plants",
+        "insects",
+        "water_bugs",
+        "bottom_bugs",
+        "carrion",
+    }
+
+
+def test_tile_food_kinds_lists_entry_mushrooms_only(tmp_path: Path) -> None:
+    """#147.4: mushrooms list only from a ground entry, as the game does."""
+    world = _world(tmp_path)
+    home = _layered(world)
+    assert "mushrooms" not in tile_food_kinds(world, home)
+    home["ground_cover"]["plants"].append({"model": "morel", "food": "mushrooms"})
+    assert "mushrooms" in tile_food_kinds(world, home)
+
+
+def test_tile_food_kinds_falls_back_without_rules(tmp_path: Path) -> None:
+    """#147.4: a world without rules reads the written list, as before."""
+    world = _world(tmp_path)
+    home = _home(world)
+    from builder.tiles import home_food_kinds
+
+    assert (
+        tile_food_kinds(world, home)
+        == home_food_kinds(home)
+        == {
+            "grass",
+            "berries",
+        }
+    )
+
+
+def test_pick_species_uses_worked_out_food(tmp_path: Path) -> None:
+    """#147.4: a layered home feeds from grows, not its list."""
+    world = _world(tmp_path)
+    home = _layered(world)
+    playable, prey, predators = pick_species(
+        {"fox": 5.0, "mountain_hare": 9.0, "vole": 20.0}, world, home
+    )
+    assert playable == ["mountain_hare", "fox"]
+    assert predators == ["fox"]
+    assert prey == ["vole", "mountain_hare"]
+    bare = dict(home, ground_cover={"grass": 0.0, "plants": []})
+    assert pick_species({"fox": 5.0}, world, bare) == ([], [], [])
 
 
 def test_pick_species_orders_food_first(tmp_path: Path) -> None:

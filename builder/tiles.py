@@ -244,12 +244,135 @@ def _animal(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _grows(world: Path, folder: str, stem: str | None) -> dict[str, Any]:
+    """A plant or tree spec's grows, or nothing when unfiled."""
+    if not stem:
+        return {}
+    path = world / "models" / folder / f"{stem}.json"
+    if not path.is_file():
+        return {}
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+    grows = spec.get("grows", {})
+    return grows if isinstance(grows, dict) else {}
+
+
+def _food_kind(food: Any) -> str:
+    """A food entry's kind, in the world's shape or a bare name."""
+    if isinstance(food, dict):
+        return str(food.get("kind", ""))
+    return str(food or "")
+
+
+def tile_food_kinds(world: Path, home: dict[str, Any]) -> set[str]:
+    """Food kinds the 0043 rules work out for this home (#147.4).
+
+    Reads `food/rules.json`, the plants' and trees' own grows,
+    the land and the water — never the home's written food list,
+    which layered homes no longer keep. Mirrors the world's
+    derive plus what its food check reads beside it (ground
+    food entries, flowers nectar); the tile check still has the
+    last word. A world without rules is pre-layer: the written
+    list, as before.
+    """
+    rules_path = world / "food" / "rules.json"
+    if not rules_path.is_file():
+        return home_food_kinds(home)
+    rules = json.loads(rules_path.read_text(encoding="utf-8"))
+    kinds: set[str] = set()
+
+    def listed(kind: str) -> bool:
+        rule = rules.get("kinds", {}).get(kind, {})
+        return "amount" in rule or "weight" in rule
+
+    ground = home.get("ground_cover", {}) or {}
+    if not isinstance(ground, dict):
+        ground = {}
+    for plant in ground.get("plants", []) or []:
+        if not isinstance(plant, dict):
+            continue
+        if "food" in plant:
+            kind = _food_kind(plant["food"])
+            if kind:
+                kinds.add(kind)
+        else:
+            kind = _food_kind(_grows(world, "plants", plant.get("model")).get("food"))
+            if kind and listed(kind):
+                kinds.add(kind)
+    trees = home.get("trees", {}) or {}
+    if not isinstance(trees, dict):
+        trees = {}
+    for entry in trees.get("mix", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        kind = _food_kind(entry.get("food"))
+        if kind:
+            kinds.add(kind)
+        shape = entry.get("shape")
+        sid = entry.get("plant")
+        if not sid and shape:
+            spec_path = world / "models" / "trees" / f"{shape}.json"
+            if spec_path.is_file():
+                try:
+                    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+                except ValueError:
+                    spec = {}
+                if "game_shape" not in spec:
+                    sid = shape
+        grows = _grows(world, "trees", sid)
+        kind = _food_kind(grows.get("food"))
+        if kind and listed(kind):
+            kinds.add(kind)
+        for key in grows.get("more_food", {}) or {}:
+            if listed(key):
+                kinds.add(key)
+        if grows.get("bark"):
+            kinds.add("bark")
+    life = home.get("lake_life", {}) or {}
+    if isinstance(life, dict) and any(
+        isinstance(life.get(key), (int, float)) and life.get(key, 0) > 0
+        for key in ("lilies", "pondweed")
+    ):
+        kinds.add("water_plants")
+    grass = ground.get("grass", 0)
+    if isinstance(grass, (int, float)) and not isinstance(grass, bool) and grass > 0:
+        kinds.add("grass")
+    terrain = home.get("terrain", {}) or {}
+    if not isinstance(terrain, dict):
+        terrain = {}
+    lakes = terrain.get("lakes", 0)
+    wet = bool(home.get("lakes") or home.get("streams") or home.get("bogs"))
+    wet = wet or (
+        isinstance(lakes, (int, float)) and not isinstance(lakes, bool) and lakes > 0
+    )
+    fresh = home.get("habitat", "") != "sea" and wet
+    water = fresh or home.get("habitat", "") == "sea" or terrain.get("edge") == "lake"
+    when = {"land": True, "fresh_water": fresh, "water": water}
+    for kind, rule in rules.get("kinds", {}).items():
+        if rule.get("from") == "small_life" and when.get(rule.get("when"), False):
+            kinds.add(kind)
+    carrion = rules.get("kinds", {}).get("carrion", {})
+    if carrion.get("or") == "small_life" and when.get(carrion.get("when"), False):
+        kinds.add("carrion")
+    flowers = ground.get("flowers", 0.0)
+    if (
+        isinstance(flowers, (int, float))
+        and not isinstance(flowers, bool)
+        and flowers > 0.0
+        and ground.get("flower_colors")
+    ):
+        kinds.add("nectar")
+    return kinds
+
+
 def home_food_kinds(home: dict[str, Any]) -> set[str]:
     """Every food kind the home offers, as the world's check counts them.
 
     The region's `food` kinds, the ground cover's food plants, and
-    nectar when flowers bloom. Mirrors `check_food_web`, which stays
-    authoritative: the tile check still has the last word.
+    nectar when flowers bloom. Only for worlds without rules now:
+    layered homes keep no written food list (#147.4).
     """
     kinds: set[str] = set()
     for entry in home.get("food", []) or []:
@@ -368,7 +491,7 @@ def pick_species(
 ) -> tuple[list[str], list[str], list[str]]:
     """Playable, prey and predators, most present first, food first.
 
-    An animal stays only if the home has every food kind it needs,
+    An animal stays only if the worked-out food has every kind it needs,
     and a hunter only if at least one of its prey stays too. The
     home's fish hunt in the region as well, so their prey must stay
     too. Playable is every kept animal whose file is playable;
@@ -385,7 +508,7 @@ def pick_species(
         path = animals_dir / f"{species}.json"
         if path.is_file():
             candidates[species] = _animal(path)
-    food = home_food_kinds(home)
+    food = tile_food_kinds(world, home)
     fish = home_fish(world, home)
     for data in fish.values():
         if not (data.get("diet") or data.get("hunts")):

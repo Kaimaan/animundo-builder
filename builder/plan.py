@@ -229,9 +229,9 @@ def _missing_food(
     home: dict[str, Any],
 ) -> str | None:
     """The first food kind a present filed animal needs and lacks."""
-    from .tiles import home_food_kinds
+    from .tiles import tile_food_kinds
 
-    kinds = home_food_kinds(home)
+    kinds = tile_food_kinds(world, home)
     for species in sorted(present, key=lambda s: (-present[s], s)):
         path = world / "animals" / f"{species}.json"
         if not path.is_file():

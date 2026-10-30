@@ -28,7 +28,8 @@ Special places: land "mountains" for high mountains (the world is twice as tall)
 or open sea (deep water for seals, sharks and whales); seabed "sand" for warm seas and reefs; ice for cold
 places (frozen_in_winter where lakes or the sea freeze, glaciers on high mountains, polar for the Arctic and
 Antarctic coasts); caves "some" where animals den in rock caves. Leave each one at none or mud unless the
-research shows it.
+research shows it. Depth is "deep" (about 35 m of sea) where the research names whales, "shallow" (7 m)
+otherwise; deep needs water "sea" and land that isn't mountains.
 
 ## Hard rules
 

@@ -122,6 +122,7 @@ CHOICE_LEVELS = {
     "ice": ["none", "frozen_in_winter", "glaciers", "polar"],
     "caves": ["none", "some"],
     "seabed": ["mud", "sand"],
+    "depth": ["shallow", "deep"],
 }
 CHOICE_PALETTE = [
     "ground_lush",
@@ -342,6 +343,8 @@ class AnimalMakerStage:
             marks = self._make_newshape(ctx, world, brief, research, target)
         else:
             marks = self._make_model(ctx, world, brief, research, target)
+        if animal_id == "humpback_whale":
+            self._code_whale_box(ctx, animal_id)
         self._save_final(ctx, world, animal_id)
         return animal_id, marks
 
@@ -363,6 +366,7 @@ class AnimalMakerStage:
             else []
         )
         diet = None if target["prey"] else _code_diet(research)
+        whale = animal_id == "humpback_whale"
         prompt = self._animal_prompt(world, brief, research, region, target)
         errors: list[str] | None = None
         previous: str | None = None
@@ -376,6 +380,8 @@ class AnimalMakerStage:
                     files["animal"]["hunts"] = hunts
                 if diet is not None:
                     files["animal"]["diet"] = diet
+                if whale:
+                    _code_whale(files["animal"])
                 self._place_animal(ctx, animal_id, files)
                 file_errors = self._check_animal(
                     world, ctx, animal_id, attempt, excused
@@ -1161,6 +1167,19 @@ class AnimalMakerStage:
             }
         )
         plan_path.write_text(json.dumps(plan, indent=2), encoding="utf-8")
+
+    def _code_whale_box(self, ctx: Any, animal_id: str) -> None:
+        """The whale's collision box from its built model (#162.4)."""
+        spec_path = ctx.job_dir / "models" / f"{animal_id}.json"
+        animal_path = ctx.job_dir / "animals" / f"{animal_id}.json"
+        if not spec_path.is_file():
+            raise _Stopped(
+                f"{animal_id}: the model left no spec to measure; a person looks"
+            )
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        animal = json.loads(animal_path.read_text(encoding="utf-8"))
+        animal["box"] = _spec_box(spec)
+        animal_path.write_text(json.dumps(animal, indent=2), encoding="utf-8")
 
     def _save_final(self, ctx: Any, world: Path, animal_id: str) -> None:
         """The passing files, where the pack and the report find them."""
@@ -2433,6 +2452,86 @@ def _code_diet(research: dict[str, Any]) -> list[str]:
     return kinds
 
 
+def _code_whale(animal: dict[str, Any]) -> None:
+    """The humpback's diving fields, by code, never the model (#162.4).
+
+    On the reef it fasts on its blubber (metabolism 0.2) and
+    feeds on krill in Antarctica; away from the reef from the
+    end of November to the start of June.
+    """
+    animal.update(
+        {
+            "diving_mammal": True,
+            "spawn": "water",
+            "min_depth": 15,
+            "spout": 3,
+            "calf": 0.3,
+            "cam_dist": 22,
+            "cam_height": 3,
+            "breath": 90,
+            "swim_speed": 3,
+            "swim_sprint_speed": 5,
+            "metabolism": 0.2,
+        }
+    )
+    year = animal.get("year") or {}
+    year.pop("hibernation", None)
+    year.update(
+        {
+            "winter": "migrates",
+            "migration": {"leaves": "11-30", "returns": "06-01"},
+            "food": {
+                "spring": "Krill in Antarctica.",
+                "summer": "Hardly eats on the reef; lives on its blubber.",
+                "autumn": "Hardly eats on the reef; lives on its blubber.",
+                "winter": "Krill in Antarctica.",
+            },
+        }
+    )
+    animal["year"] = year
+
+
+def _spec_box(spec: dict[str, Any]) -> list[float]:
+    """The body's collision box from the spec, in metres (#162.4).
+
+    The body part's width and height with the measured torso
+    length; without a body part, the torso parts' own spans.
+    Fins and flippers stay out: the box is the body.
+    """
+    parts = [
+        part
+        for part in spec.get("parts", [])
+        if isinstance(part, dict)
+        and isinstance(part.get("at"), list)
+        and isinstance(part.get("size"), list)
+        and len(part["at"]) >= 3
+        and len(part["size"]) >= 3
+    ]
+    length = round(_measure_spec(spec).get("length_m", 0.0), 1)
+    body = next((part for part in parts if part.get("name") == "body"), None)
+    if body is not None:
+        size = body["size"]
+        return [round(float(size[0]), 1), round(float(size[1]), 1), length]
+    torso = [
+        part
+        for part in parts
+        if not (part.get("bone") or "").startswith(("tail", "leg"))
+    ]
+    pool = torso or parts
+    if not pool:
+        return [0.0, 0.0, length]
+    spans = []
+    for axis in (0, 1):
+        spans.append(
+            round(
+                max(p["at"][axis] + p["size"][axis] / 2 for p in pool)
+                - min(p["at"][axis] - p["size"][axis] / 2 for p in pool),
+                1,
+            )
+        )
+    return [spans[0], spans[1], length]
+
+
 #: The build's measured game length, per animal it builds.
 _MEASURED_RE = (
     r"for animals/{id}\.json:\s*\"length\":\s*([0-9]+\.[0-9]+)\s*\(real size\)"
@@ -2861,6 +2960,14 @@ def _home_choices_schema(plants: list[str], trees: list[str]) -> dict[str, Any]:
                 (
                     "the floor of the deep water: sand for warm seas "
                     "and reefs, mud otherwise"
+                ),
+            ),
+            "depth": enum(
+                CHOICE_LEVELS["depth"],
+                (
+                    "the sea's depth: deep (about 35 m) where whales "
+                    "swim, shallow (7 m) otherwise; deep needs water "
+                    "sea and land that isn't mountains"
                 ),
             ),
             "palette": obj({key: _CHOICE_HEX for key in CHOICE_PALETTE}),

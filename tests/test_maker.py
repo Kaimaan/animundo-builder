@@ -22,6 +22,7 @@ from builder.stages.maker import (
     _choices_files,
     _closest_home,
     _code_choices,
+    _code_whale,
     _description,
     _edits_files,
     _edits_schema,
@@ -50,6 +51,7 @@ from builder.stages.maker import (
     _size_misses,
     _sizing_edits,
     _sourced_sizes,
+    _spec_box,
     _Stopped,
     _surroundings_text,
     _tool_marks,
@@ -466,6 +468,73 @@ def test_replayed_animal_drops_freelanced_translations(
     assert "translations" not in filed
     assert filed["text"] == {"title": "T"}
     assert not (tmp_path / "locale").exists()
+
+
+def test_choices_offer_the_sea_depth(tmp_path: Path) -> None:
+    """#162.1: a deep choices answer reaches the adapt tool."""
+    world = _home_world(tmp_path)
+    _home_inputs(tmp_path)
+    adapt = _AdaptStub()
+    client = ScriptClient([_choices_answer(depth="deep")])
+    HomeMakerStage(adapt=adapt).run(_ctx(tmp_path, world, client))
+    assert adapt.calls[0]["depth"] == "deep"
+    schema = _home_choices_schema([], [])
+    assert schema["properties"]["depth"]["enum"] == ["shallow", "deep"]
+    assert "depth" in schema["required"]
+
+
+def test_code_whale_sets_the_diving_fields() -> None:
+    """#162.4: the humpback's file gets its diving life by code."""
+    animal = json.loads(_animal_answer("humpback_whale"))
+    animal["year"] = {
+        "winter": "active",
+        "shelter": "The open sea.",
+        "young": "A calf in spring.",
+        "food": {"spring": "x", "summer": "x", "autumn": "x", "winter": "x"},
+    }
+    _code_whale(animal)
+    assert animal["diving_mammal"] is True
+    assert animal["spawn"] == "water"
+    assert animal["min_depth"] == 15
+    assert animal["spout"] == 3
+    assert animal["calf"] == 0.3
+    assert animal["cam_dist"] == 22
+    assert animal["cam_height"] == 3
+    assert animal["breath"] == 90
+    assert animal["swim_speed"] == 3
+    assert animal["swim_sprint_speed"] == 5
+    assert animal["metabolism"] == 0.2
+    year = animal["year"]
+    assert year["winter"] == "migrates"
+    assert year["migration"] == {"leaves": "11-30", "returns": "06-01"}
+    assert year["food"]["summer"] == (
+        "Hardly eats on the reef; lives on its blubber."
+    )
+    assert year["food"]["winter"] == "Krill in Antarctica."
+    assert year["shelter"] == "The open sea."
+    assert "hibernation" not in year
+
+
+def test_spec_box_measures_the_body() -> None:
+    """#162.4: the collision box is the body's, flippers out."""
+    spec = {
+        "bones": [{"name": "body", "head": [0, 2, -7], "tail": [0, 2, 7]}],
+        "parts": [
+            {
+                "name": "body",
+                "bone": "body",
+                "at": [0, 2, 0],
+                "size": [3.5, 3.0, 14.0],
+            },
+            {
+                "name": "flipper_l",
+                "bone": "arm_l",
+                "at": [-4.0, 1.0, 2.0],
+                "size": [4.0, 0.4, 1.0],
+            },
+        ],
+    }
+    assert _spec_box(spec) == [3.5, 3.0, 14.0]
 
 
 def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:

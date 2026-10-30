@@ -507,9 +507,7 @@ def test_code_whale_sets_the_diving_fields() -> None:
     year = animal["year"]
     assert year["winter"] == "migrates"
     assert year["migration"] == {"leaves": "11-30", "returns": "06-01"}
-    assert year["food"]["summer"] == (
-        "Hardly eats on the reef; lives on its blubber."
-    )
+    assert year["food"]["summer"] == ("Hardly eats on the reef; lives on its blubber.")
     assert year["food"]["winter"] == "Krill in Antarctica."
     assert year["shelter"] == "The open sea."
     assert "hibernation" not in year

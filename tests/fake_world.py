@@ -7,6 +7,66 @@ import json
 from pathlib import Path
 from typing import Any
 
+_TILE_REGION_STUB = '''
+"""Stub of the world's tile converter for enrich tests (#161.1)."""
+
+
+def place(tile):
+    species = tile.get("species", {})
+    return {
+        "center": tile.get("center", {}),
+        "description": "A converted tile.",
+        "sources": ["tile_region stub"],
+        "animals": {
+            k: list(species.get(k) or []) for k in ("playable", "prey", "predators")
+        },
+        "food": [{"kind": "grass"}, {"kind": "berries"}],
+        "trees": {"density": 0.0, "mix": []},
+        "ground_cover": {"plants": []},
+    }
+
+
+def tile_in(doc, want=""):
+    return doc
+
+
+def read_biome(bid, extra=None):
+    return {"author": "Test"}
+'''
+
+_FOOD_STUB = '''
+"""Stub of the world's food derive for enrich tests (#161.1)."""
+
+
+def worked_out(place):
+    return list(place.get("food", []))
+'''
+
+_LAYERS_STUB = '''
+"""Stub of the world's layers for enrich tests (#161.1)."""
+
+
+def spec(folder, pid):
+    return {}
+
+
+def use_plants(region, plants):
+    grown = []
+    for side in ("cover", "water"):
+        for entry in plants.get(side) or []:
+            grown.append({"model": entry.get("id")})
+    region["ground_cover"] = {"plants": grown}
+'''
+
+
+def write_converter_tools(world: Path) -> None:
+    """Stub tile converter, food and layers tools in a fake world."""
+    tools = world / "tools"
+    tools.mkdir(parents=True, exist_ok=True)
+    (tools / "tile_region.py").write_text(_TILE_REGION_STUB)
+    (tools / "food.py").write_text(_FOOD_STUB)
+    (tools / "layers.py").write_text(_LAYERS_STUB)
+
 
 def make_world(tmp_path: Path) -> Path:
     """A world with one home, three filed animals and two unfiled."""

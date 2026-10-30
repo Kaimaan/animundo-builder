@@ -112,6 +112,7 @@ def write_brief(
     lon: float,
     entry: dict[str, Any] | None,
     plant_names: list[str] | None = None,
+    enrich_tiles: list[str] | None = None,
 ) -> dict[str, Any]:
     """The item's `home.json` brief from its plan item (the intake).
 
@@ -119,7 +120,8 @@ def write_brief(
     surroundings and minimum makes only the home. An animal item
     carries its animal-list entry. A plant item carries its names.
     Ids and keys only, never free text, and never anything about
-    the player.
+    the player. An enrich item names its target tiles, whose
+    converter places the checks run against (#161.1).
     """
     if item["kind"] == "home":
         brief = _home_brief(item, habitat, lat, lon)
@@ -142,6 +144,8 @@ def write_brief(
             "needs_home": False,
             "center": {"lat": lat, "lon": lon},
         }
+    if enrich_tiles is not None:
+        brief["enrich"] = {"tiles": list(enrich_tiles)}
     item_dir.mkdir(parents=True, exist_ok=True)
     (item_dir / "home.json").write_text(json.dumps(brief, indent=2))
     return brief
@@ -237,6 +241,7 @@ def prepare_item(
     entry: dict[str, Any] | None,
     home: dict[str, Any] | None,
     species: dict[str, Any] | None = None,
+    enrich_tiles: list[str] | None = None,
 ) -> None:
     """Brief and scaffold for one item's stages (the intake).
 
@@ -245,23 +250,26 @@ def prepare_item(
     home item only its brief. The worker and the local replay run
     the same intake. Given the tile's species, the scaffold seats
     them, so a hunter's prey check sees the tile's cast (#150.1).
+    An enrich item skips the scaffold: the worker lays the target
+    tiles' converter places instead (#161.1).
     """
     if item["kind"] == "plant":
         assert home is not None
         names = find_plant_names(home, item["what"])
-        write_brief(item_dir, item, habitat, lat, lon, None, names)
-        write_scaffold(
-            item_dir,
-            home,
-            [{"model": item["what"], "names": names}],
-            lat=lat,
-            lon=lon,
-            species=species,
-        )
+        write_brief(item_dir, item, habitat, lat, lon, None, names, enrich_tiles)
+        if enrich_tiles is None:
+            write_scaffold(
+                item_dir,
+                home,
+                [{"model": item["what"], "names": names}],
+                lat=lat,
+                lon=lon,
+                species=species,
+            )
         write_flora_survey(item_dir, names)
     else:
-        write_brief(item_dir, item, habitat, lat, lon, entry)
-        if item["kind"] == "animal":
+        write_brief(item_dir, item, habitat, lat, lon, entry, None, enrich_tiles)
+        if item["kind"] == "animal" and enrich_tiles is None:
             assert home is not None
             write_scaffold(item_dir, home, lat=lat, lon=lon, species=species)
 

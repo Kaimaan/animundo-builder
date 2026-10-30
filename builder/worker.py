@@ -419,16 +419,14 @@ class Worker:
                 build_mod.build_food_item(item_dir, item, home)
             else:
                 cast = None
+                enrich_tiles: list[str] | None = None
                 if job.get("kind") == "enrich":
-                    try:
-                        cast = self._tile_cast(tile)
-                    except Exception as error:  # noqa: BLE001 - seats nothing then
-                        print(
-                            f"build job {job_id}: no cast for {tile}: {error}",
-                            file=sys.stderr,
-                        )
+                    enrich_tiles = [t for t in job.get("tiles", []) or [tile]]
+                    self._write_enrich_places(job_id, item_dir, enrich_tiles, item)
                     self._label_enrich_item(item_dir, tile)
-                self._run_stages(ctx, job_id, tile, plan, item, item_dir, cast)
+                self._run_stages(
+                    ctx, job_id, tile, plan, item, item_dir, cast, enrich_tiles
+                )
         except BudgetExceeded as error:
             self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
             raise _BudgetOut("budget") from error
@@ -721,51 +719,6 @@ class Worker:
             return True
         return float(job.get("cost_usd", 0.0)) < budget
 
-    def _tile_cast(self, tile: str) -> dict[str, list[str]]:
-        """The tile's species for an enrich item's work region (#150.1).
-
-        The published entry first: what the tile already has, no
-        calls. Else the tile remade by code from its cached
-        survey, keyless, as a remake would. Raises when neither
-        knows the tile; run_item then seats nothing and the
-        stages check what they need.
-        """
-        import dataclasses
-        import json
-
-        from .grid import group_path
-        from .tiles import make_tile
-
-        assert self.world is not None
-        raw = self.store.read_blob(group_path(tile))
-        if raw is not None:
-            try:
-                group = json.loads(raw.decode("utf-8"))
-            except ValueError:
-                group = {}
-            entry = (group.get("tiles") or {}).get(tile)
-            if isinstance(entry, dict) and isinstance(entry.get("species"), dict):
-                return {
-                    name: list(entry["species"].get(name) or [])
-                    for name in ("playable", "prey", "predators")
-                }
-        source = dataclasses.replace(self._species_source(), client=None)
-        made, _blocked = make_tile(
-            tile,
-            self._grids(),
-            self.world,
-            builder_root=self.builder_root,
-            species_source=source,
-        )
-        if made is None:
-            raise ValueError(
-                f"{tile} is unpublished and remakes blocked; a person looks"
-            )
-        return {
-            name: list(made.get("species", {}).get(name) or [])
-            for name in ("playable", "prey", "predators")
-        }
-
     def _label_enrich_item(self, item_dir: Path, tile: str) -> None:
         """An enrich item's report labels: its tile and kind (#150.2).
 
@@ -784,6 +737,80 @@ class Worker:
             item_dir, {"area": f"{tile} ({name})", "kind": "enrich"}
         )
 
+    def _write_enrich_places(
+        self,
+        job_id: str,
+        item_dir: Path,
+        tiles: list[str],
+        item: dict[str, Any],
+    ) -> None:
+        """Each target tile as its checkable place, no scaffold (#161.1).
+
+        The converter builds the places exactly as the game does;
+        the new animal or plant is seated and the food reworked,
+        so the item's checks run against real tiles. A tile with
+        no published doc and no code remake is left out loudly.
+        """
+        import json
+
+        from .enrich import ConvertError, tile_place
+
+        assert self.world is not None
+        regions = item_dir / "regions"
+        regions.mkdir(parents=True, exist_ok=True)
+        for target in tiles:
+            try:
+                doc = self._tile_doc(target)
+            except Exception as error:  # noqa: BLE001 - left out loudly
+                print(
+                    f"build job {job_id}: no place for {target}: {error}",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                place = tile_place(
+                    doc, self.world, str(item["what"]), str(item["kind"])
+                )
+            except ConvertError as error:
+                print(
+                    f"build job {job_id}: no place for {target}: {error}",
+                    file=sys.stderr,
+                )
+                continue
+            (regions / f"tl_{target}.json").write_text(
+                json.dumps(place, indent=2), encoding="utf-8"
+            )
+
+    def _tile_doc(self, tile: str) -> dict[str, Any]:
+        """The tile's doc: published first, else remade by code, keyless."""
+        import dataclasses
+        import json
+
+        from .grid import group_path
+        from .tiles import make_tile
+
+        assert self.world is not None
+        raw = self.store.read_blob(group_path(tile))
+        if raw is not None:
+            try:
+                group = json.loads(raw.decode("utf-8"))
+            except ValueError:
+                group = {}
+            entry = (group.get("tiles") or {}).get(tile)
+            if isinstance(entry, dict):
+                return entry
+        source = dataclasses.replace(self._species_source(), client=None)
+        made, _blocked = make_tile(
+            tile,
+            self._grids(),
+            self.world,
+            builder_root=self.builder_root,
+            species_source=source,
+        )
+        if made is None:
+            raise ValueError(f"{tile} is unpublished and remakes blocked")
+        return made
+
     def _run_stages(
         self,
         ctx: Any,
@@ -793,6 +820,7 @@ class Worker:
         item: dict[str, Any],
         item_dir: Path,
         cast: dict[str, Any] | None = None,
+        enrich_tiles: list[str] | None = None,
     ) -> None:
         """Brief, scaffold and the item pipeline, staged to build."""
         from . import build as build_mod
@@ -816,7 +844,9 @@ class Worker:
             home: dict[str, Any] | None = self._tile_home(tile, plan, job_id)
         else:
             home = None
-        build_mod.prepare_item(item_dir, item, habitat, lat, lon, entry, home, cast)
+        build_mod.prepare_item(
+            item_dir, item, habitat, lat, lon, entry, home, cast, enrich_tiles
+        )
         pipeline = build_mod.item_pipeline(
             chat=self.chat,
             build=self.build,

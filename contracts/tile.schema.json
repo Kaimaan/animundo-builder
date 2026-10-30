@@ -76,6 +76,25 @@
     },
     "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
     "water": {"type": "number", "minimum": 0, "maximum": 1},
+    "wanted": {
+      "type": "array",
+      "description": "What the survey found living here that the world doesn't have yet, at most 12, in the survey's order. The game ranks these by play and builds the top few as enrich jobs.",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "what", "part"],
+        "properties": {
+          "kind": {"enum": ["animal", "plant"]},
+          "what": {
+            "type": "string",
+            "pattern": "^([a-z][a-z0-9_]*|gbif:[0-9]+)$",
+            "description": "An animal-list id, a plant id, or gbif:<key>. Ids only, never model text."
+          },
+          "part": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "species": {
       "type": "object",
       "additionalProperties": false,

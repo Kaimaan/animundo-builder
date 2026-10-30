@@ -31,9 +31,9 @@ from .grid import (
 from .habitats import HabitatGrid
 from .presence import animals_for_habitat
 from .schemas import validate
-from .species import MODEL as SPECIES_MODEL
-from .species import Source as SpeciesSource
 from .species import (
+    LAKE_PARTS,
+    SEA_PARTS,
     SpeciesPlaceError,
     check_answer,
     check_survey,
@@ -44,6 +44,8 @@ from .species import (
     rank_weights,
     survey_facts,
 )
+from .species import MODEL as SPECIES_MODEL
+from .species import Source as SpeciesSource
 
 #: The shared water level every home builds to.
 WATER_LEVEL = 8
@@ -297,6 +299,67 @@ def _tag_covered(tag: str, hunter: str, pool: dict[str, dict[str, Any]]) -> bool
     )
 
 
+#: Wanted entries per tile: ids the game ranks by play (#143.1).
+WANTED_LIMIT = 12
+
+
+def wanted_drops(
+    answer: dict[str, Any], candidates: set[str], world: Path
+) -> list[dict[str, str]]:
+    """What the survey found that the world doesn't have yet (#143.1).
+
+    Survey animals in the tile's habitat with no animal file, in
+    the survey's order, each in its first part; then the thing to
+    find when no plant file matches it, in the first land part
+    (plants grow on land) or the first part when all is water.
+    Filed animals dropped for food stay out: building them again
+    wouldn't help. Ids only, never model text.
+    """
+    from .plan import plant_slug
+
+    animals_dir = world / "animals"
+    parts = answer["parts"]
+    part_of: dict[str, str] = {}
+    for part in parts:
+        for species_id in part.get("species", []):
+            part_of.setdefault(species_id, part["kind"])
+    drops: list[dict[str, str]] = []
+    for species_id in answer["present"]:
+        if species_id not in candidates:
+            continue
+        if (animals_dir / f"{species_id}.json").is_file():
+            continue
+        if species_id not in part_of:
+            continue
+        drops.append(
+            {"kind": "animal", "what": species_id, "part": part_of[species_id]}
+        )
+    find = answer.get("find")
+    if isinstance(find, str) and find.strip() and len(drops) < WANTED_LIMIT:
+        slug = plant_slug(find)
+        have = {p.stem for p in (world / "models" / "plants").glob("*.json")}
+        if slug and slug not in have and parts:
+            land = [p["kind"] for p in parts if p["kind"] not in SEA_PARTS | LAKE_PARTS]
+            drops.append(
+                {
+                    "kind": "plant",
+                    "what": slug,
+                    "part": land[0] if land else parts[0]["kind"],
+                }
+            )
+    return drops[:WANTED_LIMIT]
+
+
+def _blocked(
+    reason: str, habitat: str, wanted: list[dict[str, str]] | None
+) -> dict[str, Any]:
+    """A blocked entry, carrying `wanted` when the survey named any."""
+    blocked: dict[str, Any] = {"reason": reason, "habitat": habitat}
+    if wanted:
+        blocked["wanted"] = wanted
+    return blocked
+
+
 def pick_species(
     counts: dict[str, float],
     world: Path,
@@ -473,7 +536,7 @@ def make_tile(
     builder_root: Path | None = None,
     species: dict[str, Any] | None = None,
     species_source: SpeciesSource | None = None,
-) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Make one tile, or the blocked reason when it can't be made.
 
     Returns (tile, None) or (None, {"reason": ..., "habitat": ...}).
@@ -514,6 +577,7 @@ def make_tile(
         )
         seen = {a["id"] for a in candidates}
         candidates += [a for a in others if a["id"] not in seen]
+    wanted: list[dict[str, str]] | None = None
     if presence is not None:
         present = {s: n for s, n in presence.items() if n > 0}
         species_tag = f"gbif:search:{datetime.now(UTC).date().isoformat()}"
@@ -548,9 +612,10 @@ def make_tile(
         ordered = [s for s in answer["present"] if s in {a["id"] for a in candidates}]
         present = rank_weights(ordered)
         species_tag = f"{SPECIES_MODEL}:{date}"
+        wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
     playable, prey, predators = pick_species(present, world, homes[home])
     if not playable:
-        return None, {"reason": "no_animal", "habitat": habitat}
+        return None, _blocked("no_animal", habitat, wanted)
     level = cell_level(habitat, elev)
     edges = tile_edges(tile, grids)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
@@ -592,11 +657,13 @@ def make_tile(
         made_tile["blend"] = blend
     if coast is not None:
         made_tile["coast"] = coast
+    if wanted:
+        made_tile["wanted"] = wanted
     validate("tile", made_tile)
     failures = check_with_world(made_tile, world)
     if failures:
         if all(check == "food" for check, _ in failures):
-            return None, {"reason": "no_animal", "habitat": habitat}
+            return None, _blocked("no_animal", habitat, wanted)
         detail = "; ".join(
             f"{check}: {', '.join(problems) or 'failed'}"
             for check, problems in failures
@@ -609,7 +676,7 @@ def write_group(
     out_dir: Path,
     tile: str,
     made: dict[str, Any] | None,
-    blocked: dict[str, str] | None,
+    blocked: dict[str, Any] | None,
 ) -> Path:
     """Write the tile or blocked cell into its group file, merged."""
     from .grid import group

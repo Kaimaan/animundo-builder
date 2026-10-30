@@ -51,8 +51,29 @@
               "mediterranean",
               "open_ocean"
             ]
+          },
+          "wanted": {
+            "type": "array",
+            "description": "What the survey found living here that the world doesn't have yet, at most 12, in the survey's order. A playable animal wanted in a no_animal tile would open it.",
+            "maxItems": 12,
+            "items": {"$ref": "#/$defs/wanted_entry"}
           }
         }
+      }
+    }
+  },
+  "$defs": {
+    "wanted_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "what", "part"],
+      "properties": {
+        "kind": {"enum": ["animal", "plant"]},
+        "what": {
+          "type": "string",
+          "pattern": "^([a-z][a-z0-9_]*|gbif:[0-9]+)$"
+        },
+        "part": {"type": "string", "minLength": 1}
       }
     }
   }

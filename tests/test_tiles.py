@@ -295,6 +295,7 @@ def test_remake_after_ship_adds_the_animal_with_no_new_call(
     assert blocked is None
     assert made is not None
     assert "lion" not in made["species"]["playable"]
+    assert made["wanted"] == [{"kind": "animal", "what": "lion", "part": "forest"}]
     assert _Stub.calls == 1
     (world / "animals" / "lion.json").write_text(
         json.dumps({"playable": True, "tags": ["big_cat"], "diet": ["grass"]})
@@ -312,7 +313,120 @@ def test_remake_after_ship_adds_the_animal_with_no_new_call(
     assert again is not None
     assert "lion" in again["species"]["playable"]
     assert "lion" in again["requires"]["animals"]
+    assert "wanted" not in again
     assert _Stub.calls == 1
+
+
+def test_wanted_lists_drops_in_survey_order_capped_at_twelve(
+    tmp_path: Path,
+) -> None:
+    """#143.1: unfiled habitat animals first, the new find last, at most 12."""
+    from builder.tiles import wanted_drops
+
+    world = _world(tmp_path)
+    answer = {
+        "parts": [
+            {"kind": "forest", "species": ["fox", *[f"beast_{n}" for n in range(13)]]},
+            {"kind": "lake", "species": ["vole"]},
+        ],
+        "present": ["fox", *[f"beast_{n}" for n in range(13)], "vole"],
+        "find": "cloudberry",
+    }
+    candidates = {"fox", "vole", *[f"beast_{n}" for n in range(13)]}
+    drops = wanted_drops(answer, candidates, world)
+    assert len(drops) == 12
+    assert [d["what"] for d in drops] == [f"beast_{n}" for n in range(12)]
+    assert all(d["kind"] == "animal" and d["part"] == "forest" for d in drops)
+    drops = wanted_drops(answer, {"fox", "vole"}, world)
+    assert drops == [{"kind": "plant", "what": "cloudberry", "part": "forest"}]
+
+
+def test_wanted_plant_takes_the_first_land_part(tmp_path: Path) -> None:
+    """#143.1: the find grows on land; in open water, in the sea part."""
+    from builder.tiles import wanted_drops
+
+    world = _world(tmp_path)
+    mixed = {
+        "parts": [
+            {"kind": "sea", "species": ["fox"]},
+            {"kind": "forest", "species": ["fox"]},
+        ],
+        "present": ["fox"],
+        "find": "cloudberry",
+    }
+    assert wanted_drops(mixed, {"fox"}, world) == [
+        {"kind": "plant", "what": "cloudberry", "part": "forest"}
+    ]
+    wet = {
+        "parts": [{"kind": "sea", "species": ["fox"]}],
+        "present": ["fox"],
+        "find": "sea lettuce",
+    }
+    assert wanted_drops(wet, {"fox"}, world) == [
+        {"kind": "plant", "what": "sea_lettuce", "part": "sea"}
+    ]
+
+
+def test_wanted_skips_filed_find_and_unfed_filed_animals(tmp_path: Path) -> None:
+    """#143.1: a filed find is had; rebuilding a hungry animal helps nothing."""
+    import json
+
+    from builder.tiles import wanted_drops
+
+    world = _world(tmp_path)
+    plants = world / "models" / "plants"
+    plants.mkdir(parents=True)
+    (plants / "cloudberry.json").write_text(json.dumps({"id": "cloudberry"}))
+    (world / "animals" / "bear.json").write_text(
+        json.dumps({"playable": True, "tags": ["predator"], "diet": ["honey"]})
+    )
+    answer = {
+        "parts": [{"kind": "forest", "species": ["fox", "bear"]}],
+        "present": ["fox", "bear"],
+        "find": "cloudberry",
+    }
+    assert wanted_drops(answer, {"fox", "bear"}, world) == []
+
+
+def test_blocked_no_animal_carries_the_opener(tmp_path: Path) -> None:
+    """#143.1: a no_animal tile still wants the animal that would open it."""
+    import json
+
+    world = _world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"].append(
+        {
+            "id": "lion",
+            "name": "Lion",
+            "latin": "Panthera leo",
+            "gbif_key": 5219404,
+            "habitats": ["boreal_forest"],
+        }
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    grids = _grids(tmp_path, _boreal_3x3(413, 478))
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+        species={
+            "place": "Boreal forest in southern Finland",
+            "parts": [{"kind": "forest", "species": ["lion"]}],
+            "find": None,
+            "name_en": "Lion woods",
+            "name_fi": "Leijonametsä",
+        },
+    )
+    assert made is None
+    assert blocked == {
+        "reason": "no_animal",
+        "habitat": "boreal_forest",
+        "wanted": [{"kind": "animal", "what": "lion", "part": "forest"}],
+    }
+    path = write_group(tmp_path / "groups", "n_413_478", None, blocked)
+    data = json.loads(path.read_text())
+    assert data["blocked"]["n_413_478"]["wanted"][0]["what"] == "lion"
 
 
 def test_make_tile_validates(tmp_path: Path) -> None:

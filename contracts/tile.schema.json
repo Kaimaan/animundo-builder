@@ -65,12 +65,18 @@
     },
     "ecoregion": {"type": "integer", "minimum": 0},
     "home": {"type": "string", "minLength": 1},
+    "biome": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The new name for home (game 0043), same ids; written with home until the game needs only it."
+    },
     "blend": {
       "type": "object",
       "additionalProperties": false,
       "required": ["home", "share"],
       "properties": {
         "home": {"type": "string", "minLength": 1},
+        "biome": {"type": "string", "minLength": 1},
         "share": {"type": "number", "minimum": 0.1, "maximum": 0.5}
       }
     },
@@ -169,6 +175,10 @@
           "type": "array",
           "items": {"type": "string", "minLength": 1}
         },
+        "biomes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
         "animals": {
           "type": "array",
           "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
@@ -221,6 +231,7 @@
           "habitat": false,
           "ecoregion": false,
           "home": false,
+          "biome": false,
           "blend": false,
           "seed": false,
           "water": false,

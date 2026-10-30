@@ -502,7 +502,7 @@ def test_make_tile_returns_a_place_entry(tmp_path: Path) -> None:
     assert made["kind"] == "place"
     assert made["place"] == "fi_nuuksio"
     assert made["part"] == [1, 1]
-    for key in ("habitat", "home", "seed", "water", "species"):
+    for key in ("habitat", "home", "biome", "seed", "water", "species"):
         assert key not in made
     assert made["requires"] == {"homes": [], "animals": []}
     east = tile_edges(
@@ -553,6 +553,8 @@ def test_make_tile_validates(tmp_path: Path) -> None:
     assert made["habitat"] == "boreal_forest"
     assert made["ecoregion"] == 717
     assert made["home"] == "boreal_forest"
+    assert made["biome"] == "boreal_forest"
+    assert made["requires"]["biomes"] == made["requires"]["homes"]
     assert made["level"] == cell_level("boreal_forest", 80.0)
     assert made["height"] == 32
     assert "blend" not in made
@@ -976,8 +978,9 @@ def test_make_tile_blends_second_home(tmp_path: Path) -> None:
     )
     assert blocked is None
     assert made is not None
-    assert made["blend"] == {"home": "taiga", "share": 0.15}
+    assert made["blend"] == {"home": "taiga", "biome": "taiga", "share": 0.15}
     assert made["requires"]["homes"] == ["boreal_forest", "taiga"]
+    assert made["requires"]["biomes"] == ["boreal_forest", "taiga"]
 
 
 def test_make_tile_blocks_ocean_without_ecoregion(tmp_path: Path) -> None:

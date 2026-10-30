@@ -679,7 +679,11 @@ def make_tile(
     blend: dict[str, Any] | None = None
     blend_home = home_for_cell(eco2, habitat, homes) if eco2 is not None else None
     if blend_home is not None and blend_home != home and share2 >= 0.1:
-        blend = {"home": blend_home, "share": round(share2, 2)}
+        blend = {
+            "home": blend_home,
+            "biome": blend_home,
+            "share": round(share2, 2),
+        }
     coast: list[str] | None = None
     if 0.0 < land < 1.0:
         mask = habitat_grid.coast(col, row)
@@ -737,6 +741,7 @@ def make_tile(
     level = cell_level(habitat, elev)
     edges = tile_edges(tile, grids)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
+    needed = sorted({home} | ({blend["home"]} if blend else set()))
     made_tile: dict[str, Any] = {
         "format": 1,
         "id": tile,
@@ -749,13 +754,15 @@ def make_tile(
         "habitat": habitat,
         "ecoregion": eco1,
         "home": home,
+        "biome": home,
         "seed": tile_seed(tile),
         "water": round(water, 2),
         "species": {"playable": playable, "prey": prey, "predators": predators},
         "edges": edges,
         "landmarks": [],
         "requires": {
-            "homes": sorted({home} | ({blend["home"]} if blend else set())),
+            "homes": needed,
+            "biomes": list(needed),
             "animals": sorted(set(playable) | set(prey) | set(predators)),
         },
         "sources": {

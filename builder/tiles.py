@@ -32,21 +32,20 @@ from .grid import (
 from .habitats import HabitatGrid
 from .presence import animals_for_habitat
 from .schemas import validate
+from .species import MODEL as SPECIES_MODEL
+from .species import Source as SpeciesSource
 from .species import (
-    LAKE_PARTS,
-    SEA_PARTS,
     SpeciesPlaceError,
     check_answer,
     check_survey,
     fetch_species,
-    filed_plants,
+    library_fingerprint,
     list_animals,
     list_fingerprint,
+    list_library,
     rank_weights,
     survey_facts,
 )
-from .species import MODEL as SPECIES_MODEL
-from .species import Source as SpeciesSource
 
 #: The shared water level every home builds to.
 WATER_LEVEL = 8
@@ -427,20 +426,25 @@ def _tag_covered(tag: str, hunter: str, pool: dict[str, dict[str, Any]]) -> bool
 WANTED_LIMIT = 12
 
 
+#: The phone's limits on a tile's own plants (spec 02 §2).
+MAX_GROUND_PLANTS = 24
+MAX_TILE_TREES = 6
+
+#: Density for a picked plant whose spec names none.
+TILE_PLANT_DENSITY = 0.05
+
+
 def wanted_drops(
     answer: dict[str, Any], candidates: set[str], world: Path
 ) -> list[dict[str, str]]:
     """What the survey found that the world doesn't have yet (#143.1).
 
     Survey animals in the tile's habitat with no animal file, in
-    the survey's order, each in its first part; then the thing to
-    find when no plant file matches it, in the first land part
-    (plants grow on land) or the first part when all is water.
-    Filed animals dropped for food stay out: building them again
-    wouldn't help. Ids only, never model text.
+    the survey's order, each in its first part. Filed animals
+    dropped for food stay out: building them again wouldn't help.
+    Ids only, never model text. Plants are picked from the
+    library now, never wanted (#147.3).
     """
-    from .plan import plant_slug
-
     animals_dir = world / "animals"
     parts = answer["parts"]
     part_of: dict[str, str] = {}
@@ -458,20 +462,66 @@ def wanted_drops(
         drops.append(
             {"kind": "animal", "what": species_id, "part": part_of[species_id]}
         )
-    find = answer.get("find")
-    if isinstance(find, str) and find.strip() and len(drops) < WANTED_LIMIT:
-        slug = plant_slug(find)
-        have = {p.stem for p in (world / "models" / "plants").glob("*.json")}
-        if slug and slug not in have and parts:
-            land = [p["kind"] for p in parts if p["kind"] not in SEA_PARTS | LAKE_PARTS]
-            drops.append(
-                {
-                    "kind": "plant",
-                    "what": slug,
-                    "part": land[0] if land else parts[0]["kind"],
-                }
-            )
     return drops[:WANTED_LIMIT]
+
+
+def tile_plants(
+    world: Path, answer: dict[str, Any]
+) -> tuple[dict[str, Any] | None, list[str], list[str]]:
+    """The survey's picks as the tile's plants (#147.3).
+
+    Cover or water by the spec's grows (seabed grows in water);
+    density is the spec's own scaled by the pick's count against
+    the part's highest; tree shares split the picks' counts. The
+    phone's limits cap each list in the survey's order. Returns
+    the plants dict (nothing when nothing picked) with the
+    requires lists.
+    """
+    cover: list[dict[str, Any]] = []
+    water: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for pick in answer.get("plants", []):
+        if pick["id"] in seen:
+            continue
+        seen.add(pick["id"])
+        grows = _grows(world, "plants", pick["id"])
+        part = water if "seabed" in (grows.get("on") or []) else cover
+        part.append(pick)
+        if len(cover) + len(water) >= MAX_GROUND_PLANTS:
+            break
+    entries: dict[str, Any] = {}
+    for part, key in ((cover, "cover"), (water, "water")):
+        if not part:
+            continue
+        top = max(p["count"] for p in part)
+        items = []
+        for pick in part:
+            density = _grows(world, "plants", pick["id"]).get("density")
+            if not isinstance(density, (int, float)) or not 0 < density <= 1:
+                density = TILE_PLANT_DENSITY
+            amount = max(0.001, round(density * pick["count"] / top, 3))
+            items.append({"id": pick["id"], "density": amount})
+        entries[key] = items
+    picked_trees = []
+    seen = set()
+    for pick in answer.get("trees", []):
+        if pick["id"] in seen:
+            continue
+        seen.add(pick["id"])
+        picked_trees.append(pick)
+        if len(picked_trees) >= MAX_TILE_TREES:
+            break
+    if picked_trees:
+        total = sum(p["count"] for p in picked_trees)
+        entries["trees"] = [
+            {"id": p["id"], "share": max(0.001, round(p["count"] / total, 3))}
+            for p in picked_trees
+        ]
+    if not entries:
+        return None, [], []
+    needs = sorted({p["id"] for part in (cover, water) for p in part})
+    wants = sorted(p["id"] for p in picked_trees)
+    return entries, needs, wants
 
 
 def _blocked(
@@ -648,7 +698,6 @@ def tile_facts(
         edge_hi=max(samples),
         home=home,
         adapt=adapt,
-        plants=filed_plants(world),
     )
 
 
@@ -823,14 +872,22 @@ def make_tile(
         seen = {a["id"] for a in candidates}
         candidates += [a for a in others if a["id"] not in seen]
     wanted: list[dict[str, str]] | None = None
+    greens: dict[str, Any] | None = None
     if presence is not None:
         present = {s: n for s, n in presence.items() if n > 0}
         species_tag = f"gbif:search:{datetime.now(UTC).date().isoformat()}"
     else:
         ids = [a["id"] for a in animals]
+        greens_list = list_library(world, "plants")
+        trees_list = list_library(world, "trees")
         facts = tile_facts(tile, grids, world, home, False)
         if species is not None:
-            answer = check_answer(species, ids)
+            answer = check_answer(
+                species,
+                ids,
+                [p["id"] for p in greens_list],
+                [t["id"] for t in trees_list],
+            )
             problem = check_survey(answer, habitat, lat, lon, facts, animals)
             if problem is not None:
                 return None, {"reason": "species_place", "habitat": habitat}
@@ -844,11 +901,14 @@ def make_tile(
                 answer = fetch_species(
                     tile,
                     animals,
+                    greens_list,
+                    trees_list,
                     habitat,
                     lat,
                     lon,
                     source,
                     list_fingerprint(animals),
+                    library_fingerprint(greens_list, trees_list),
                     facts,
                 )
             except SpeciesPlaceError:
@@ -858,6 +918,7 @@ def make_tile(
         present = rank_weights(ordered)
         species_tag = f"{SPECIES_MODEL}:{date}"
         wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
+        greens, needs, wants = tile_plants(world, answer)
     playable, prey, predators = pick_species(present, world, homes[home])
     if not playable:
         return None, _blocked("no_animal", habitat, wanted)
@@ -865,6 +926,14 @@ def make_tile(
     edges = tile_edges(tile, grids)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
     needed = sorted({home} | ({blend["home"]} if blend else set()))
+    requires: dict[str, Any] = {
+        "homes": needed,
+        "biomes": list(needed),
+        "animals": sorted(set(playable) | set(prey) | set(predators)),
+    }
+    if greens is not None:
+        requires["plants"] = needs
+        requires["trees"] = wants
     made_tile: dict[str, Any] = {
         "format": 1,
         "id": tile,
@@ -883,11 +952,7 @@ def make_tile(
         "species": {"playable": playable, "prey": prey, "predators": predators},
         "edges": edges,
         "landmarks": [],
-        "requires": {
-            "homes": needed,
-            "biomes": list(needed),
-            "animals": sorted(set(playable) | set(prey) | set(predators)),
-        },
+        "requires": requires,
         "sources": {
             "habitat": f"resolve2017:{eco1}",
             "elevation": "etopo2022:v1_60s_surface",
@@ -905,6 +970,8 @@ def make_tile(
         made_tile["blend"] = blend
     if coast is not None:
         made_tile["coast"] = coast
+    if greens is not None:
+        made_tile["plants"] = greens
     if wanted:
         made_tile["wanted"] = wanted
     validate("tile", made_tile)

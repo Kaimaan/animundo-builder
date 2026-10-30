@@ -22,8 +22,10 @@ from .species import (
     check_place,
     check_survey,
     fetch_species,
+    library_fingerprint,
     list_animals,
     list_fingerprint,
+    list_library,
 )
 from .tiles import available_homes, home_for_cell, tile_facts
 
@@ -49,6 +51,9 @@ def run_lab(
 
     animals = list_animals(world)
     fingerprint = list_fingerprint(animals)
+    greens = list_library(world, "plants")
+    trees = list_library(world, "trees")
+    plants_print = library_fingerprint(greens, trees)
     homes = available_homes(world)
     results: list[dict[str, Any]] = []
     for tile in tiles:
@@ -65,7 +70,17 @@ def run_lab(
         lat, lon = center(tile)
         try:
             survey = fetch_species(
-                tile, animals, habitat, lat, lon, source, fingerprint, facts
+                tile,
+                animals,
+                greens,
+                trees,
+                habitat,
+                lat,
+                lon,
+                source,
+                fingerprint,
+                plants_print,
+                facts,
             )
         except SpeciesPlaceError as error:
             results.append(
@@ -133,7 +148,7 @@ def comparison(
             lines.append(
                 f"Old: {before.get('place')} — {before.get('name_en')} / "
                 f"{before.get('name_fi')}, {len(before.get('present', []))} "
-                "animals."
+                f"animals, find {before.get('find') or 'none'}."
             )
             problem = _old_name_problem(old[tile], animals)
             lines.append(
@@ -149,10 +164,14 @@ def comparison(
             continue
         survey = entry["survey"]
         parts = ", ".join(f"{p['kind']} ({len(p['species'])})" for p in survey["parts"])
+        picked = ", ".join(
+            f"{p['id']} ×{p['count']}"
+            for p in [*survey.get("plants", []), *survey.get("trees", [])]
+        )
         lines.append(
             f"New: {survey['place']} — {survey['name_en']} / "
-            f"{survey['name_fi']}, parts {parts}, find "
-            f"{survey['find'] or 'none'}."
+            f"{survey['name_fi']}, parts {parts}, plants "
+            f"{picked or 'none'}."
         )
         check = entry.get("check")
         lines.append("New checks: " + (check if check is not None else "all pass."))

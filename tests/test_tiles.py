@@ -388,7 +388,8 @@ def test_remake_after_ship_adds_the_animal_with_no_new_call(
         "parts": [
             {"kind": "forest", "species": ["fox", "mountain_hare", "vole", "lion"]}
         ],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "name_en": "Fox and lion woods",
         "name_fi": "Kettujen ja leijonien metsä",
     }
@@ -440,7 +441,7 @@ def test_remake_after_ship_adds_the_animal_with_no_new_call(
 def test_wanted_lists_drops_in_survey_order_capped_at_twelve(
     tmp_path: Path,
 ) -> None:
-    """#143.1: unfiled habitat animals first, the new find last, at most 12."""
+    """#143.1: unfiled habitat animals in survey order, at most 12."""
     from builder.tiles import wanted_drops
 
     world = _world(tmp_path)
@@ -450,7 +451,8 @@ def test_wanted_lists_drops_in_survey_order_capped_at_twelve(
             {"kind": "lake", "species": ["vole"]},
         ],
         "present": ["fox", *[f"beast_{n}" for n in range(13)], "vole"],
-        "find": "cloudberry",
+        "plants": [],
+        "trees": [],
     }
     candidates = {"fox", "vole", *[f"beast_{n}" for n in range(13)]}
     drops = wanted_drops(answer, candidates, world)
@@ -458,52 +460,55 @@ def test_wanted_lists_drops_in_survey_order_capped_at_twelve(
     assert [d["what"] for d in drops] == [f"beast_{n}" for n in range(12)]
     assert all(d["kind"] == "animal" and d["part"] == "forest" for d in drops)
     drops = wanted_drops(answer, {"fox", "vole"}, world)
-    assert drops == [{"kind": "plant", "what": "cloudberry", "part": "forest"}]
+    assert drops == []
 
 
-def test_wanted_plant_takes_the_first_land_part(tmp_path: Path) -> None:
-    """#143.1: the find grows on land; in open water, in the sea part."""
-    from builder.tiles import wanted_drops
+def test_picked_plants_land_on_the_tile(tmp_path: Path) -> None:
+    """#147.3: the survey's picks become the tile's cover and water plants."""
+    import json
+
+    from builder.tiles import tile_plants
 
     world = _world(tmp_path)
-    mixed = {
-        "parts": [
-            {"kind": "sea", "species": ["fox"]},
-            {"kind": "forest", "species": ["fox"]},
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True)
+    (greens / "bilberry.json").write_text(
+        json.dumps({"grows": {"on": ["grassland"], "density": 0.5}})
+    )
+    (greens / "bladderwrack.json").write_text(
+        json.dumps({"grows": {"on": ["seabed"], "density": 0.4}})
+    )
+    answer = {
+        "plants": [
+            {"id": "bilberry", "count": 6},
+            {"id": "bladderwrack", "count": 3},
         ],
-        "present": ["fox"],
-        "find": "cloudberry",
+        "trees": [{"id": "pine", "count": 5, "share": 1.0}],
     }
-    assert wanted_drops(mixed, {"fox"}, world) == [
-        {"kind": "plant", "what": "cloudberry", "part": "forest"}
-    ]
-    wet = {
-        "parts": [{"kind": "sea", "species": ["fox"]}],
-        "present": ["fox"],
-        "find": "sea lettuce",
-    }
-    assert wanted_drops(wet, {"fox"}, world) == [
-        {"kind": "plant", "what": "sea_lettuce", "part": "sea"}
-    ]
+    plants, requires, tree_ids = tile_plants(world, answer)
+    assert plants is not None
+    assert [c["id"] for c in plants["cover"]] == ["bilberry"]
+    assert [c["id"] for c in plants["water"]] == ["bladderwrack"]
+    assert plants["trees"] == [{"id": "pine", "share": 1.0}]
+    assert requires == ["bilberry", "bladderwrack"]
+    assert tree_ids == ["pine"]
 
 
-def test_wanted_skips_filed_find_and_unfed_filed_animals(tmp_path: Path) -> None:
-    """#143.1: a filed find is had; rebuilding a hungry animal helps nothing."""
+def test_wanted_skips_filed_and_unfed_filed_animals(tmp_path: Path) -> None:
+    """#143.1: rebuilding a hungry animal helps nothing."""
     import json
 
     from builder.tiles import wanted_drops
 
     world = _world(tmp_path)
-    plants = world / "models" / "plants"
-    plants.mkdir(parents=True)
-    (plants / "cloudberry.json").write_text(json.dumps({"id": "cloudberry"}))
     (world / "animals" / "bear.json").write_text(
         json.dumps({"playable": True, "tags": ["predator"], "diet": ["honey"]})
     )
     answer = {
         "parts": [{"kind": "forest", "species": ["fox", "bear"]}],
         "present": ["fox", "bear"],
-        "find": "cloudberry",
+        "plants": [],
+        "trees": [],
     }
     assert wanted_drops(answer, {"fox", "bear"}, world) == []
 
@@ -533,7 +538,8 @@ def test_blocked_no_animal_carries_the_opener(tmp_path: Path) -> None:
         species={
             "place": "Boreal forest in southern Finland",
             "parts": [{"kind": "forest", "species": ["lion"]}],
-            "find": None,
+            "plants": [],
+            "trees": [],
             "name_en": "Lion woods",
             "name_fi": "Leijonametsä",
         },
@@ -887,7 +893,8 @@ def test_make_tile_builds_the_reviewed_sea_border() -> None:
         species={
             "place": "Gulf of Finland off Helsinki",
             "parts": [{"kind": "sea", "species": ["herring_gull"]}],
-            "find": None,
+            "plants": [],
+            "trees": [],
             "name_en": "Helsinki coast",
             "name_fi": "Helsingin ranta",
         },
@@ -920,7 +927,7 @@ def test_tile_facts_come_from_the_grids(tmp_path: Path) -> None:
     assert facts["edge_lo"] <= facts["level"] <= facts["edge_hi"]
     assert facts["home"] == "sea"
     assert facts["adapt"] is True
-    assert facts["plants"] == ["bilberry"]
+    assert "plants" not in facts
 
 
 def _live_grids() -> dict[str, HabitatGrid]:

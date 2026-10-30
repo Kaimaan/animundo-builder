@@ -23,6 +23,8 @@ from builder.tiles import available_homes, home_for_cell, make_tile, tile_facts
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "species"
 SPOTS = ("sahel", "taymyr-tundra", "amazon-interior", "everglades", "kakadu")
+_GREENS = [{"id": "bilberry", "name": "Bilberry", "latin": "Vaccinium myrtillus"}]
+_TREES: list[dict[str, str]] = []
 
 
 def _world(tmp_path: Path) -> Path:
@@ -138,7 +140,6 @@ def _facts() -> dict[str, Any]:
         edge_hi=11,
         home="boreal_forest",
         adapt=False,
-        plants=["bilberry"],
     )
 
 
@@ -159,7 +160,11 @@ def test_lab_recordings_decode_and_match_their_cells() -> None:
     if ids is None:
         pytest.skip("needs an animundo-world checkout for the animal list")
     world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    from builder.species import list_library
+
     animals = list_animals(world)
+    greens = [p["id"] for p in list_library(world, "plants")]
+    trees = [t["id"] for t in list_library(world, "trees")]
     homes = available_homes(world)
     grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
     grids = {
@@ -172,16 +177,19 @@ def test_lab_recordings_decode_and_match_their_cells() -> None:
             {
                 "place": fix["place"],
                 "parts": fix["parts"],
-                "find": fix["find"],
+                "plants": [],
+                "trees": [],
                 "name_en": fix["name_en"],
                 "name_fi": fix["name_fi"],
             },
             ids,
+            greens,
+            trees,
         )
         assert answer["present"] == [s for p in fix["parts"] for s in p["species"]], (
             spot
         )
-        assert answer["find"] == fix["find"]
+        assert answer["plants"] == []
         assert answer["name_en"] == fix["name_en"]
         assert answer["name_fi"] == fix["name_fi"]
         grid, col, row = parse_tile(fix["tile"])
@@ -210,14 +218,16 @@ def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
             {
                 "place": "Open ocean far from land",
                 "parts": [{"kind": "sea", "species": ["fox"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
             {
                 "place": "Open ocean far from land",
                 "parts": [{"kind": "sea", "species": ["fox"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
@@ -245,14 +255,16 @@ def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
             {
                 "place": "Open ocean far from land",
                 "parts": [{"kind": "sea", "species": ["fox"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
             {
                 "place": "Boreal forest in southern Finland",
                 "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -285,7 +297,8 @@ def test_unknown_species_id_is_refused(tmp_path: Path) -> None:
             species={
                 "place": "Boreal forest in southern Finland",
                 "parts": [{"kind": "forest", "species": ["fox", "dragon"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -305,7 +318,8 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
             {
                 "place": "Boreal forest in southern Finland",
                 "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -314,18 +328,48 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
     source = Source(client=client, cache_dir=tmp_path / "cache")
     lat, lon = tile_center("n_413_478")
     first = fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        _facts(),
     )
     assert client.calls == 1
     assert first["name_en"] == "Nuuksio forest"
     second = fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        _facts(),
     )
     assert client.calls == 1
     assert second == first
     assert second["name_fi"] == "Nuuksion metsä"
     fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp2", _facts()
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp2",
+        "pp1",
+        _facts(),
     )
     assert client.calls == 2
 
@@ -352,7 +396,8 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
             {
                 "place": "Boreal forest in southern Finland",
                 "parts": [{"kind": "forest", "species": ["fox"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -364,7 +409,17 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
     source = Source(client=client, cache_dir=cache)
     lat, lon = tile_center("n_413_478")
     answer = fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        _facts(),
     )
     assert client.calls == 1
     assert answer["present"] == ["fox"]
@@ -379,7 +434,17 @@ def test_species_without_key_or_cache_fails_clearly(tmp_path: Path) -> None:
     lat, lon = tile_center("n_413_478")
     with pytest.raises(ValueError, match="MODEL_API_KEY is not set"):
         fetch_species(
-            "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+            "n_413_478",
+            animals,
+            _GREENS,
+            _TREES,
+            "boreal_forest",
+            lat,
+            lon,
+            source,
+            "fp1",
+            "pp1",
+            _facts(),
         )
 
 
@@ -401,12 +466,13 @@ def test_survey_prompt_carries_our_facts() -> None:
         edge_hi=9,
         home="sea_717",
         adapt=False,
-        plants=["bilberry", "bladderwrack"],
     )
     text = user_message(
         60.15,
         24.91,
         [{"id": "herring_gull", "name": "Herring gull", "latin": "Larus argentatus"}],
+        [{"id": "bladderwrack", "name": "Bladderwrack", "latin": "Fucus vesiculosus"}],
+        [],
         facts,
     )
     assert "habitat sea, ecoregion 717 over 0.8 of it" in text
@@ -415,8 +481,9 @@ def test_survey_prompt_carries_our_facts() -> None:
     assert "sea on 13" in text
     assert "level 5, edges 4 to 9 blocks" in text
     assert "builds from the home sea_717" in text
-    assert "Our plants: bilberry, bladderwrack." in text
     assert "- herring_gull: Herring gull (Larus argentatus)" in text
+    assert "- bladderwrack: Bladderwrack (Fucus vesiculosus)" in text
+    assert "with how many of each grow" in text
 
 
 def test_survey_refuses_sea_part_without_sea() -> None:
@@ -427,7 +494,8 @@ def test_survey_refuses_sea_part_without_sea() -> None:
     answer = {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "sea", "species": ["fox"]}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "present": ["fox"],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
@@ -449,7 +517,8 @@ def test_survey_refuses_lake_part_without_lake() -> None:
     answer = {
         "place": "Boreal forest and lakes in southern Finland",
         "parts": [{"kind": "lake", "species": ["fox"]}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "present": ["fox"],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
@@ -471,7 +540,8 @@ def test_survey_refuses_name_naming_an_absent_animal() -> None:
     answer = {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": ["fox"]}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "present": ["fox"],
         "name_en": "Seal and Swan Shores",
         "name_fi": "Hylje- ja joutsenrannat",
@@ -513,11 +583,14 @@ def test_empty_parts_are_refused() -> None:
             {
                 "place": "Boreal forest in southern Finland",
                 "parts": [],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
             ids,
+            ["bilberry"],
+            [],
         )
 
 
@@ -528,7 +601,8 @@ def test_survey_part_mismatch_blocks_after_retry(tmp_path: Path) -> None:
     sea = {
         "place": "Boreal forest by the sea in southern Finland",
         "parts": [{"kind": "sea", "species": ["fox"]}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -563,14 +637,16 @@ def test_retry_carries_the_refusal_back(tmp_path: Path) -> None:
             {
                 "place": "Open ocean far from land",
                 "parts": [{"kind": "sea", "species": ["fox"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
             {
                 "place": "Boreal forest in southern Finland",
                 "parts": [{"kind": "forest", "species": ["fox"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -579,7 +655,17 @@ def test_retry_carries_the_refusal_back(tmp_path: Path) -> None:
     source = Source(client=client, cache_dir=tmp_path / "cache")
     lat, lon = tile_center("n_413_478")
     fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        _facts(),
     )
     assert client.calls == 2
     assert "was refused" not in prompts[0]
@@ -599,7 +685,8 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
             {
                 "place": "Boreal forest in southern Finland",
                 "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-                "find": None,
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -608,16 +695,62 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
     source = Source(client=client, cache_dir=tmp_path / "cache")
     lat, lon = tile_center("n_413_478")
     fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        _facts(),
     )
     assert client.calls == 1
     fetch_species(
-        "n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", _facts()
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        _facts(),
     )
     assert client.calls == 1
     moved = {**_facts(), "level": 12, "edge_hi": 14}
-    fetch_species("n_413_478", animals, "boreal_forest", lat, lon, source, "fp1", moved)
+    fetch_species(
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp1",
+        moved,
+    )
     assert client.calls == 2
+    fetch_species(
+        "n_413_478",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        "fp1",
+        "pp2",
+        moved,
+    )
+    assert client.calls == 3
 
 
 def test_model_order_ranks_species(tmp_path: Path) -> None:
@@ -632,7 +765,8 @@ def test_model_order_ranks_species(tmp_path: Path) -> None:
         species={
             "place": "Boreal forest in southern Finland",
             "parts": [{"kind": "forest", "species": ["mountain_hare", "fox", "vole"]}],
-            "find": None,
+            "plants": [],
+            "trees": [],
             "name_en": "Nuuksio forest",
             "name_fi": "Nuuksion metsä",
         },

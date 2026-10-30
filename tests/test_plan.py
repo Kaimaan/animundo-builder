@@ -544,18 +544,19 @@ def _find_world(tmp_path: Path) -> Path:
     return world
 
 
-def _survey(find: str | None) -> dict[str, Any]:
+def _survey(*plant_ids: str) -> dict[str, Any]:
     return {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-        "find": find,
+        "plants": [{"id": pid, "count": 5} for pid in plant_ids],
+        "trees": [],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
 
 
-def test_plan_find_prefers_the_survey_find(tmp_path: Path) -> None:
-    """#141.1: the survey's unfiled find becomes the plant item."""
+def test_plan_plant_prefers_the_survey_pick(tmp_path: Path) -> None:
+    """#147.3: the survey's unfiled pick becomes the plant item."""
     world = _find_world(tmp_path)
     grids = _grids(tmp_path, _boreal())
     plan = plan_tile(
@@ -566,7 +567,7 @@ def test_plan_find_prefers_the_survey_find(tmp_path: Path) -> None:
         "abc123",
         presence={},
         unfiled_presence={},
-        species=_survey("Bladderwrack"),
+        species=_survey("bladderwrack"),
     )
     assert plan["items"] == [
         {
@@ -579,10 +580,10 @@ def test_plan_find_prefers_the_survey_find(tmp_path: Path) -> None:
     ]
 
 
-def test_plan_find_falls_back_when_the_survey_find_is_filed(
+def test_plan_plant_falls_back_when_the_survey_pick_is_filed(
     tmp_path: Path,
 ) -> None:
-    """#141.1: a filed survey find leaves the home's missing one."""
+    """#147.3: a filed survey pick leaves the home's missing one."""
     world = _find_world(tmp_path)
     grids = _grids(tmp_path, _boreal())
     plan = plan_tile(
@@ -606,10 +607,10 @@ def test_plan_find_falls_back_when_the_survey_find_is_filed(
     ]
 
 
-def test_plan_find_without_survey_find_is_the_home_missing(
+def test_plan_plant_without_survey_picks_is_the_home_missing(
     tmp_path: Path,
 ) -> None:
-    """#141.1: no survey find, the home's missing plant as before."""
+    """#147.3: no survey picks, the home's missing plant as before."""
     world = _find_world(tmp_path)
     grids = _grids(tmp_path, _boreal())
     plan = plan_tile(
@@ -620,7 +621,7 @@ def test_plan_find_without_survey_find_is_the_home_missing(
         "abc123",
         presence={},
         unfiled_presence={},
-        species=_survey(None),
+        species=_survey(),
     )
     assert [i["id"] for i in plan["items"]] == ["plant_cloudberry"]
 
@@ -750,7 +751,8 @@ def test_plan_uses_the_species_names(tmp_path: Path) -> None:
         species={
             "place": "Boreal forest in southern Finland",
             "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-            "find": None,
+            "plants": [],
+            "trees": [],
             "name_en": "Nuuksio forest",
             "name_fi": "Nuuksion metsä",
         },
@@ -767,7 +769,8 @@ def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:
     nameless = {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-        "find": None,
+        "plants": [],
+        "trees": [],
     }
     plan = plan_tile(
         "n_413_478",

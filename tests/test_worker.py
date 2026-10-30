@@ -76,7 +76,8 @@ def _planned_worker(tmp_path: Path, store: FakeStore, monkeypatch: Any) -> Worke
     worker.species = {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -218,7 +219,8 @@ def _flow_worker(
     worker.species = {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -314,7 +316,8 @@ def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> No
     worker.species = {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": []}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -617,7 +620,8 @@ def _forest_survey(
     return {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": list(species)}],
-        "find": None,
+        "plants": [],
+        "trees": [],
         "name_en": name_en,
         "name_fi": name_fi,
     }

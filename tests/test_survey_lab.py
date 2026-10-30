@@ -55,7 +55,8 @@ def _results() -> list[dict[str, Any]]:
             "survey": {
                 "place": "Boreal forest in southern Finland",
                 "parts": [{"kind": "forest", "species": ["fox"]}],
-                "find": "bilberry",
+                "plants": [],
+                "trees": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -77,7 +78,7 @@ def test_comparison_reads_old_against_new() -> None:
     assert "Old: Boreal forest in southern Finland — Seal Forest" in text
     assert "Old name: names seal, which is not on the tile" in text
     assert "New: Boreal forest in southern Finland — Nuuksio forest" in text
-    assert "parts forest (1), find bilberry" in text
+    assert "parts forest (1), plants none." in text
     assert "New checks: all pass." in text
 
 
@@ -124,11 +125,14 @@ def test_run_lab_surveys_each_tile(tmp_path: Path, monkeypatch: Any) -> None:
     def fake_fetch(
         tile: str,
         animals: list[dict[str, Any]],
+        plants: list[dict[str, Any]],
+        trees: list[dict[str, Any]],
         habitat: str,
         lat: float,
         lon: float,
         source: Any,
         fingerprint: str,
+        plants_print: str,
         facts: dict[str, Any],
     ) -> dict[str, Any]:
         assert facts["home"] == "boreal_forest"
@@ -136,7 +140,8 @@ def test_run_lab_surveys_each_tile(tmp_path: Path, monkeypatch: Any) -> None:
         return {
             "place": "Boreal forest in southern Finland",
             "parts": [{"kind": "forest", "species": ["fox"]}],
-            "find": None,
+            "plants": [],
+            "trees": [],
             "present": ["fox"],
             "name_en": "Nuuksio forest",
             "name_fi": "Nuuksion metsä",

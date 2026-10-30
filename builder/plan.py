@@ -27,7 +27,14 @@ from .schemas import validate
 from .species import (
     Source as SpeciesSource,
 )
-from .species import SpeciesPlaceError, fetch_species, list_animals, list_fingerprint
+from .species import (
+    SpeciesPlaceError,
+    fetch_species,
+    library_fingerprint,
+    list_animals,
+    list_fingerprint,
+    list_library,
+)
 from .tiles import (
     available_homes,
     excluded_tiles,
@@ -249,20 +256,20 @@ def plant_slug(name: str) -> str:
 
 
 def _missing_find(
-    world: Path, home: dict[str, Any], survey_find: str | None = None
+    world: Path, home: dict[str, Any], picks: list[dict[str, Any]] | None = None
 ) -> tuple[str, str] | None:
     """The plan's thing to find, and the plant it adapts from.
 
-    The survey's find goes first (#141.1: the plant that really
-    grows there); then the home's first named plant without a
-    plant file (`food[].names`, say "arctic willow"). The find
-    adapts from a filed plant of the same food kind, else the
-    first plant there is. A find that is already filed, and a home
-    naming nothing unfiled, need nothing.
+    The survey's first unfiled pick goes first (#147.3: the
+    plant that really grows there); then the home's first named
+    plant without a plant file (`food[].names`, say "arctic
+    willow"). The pick adapts from the first plant there is. A
+    pick that is already filed, and a home naming nothing
+    unfiled, need nothing.
     """
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
-    if survey_find:
-        slug = plant_slug(survey_find)
+    for pick in picks or []:
+        slug = pick.get("id", "")
         if slug and slug not in have:
             if not have:
                 raise ValueError("the world has no plants to adapt from")
@@ -497,10 +504,8 @@ def plan_tile(
                     "estimate_usd": ITEM_ESTIMATES["animal"],
                 }
             )
-    survey_find = answer.get("find") if answer else None
-    find = _missing_find(
-        world, house, survey_find if isinstance(survey_find, str) else None
-    )
+    picks = answer.get("plants") if answer else None
+    find = _missing_find(world, house, picks if isinstance(picks, list) else None)
     if find is not None:
         slug, ref = find
         items.append(
@@ -538,7 +543,7 @@ def _resolve_species(
     species_source: Any | None,
     facts: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, bool]:
-    """The survey for the plan's name and find (and the probe) (#141.1).
+    """The survey for the plan's name and probe (#141.1).
 
     A recorded answer passes through untouched; else the cache,
     else one call, like the tile maker. Anything failing leaves
@@ -549,6 +554,8 @@ def _resolve_species(
     if species is not None:
         return species, species, False
     animals = list_animals(world)
+    greens = list_library(world, "plants")
+    trees = list_library(world, "trees")
     source = species_source or SpeciesSource(
         client=None,
         cache_dir=(builder_root or BUILDER_ROOT) / "data" / "species",
@@ -557,11 +564,14 @@ def _resolve_species(
         fetched = fetch_species(
             tile,
             animals,
+            greens,
+            trees,
             habitat,
             lat,
             lon,
             source,
             list_fingerprint(animals),
+            library_fingerprint(greens, trees),
             facts,
         )
     except SpeciesPlaceError:
@@ -571,7 +581,7 @@ def _resolve_species(
     if fetched.get("name_en") and fetched.get("name_fi"):
         probe = {
             key: fetched[key]
-            for key in ("place", "parts", "find", "name_en", "name_fi")
+            for key in ("place", "parts", "plants", "trees", "name_en", "name_fi")
         }
     else:
         probe = None

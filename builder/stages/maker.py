@@ -640,13 +640,18 @@ class AnimalMakerStage:
     def _animal_files(
         self, world: Path, answer: str
     ) -> tuple[dict[str, Any] | None, list[str]]:
-        """The try's animal file, or why the answer holds none."""
+        """The try's animal file, or why the answer holds none.
+
+        A freelanced `translations` is dropped: the file keeps
+        English only and Finnish comes from the reviewer (#163).
+        """
         try:
             animal = json.loads(_unfence(answer))
         except json.JSONDecodeError as error:
             return None, [f"not JSON: {error}"]
         if not isinstance(animal, dict):
             return None, ["reply with the animal file as one JSON object"]
+        animal.pop("translations", None)
         animal_schema = json.loads(
             (world / "schemas" / "animal.schema.json").read_text(encoding="utf-8")
         )

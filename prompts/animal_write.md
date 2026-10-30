@@ -106,6 +106,9 @@ None. Write from the inputs only.
 - Text sounds like the examples: plain words, short sentences, present
   tense, what a child sees. Never a real breeding, nesting, denning or
   resting site for a sensitive species.
+- `text` is English only. Never write `translations`: Finnish
+  comes later, from the reviewer, and the animal file must not
+  carry it.
 - Numbers stay inside the rules' ranges.
 
 $FOR_CHILDREN

@@ -463,18 +463,19 @@ def test_reef_plan_lists_home_fish_shark_and_turtle(
     assert "animal_green_sea_turtle" in by_id
     turtle = next(a for a in animals if a["id"] == "green_sea_turtle")
     assert turtle["shape"] == "new"
+    # World a5679e1 (decision 0045): the humpback can be made.
+    assert by_id["animal_humpback_whale"]["from"] == "harbour_porpoise"
     assert plan["blocked"] == [
-        {"what": "humpback_whale", "reason": "not_makeable"},
         {"what": "whale_shark", "reason": "not_makeable"},
         {"what": "jellyfish", "reason": "not_makeable"},
     ]
-    assert plan["estimate_usd"] == 1.85
+    assert plan["estimate_usd"] == 2.0
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
     assert plan["country"] == "Australia"
     assert plan["region_id"] == "au_great_barrier_reef"
     assert [i["kind"] for i in plan["items"]] == (
-        ["home"] + ["animal"] * 7 + ["plant"] * 4
+        ["home"] + ["animal"] * 8 + ["plant"] * 4
     )
     assert by_id["plant_dugong_grass_halodule_uninervis"]["from"] == "wavy_hair_grass"
 

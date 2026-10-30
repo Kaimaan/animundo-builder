@@ -445,6 +445,29 @@ def test_makes_animal_first_try(tmp_path: Path) -> None:
     assert len(client.prompts) == 2
 
 
+def test_replayed_animal_drops_freelanced_translations(
+    tmp_path: Path,
+) -> None:
+    """#163: a recorded answer with translations still reaches its files."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient(
+        [
+            _animal_answer(
+                "lynx",
+                translations={"fi": {"title": "Ilves"}},
+            ),
+            _edits_answer(),
+        ]
+    )
+    result = _stage().run(_ctx(tmp_path, world, client))
+    assert result["animal_files"] == ["animals/lynx.json"]
+    filed = json.loads((tmp_path / "animals" / "lynx.json").read_text())
+    assert "translations" not in filed
+    assert filed["text"] == {"title": "T"}
+    assert not (tmp_path / "locale").exists()
+
+
 def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

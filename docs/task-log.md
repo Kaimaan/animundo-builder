@@ -1943,3 +1943,62 @@ reviewer runs the real step tests.
   an 81-id one).
 - Tallinn's facts show the #141.4 problem live: the forest
   tile would adapt from `sea`.
+
+## 2026-10-31: inbox #161, the converter everywhere
+
+Reply with the commit ids, as asked. All on builder
+`main`, pushed, against world `a76fc34` and later:
+
+- #161.1 `b365908`: enrich checks run through
+  `tools/tile_region.py` in each item's real target tiles;
+  `zz_work` is dropped.
+- #161.2 `e677691`: failures sort into the model's (a fix
+  round) or the place's (reported, no model call).
+- #161.3 `fbaf87c`: the tile maker validates through the
+  converter too, and refuses a tile check that predates it
+  instead of drifting from the game.
+- The #147.4 check passed first (squirrel and bee stay
+  playable on `n_414_480`); the lynx can resume whenever
+  you deploy this.
+
+## 2026-10-31: inbox #162, the humpback cost
+
+Cost against the estimate, as asked (`replay-place-gbr-4`,
+14 calls, all in the ledger under `replay/*`):
+
+- Reef home rebuild (deep: water 40, sea 35): 4 calls,
+  $0.188 against $0.20. Under, and the home is good.
+- Whale item: 10 calls, $0.249 against $0.15. Over
+  because `oneshot` failed and the one fix round still
+  gave no third-length flippers and no knobbly head, so
+  per #162.3 the whale went to `NEW_SHAPE` with no more
+  calls spent on it.
+- Total $0.437 against $0.35 (+25%). The draft region
+  fails only on the missing whale, as expected.
+
+## 2026-10-31: code-review batch #155-#160
+
+One commit each, all pushed, suite 896 passed + 12 skipped
+(11 live-model, 1 missing optional SAM parser):
+
+- #155 `6a83b93`: atomic worker ownership, conditional
+  writes, dead same-host takeover, 30-minute leases.
+- #156 `b450b36`: one combined job allowance across both
+  providers, with paired receipts and release-once.
+- #157 `b03225a`: timeouts hold their reservations and
+  pause the item; only proven-zero errors retry.
+- #158 `687447f`: re-enabling re-queues queued jobs,
+  interrupted builds and unplanned requests.
+- #159 `ffb4d58`: ledger failures stay control failures:
+  no fix round, no further items, job reports `ledger`.
+- #160 `0afb1a9`: `check --world` is real (tools, data,
+  contracts, the world's own seven self-tests: 21/21 on
+  world `637e742`); CI checks the world out at a pinned
+  rev and runs the compat test instead of skipping it.
+- Ledger check: `place-gbr-2` carries the $0.91 fish
+  rebuilds, the whale run its $0.437; 59 jobs total
+  $21.37 with day sums matching. Who repays the whale
+  and the deep-choices spend is still open.
+- Not green, pre-existing: repo-wide ruff (978, nearly
+  all E501) and format (32 files) fail on `main`; every
+  file this batch touched passes on its own.

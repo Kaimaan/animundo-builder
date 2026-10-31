@@ -21,7 +21,7 @@ from typing import Any
 from .grid import GridName, center, parse_tile
 from .habitats import HabitatGrid
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
-from .prices import ITEM_ESTIMATES
+from .prices import ITEM_ESTIMATES, SURVEY_ESTIMATE_USD
 from .schemas import ROOT as BUILDER_ROOT
 from .schemas import validate
 from .species import (
@@ -560,15 +560,35 @@ def plan_tile(
         if place_blocked:
             made = None
         else:
-            made, _blocked = make_tile(
-                tile,
-                grids,
-                world,
-                presence=presence,
-                builder_root=builder_root,
-                species=probe_species,
-                species_source=species_source,
-            )
+            try:
+                made, _blocked = make_tile(
+                    tile,
+                    grids,
+                    world,
+                    presence=presence,
+                    builder_root=builder_root,
+                    species=probe_species,
+                    species_source=species_source,
+                )
+            except ValueError as error:
+                if "no usable cached species" not in str(error):
+                    raise
+                return _finish(
+                    tile,
+                    False,
+                    [],
+                    unfiled,
+                    unfiled_counts,
+                    request,
+                    habitat,
+                    lat,
+                    lon,
+                    world_commit,
+                    None,
+                    None,
+                    world,
+                    "needs_survey",
+                )
         if made is not None:
             return _finish(
                 tile,
@@ -721,11 +741,14 @@ def _finish(
     answer: dict[str, Any] | None = None,
     blocked: str | None = None,
     world: Path | None = None,
+    probe: str | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items.
 
     A blocked plan carries nothing to build and nothing coming,
-    only the reason for the game to show (#141.2).
+    only the reason for the game to show (#141.2). A plan whose
+    probe needs a survey says so, and its estimate is that
+    survey's cost (#169.3).
     """
     picked_ids = {i["what"] for i in items if i["kind"] == "animal"}
     by_id = {e["id"]: e for e in unfiled}
@@ -749,13 +772,16 @@ def _finish(
             if len(improve) >= 2:
                 break
     coming = [item["what"] for item in [*items, *improve] if item["kind"] == "animal"]
+    estimate = sum(i["estimate_usd"] for i in [*items, *improve])
+    if probe is not None:
+        estimate += SURVEY_ESTIMATE_USD
     plan = {
         "format": 1,
         "tile": tile,
         "code_only": code_only,
         "items": items,
         "improve": improve,
-        "estimate_usd": round(sum(i["estimate_usd"] for i in [*items, *improve]), 2),
+        "estimate_usd": round(estimate, 2),
         "name": plan_name(habitat, lat, lon, answer, world),
         "coming": coming,
         "world": world_commit,
@@ -763,5 +789,7 @@ def _finish(
     }
     if blocked is not None:
         plan["blocked"] = blocked
+    if probe is not None:
+        plan["probe"] = probe
     validate("plan", plan)
     return plan

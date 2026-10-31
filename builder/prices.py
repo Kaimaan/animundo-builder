@@ -78,3 +78,9 @@ ITEM_ESTIMATES: dict[str, float] = {
     "plant": 0.15,
     "food": 0.0,
 }
+
+#: One tile survey's cost in US dollars, a conservative first
+#: guess (#169.3): a single call with no searches, against the
+#: live place survey's $0.11 with six. Re-measure when the
+#: ledger holds real tile surveys.
+SURVEY_ESTIMATE_USD = 0.05

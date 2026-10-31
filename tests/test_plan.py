@@ -937,6 +937,56 @@ def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
     }
 
 
+def test_plan_leaves_the_probe_undecided_without_a_key(tmp_path: Path) -> None:
+    """#169.3: no cached survey and no key prints needs_survey, free."""
+    from builder.species import Source
+
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _boreal())
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence=None,
+        unfiled_presence={},
+        species_source=Source(client=None, cache_dir=tmp_path / "sp"),
+    )
+    assert plan["probe"] == "needs_survey"
+    assert plan["estimate_usd"] == 0.05
+    assert plan["code_only"] is False
+    assert plan["items"] == []
+    assert "blocked" not in plan
+
+
+def test_plan_probe_reraises_a_real_tile_error(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#169.3: only the missing survey is caught; a bug stays loud."""
+    import pytest
+
+    import builder.plan as plan_mod
+
+    world = _world(tmp_path)
+    grids = _grids(tmp_path, _boreal())
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise ValueError("the tile maker broke")
+
+    monkeypatch.setattr(plan_mod, "make_tile", broken)
+    with pytest.raises(ValueError, match="the tile maker broke"):
+        plan_tile(
+            "n_413_478",
+            None,
+            grids,  # type: ignore[arg-type]
+            world,
+            "abc123",
+            presence={},
+            unfiled_presence={},
+        )
+
+
 def test_open_water_plan_names_its_region_neighbour(tmp_path: Path) -> None:
     """#169.2: s_530_613's plan points from the Great Barrier Reef."""
     world = _world(tmp_path)

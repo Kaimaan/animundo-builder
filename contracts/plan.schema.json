@@ -96,6 +96,10 @@
       "description": "For a place plan: the path of its survey.json.",
       "type": "string",
       "minLength": 1
+    },
+    "probe": {
+      "description": "The code-only probe left undecided: needs_survey says the tile needs one survey before the plan can say more, and estimate_usd is that survey's cost (#169.3).",
+      "enum": ["needs_survey"]
     }
   }
 }

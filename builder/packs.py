@@ -177,8 +177,16 @@ def publish_pack(
     if store.list_blobs(prefix):
         raise PackExists(f"{prefix} is already published")
     for rel in sorted(files):
-        store.write_blob(prefix + rel, files[rel])
+        store.write_blob(prefix + rel, files[rel], _content_type(rel))
     return prefix
+
+
+def _content_type(rel: str) -> str:
+    if rel.endswith(".png"):
+        return "image/png"
+    if rel.endswith(".glb"):
+        return "model/gltf-binary"
+    return "application/json"
 
 
 def _is_int(value: Any) -> bool:

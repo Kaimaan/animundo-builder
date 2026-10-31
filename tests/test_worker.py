@@ -3063,3 +3063,47 @@ def test_resume_settles_superseded_timeout_at_estimate(tmp_path: Path) -> None:
         data = json.loads(pool.path.read_text(encoding="utf-8"))
         assert side.id in data["settled"]
         assert pool.job_spent("j1") == pytest.approx(0.05)
+
+
+def test_enrich_review_needs_no_person_verdict() -> None:
+    """#174: a checking enrich job is ready for its review step."""
+    from builder.worker import Worker
+
+    assert Worker._needs_review({"status": "checking", "kind": "enrich"}) is True
+    build = {"status": "checking", "kind": "build", "review": {"a": 1}}
+    assert Worker._needs_review(build) is True
+    assert Worker._needs_review({"status": "checking", "kind": "build"}) is False
+    assert Worker._needs_review({"status": "building", "kind": "enrich"}) is False
+
+
+def test_ship_state_marks_the_item_shipped(tmp_path: Path) -> None:
+    """#174, #176.2: the ship result carries the pack prefix."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    item_dir = tmp_path / "jobs" / "job-1" / "animal_hammerhead"
+    item_dir.mkdir(parents=True)
+    assert worker._ship_completed("job-1", "animal_hammerhead") is False
+    assert worker._ship_pack("job-1", "animal_hammerhead") is None
+    (item_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research", "ship"],
+                "results": {"ship": {"pack": "packs/animal_hammerhead/1/"}},
+            }
+        )
+    )
+    assert worker._ship_completed("job-1", "animal_hammerhead") is True
+    assert worker._ship_pack("job-1", "animal_hammerhead") == (
+        "packs/animal_hammerhead/1/"
+    )
+
+
+def test_enrich_review_waits_for_the_ship(tmp_path: Path) -> None:
+    """#174: no ship, no verdict: the job waits, untouched."""
+    store = FakeStore()
+    job = _enrich_job(status="checking")
+    store.build_jobs["j1"] = job
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.review_enrich_job("j1", job)
+    assert store.build_jobs["j1"]["status"] == "checking"
+    assert "pack" not in store.build_jobs["j1"]

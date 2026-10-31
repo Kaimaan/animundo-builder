@@ -30,7 +30,7 @@ class _Store:
     def list_blobs(self, prefix: str) -> list[str]:
         return sorted(n for n in self.blobs if n.startswith(prefix))
 
-    def write_blob(self, name: str, data: bytes) -> None:
+    def write_blob(self, name: str, data: bytes, content_type: str = "") -> None:
         self.blobs[name] = data
 
 

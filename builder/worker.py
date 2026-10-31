@@ -846,16 +846,19 @@ class Worker:
     def review_enrich_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Remake a shipped enrich item's tiles, then publish (#143.4).
 
-        `not_accepted` fails with `nothing_shipped`, as for a build.
-        A shipped item still missing from the checkout waits. Else
-        every listed tile is remade by code from its cached survey
+        The ship stage's gates replace the person's review (#174):
+        an item whose ship completed remakes now; `not_accepted`
+        still drops it. Items reviewed the old way (a `shipped`
+        verdict, in the checkout) remake as before. Else every
+        listed tile is remade by code from its cached survey
         (never a new call), the changed groups publish in one go,
-        and the job carries `versions` for the tiles that changed.
-        Tiles the thing missed for food are flagged `no_food` in
-        the item's report. With per-tile place verdicts (#161.2),
-        only the tiles that passed remake; the rest are listed
-        with their reasons instead of failing the whole job, and
-        no passed tile fails the job as `place`.
+        and the job carries `versions` for the tiles that changed
+        and the pack the ship published. Tiles the thing missed
+        for food are flagged `no_food` in the item's report. With
+        per-tile place verdicts (#161.2), only the tiles that
+        passed remake; the rest are listed with their reasons
+        instead of failing the whole job, and no passed tile
+        fails the job as `place`.
         """
         from . import build as build_mod
 
@@ -875,8 +878,15 @@ class Worker:
             print(f"build job {job_id}: dropped {item_id}")
             self._fail(job_id, "nothing_shipped")
             return
-        if verdict != "shipped" or item is None or not self._world_has(item, plan):
-            print(f"build job {job_id}: {item_id} waits for the world")
+        if item is None:
+            print(f"build job {job_id}: {item_id} is not in the plan")
+            return
+        if self._ship_completed(job_id, item_id or ""):
+            pack = self._ship_pack(job_id, item_id or "")
+        elif verdict == "shipped" and self._world_has(item, plan):
+            pack = None
+        else:
+            print(f"build job {job_id}: {item_id} waits for its ship")
             return
         ship, failed, general, missing = self._place_ship(job_id, job, item)
         if general or (ship is not None and not ship):
@@ -900,9 +910,45 @@ class Worker:
         self._flag_no_food(job_id, item, no_food, what)
         self._flag_place(job_id, item, failed, missing, [])
         self._history_left_out(job_id, job, ship, failed, missing)
-        self._update(job_id, {"versions": versions})
+        self._update(job_id, {"versions": versions, **({"pack": pack} if pack else {})})
         print(f"build job {job_id}: remade {len(versions)} tiles")
         self._set_status(job_id, "published")
+
+    def _ship_completed(self, job_id: str, item_id: str) -> bool:
+        """Whether the item's ship stage completed (#174)."""
+        import json
+
+        state_path = self.jobs_dir / job_id / item_id / "state.json"
+        if not state_path.is_file():
+            return False
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except ValueError:
+            return False
+        return "ship" in (state.get("completed") or [])
+
+    def _ship_pack(self, job_id: str, item_id: str) -> str | None:
+        """The pack prefix the item's ship published (#176.2)."""
+        import json
+
+        state_path = self.jobs_dir / job_id / item_id / "state.json"
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        result = (state.get("results") or {}).get("ship") or {}
+        return result.get("pack")
+
+    @staticmethod
+    def _needs_review(doc: dict[str, Any]) -> bool:
+        """A checking job ready for its review step (#174).
+
+        A person's verdict, or an enrich item whose ship stage
+        already gated it: the checks replace the review there.
+        """
+        if doc.get("status") != "checking":
+            return False
+        return bool(doc.get("review")) or doc.get("kind") == "enrich"
 
     def _history_left_out(
         self,
@@ -1397,6 +1443,14 @@ class Worker:
         build_mod.prepare_item(
             item_dir, item, habitat, lat, lon, entry, home, cast, enrich_tiles
         )
+        if enrich_tiles is not None:
+            # An enrich item ships itself when every check passes
+            # (#174): the ship stage gates and publishes its pack.
+            from .stages.ship import ShipStage
+
+            extra: list[Any] = [ShipStage(store=self.store)]
+        else:
+            extra = []
         pipeline = build_mod.item_pipeline(
             chat=self.chat,
             build=self.build,
@@ -1404,6 +1458,7 @@ class Worker:
             state_path=item_dir / "state.json",
             guard=self._guard,
             plant_cache=self.jobs_dir / "_plant-cache",
+            extra=extra,
         )
         build_mod.run_item_stages(ctx, item_dir, pipeline)
 
@@ -1676,7 +1731,7 @@ class Worker:
         if self.pull_world():
             self.sync_world()
             for job_id, doc in self.store.pending_build_jobs():
-                if doc.get("status") == "checking" and doc.get("review"):
+                if self._needs_review(doc):
                     queued.append(("build_job", job_id))
         enabled = self.store.get_enabled()
         if enabled and not self._was_enabled:
@@ -1695,9 +1750,7 @@ class Worker:
         """
         for job_id, doc in self.store.pending_build_jobs():
             status = doc.get("status") or "queued"
-            if status in ("queued", "building") or (
-                status == "checking" and doc.get("review")
-            ):
+            if status in ("queued", "building") or self._needs_review(doc):
                 if self._job_paused(doc) and not doc.get("operator_action"):
                     print(f"build job {job_id}: paused, waiting for an operator")
                     continue

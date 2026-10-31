@@ -14,6 +14,7 @@ from .region import RegionStage
 from .research import ResearchStage
 from .reuse import ReuseStage
 from .safety import SafetyStage
+from .ship import ShipStage
 from .species_plan import SpeciesPlanStage
 from .survey import SurveyStage
 from .words import WordsStage
@@ -34,6 +35,7 @@ __all__ = [
     "RegionStage",
     "ReuseStage",
     "SafetyStage",
+    "ShipStage",
     "SpeciesPlanStage",
     "SurveyStage",
     "WordsStage",

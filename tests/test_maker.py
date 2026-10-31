@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -741,10 +743,36 @@ def _build_real_glb(sandbox: Path, spec: str) -> dict[str, Any]:
     return {"ok": True, "summary": f"{spec}: built", "log": log}
 
 
+_RESOLVE = (
+    "import json, sys; sys.path.insert(0, sys.argv[1]); "
+    "import layers; "
+    "print(json.dumps(layers.resolve(json.load(open(sys.argv[2])))))"
+)
+
+
 def _recast_region(tmp_path: Path) -> None:
     """The shipped Nuuksio, seating only the hunter, the prey and its fish."""
     sibling = _sibling_world()
     region = json.loads((sibling / "regions" / "fi_nuuksio.json").read_text())
+    if "biome" in region:
+        # A layered place resolves to the full region first: the
+        # recast below works on the resolved shape, as before (#178).
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _RESOLVE,
+                str(sibling / "tools"),
+                str(sibling / "regions" / "fi_nuuksio.json"),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        region = json.loads(proc.stdout)
+        # The recast works the old shape: resolved content, no layers.
+        region.pop("biome", None)
+        region.pop("species", None)
     region["animals"] = {"playable": ["lynx"], "predators": [], "prey": ["capybara"]}
     region["fish"] = [{"kind": "lynx", "count": 3}]
     region["ground_cover"]["plants"] = []

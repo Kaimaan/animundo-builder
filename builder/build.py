@@ -48,8 +48,12 @@ def item_pipeline(
     state_path: Path | None = None,
     guard: Any = None,
     plant_cache: Path | None = None,
+    extra: list[Any] | None = None,
 ) -> Pipeline:
-    """The item pipeline, with the makers' seams open for tests."""
+    """The item pipeline, with the makers' seams open for tests.
+
+    `extra` stages run last; the worker ships enrich items with one.
+    """
     return Pipeline(
         [
             ResearchStage(),
@@ -58,6 +62,7 @@ def item_pipeline(
             HomeMakerStage(chat=chat, adapt=adapt, plant_cache=plant_cache),
             AnimalMakerStage(chat=chat, build=build, adapt=adapt),
             PlantsStage(chat=chat, build=build),
+            *(extra or []),
         ],
         state_path=state_path or Path("state.json"),
         guard=guard,

@@ -2068,3 +2068,38 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   region's name.
 - Ready for the hammerhead retry once the worker is
   restarted on this commit; Kai decides.
+
+## 2026-10-31: inbox #169 (builder 3840941, 379755a, f1413a8)
+
+- Tropical seas refuse the generic `sea` home (it fits
+  boreal and temperate biomes 4, 5, 6, 8, 11): the
+  Cairns coast blocks `no_home`; Helsinki keeps
+  `sea_717`.
+- Plan names point from the nearest hand-made region;
+  ties keep the curated name. The Finnish genitive is
+  a rule (vowel +n, -e +en, else +in) until the world
+  files one.
+- Keyless `request plan` prints the plan with the
+  probe `needs_survey` and the survey's cost ($0.05
+  first guess) instead of exiting 1.
+
+## 2026-10-31: inbox #170 (builder 2e0c53c, dddeace)
+
+- Surveys keep `missing` (survey order, at most 12)
+  and `surveyed_at`; replays keep the prior date.
+- `builder place file <dir>` files it under the
+  place's own tiles as group `places`; tiles and
+  index counts untouched. Improve surveys file too.
+- Cost per survey from the reef: the live survey was
+  $0.11 (6 searches); a replay is $0. A fresh survey
+  each for Nuuksio and Saimaa should run about $0.11
+  on the Meta credit.
+- Spec 02 §2, next to `wanted`, paste-ready:
+  `places` (object, optional): hand-made places'
+  wanted lists by tile id, filed from the survey when
+  the place ships (`builder place file`), so enrich
+  can grow them too. `places["<tile>"] = {"region",
+  "wanted", "surveyed_at"}` with `wanted` in tile
+  `wanted` shape (at most 12). Never under `tiles`:
+  the tile stays the hand-made region, and the game
+  must not load a code-made tile there.

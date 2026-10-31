@@ -80,14 +80,7 @@ class FirebaseStore:
         return snap.to_dict() if snap.exists else None
 
     def update_build_job(self, job_id: str, fields: dict[str, Any]) -> None:
-        from .worker import DELETE
-
-        self._db.collection("build_jobs").document(job_id).update(
-            {
-                key: firestore.DELETE_FIELD if value is DELETE else value
-                for key, value in fields.items()
-            }
-        )
+        self._db.collection("build_jobs").document(job_id).update(_translated(fields))
 
     def claim_build_job(self, job_id: str, worker_id: str) -> bool:
         """Claim a job atomically: queued, own, or an expired lease (#155)."""
@@ -139,7 +132,7 @@ class FirebaseStore:
         self._db.collection("jobs").document(job_id).set(doc)
 
     def update_job(self, job_id: str, fields: dict[str, Any]) -> None:
-        self._db.collection("jobs").document(job_id).update(fields)
+        self._db.collection("jobs").document(job_id).update(_translated(fields))
 
     # -- Storage blobs: tiles, review bundles, previews ----------------------
 
@@ -237,6 +230,21 @@ def _renew_lease(
     return True
 
 
+def _translated(fields: dict[str, Any]) -> dict[str, Any]:
+    """Caller fields as Firestore writes: `DELETE` deletes (#172.1).
+
+    Every update path translates; `set` and `add` take whole new
+    documents, where a delete marker is meaningless, so the worker
+    never sends one there.
+    """
+    from .worker import DELETE
+
+    return {
+        key: firestore.DELETE_FIELD if value is DELETE else value
+        for key, value in fields.items()
+    }
+
+
 @firestore.transactional
 def _update_if_owner(
     transaction: Any, ref: Any, worker_id: str, fields: dict[str, Any]
@@ -248,5 +256,5 @@ def _update_if_owner(
     data = snap.to_dict() or {}
     if data.get("worker_id") != worker_id:
         return False
-    transaction.update(ref, fields)
+    transaction.update(ref, _translated(fields))
     return True

@@ -31,6 +31,43 @@ def test_stores_expose_every_worker_method() -> None:
         assert callable(getattr(FirebaseStore, name, None)), f"real lacks {name}"
 
 
+def test_owner_update_encodes_delete_for_firestore() -> None:
+    """#172.1: the give-up patch survives the real client's encoder."""
+    import pytest
+    from google.cloud.firestore_v1._helpers import pbs_for_update
+
+    from builder.worker import DELETE
+    from builder.worker_store import _translated, _update_if_owner
+
+    class _Snap:
+        exists = True
+
+        def to_dict(self) -> dict[str, str]:
+            return {"worker_id": "wA"}
+
+    class _Ref:
+        def get(self, transaction: Any = None) -> _Snap:
+            return _Snap()
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.fields: dict[str, Any] | None = None
+
+        def update(self, ref: Any, fields: dict[str, Any]) -> None:
+            self.fields = fields
+
+    path = "projects/x/databases/(default)/documents/build_jobs/j1"
+    patch = {"progress": [], "operator_action": DELETE, "error": "gave_up"}
+    assert _translated(patch)["operator_action"] is not DELETE
+    tx = _Tx()
+    body = getattr(_update_if_owner, "to_wrap", _update_if_owner)
+    assert body(tx, _Ref(), "wA", patch) is True
+    assert tx.fields is not None
+    pbs_for_update(path, tx.fields, None)
+    with pytest.raises(TypeError):
+        pbs_for_update(path, patch, None)
+
+
 def test_note_request_queues_once(tmp_path: Path) -> None:
     worker = _worker(tmp_path, FakeStore())
     assert worker.note_request("n_413_296", {}) is True

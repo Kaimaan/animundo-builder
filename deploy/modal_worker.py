@@ -16,6 +16,11 @@ minutes while the worker runs.
 Kai deploys (the Modal account and secrets are his)::
 
     modal deploy deploy/modal_worker.py
+
+Restart notes: the daily 03:17 cron restarts the container by
+itself. To stop the old container by hand, `modal container
+stop` needs `-y` when there is no terminal; without it the
+command asks, hears nothing, and stops nothing (#172.3).
 """
 
 from __future__ import annotations

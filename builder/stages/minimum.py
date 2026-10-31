@@ -4,12 +4,15 @@ A home is one animal in its home plus its food (#42): the
 animal itself when the library lacks it, its home when no
 template is built, and one prey when it hunts and no library
 prey shares its habitat (the smallest-bodied prey the
-research names that can be made). Free: no model calls.
+research names that can be made). A place or enrich item
+never makes prey; when none of its food is in the place the
+report says `no_food` (#175.2). Free: no model calls.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -35,11 +38,19 @@ class MinimumStage:
         if brief.get("species_key"):
             entry = find_entry(data["animals"], brief["species_key"])
             make_animal, animal_reason = self._need_animal(ctx, brief, entry)
-            prey, prey_reason = self._need_prey(world, data, brief, entry, research)
+            if brief.get("region_id") is not None or brief.get("enrich") is not None:
+                # A place or enrich item never makes prey: food is
+                # worked out from what is there (decision 0043).
+                prey, prey_reason = None, _never_prey_reason(brief)
+                food, food_reason = self._place_food(ctx, brief, research)
+            else:
+                prey, prey_reason = self._need_prey(world, data, brief, entry, research)
+                food, food_reason = None, ""
         else:
             # A home item carries no species: only the home is made.
             make_animal, animal_reason = False, "this item makes no animal"
             prey, prey_reason = None, "this item makes no animal"
+            food, food_reason = None, ""
         make_home, home_reason = self._need_home(ctx, brief)
         minset = {
             "make_animal": make_animal,
@@ -49,6 +60,8 @@ class MinimumStage:
             "home_habitat": brief["home"],
             "prey": prey,
             "prey_reason": prey_reason,
+            "food": food,
+            "food_reason": food_reason,
         }
         (ctx.job_dir / "minset.json").write_text(
             json.dumps(minset, indent=2), encoding="utf-8"
@@ -185,6 +198,72 @@ class MinimumStage:
             )
         found.sort(key=lambda item: item[1])
         return found, skipped
+
+    def _place_food(
+        self, ctx: Any, brief: dict[str, Any], research: dict[str, Any]
+    ) -> tuple[str | None, str]:
+        """Whether its food is in the place, by name (#175.2).
+
+        The item's laid regions (the scaffold, or an enrich
+        item's converter places) carry the place's food names,
+        fish and cast. A food counts when its name matches one
+        of those; when none does, the report says `no_food` and
+        the item goes on. With no regions laid there is nothing
+        to judge against, so no verdict.
+        """
+        regions = sorted((ctx.job_dir / "regions").glob("*.json"))
+        if not regions:
+            return None, "no place was laid to check food against"
+        have: set[str] = set()
+        for path in regions:
+            try:
+                region = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(region, dict):
+                continue
+            for entry in region.get("food", []) or []:
+                if not isinstance(entry, dict):
+                    continue
+                for name in entry.get("names", []) or []:
+                    if isinstance(name, str) and name:
+                        have.add(_slug(name))
+            for fish in region.get("fish", []) or []:
+                if isinstance(fish, dict) and fish.get("kind"):
+                    have.add(_slug(str(fish["kind"])))
+            animals = region.get("animals", {}) or {}
+            if isinstance(animals, dict):
+                for group in ("playable", "prey", "predators"):
+                    for animal_id in animals.get(group, []) or []:
+                        if isinstance(animal_id, str) and animal_id:
+                            have.add(_slug(animal_id))
+        foods = [research["main_food"], *research["other_foods"]]
+        names = [
+            str(food["name"])
+            for food in foods
+            if isinstance(food, dict) and food.get("name")
+        ]
+        matched = [name for name in names if _slug(name) in have]
+        if brief.get("region_id") is not None:
+            where = f"the {brief['home']}"
+        else:
+            where = "its tiles"
+        if matched:
+            return "in_place", f"{matched[0]} is in {where}"
+        first = names[0] if names else "its food"
+        return "no_food", f"{first} is not in {where}"
+
+
+def _never_prey_reason(brief: dict[str, Any]) -> str:
+    """Why no prey: a place or enrich item never makes one (#175.2)."""
+    if brief.get("enrich") is not None:
+        return "an enrich item never makes prey"
+    return "a place item never makes prey"
+
+
+def _slug(name: str) -> str:
+    """A food name as an id, for matching against the place."""
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
 def _making(minset: dict[str, Any]) -> list[str]:

@@ -1,0 +1,40 @@
+{
+ "format": 1,
+ "tile": "s_530_612",
+ "code_only": false,
+ "items": [
+  {
+   "id": "animal_humpback_whale",
+   "kind": "animal",
+   "what": "humpback_whale",
+   "from": "harbour_porpoise",
+   "estimate_usd": 0.6
+  }
+ ],
+ "improve": [],
+ "blocked": [
+  {
+   "what": "whale_shark",
+   "reason": "not_makeable"
+  },
+  {
+   "what": "jellyfish",
+   "reason": "not_makeable"
+  },
+  {
+   "what": "brown_seaweed_sargassum",
+   "reason": "not_a_plant"
+  }
+ ],
+ "survey": "survey.json",
+ "estimate_usd": 0.6,
+ "name": {
+  "en": "Great Barrier Reef",
+  "fi": "Iso Valliriutta"
+ },
+ "country": "Australia",
+ "region_id": "au_great_barrier_reef",
+ "coming": [],
+ "world": "278ca9a",
+ "planned_at": "2026-10-30T15:15:56.080131+00:00"
+}

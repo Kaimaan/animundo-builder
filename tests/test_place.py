@@ -1413,3 +1413,27 @@ def test_request_build_local_rejects_a_split_answers_dir(tmp_path: Path) -> None
         ]
     )
     assert code == 1
+
+
+def test_replayed_whale_makes_no_prey_and_reports_no_food(tmp_path: Path) -> None:
+    """#175.2: the lab whale replayed: no herring, `no_food` reported."""
+    from builder.place import replay_place
+    from builder.records import ReplayError
+    from builder.report import build_report, report_text
+
+    world = _needs_world()
+    with pytest.raises(ReplayError, match="out of answers"):
+        replay_place(FIXTURES / "whale-noprey", tmp_path / "out", world, _grid_dir())
+    item_dir = tmp_path / "out" / "replay" / "animal_humpback_whale"
+    minset = json.loads((item_dir / "minset.json").read_text())
+    assert minset["home_habitat"] == "reef"
+    assert minset["prey"] is None
+    assert "never makes prey" in minset["prey_reason"]
+    assert minset["food"] == "no_food"
+    assert "krill" in minset["food_reason"]
+    made = [p.name for p in (item_dir / "draft" / "animals").glob("*.json")]
+    assert made == ["humpback_whale.json"], "no herring was made"
+    stray = [p for p in item_dir.rglob("*herring*") if "sandbox" not in p.parts]
+    assert stray == []
+    assert "no_food" in build_report(item_dir).read_text()
+    assert "no_food" in report_text(item_dir)

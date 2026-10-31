@@ -58,6 +58,8 @@ def _new_things_data(job_dir: Path) -> list[tuple[str, str, Any]]:
                 _read_json(job_dir / "checks" / "oneshot.json").get("cost_usd"),
             )
         )
+    if minset.get("food") == "no_food":
+        things.append(("food", f"no_food ({minset.get('food_reason', '')})", None))
     return things
 
 

@@ -323,3 +323,87 @@ def test_place_home_is_never_made(tmp_path: Path) -> None:
     minset = json.loads((tmp_path / "minset.json").read_text())
     assert minset["make_home"] is False
     assert minset["home_reason"] == "tt_park is built"
+
+
+def _reef_regions(tmp_path: Path) -> None:
+    regions = tmp_path / "regions"
+    regions.mkdir(parents=True, exist_ok=True)
+    (regions / "zz_work.json").write_text(
+        json.dumps(
+            {
+                "food": [
+                    {"kind": "water_bugs", "names": ["zooplankton", "tiny shrimp"]},
+                    {"kind": "water_plants", "names": ["seagrass", "algae"]},
+                ],
+                "fish": [{"kind": "clownfish", "count": 6}],
+                "animals": {"playable": [], "prey": [], "predators": []},
+            }
+        )
+    )
+
+
+def test_place_item_never_makes_prey(tmp_path: Path) -> None:
+    """#175.2: a place item seats into the place; krill is not there."""
+    brief = _brief(
+        species_key=5225712,
+        latin="Megaptera novaeangliae",
+        in_library=None,
+        home="reef",
+        region_id="au_great_barrier_reef",
+    )
+    research = _research(
+        main_food={"name": "Antarctic krill", "kind": "prey", "size_cm": 6},
+        other_foods=[{"name": "copepods", "kind": "prey", "size_cm": 1}],
+    )
+    world = _files(tmp_path, [ANACONDA, CAPYBARA], brief, research)
+    _reef_regions(tmp_path)
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == ["animal"]
+    minset = json.loads((tmp_path / "minset.json").read_text())
+    assert minset["home_habitat"] == "reef"
+    assert minset["prey"] is None
+    assert "never makes prey" in minset["prey_reason"]
+    assert minset["food"] == "no_food"
+    assert "krill" in minset["food_reason"]
+
+
+def test_place_item_with_food_in_place(tmp_path: Path) -> None:
+    """#175.2: a food the place names is no verdict against it."""
+    brief = _brief(
+        species_key=5225712,
+        latin="Chelonia mydas",
+        in_library=None,
+        home="reef",
+        region_id="au_great_barrier_reef",
+    )
+    research = _research(
+        main_food={"name": "seagrass", "kind": "plants"},
+        other_foods=[],
+    )
+    world = _files(tmp_path, [ANACONDA, CAPYBARA], brief, research)
+    _reef_regions(tmp_path)
+    MinimumStage().run(_ctx(tmp_path, world))
+    minset = json.loads((tmp_path / "minset.json").read_text())
+    assert minset["prey"] is None
+    assert minset["food"] == "in_place"
+
+
+def test_enrich_item_never_makes_prey(tmp_path: Path) -> None:
+    """#175.2: an enrich item neither makes prey nor wants for verdicts."""
+    brief = _brief(
+        species_key=5225712,
+        latin="Megaptera novaeangliae",
+        in_library=None,
+        home="open_ocean",
+        enrich={"tiles": ["s_530_612"]},
+    )
+    research = _research(
+        main_food={"name": "Antarctic krill", "kind": "prey", "size_cm": 6},
+    )
+    world = _files(tmp_path, [ANACONDA, CAPYBARA], brief, research)
+    _reef_regions(tmp_path)
+    MinimumStage().run(_ctx(tmp_path, world))
+    minset = json.loads((tmp_path / "minset.json").read_text())
+    assert minset["prey"] is None
+    assert "never makes prey" in minset["prey_reason"]
+    assert minset["food"] == "no_food"

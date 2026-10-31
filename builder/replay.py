@@ -63,6 +63,7 @@ def run_request(
     world: Path,
     grid_dir: Path | None,
     make_ctx: Callable[[dict[str, Any], Path], Any],
+    place: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     """Every expand item through its stages. Reports by item id.
 
@@ -71,7 +72,9 @@ def run_request(
     must have played every answer it holds. Like a border job
     (#135.3), one failed item never stops the rest (#146.1):
     every item that doesn't need it still runs, the failed one is
-    reported, and only a run where nothing built raises.
+    reported, and only a run where nothing built raises. A place
+    run passes its region id and home, which the intake briefs
+    (#175.2).
     """
     from .ledger import CapExceeded, LedgerError
     from .meta import MetaAuthError
@@ -107,7 +110,9 @@ def run_request(
                     if item["kind"] in ("plant", "animal")
                     else None
                 )
-                build_mod.prepare_item(item_dir, item, habitat, lat, lon, entry, home)
+                build_mod.prepare_item(
+                    item_dir, item, habitat, lat, lon, entry, home, place=place
+                )
                 ctx = make_ctx(item, item_dir)
                 pipeline = build_mod.item_pipeline(state_path=item_dir / "state.json")
                 build_mod.run_item_stages(ctx, item_dir, pipeline)
@@ -168,12 +173,18 @@ def replay_request(
     grid_dir: Path | None,
 ) -> dict[str, Path]:
     """Rebuild a recorded request: no key, no model cost."""
+    from .place import place_of
     from .records import ReplayClient, ReplayError
 
     _check_tile(tile)
     plan = json.loads((recording / "plan.json").read_text(encoding="utf-8"))
     if plan.get("tile") != tile:
         raise ValueError(f"the recording plans {plan.get('tile')}, not {tile}")
+    place: dict[str, Any] | None = None
+    survey_path = recording / "survey.json"
+    if plan.get("region_id") and survey_path.is_file():
+        survey = json.loads(survey_path.read_text(encoding="utf-8"))
+        place = place_of(plan["region_id"], survey)
 
     def make_ctx(item: dict[str, Any], item_dir: Path) -> JobContext:
         records = recording / "items" / item["id"] / "records"
@@ -189,7 +200,7 @@ def replay_request(
             world_path=world,
         )
 
-    return run_request(tile, plan, out_dir, world, grid_dir, make_ctx)
+    return run_request(tile, plan, out_dir, world, grid_dir, make_ctx, place)
 
 
 def record_request(

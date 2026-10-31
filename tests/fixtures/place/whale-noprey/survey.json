@@ -1,0 +1,101 @@
+{
+  "place": "Great Barrier Reef",
+  "tile": "s_530_612",
+  "habitat": "tropical coral reef sea",
+  "grid_habitat": "open_ocean",
+  "home_from": "examples/reef",
+  "name": {
+    "en": "Great Barrier Reef",
+    "fi": "Iso Valliriutta"
+  },
+  "country": "Australia",
+  "region_id": "au_great_barrier_reef",
+  "animals": [
+    {
+      "id": "clownfish",
+      "source": "https://oceanconservancy.org/blog/2024/07/03/animals-great-barrier-reef/"
+    },
+    {
+      "id": "green_sea_turtle",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/marine-turtles"
+    },
+    {
+      "id": "blue_tang",
+      "source": "https://australian.museum/learn/animals/fishes/palette-surgeonfish-paracanthurus-hepatus/"
+    },
+    {
+      "id": "reef_shark",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/sharks-and-rays"
+    },
+    {
+      "id": "bottlenose_dolphin",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/dolphins-and-whales"
+    },
+    {
+      "id": "humpback_whale",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/dolphins-and-whales"
+    },
+    {
+      "id": "whale_shark",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/sharks-and-rays"
+    },
+    {
+      "id": "lionfish",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/fishes"
+    },
+    {
+      "id": "butterflyfish",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/fishes"
+    },
+    {
+      "id": "jellyfish",
+      "source": "https://www.gbrmpa.gov.au/the-reef/animals/jellyfish"
+    }
+  ],
+  "plants": [
+    {
+      "name": "Dugong grass (Halodule uninervis)",
+      "source": "https://www.gbrmpa.gov.au/the-reef/habitats/seagrass",
+      "kingdom": "Plantae"
+    },
+    {
+      "name": "Paddle grass (Halophila ovalis)",
+      "source": "https://www.gbrmpa.gov.au/the-reef/habitats/seagrass",
+      "kingdom": "Plantae"
+    },
+    {
+      "name": "Green algae (Halimeda)",
+      "source": "https://www.aims.gov.au/research-topics/biodiversity/algae",
+      "kingdom": "Plantae"
+    },
+    {
+      "name": "Brown seaweed (Sargassum)",
+      "source": "https://www.gbrmpa.gov.au/the-reef/habitats/algae",
+      "kingdom": "Chromista"
+    }
+  ],
+  "food": [
+    {
+      "name": "Plankton",
+      "source": "https://www.gbrmpa.gov.au/learn/about-the-reef/food-webs"
+    },
+    {
+      "name": "Small fish",
+      "source": "https://www.gbrmpa.gov.au/learn/about-the-reef/food-webs"
+    },
+    {
+      "name": "Algae",
+      "source": "https://www.gbrmpa.gov.au/learn/about-the-reef/food-webs"
+    },
+    {
+      "name": "Seagrass",
+      "source": "https://www.gbrmpa.gov.au/the-reef/habitats/seagrass"
+    },
+    {
+      "name": "Squid",
+      "source": "https://www.gbrmpa.gov.au/learn/about-the-reef/food-webs"
+    }
+  ],
+  "wanted": [],
+  "budget_usd": 5.0
+}

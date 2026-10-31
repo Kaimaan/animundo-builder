@@ -1001,6 +1001,13 @@ def record_place(
     if not config.model_api_key:
         raise MetaAuthError("MODEL_API_KEY is not set")
     plan = json.loads((place_dir / "plan.json").read_text(encoding="utf-8"))
+    survey_path = place_dir / "survey.json"
+    survey = (
+        json.loads(survey_path.read_text(encoding="utf-8"))
+        if survey_path.is_file()
+        else {}
+    )
+    place = place_of(plan["region_id"], survey) if plan.get("region_id") else None
 
     def make_ctx(item: dict[str, Any], item_dir: Path) -> Any:
         records = place_dir / "items" / item["id"] / "records"
@@ -1010,7 +1017,7 @@ def record_place(
             ctx.open_client = RecordingClient(ctx.open_client, records)
         return ctx
 
-    reports = run_request(plan["tile"], plan, out_dir, world, grid_dir, make_ctx)
+    reports = run_request(plan["tile"], plan, out_dir, world, grid_dir, make_ctx, place)
     region_path, problems = write_job_region(place_dir, out_dir / JOB_ID, world)
     if problems:
         raise ValueError(f"the draft region fails the world's checks: {problems[0]}")
@@ -1054,6 +1061,18 @@ def take_place_job(job_dir: Path, out_dir: Path, world: Path) -> Path:
         raise ValueError(f"the take fails the draft check: {problems[0]}")
     take_report(dest)
     return dest
+
+
+def place_of(region_id: str, survey: dict[str, Any]) -> dict[str, str]:
+    """The intake's place: its region id and its own home (#175.2).
+
+    The home is the `home_from` stem (`examples/reef` is the
+    `reef` home); empty when the survey names none, and the
+    intake then keeps the grid habitat.
+    """
+    home_from = str(survey.get("home_from") or "")
+    home = home_from.split("/")[-1] if home_from else ""
+    return {"id": region_id, "home": home}
 
 
 def region_residents(world: Path, region_id: str) -> set[str]:

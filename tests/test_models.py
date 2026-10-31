@@ -288,6 +288,95 @@ def test_missing_bar_preview_stops(tmp_path: Path) -> None:
     assert "no bar preview" in state["failed"]["error"]
 
 
+def test_new_shape_starts_from_models_examples(tmp_path: Path) -> None:
+    """#175.1: a start in models/examples/ reaches its first build."""
+    world = _world(tmp_path)
+    (world / "models" / "kestrel.json").unlink()
+    (world / "models" / "previews" / "kestrel.png").unlink()
+    (world / "models" / "examples").mkdir(parents=True)
+    (world / "models" / "examples" / "harbour_porpoise.json").write_text(
+        json.dumps(
+            {
+                "id": "harbour_porpoise",
+                "name": "Harbour porpoise",
+                "description": "EXAMPLE-PORPOISE-MARKER",
+                "parts": [{"name": "body"}],
+            }
+        )
+    )
+    (world / "models" / "examples" / "previews").mkdir(parents=True)
+    (world / "models" / "examples" / "previews" / "harbour_porpoise.png").write_bytes(
+        b"examples-png-bytes"
+    )
+    (tmp_path / "species-plan.json").write_text(
+        json.dumps(
+            {
+                "species": [
+                    {
+                        "species": "humpback_whale",
+                        "decision": "new",
+                        "reference": {
+                            "row": "Whales",
+                            "start": "harbour_porpoise",
+                            "change": "Much bigger.",
+                            "kind": "mammal",
+                        },
+                    }
+                ]
+            }
+        )
+    )
+    (tmp_path / "survey.json").write_text(
+        json.dumps(
+            {
+                "area_id": "xx_test",
+                "facts": [],
+                "species": [
+                    {
+                        "species": "humpback_whale",
+                        "latin": "Megaptera novaeangliae",
+                        "description": "A very large whale.",
+                    }
+                ],
+            }
+        )
+    )
+    (tmp_path / "measurements").mkdir(exist_ok=True)
+    (tmp_path / "measurements" / "humpback_whale.json").write_text(
+        json.dumps({"species": "humpback_whale"})
+    )
+    refs = tmp_path / "references" / "humpback_whale"
+    refs.mkdir(parents=True)
+    (refs / "sheet-1.png").write_bytes(_png())
+    animals = tmp_path / "animals"
+    animals.mkdir(exist_ok=True)
+    (animals / "humpback_whale.json").write_text(
+        json.dumps({"text": {"title": "Humpback whale"}})
+    )
+    whale_spec = {"id": "humpback_whale", "parts": [{"name": "body"}]}
+    chat = ScriptChat(
+        [
+            json.dumps(whale_spec),
+            json.dumps({"species": "humpback_whale", "round": 1, "issues": []}),
+        ]
+    )
+    builds: list[str] = []
+
+    def _build(sandbox: Path, species_id: str) -> dict[str, Any]:
+        builds.append(species_id)
+        return _build_ok(sandbox, species_id)
+
+    result = ModelsStage(chat=chat, build=_build, check=lambda c, s, i, n: []).run(
+        _ctx(tmp_path, world)
+    )
+    assert result == {"model_files": ["models/humpback_whale.json"]}
+    assert builds == ["humpback_whale"], "reached its first build round"
+    assert "EXAMPLE-PORPOISE-MARKER" in chat.prompts[0], "spec from examples"
+    assert "Harbour porpoise" in chat.prompts[1], "review names the bar"
+    bar = tmp_path / "references" / "humpback_whale" / "closest-harbour_porpoise.png"
+    assert bar.read_bytes() == b"examples-png-bytes"
+
+
 def _draft_world(tmp_path: Path, verdict: dict) -> Path:
     world = tmp_path / "world"
     (world / "tools").mkdir(parents=True)

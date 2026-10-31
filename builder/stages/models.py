@@ -112,7 +112,13 @@ class ModelsStage:
             + (world / "models" / "README.md").read_text(encoding="utf-8")
         )
         closest_id = ref["start"]
-        closest_spec = (world / "models" / f"{closest_id}.json").read_text()
+        closest_path = _reference_path(world, closest_id)
+        if closest_path is None:
+            raise _Stopped(
+                f"{species_id}: no starting spec for {closest_id} "
+                "in models/ or models/examples/"
+            )
+        closest_spec = closest_path.read_text(encoding="utf-8")
         animal = _animal_title(ctx.job_dir, species_id)
         sheet = _latest_sheet(ctx.job_dir, species_id, self.reference)
         spec: dict[str, Any] | None = None
@@ -623,11 +629,39 @@ def _review_prompt_name(kind: str, sheet: bool) -> str:
     return base if sheet else f"{base}_none"
 
 
+def _reference_path(world: Path, start_from: str) -> Path | None:
+    """Where the reference spec lives: models, then examples (#77.1)."""
+    for path in (
+        world / "models" / f"{start_from}.json",
+        world / "models" / "examples" / f"{start_from}.json",
+    ):
+        if path.is_file():
+            return path
+    return None
+
+
+def _reference_preview(world: Path, closest_id: str) -> Path | None:
+    """The closest preview: models, then the examples' own (#175.1)."""
+    for path in (
+        world / "models" / "previews" / f"{closest_id}.png",
+        world / "models" / "examples" / "previews" / f"{closest_id}.png",
+    ):
+        if path.is_file():
+            return path
+    return None
+
+
 def _bar_preview(ctx: Any, species_id: str, closest_id: str) -> Path:
     """The game's own closest preview, copied into the job as the bar."""
     parts = closest_id.split("/")
     if len(parts) == 1:
-        src = Path(ctx.world_path) / "models" / "previews" / f"{closest_id}.png"
+        src = _reference_preview(Path(ctx.world_path), closest_id)
+        if src is None:
+            raise _Stopped(
+                f"no bar preview for {closest_id}: "
+                "models/previews/ and models/examples/previews/ "
+                "are both missing it"
+            )
     else:
         src = (
             Path(ctx.world_path)
@@ -636,8 +670,8 @@ def _bar_preview(ctx: Any, species_id: str, closest_id: str) -> Path:
             / "previews"
             / f"{parts[-1]}.png"
         )
-    if not src.is_file():
-        raise _Stopped(f"no bar preview for {closest_id}: {src} is missing")
+        if not src.is_file():
+            raise _Stopped(f"no bar preview for {closest_id}: {src} is missing")
     dest = ctx.job_dir / "references" / species_id / f"closest-{parts[-1]}.png"
     if not dest.is_file():
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -647,8 +681,11 @@ def _bar_preview(ctx: Any, species_id: str, closest_id: str) -> Path:
 
 def _closest_title(world: Path, closest_id: str) -> str:
     """The closest animal's name for the review prompt."""
-    data = json.loads((world / "models" / f"{closest_id}.json").read_text())
     base = closest_id.rsplit("/", 1)[-1]
+    path = _reference_path(world, closest_id)
+    if path is None:
+        return base.replace("_", " ").title()
+    data = json.loads(path.read_text(encoding="utf-8"))
     return str(data.get("name") or base.replace("_", " ").title())
 
 

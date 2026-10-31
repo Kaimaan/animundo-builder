@@ -750,3 +750,46 @@ def test_publish_remakes_moves_counts_on_an_opener() -> None:
     assert index["counts"] == {"ready": 1, "blocked": {}}
     data = json.loads(store.blobs[group_blob].decode("utf-8"))
     assert data["blocked"] == {}
+
+
+def test_write_place_animal_brief_names_the_place_home(tmp_path: Path) -> None:
+    """#175.2: a place item's home is the place's own home."""
+    item = {"id": "animal_whale", "kind": "animal", "what": "humpback_whale"}
+    entry = {
+        "id": "humpback_whale",
+        "gbif_key": 5220606,
+        "latin": "Megaptera novaeangliae",
+        "name": "Humpback whale",
+    }
+    brief = build_mod.write_brief(
+        tmp_path,
+        item,
+        "open_ocean",
+        -16.6,
+        146.0,
+        entry,
+        place={"id": "au_great_barrier_reef", "home": "reef"},
+    )
+    assert brief["home"] == "reef"
+    assert brief["region_id"] == "au_great_barrier_reef"
+
+
+def test_write_place_home_brief_keeps_its_flow(tmp_path: Path) -> None:
+    """#175.2: a place home item still briefs its own making."""
+    item = {
+        "id": "home_reef",
+        "kind": "home",
+        "what": "reef",
+        "from": "examples/reef",
+    }
+    brief = build_mod.write_brief(
+        tmp_path,
+        item,
+        "open_ocean",
+        -16.6,
+        146.0,
+        None,
+        place={"id": "au_great_barrier_reef", "home": "reef"},
+    )
+    assert brief["home"] == "open_ocean"
+    assert "region_id" not in brief

@@ -51,6 +51,7 @@ from .models import (
     _build_first_specs,
     _build_only,
     _ensure_sandbox,
+    _reference_path,
     build_in_sandbox,
     ensure_plant_models,
     ensure_specs,
@@ -2062,17 +2063,6 @@ def _measure_errors(
     found = _measure_spec(spec)
     sourced = _sourced_sizes(research, target)
     return _size_errors(found, sourced, spec) + _ratio_errors(found, target, world)
-
-
-def _reference_path(world: Path, start_from: str) -> Path | None:
-    """Where the reference spec lives: models, then examples (#77.1)."""
-    for path in (
-        world / "models" / f"{start_from}.json",
-        world / "models" / "examples" / f"{start_from}.json",
-    ):
-        if path.is_file():
-            return path
-    return None
 
 
 def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:

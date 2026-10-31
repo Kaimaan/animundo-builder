@@ -889,6 +889,82 @@ def test_plan_names_direction_from_nearest_place() -> None:
     }
 
 
+def _reef_region(world: Path) -> None:
+    regions = world / "regions"
+    regions.mkdir(exist_ok=True)
+    (regions / "au_great_barrier_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "au_great_barrier_reef",
+                "name": "Great Barrier Reef – Green Island",
+                "center": {"lat": -16.759, "lon": 145.973},
+            }
+        )
+    )
+
+
+def test_plan_names_from_the_nearest_region(tmp_path: Path) -> None:
+    """#169.2: a reef neighbour is named from the reef, both languages."""
+    from builder.grid import center
+
+    world = _world(tmp_path)
+    _reef_region(world)
+    lat, lon = center("s_530_613")
+    named = plan_name("open_ocean", lat, lon, None, world)
+    assert named["en"] == "Open ocean north of Great Barrier Reef – Green Island"
+    assert named["fi"] == (
+        "Avomeri Great Barrier Reef – Green Islandin pohjoispuolella"
+    )
+
+
+def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
+    """#169.2: where a curated name exists, the region doesn't rename it."""
+    world = _world(tmp_path)
+    regions = world / "regions"
+    regions.mkdir(exist_ok=True)
+    (regions / "fi_nuuksio.json").write_text(
+        json.dumps(
+            {
+                "id": "fi_nuuksio",
+                "name": "Nuuksio National Park",
+                "center": {"lat": 60.3007, "lon": 24.5263},
+            }
+        )
+    )
+    assert plan_name("sea", 52.077, -5.007, None, world) == {
+        "en": "Sea southwest of Nuuksio",
+        "fi": "Meri Nuuksion lounaispuolella",
+    }
+
+
+def test_open_water_plan_names_its_region_neighbour(tmp_path: Path) -> None:
+    """#169.2: s_530_613's plan points from the Great Barrier Reef."""
+    world = _world(tmp_path)
+    _reef_region(world)
+    path = tmp_path / "ease2_s25.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "grid": "ease2_s25",
+                "cells": {"530,613": [None, 0.0, None, 0.0, None, 0.0, 0.0, 0.0]},
+            },
+            handle,
+        )
+    grids = {"ease2_s25": HabitatGrid.load(path, "ease2_s25")}
+    plan = plan_tile(
+        "s_530_613",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    assert plan["blocked"] == "open_water"
+    assert "Great Barrier Reef – Green Island" in plan["name"]["en"]
+    assert "Green Islandin" in plan["name"]["fi"]
+
+
 def test_plan_uses_the_species_names(tmp_path: Path) -> None:
     """#135.5: a recorded answer names the plan in both languages."""
     world = _world(tmp_path)

@@ -56,6 +56,73 @@ PLACES: tuple[tuple[str, str, str, float, float], ...] = (
     ("saimaa", "Saimaa", "Saimaan", 62.115, 28.508),
 )
 
+#: Finnish vowels for the genitive rule: a base ending in one
+#: takes `-n`, in `-e` takes `-en`, else `-in` (#169.2).
+_FI_VOWELS = frozenset("aeiouyäöåAEIOUYÄÖÅ")
+
+
+def _fi_genitive(base: str) -> str:
+    """The Finnish genitive of a place name, by rule (#169.2).
+
+    The world's region files carry no genitive field yet, so a
+    compass fallback derives it: `Nuuksio` → `Nuuksion`,
+    `Green Island` → `Green Islandin`. A surveyed name always
+    wins over this guess.
+    """
+    word = base.strip()
+    if not word:
+        return word
+    if word[-1] in _FI_VOWELS:
+        return word + ("en" if word[-1] in ("e", "E") else "n")
+    return word + "in"
+
+
+def region_places(world: Path) -> list[tuple[str, str, str, float, float]]:
+    """The world's hand-made regions as plan-name places (#169.2).
+
+    Id, English and genitive Finnish names, and the centre, as
+    `PLACES`. A region without a centre or a name is skipped;
+    a name dict takes its `en`/`fi`, else the name is both.
+    """
+    out: list[tuple[str, str, str, float, float]] = []
+    folder = world / "regions"
+    if not folder.is_dir():
+        return out
+    for path in sorted(folder.glob("*.json")):
+        try:
+            region = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(region, dict):
+            continue
+        center = region.get("center")
+        lat = center.get("lat") if isinstance(center, dict) else None
+        lon = center.get("lon") if isinstance(center, dict) else None
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            continue
+        name = region.get("name")
+        if isinstance(name, dict):
+            en = name.get("en")
+            fi = name.get("fi") or en
+        else:
+            en = fi = name
+        if not isinstance(en, str) or not en.strip():
+            continue
+        if not isinstance(fi, str) or not fi.strip():
+            fi = en
+        rid = region.get("id")
+        out.append(
+            (
+                str(rid) if isinstance(rid, str) and rid else path.stem,
+                en.strip(),
+                _fi_genitive(fi),
+                float(lat),
+                float(lon),
+            )
+        )
+    return out
+
+
 #: Compass winds for the plan name, clockwise from north.
 WINDS: tuple[tuple[str, str], ...] = (
     ("north", "pohjois"),
@@ -93,13 +160,19 @@ HABITATS: dict[str, tuple[str, str]] = {
 
 
 def plan_name(
-    habitat: str, lat: float, lon: float, species: dict[str, Any] | None = None
+    habitat: str,
+    lat: float,
+    lon: float,
+    species: dict[str, Any] | None = None,
+    world: Path | None = None,
 ) -> dict[str, str]:
     """The area name: the species call's own, else the compass (#135.5).
 
     "Helsinki shore" / "Helsingin ranta" when the answer names the
     square; without names, "Forest north of Nuuksio" / "Metsä
-    Nuuksion pohjoispuolella" by code as before.
+    Nuuksion pohjoispuolella" by code as before. With a world,
+    the hand-made regions join the places and the nearest wins;
+    a tie keeps the curated name (#169.2).
     """
     if species is not None:
         en, fi = species.get("name_en"), species.get("name_fi")
@@ -107,14 +180,19 @@ def plan_name(
             return {"en": en.strip(), "fi": fi.strip()}
     words = HABITATS.get(habitat, (habitat.replace("_", " ").title(), habitat))
     scored = []
-    for _pid, en, gen, plat, plon in PLACES:
+    candidates: list[tuple[tuple[str, str, str, float, float], int]] = [
+        (place, 0) for place in PLACES
+    ]
+    if world is not None:
+        candidates += [(place, 1) for place in region_places(world)]
+    for (_pid, en, gen, plat, plon), order in candidates:
         east = (lon - plon) * math.cos(math.radians(lat))
         north = lat - plat
         dist = math.hypot(east, north)
         angle = (math.degrees(math.atan2(east, north)) + 360) % 360
         wind = WINDS[int((angle + 22.5) // 45) % 8]
-        scored.append((dist, en, gen, wind))
-    _dist, en, gen, wind = sorted(scored)[0]
+        scored.append((dist, order, en, gen, wind))
+    _dist, _order, en, gen, wind = sorted(scored)[0]
     return {
         "en": f"{words[0]} {wind[0]} of {en}",
         "fi": f"{words[1]} {gen} {wind[1]}puolella",
@@ -350,7 +428,17 @@ def plan_tile(
     lat, lon = center(tile)
     if tile in excluded_tiles(builder_root):
         return _finish(
-            tile, False, [], [], {}, request, habitat, lat, lon, world_commit
+            tile,
+            False,
+            [],
+            [],
+            {},
+            request,
+            habitat,
+            lat,
+            lon,
+            world_commit,
+            world=world,
         )
     placed = place_cells(world).get(tile)
     if placed is not None:
@@ -368,6 +456,7 @@ def plan_tile(
             world_commit,
             None,
             f"place:{placed[0]}",
+            world=world,
         )
     homes = available_homes(world)
     biomes = available_biomes(world)
@@ -398,6 +487,7 @@ def plan_tile(
             world_commit,
             None,
             "open_water",
+            world=world,
         )
     bundle: str | None = None
     if home is None:
@@ -421,6 +511,7 @@ def plan_tile(
                     world_commit,
                     None,
                     "no_land",
+                    world=world,
                 )
             bundle = default_bundle(tile, grids, biomes, habitat, style)
             if bundle is None:
@@ -437,6 +528,7 @@ def plan_tile(
                     world_commit,
                     None,
                     "no_home",
+                    world=world,
                 )
             home_id = bundle
             adapt = False
@@ -490,6 +582,7 @@ def plan_tile(
                 lon,
                 world_commit,
                 answer,
+                world=world,
             )
     # Expanding: each missing thing on its own (spec 04, minimum).
     # The home below is real, or the one the new home adapts from.
@@ -554,6 +647,7 @@ def plan_tile(
         lon,
         world_commit,
         answer,
+        world=world,
     )
 
 
@@ -626,6 +720,7 @@ def _finish(
     world_commit: str,
     answer: dict[str, Any] | None = None,
     blocked: str | None = None,
+    world: Path | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items.
 
@@ -661,7 +756,7 @@ def _finish(
         "items": items,
         "improve": improve,
         "estimate_usd": round(sum(i["estimate_usd"] for i in [*items, *improve]), 2),
-        "name": plan_name(habitat, lat, lon, answer),
+        "name": plan_name(habitat, lat, lon, answer, world),
         "coming": coming,
         "world": world_commit,
         "planned_at": datetime.now(UTC).isoformat(),

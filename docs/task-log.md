@@ -2251,8 +2251,8 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   installs through the game's real `LivePacks`
   path on fresh game main (headless Godot):
   version 1, the reef gains the hammerhead in
-  `playable` and `fish`, everything elsebyte
-  for byte, playable on the reef, clean exit.
+  `playable` and `fish`, everything else
+  byte for byte, playable on the reef, clean exit.
 - Two judgment calls, both logged in code:
   hunts must be tags a shipped animal already
   hunts (new predator-prey relations go

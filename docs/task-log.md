@@ -2159,3 +2159,27 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   ref["reserved_usd"])` per side from `builder.ledger`.
 - `modal container stop` needs `-y` with no
   terminal; noted in `deploy/modal_worker.py`.
+
+## 2026-10-31: inbox #173 (builder 3e90858)
+
+- Region seating now only adds: the animal joins
+  `fish` (or `animals`) and the
+  `playable`/`predators`/`prey` lists, and food,
+  plants, terrain and everything else stay byte
+  for byte. The test diffs the reef before and
+  after and allows only those lists to change.
+- A job whose checks fail no longer sits in
+  `checking` looking passed: the failing checks
+  land in `progress[].checks_failed` with a red
+  line at the top of the report.
+- "Not built" model verdicts split out as
+  unknown instead of failing, for the worker's
+  fresh clone with no `.glb` files.
+- Sea animal rules: migration dates are checked
+  against the place's hemisphere, `active`
+  unless the sources show it leaving; a big
+  fish hunts only `small_fish`; typical adult
+  length; a fish count below the small fish.
+- The report shows the job's own budget, not
+  the $8 default; enrich items without a survey
+  say so plainly.

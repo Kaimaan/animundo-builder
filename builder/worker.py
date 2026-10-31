@@ -368,10 +368,17 @@ class Worker:
             )
             if made is None:
                 reason = (blocked or {}).get("reason", "no_home")
+                self._history_blocked(job_id, tile, "code", reason)
                 self._fail(job_id, reason)
                 return
             self._require_lease(job_id)
-            path = publish_group(tile, made, self.store, self.world_commit or "unknown")
+            path = publish_group(
+                tile,
+                made,
+                self.store,
+                self.world_commit or "unknown",
+                self._history_context(job_id, "code"),
+            )
             print(f"build job {job_id}: published {path}")
             # The published copy's own version, so areas/{tile} shows it (#143.5).
             self._set_status(job_id, "published", {"version": made["version"]})
@@ -782,10 +789,18 @@ class Worker:
             species_source=self._species_source(),
         )
         if made is None:
-            self._fail(job_id, (blocked or {}).get("reason", "no_home"))
+            reason = (blocked or {}).get("reason", "no_home")
+            self._history_blocked(job_id, tile, "build", reason)
+            self._fail(job_id, reason)
             return
         self._require_lease(job_id)
-        path = publish_group(tile, made, self.store, self.world_commit or "unknown")
+        path = publish_group(
+            tile,
+            made,
+            self.store,
+            self.world_commit or "unknown",
+            self._history_context(job_id, "build"),
+        )
         print(f"build job {job_id}: published {path}")
         # The published copy's own version, so areas/{tile} shows it (#143.5).
         self._set_status(job_id, "published", {"version": made["version"]})
@@ -832,7 +847,7 @@ class Worker:
             return
         self._require_lease(job_id)
         try:
-            versions, no_food = self._remake_enrich_tiles(job, item, ship)
+            versions, no_food = self._remake_enrich_tiles(job_id, job, item, ship)
         except build_mod.EnrichRemakeError as error:
             print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
             self._fail(job_id, "remake_failed")
@@ -846,9 +861,53 @@ class Worker:
         what = (job.get("enrich") or {}).get("what", "")
         self._flag_no_food(job_id, item, no_food, what)
         self._flag_place(job_id, item, failed, missing, [])
+        self._history_left_out(job_id, job, ship, failed, missing)
         self._update(job_id, {"versions": versions})
         print(f"build job {job_id}: remade {len(versions)} tiles")
         self._set_status(job_id, "published")
+
+    def _history_left_out(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        ship: set[str] | None,
+        failed: dict[str, list[str]],
+        missing: list[str],
+    ) -> None:
+        """Left-out tiles' history rows: place cells and refusals (#165.1).
+
+        Nothing was written for them; the reason says whose
+        region or which place checks refused.
+        """
+        from . import history as history_mod
+        from .tiles import place_cells
+
+        assert self.world is not None
+        context = self._history_context(job_id, "enrich")
+        placed = place_cells(self.world)
+        for tile in job.get("tiles", []):
+            hit = placed.get(tile)
+            if hit is not None:
+                reason: str | None = f"place:{hit[0]}"
+            elif ship is not None and tile not in ship and tile in failed:
+                reason = "; ".join(failed[tile])
+            elif tile in missing:
+                reason = "the intake converted no place for this tile"
+            else:
+                continue
+            history_mod.record(
+                self.store,
+                history_mod.row(
+                    tile,
+                    "left_out",
+                    job=context["job"],
+                    kind=context["kind"],
+                    world=self.world_commit or "unknown",
+                    version=None,
+                    reason=reason,
+                    cost_usd=context["cost_usd"],
+                ),
+            )
 
     def _place_ship(
         self, job_id: str, job: dict[str, Any], item: dict[str, Any]
@@ -925,6 +984,7 @@ class Worker:
 
     def _remake_enrich_tiles(
         self,
+        job_id: str,
         job: dict[str, Any],
         item: dict[str, Any],
         ship: set[str] | None = None,
@@ -979,7 +1039,11 @@ class Worker:
             if hungry:
                 no_food.append(tile)
         versions = build_mod.publish_remakes(
-            self.store, groups, decisions, self.world_commit or "unknown"
+            self.store,
+            groups,
+            decisions,
+            self.world_commit or "unknown",
+            self._history_context(job_id, "enrich"),
         )
         return versions, no_food
 
@@ -1048,6 +1112,35 @@ class Worker:
         print(f"build job {job_id}: failed ({error})", file=sys.stderr)
         self._update(job_id, {"status": "failed", "error": error})
         self.alert({"kind": "job_failed", "id": job_id, "error": error})
+
+    def _history_context(self, job_id: str, kind: str) -> dict[str, Any]:
+        """The job's half of a tile history row (#165.1)."""
+        job = self.store.get_build_job(job_id) or {}
+        cost = job.get("cost_usd", 0.0)
+        return {
+            "job": job_id,
+            "kind": kind,
+            "cost_usd": cost if isinstance(cost, (int, float)) else None,
+        }
+
+    def _history_blocked(self, job_id: str, tile: str, kind: str, reason: str) -> None:
+        """A blocked tile's history row; nothing was written (#165.1)."""
+        from . import history as history_mod
+
+        context = self._history_context(job_id, kind)
+        history_mod.record(
+            self.store,
+            history_mod.row(
+                tile,
+                "blocked",
+                job=context["job"],
+                kind=context["kind"],
+                world=self.world_commit or "unknown",
+                version=None,
+                reason=reason,
+                cost_usd=context["cost_usd"],
+            ),
+        )
 
     def _job_tile(self, job_id: str, job: dict[str, Any]) -> str | None:
         """The job's tile, straight from the job (spec/02 §build job).

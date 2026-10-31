@@ -127,6 +127,10 @@ class FirebaseStore:
         _, ref = self._db.collection("builder_alerts").add(item)
         return ref.id
 
+    def add_tile_history(self, item: dict[str, Any]) -> str:
+        _, ref = self._db.collection("tile_history").add(item)
+        return ref.id
+
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         snap = self._db.collection("jobs").document(job_id).get()
         return snap.to_dict() if snap.exists else None
@@ -164,6 +168,7 @@ class FirebaseStore:
 #: and the tests' fake must have them all.
 STORE_METHODS = (
     "add_alert",
+    "add_tile_history",
     "claim_build_job",
     "get_build_job",
     "get_enabled",

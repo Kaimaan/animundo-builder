@@ -526,6 +526,69 @@ def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> No
     assert store.alerts[-1]["kind"] == "job_failed"
 
 
+def test_code_job_records_its_tile_history(tmp_path: Path) -> None:
+    """#165.3: a publish lands one made row that stays put."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    (entry,) = store.tile_history
+    assert entry["tile"] == "n_413_478"
+    assert entry["event"] == "made"
+    assert entry["job"] == "j1"
+    assert entry["kind"] == "code"
+    assert entry["world"] == "abc123"
+    assert entry["version"] == 1
+    assert entry["maker"]
+    assert entry["at"]
+    assert "reason" not in entry
+
+
+def test_second_publish_appends_a_remake_row(tmp_path: Path) -> None:
+    """#165.3: a remake bumps the version; both rows remain."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert worker.world is not None
+    _file_lion(worker.world, ["grass"])
+    worker.species = _forest_survey("fox", "mountain_hare", "vole", "lion")
+    store.build_jobs["j2"] = _code_job()
+    worker.handle_build_job("j2")
+    assert [e["event"] for e in store.tile_history] == ["made", "remade"]
+    assert [e["version"] for e in store.tile_history] == [1, 2]
+    assert [e["job"] for e in store.tile_history] == ["j1", "j2"]
+
+
+def test_blocked_code_job_records_its_reason(tmp_path: Path) -> None:
+    """#165.3: a blocked tile lands a row with its reason, no version."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.species = _forest_survey()
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    (entry,) = store.tile_history
+    assert entry["event"] == "blocked"
+    assert entry["reason"] == "no_animal"
+    assert entry["version"] is None
+
+
+def test_broken_history_never_stops_the_tile(tmp_path: Path, monkeypatch: Any) -> None:
+    """#165.3: a failing history write prints; the tile still ships."""
+
+    def broken(item: dict[str, Any]) -> str:
+        raise ValueError("firestore is down")
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    monkeypatch.setattr(store, "add_tile_history", broken)
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "published"
+    assert store.tile_history == []
+
+
 def test_pending_request_builds_nothing(tmp_path: Path, monkeypatch: Any) -> None:
     """#118.10: a pending or turned-down request builds nothing."""
     store = FakeStore()
@@ -1311,6 +1374,12 @@ def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> No
     assert job["status"] == "published"
     assert job["versions"] == {}
     assert store.blobs[blob] == before
+    (entry,) = store.tile_history
+    assert entry["tile"] == P
+    assert entry["event"] == "left_out"
+    assert entry["reason"] == "place:fi_test"
+    assert entry["kind"] == "enrich"
+    assert entry["version"] is None
 
 
 def _region_world(world: Path) -> None:

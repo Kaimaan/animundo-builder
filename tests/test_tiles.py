@@ -1531,3 +1531,48 @@ def test_remade_nuuksio_tile_keeps_squirrel_and_bee(tmp_path: Path) -> None:
     assert made is not None
     assert "squirrel" in made["species"]["playable"]
     assert "bee" in made["species"]["playable"]
+
+
+def test_make_at_appends_local_history_without_a_store(tmp_path: Path) -> None:
+    """#165.2: the command line keeps jsonl rows, one per event."""
+    from builder.grid import center
+    from builder.tiles import make_at
+
+    world = _world(tmp_path)
+    cells = {"413,478": [999, 1.0, None, 0.0, 13, 1.0, 0.0, 80.0]}
+    grids = _grids(tmp_path, cells)
+    lat, lon = center("n_413_478")
+    tile, _path, status = make_at(lat, lon, grids, world, tmp_path / "out")
+    assert tile == "n_413_478"
+    assert status == "no_home"
+    rows = (tmp_path / "out" / "tile-history.jsonl").read_text().splitlines()
+    assert len(rows) == 1
+    entry = json.loads(rows[0])
+    assert entry["event"] == "blocked"
+    assert entry["kind"] == "cli"
+    assert entry["job"] is None
+    assert entry["reason"] == "no_home"
+    assert entry["version"] == 1
+    make_at(lat, lon, grids, world, tmp_path / "out")
+    rows = (tmp_path / "out" / "tile-history.jsonl").read_text().splitlines()
+    assert len(rows) == 2
+    assert json.loads(rows[1])["version"] == 2
+
+
+def test_make_at_records_to_the_store_when_given(tmp_path: Path) -> None:
+    """#165.2: with credentials the row goes to tile_history."""
+    from fake_store import FakeStore
+
+    from builder.grid import center
+    from builder.tiles import make_at
+
+    world = _world(tmp_path)
+    cells = {"413,478": [999, 1.0, None, 0.0, 13, 1.0, 0.0, 80.0]}
+    grids = _grids(tmp_path, cells)
+    lat, lon = center("n_413_478")
+    store = FakeStore()
+    make_at(lat, lon, grids, world, tmp_path / "out", history_store=store)
+    (entry,) = store.tile_history
+    assert entry["tile"] == "n_413_478"
+    assert entry["event"] == "blocked"
+    assert not (tmp_path / "out" / "tile-history.jsonl").exists()

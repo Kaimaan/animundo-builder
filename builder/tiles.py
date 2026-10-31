@@ -1367,15 +1367,58 @@ def make_at(
     out_dir: Path,
     builder_root: Path | None = None,
     species_source: SpeciesSource | None = None,
+    history_store: Any | None = None,
 ) -> tuple[str, Path, str]:
     """Make the tile at this point and write its group file.
 
     Returns (tile id, group path, "ready" or the blocked reason).
+    The tile's history row goes to the store when one is given,
+    else to `tile-history.jsonl` beside the groups (#165.2).
     """
+    from . import history as history_mod
+    from .grid import group
+
     tile = tile_at(lat, lon)
     made, blocked = make_tile(
         tile, grids, world, builder_root=builder_root, species_source=species_source
     )
+    grid, gcol, grow = group(tile)
+    group_file = out_dir / grid / f"{gcol:02d}_{grow:02d}.json"
+    old: dict[str, Any] = {}
+    if group_file.is_file():
+        try:
+            old = json.loads(group_file.read_text(encoding="utf-8"))
+        except ValueError:
+            old = {}
     path = write_group(out_dir, tile, made, blocked)
+    if made is not None:
+        event = (
+            "remade"
+            if tile in (old.get("tiles") or {}) or tile in (old.get("blocked") or {})
+            else "made"
+        )
+        reason = None
+    else:
+        event = "blocked"
+        reason = (blocked or {}).get("reason", "?")
+    try:
+        version = int(json.loads(path.read_text(encoding="utf-8")).get("version", 1))
+    except ValueError:
+        version = 1
+    entry = history_mod.row(
+        tile,
+        event,
+        job=None,
+        kind="cli",
+        world=history_mod.commit(world),
+        version=version,
+        reason=reason,
+    )
+    if history_store is not None:
+        history_mod.record(history_store, entry)
+    else:
+        local = out_dir / "tile-history.jsonl"
+        history_mod.record_local(local, entry)
+        print(f"history: no store, appended to {local}")
     status = "ready" if made is not None else (blocked or {}).get("reason", "?")
     return tile, path, status

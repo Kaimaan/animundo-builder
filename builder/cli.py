@@ -139,6 +139,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="data/habitat-grid",
         help="Baked habitat grids (default: data/habitat-grid).",
     )
+    make.add_argument("--project", default=None, help="The Firebase project.")
+    make.add_argument(
+        "--storage-bucket",
+        default=None,
+        help="The Storage bucket: history goes to tile_history, else jsonl.",
+    )
     lab = tiles_sub.add_parser("lab", help="Run the $0 lab over sample spots.")
     lab.add_argument("--out", required=True, help="Directory for counts and globe.")
     lab.add_argument(
@@ -659,6 +665,18 @@ def cmd_tiles_make(args: argparse.Namespace) -> int:
         print(f"error: no baked grid: {path}", file=sys.stderr)
         return 1
     grids: dict[GridName, HabitatGrid] = {name: HabitatGrid.load(path, name)}
+    history_store = None
+    if args.project or args.storage_bucket:
+        if not (args.project and args.storage_bucket):
+            print("error: --project and --storage-bucket go together", file=sys.stderr)
+            return 1
+        from .worker_store import FirebaseStore, StoreError
+
+        try:
+            history_store = FirebaseStore(args.project, args.storage_bucket)
+        except StoreError as error:
+            print(f"note: no store ({error}); history goes to jsonl", file=sys.stderr)
+            history_store = None
     try:
         tile, path, status = make_at(
             lat,
@@ -667,6 +685,7 @@ def cmd_tiles_make(args: argparse.Namespace) -> int:
             world,
             Path(args.out),
             species_source=source_from_config(load_config()),
+            history_store=history_store,
         )
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)

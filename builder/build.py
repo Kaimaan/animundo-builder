@@ -361,13 +361,17 @@ def publish_group(
     made_tile: dict[str, Any],
     store: Any,
     world_commit: str,
+    history: dict[str, Any] | None = None,
 ) -> str:
     """One made tile to Storage: its group file and the tile index.
 
     The group merges over the published one; the index counts move
     by the honest delta (this tile newly ready, or no longer
     blocked for its old reason). Returns the group Storage path.
+    With `history` (job, kind, cost_usd), a made/remade row lands
+    in the tile history (#165).
     """
+    from . import history as history_mod
     from .tiles import write_group
 
     grid, gcol, grow = group(tile)
@@ -385,6 +389,24 @@ def publish_group(
         data = json.loads(path.read_bytes())
         store.write_blob(blob_path, path.read_bytes())
     _update_index(store, grid, gcol, grow, data["version"], old, tile, world_commit)
+    if history is not None:
+        event = (
+            "remade"
+            if tile in (old.get("tiles") or {}) or tile in (old.get("blocked") or {})
+            else "made"
+        )
+        history_mod.record(
+            store,
+            history_mod.row(
+                tile,
+                event,
+                job=history.get("job"),
+                kind=history["kind"],
+                world=world_commit,
+                version=data["version"],
+                cost_usd=history.get("cost_usd"),
+            ),
+        )
     return blob_path
 
 
@@ -588,13 +610,17 @@ def publish_remakes(
     groups: dict[str, dict[str, Any]],
     decisions: dict[str, Remake],
     world_commit: str,
+    history: dict[str, Any] | None = None,
 ) -> dict[str, int]:
     """Changed remake tiles to Storage: one write per group, index once.
 
     `groups` holds the loaded group files by blob path; only groups
     with a changed tile are written, their version up by one.
-    Returns `versions` for the tiles whose content changed.
+    Returns `versions` for the tiles whose content changed. With
+    `history` (job, kind, cost_usd), every written tile lands a
+    made/remade/blocked row in the tile history (#165).
     """
+    from . import history as history_mod
     from .grid import group, group_path
 
     by_blob: dict[str, list[str]] = {}
@@ -652,6 +678,28 @@ def publish_remakes(
             assert entry is not None
             reason = entry.get("reason") if kind == "blocked" else None
             _apply_index_delta(index, old, tile, kind == "tile", reason)
+            if history is not None:
+                if kind == "blocked":
+                    event: str = "blocked"
+                elif tile in (old.get("tiles") or {}) or tile in (
+                    old.get("blocked") or {}
+                ):
+                    event = "remade"
+                else:
+                    event = "made"
+                history_mod.record(
+                    store,
+                    history_mod.row(
+                        tile,
+                        event,
+                        job=history.get("job"),
+                        kind=history["kind"],
+                        world=world_commit,
+                        version=data["version"],
+                        reason=reason,
+                        cost_usd=history.get("cost_usd"),
+                    ),
+                )
     index["made_at"] = datetime.now(UTC).isoformat()
     index["world"] = world_commit
     validate("tile-index", index)

@@ -2037,3 +2037,19 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   (#157 behavior), so a deploy would retry the lynx;
   nothing live was touched here, it stays paused for
   Kai's call.
+
+## 2026-10-31: inbox #167 (builder f57b011)
+
+- Own plants are never planned again: common name
+  without parentheses, Latin against the plant files,
+  and the improved region's ground_cover/plants. The
+  reef improve replay plans none of its three.
+- Existing regions get no home item: improve adds
+  animals and plants only, no terrain change.
+- GBIF counts ride in survey.json; replays pass the
+  prior survey's back: fast, offline, identical.
+- Improve asks the library's habitat animals first
+  (residents' habitats, or the cell's); the plan's
+  `looked_for` holds the asked-about makeable ones in
+  neither the answer nor the place (parrotfish, moray,
+  hammerhead, manta on the reef replay).

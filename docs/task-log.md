@@ -2122,3 +2122,15 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   `version` (group version after the write, null when
   nothing was written), `reason`, `cost_usd`. Rules:
   admins read, no client writes.
+
+## 2026-10-31: inbox #171 (builder 733870a)
+
+- Paused jobs skip the catch-up, the reconcile and
+  `build_job`: a restart leaves the lynx untouched
+  and prints that it waits for an operator.
+- Resume settles the held spend first, then marks
+  items building; stale commands still clear.
+- From your side: write `operator_action` on the job
+  (`resume` or `give_up`); the worker clears it once
+  obeyed. Details in `docs/worker.md`. Safe to stop
+  the old container whenever Kai has decided.

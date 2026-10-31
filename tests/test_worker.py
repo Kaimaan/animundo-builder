@@ -55,6 +55,29 @@ def test_claim_build_job_leaves_one_winner() -> None:
     assert store.build_jobs["j1"]["worker_id"] == "w1"
 
 
+def test_job_without_status_counts_as_queued(tmp_path: Path, monkeypatch: Any) -> None:
+    """#164: a status-less job is claimed, built, and reconciled."""
+    store = FakeStore()
+    job = _enrich_job()
+    del job["status"]
+    store.build_jobs["j1"] = job
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+
+    def fake_stages(*args: Any, **kwargs: Any) -> None:
+        (args[5] / "animals").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    monkeypatch.setattr(Worker, "pull_world", lambda self: False)
+    store.enabled = False
+    assert worker.poll() == []
+    store.enabled = True
+    assert ("build_job", "j1") in worker.poll()
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "checking"
+    assert store.build_jobs["j1"]["progress"][0]["id"] == "enrich_lion"
+
+
 def _owned_job(status: str = "building", owner: str = "wA") -> dict[str, Any]:
     job = _enrich_job(status=status)
     job["worker_id"] = owner

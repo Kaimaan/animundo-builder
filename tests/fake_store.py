@@ -66,13 +66,12 @@ class FakeStore:
     def claim_build_job(self, job_id: str, worker_id: str) -> bool:
         with self._lock:
             doc = self.build_jobs.get(job_id)
-            if doc is None or doc.get("status") not in (
-                "queued",
-                "building",
-                "checking",
-            ):
+            if doc is None:
                 return False
-            if doc.get("status") != "queued":
+            status = doc.get("status") or "queued"
+            if status not in ("queued", "building", "checking"):
+                return False
+            if status != "queued":
                 if doc.get("worker_id") != worker_id and not lease_expired(
                     doc.get("lease_until")
                 ):
@@ -80,7 +79,7 @@ class FakeStore:
             doc["worker_id"] = worker_id
             doc["lease_until"] = lease_fresh_iso()
             doc["updated_at"] = now_iso()
-            if doc.get("status") == "queued":
+            if status == "queued":
                 doc["status"] = "building"
             return True
 

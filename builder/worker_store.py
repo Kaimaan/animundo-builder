@@ -198,9 +198,10 @@ def _claim_lease(
     if not snap.exists:
         return False
     data = snap.to_dict() or {}
-    if data.get("status") not in ("queued", "building", "checking"):
+    status = data.get("status") or "queued"
+    if status not in ("queued", "building", "checking"):
         return False
-    if data.get("status") != "queued":
+    if status != "queued":
         if data.get("worker_id") != worker_id and not lease_expired(
             data.get("lease_until")
         ):
@@ -210,7 +211,7 @@ def _claim_lease(
         "lease_until": fresh,
         "updated_at": at,
     }
-    if data.get("status") == "queued":
+    if status == "queued":
         update["status"] = "building"
     transaction.update(ref, update)
     return True

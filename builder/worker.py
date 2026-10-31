@@ -1376,7 +1376,7 @@ class Worker:
         (#155); this only re-queues, deduplicated, never runs.
         """
         for job_id, doc in self.store.pending_build_jobs():
-            status = doc.get("status")
+            status = doc.get("status") or "queued"
             if status in ("queued", "building") or (
                 status == "checking" and doc.get("review")
             ):

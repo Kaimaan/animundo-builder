@@ -2209,3 +2209,59 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   reports `no_food` (its recording runs out in
   the whale's model loop, past everything
   fixed here).
+
+## 2026-10-31: inbox #174, #176, #179 (builder b08c507, 287e095, c878393)
+
+- An enrich item ships itself: the `ship` stage
+  (#174.1, #174.2) writes its Finnish (open host
+  when set, else Muse Spark), runs the
+  child-safety review, gates the world's own
+  checks (not-built models unknown, #173.3),
+  the render review (marks all shown, none
+  unmakable; a new shape's final review
+  unblocked), the reef file rules (typical
+  adult length within 20%, the research's
+  winter and in-season migration dates, hunts
+  only reviewed prey tags, a big fish fewer
+  than the small fish, the camera behind the
+  body and under the water), the English and
+  Finnish key for key, and the additions-only
+  region change (#174.1, #173.1). A failed
+  check fails the item with the check and its
+  message, in the report and the progress
+  entry; `checks/ship.json` carries them all.
+- The pack (#176.1, #176.3, #179) is spec 02
+  §8b's shape: the animal file, its `.glb` and
+  preview, its English and Finnish texts, one
+  `additions/` file per hand-made place
+  (top-level lists only, fish exactly kind and
+  count), and the §8b manifest. The pre-upload
+  check mirrors the game's `files_error`,
+  `file_error`, size-and-hash download check
+  and `addition_error`. Versions count up; a
+  version never rewrites.
+- The worker runs `ship` last for enrich
+  items, and the review step remakes on the
+  gates instead of a person's verdict (#176.2,
+  #174.1): the job goes `published` with
+  `pack` and the remade tiles' `versions`.
+  Old reviewed jobs still remake the old way.
+- Verified beyond the builder suite: a
+  builder-made `packs/animal_hammerhead/1/`
+  installs through the game's real `LivePacks`
+  path on fresh game main (headless Godot):
+  version 1, the reef gains the hammerhead in
+  `playable` and `fish`, everything elsebyte
+  for byte, playable on the reef, clean exit.
+- Two judgment calls, both logged in code:
+  hunts must be tags a shipped animal already
+  hunts (new predator-prey relations go
+  through a person), and length within 20% of
+  the researched typical adult.
+- Not done here: the hammerhead recording
+  (#176.4's exact replay input) sits in cloud
+  Storage, out of reach with no credentials,
+  so those tests run the same ship code with
+  an equivalent whale-free item. Plant enrich
+  items stop the ship with "ships by hand":
+  packs have no plant shape yet.

@@ -31,6 +31,16 @@ judge opens (T84). When the game's review lands and the world
 change reaches the checkout, shipped items make the tile again
 and publish it.
 
+An `enrich` item ships itself when every check passes (#174,
+decision 0049): the `ship` stage writes its Finnish, runs the
+child-safety review, gates the world's checks, the render
+review, the reef file rules and the additions-only region
+change, then publishes its content pack to
+`packs/<item>/<version>/`. The job goes `published` carrying
+`pack` and the remade tiles' `versions`. A failed check fails
+the item with the check and its message, in the report and
+the progress entry. Plant items still ship by hand.
+
 Crashes and restarts are safe: every status is a guard, so only
 events still waiting are replayed.
 

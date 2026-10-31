@@ -2053,3 +2053,18 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   `looked_for` holds the asked-about makeable ones in
   neither the answer nor the place (parrotfish, moray,
   hammerhead, manta on the reef replay).
+
+## 2026-10-31: inbox #168 (builder 24d4ec5)
+
+- Region tiles check in the region file: one
+  `<region id>.json` per region, manifested, plus a
+  home-lookup fallback to the region. Hammerhead on
+  s_530_612 reaches checking; verified against the
+  live reef file (hammerhead seated 8th).
+- Region tiles publish nothing (.2 was already
+  covered: versions without the tile).
+- Failed items carry stage and message in the report
+  and progress[].error; in-region tiles take the
+  region's name.
+- Ready for the hammerhead retry once the worker is
+  restarted on this commit; Kai decides.

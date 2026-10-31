@@ -34,6 +34,23 @@ and publish it.
 Crashes and restarts are safe: every status is a guard, so only
 events still waiting are replayed.
 
+## Paused jobs wait for an operator (#171)
+
+A job whose spend is uncertain pauses instead of spending
+blind: `error` is `paused_spend_uncertain` and the item's
+progress entry too. No restart, re-enable or document change
+runs it on its own; the listener prints that it is waiting
+for an operator. To move it, write `operator_action` on its
+`build_jobs/{id}` document (the console or `admin.mjs`):
+
+- `resume`: settle the held spend at its estimate, then run
+  the paused items again from their unfinished stages.
+- `give_up`: settle the held spend, record it under
+  `uncertain_usd`, and fail the job as `gave_up`.
+
+The worker clears the field once obeyed. Anything else with
+nothing paused is ignored and cleared.
+
 ## Model hosts
 
 Every `ctx.chat` call prefers the open-weights host when one is

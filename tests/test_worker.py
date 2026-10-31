@@ -2118,6 +2118,109 @@ def test_poll_resumes_builds_on_reenable(tmp_path: Path, monkeypatch: Any) -> No
     assert worker.poll() == []
 
 
+def _paused_lynx() -> dict[str, Any]:
+    """The lynx as #171 found it: building, paused, lease gone."""
+    job = _enrich_job(status="building")
+    job["error"] = "paused_spend_uncertain"
+    job["progress"] = [
+        {
+            "id": "enrich_lion",
+            "status": "paused_spend_uncertain",
+            "report": "review/j1/enrich_lion/report.html",
+            "cost_usd": 0.26,
+        }
+    ]
+    return job
+
+
+def test_restart_leaves_a_paused_job_for_the_operator(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    """#171.1: a restart never runs a paused job on its own."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _paused_lynx()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wB"
+
+    def no_stages(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("no stages run without a resume")
+
+    monkeypatch.setattr(worker, "_run_stages", no_stages)
+    assert worker.note_build_job("j1", store.build_jobs["j1"]) is False
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "building"
+    assert job["error"] == "paused_spend_uncertain"
+    assert job["progress"][0]["status"] == "paused_spend_uncertain"
+    assert job.get("worker_id") != "wB"
+    assert "waiting for an operator" in capsys.readouterr().out
+
+
+def test_reconcile_skips_a_paused_job(tmp_path: Path, monkeypatch: Any) -> None:
+    """#171.1: re-enable re-queues everything but a paused job."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _paused_lynx()
+    store.build_jobs["j2"] = {
+        "area": "a",
+        "budget_usd": 8.0,
+        "kind": "build",
+        "status": "building",
+        "items": [],
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    worker = _worker(tmp_path, store)
+    monkeypatch.setattr(Worker, "pull_world", lambda self: False)
+    store.enabled = False
+    assert worker.poll() == []
+    store.enabled = True
+    assert worker.poll() == [("build_job", "j2")]
+
+
+def test_paused_job_with_resume_queues_and_builds(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#171.1: the operator's resume is obeyed, not skipped."""
+    store = FakeStore()
+    job = _paused_lynx()
+    job["operator_action"] = "resume"
+    store.build_jobs["j1"] = job
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+    assert worker.note_build_job("j1", store.build_jobs["j1"]) is True
+
+    def fake_stages(*args: Any, **kwargs: Any) -> None:
+        (args[5] / "animals").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"
+    assert job.get("error") is None
+    assert "operator_action" not in job
+
+
+def test_resume_settles_first_and_marks_items_building(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#171.1: resume settles the held spend, then the job may run."""
+    from types import SimpleNamespace
+
+    store = FakeStore()
+    provider, allowance, ledger, receipt = _held_pair(tmp_path)
+    _paused_job(store, "resume", receipt)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+    worker.chat = SimpleNamespace(ledger=ledger, model="muse-spark-1.3")
+    assert worker._operator_action("j1", store.build_jobs["j1"]) is True
+    job = store.build_jobs["j1"]
+    assert job["progress"][0]["status"] == "building"
+    assert worker._job_paused(job) is False
+    for pool, side in ((provider, receipt.provider), (allowance, receipt.allowance)):
+        data = json.loads(pool.path.read_text(encoding="utf-8"))
+        assert side.id in data["settled"]
+
+
 def test_guard_stops_pipeline_at_next_stage(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
@@ -2571,7 +2674,7 @@ def _held_pair(tmp_path: Path):  # type: ignore[no-untyped-def]
 def test_timeout_pauses_item_and_resume_recovers(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#157: the reservation stays held; a later drive retries the item."""
+    """#157: the reservation stays held; an operator resume retries it."""
     from types import SimpleNamespace
 
     from builder.meta import SpendUncertain
@@ -2605,6 +2708,13 @@ def test_timeout_pauses_item_and_resume_recovers(
     assert provider.job_spent("j1") == pytest.approx(0.05)
     assert allowance.job_spent("j1") == pytest.approx(0.05)
 
+    # A later drive without an operator resume leaves it paused (#171.1).
+    worker.handle_build_job("j1")
+    entry = store.build_jobs["j1"]["progress"][0]
+    assert entry["status"] == "paused_spend_uncertain"
+    assert store.build_jobs["j1"]["status"] == "building"
+    assert attempts == ["stages"]
+    store.build_jobs["j1"]["operator_action"] = "resume"
     worker.handle_build_job("j1")
     entry = store.build_jobs["j1"]["progress"][0]
     assert entry["status"] == "checking"

@@ -145,10 +145,29 @@ class Worker:
         return ("request", tile) not in self.in_flight
 
     def note_build_job(self, job_id: str, data: dict[str, Any]) -> bool:
-        """Queue a build job unless it is done or already queued."""
+        """Queue a build job unless it is done or already queued.
+
+        A paused job waits for an operator resume or give-up: no
+        restart or document change runs it on its own (#171.1). An
+        operator action queues it so the command is obeyed.
+        """
         if data.get("status") in ("published", "failed"):
             return False
+        if self._job_paused(data) and not data.get("operator_action"):
+            print(f"build job {job_id}: paused, waiting for an operator")
+            return False
         return ("build_job", job_id) not in self.in_flight
+
+    @staticmethod
+    def _job_paused(job: dict[str, Any]) -> bool:
+        """The job or any of its items waits on uncertain spend (#171.1)."""
+        if job.get("error") == "paused_spend_uncertain":
+            return True
+        return any(
+            entry.get("status") == "paused_spend_uncertain"
+            for entry in job.get("progress", [])
+            if isinstance(entry, dict)
+        )
 
     # -- top-level flows ----------------------------------------------
 
@@ -233,14 +252,30 @@ class Worker:
             for entry in job.get("progress", [])
             if entry.get("status") == "paused_spend_uncertain"
         ]
-        if action == "resume" and paused:
+        if action == "resume" and (
+            paused or job.get("error") == "paused_spend_uncertain"
+        ):
             print(f"build job {job_id}: operator resumes {len(paused)} paused items")
-            patch: dict[str, Any] = {"operator_action": DELETE}
+            assert self.world is not None
+            ctx = make_context(self.config, job_id, self.jobs_dir / job_id, self.world)
+            if self.chat is not None:
+                ctx.client = self.chat
+            for entry in paused:
+                self._settle_superseded(job_id, {"id": entry["id"]}, ctx)
+            progress = [
+                {**entry, "status": "building"}
+                if entry.get("status") == "paused_spend_uncertain"
+                else entry
+                for entry in job.get("progress", [])
+            ]
+            patch: dict[str, Any] = {"progress": progress, "operator_action": DELETE}
             if job.get("error") == "paused_spend_uncertain":
                 patch["error"] = DELETE
             self._update(job_id, patch)
             return True
-        if action == "give_up" and paused:
+        if action == "give_up" and (
+            paused or job.get("error") == "paused_spend_uncertain"
+        ):
             print(f"build job {job_id}: operator gives up {len(paused)} paused items")
             assert self.world is not None
             ctx = make_context(self.config, job_id, self.jobs_dir / job_id, self.world)
@@ -340,6 +375,9 @@ class Worker:
         from .tiles import make_tile
 
         assert self.world is not None
+        if self._job_paused(job) and not job.get("operator_action"):
+            print(f"build job {job_id}: paused, waiting for an operator")
+            return
         if not self._claim(job_id):
             return
         job = self.store.get_build_job(job_id) or job
@@ -1654,6 +1692,9 @@ class Worker:
             if status in ("queued", "building") or (
                 status == "checking" and doc.get("review")
             ):
+                if self._job_paused(doc) and not doc.get("operator_action"):
+                    print(f"build job {job_id}: paused, waiting for an operator")
+                    continue
                 key = ("build_job", job_id)
                 if key not in queued:
                     queued.append(key)

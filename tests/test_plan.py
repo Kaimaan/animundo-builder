@@ -332,6 +332,62 @@ def test_plan_blocks_no_land_without_a_style(tmp_path: Path) -> None:
     assert plan["items"] == []
 
 
+def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
+    """#169.1: s_530_611 never plans with home: sea."""
+    import gzip
+
+    from builder.tiles import available_biomes, home_for_cell
+
+    world = _world(tmp_path)
+    (world / "homes" / "sea.json").write_text(
+        json.dumps({"habitat": "sea", "ecoregions": [651]})
+    )
+    biomes = world / "biomes"
+    biomes.mkdir()
+    (biomes / "sea.json").write_text(
+        json.dumps(
+            {"habitat": "sea", "ecoregions": [651], "land": "temperate_broadleaf"}
+        )
+    )
+    (biomes / "sea_717.json").write_text(
+        json.dumps({"habitat": "sea", "ecoregions": [717], "land": "boreal"})
+    )
+    lands = world / "lands"
+    lands.mkdir()
+    (lands / "index.json").write_text(
+        json.dumps(
+            {
+                "styles": [
+                    {"land": "boreal", "biome": 6},
+                    {"land": "tropical_moist", "biome": 1},
+                ]
+            }
+        )
+    )
+    tropical = [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]
+    cells = {
+        f"{c},{r}": list(tropical) for r in (610, 611, 612) for c in (529, 530, 531)
+    }
+    path = tmp_path / "ease2_s25.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump({"grid": "ease2_s25", "cells": cells}, handle)
+    grids = {"ease2_s25": HabitatGrid.load(path, "ease2_s25")}
+    plan = plan_tile(
+        "s_530_611",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+    )
+    assert plan["blocked"] == "no_home"
+    assert plan["items"] == []
+    filed = available_biomes(world)
+    assert home_for_cell(150, "sea", filed, 1) is None
+    assert home_for_cell(717, "sea", filed, 6) == "sea_717"
+
+
 def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
     """#148.3: 717 by the sea plans code-only on sea_717, no home item."""
     import pytest

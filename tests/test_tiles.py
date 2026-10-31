@@ -330,6 +330,17 @@ def test_home_for_cell_matches_ecoregion_and_habitat(tmp_path: Path) -> None:
     assert home_for_cell(None, "sea", homes) is None
 
 
+def test_home_for_cell_refuses_the_generic_sea_in_the_tropics(
+    tmp_path: Path,
+) -> None:
+    """#169.1: a tropical sea cell never builds from the cold sea home."""
+    homes = available_homes(_world(tmp_path))
+    assert home_for_cell(150, "sea", homes, 1) is None
+    assert home_for_cell(150, "open_ocean", homes, 7) is None
+    assert home_for_cell(999, "sea", homes, 6) == "sea"
+    assert home_for_cell(999, "sea", homes, 4) == "sea"
+
+
 def test_cell_level() -> None:
     assert cell_level("sea", 0) == 5
     assert cell_level("open_ocean", -100) == 5

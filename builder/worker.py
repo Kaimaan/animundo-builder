@@ -1401,7 +1401,10 @@ class Worker:
         cells = self._grids()[grid]
         homes = available_homes(self.world)
         found = home_for_cell(
-            cells.cell_data(col, row)[0], cells.habitat(col, row), homes
+            cells.cell_data(col, row)[0],
+            cells.habitat(col, row),
+            homes,
+            cells.cell_data(col, row)[4],
         )
         if found is None:
             raise _NoHome(f"tile {tile} has no home in this checkout")

@@ -371,7 +371,7 @@ def plan_tile(
         )
     homes = available_homes(world)
     biomes = available_biomes(world)
-    home = home_for_cell(eco1, habitat, biomes)
+    home = home_for_cell(eco1, habitat, biomes, biome_number)
     entries = library_animals(world)
     unfiled = _unfiled(world, habitat, entries)
     if unfiled_presence is None:

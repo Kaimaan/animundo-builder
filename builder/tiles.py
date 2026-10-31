@@ -190,18 +190,30 @@ def excluded_tiles(builder_root: Path | None = None) -> set[str]:
     return {t for t in tiles if isinstance(t, str)}
 
 
+SEA_BIOMES = frozenset({4, 5, 6, 8, 11})
+"""RESOLVE biomes the generic `sea` home fits (#169.1).
+
+Temperate broadleaf and conifer, boreal forest, temperate
+grassland and tundra: the cold northern seas it was made
+for. A tropical cell plans a home item or blocks `no_home`
+instead of a Finnish-looking archipelago by the reef.
+"""
+
+
 def home_for_cell(
     eco: int | None,
     habitat: str,
     homes: dict[str, dict[str, Any]],
+    biome: int | None = None,
 ) -> str | None:
     """The home covering this ecoregion and habitat, or None.
 
     Sea and open ocean build from a home of habitat `sea` that
-    lists the cell's ecoregion, else the generic `sea` (#140.1).
-    Boreal water picks the lake home through the tile's habitat:
-    a boreal_lake cell builds from boreal_lake, a boreal_forest
-    cell from boreal_forest.
+    lists the cell's ecoregion, else the generic `sea` (#140.1),
+    but only where it fits: a known tropical biome refuses it
+    (#169.1). Boreal water picks the lake home through the
+    tile's habitat: a boreal_lake cell builds from boreal_lake,
+    a boreal_forest cell from boreal_forest.
     """
     if eco is None:
         return None
@@ -213,7 +225,7 @@ def home_for_cell(
         )
         if listed:
             return listed[0]
-        if "sea" in homes:
+        if "sea" in homes and (biome is None or biome in SEA_BIOMES):
             return "sea"
         return None
     for home_id in sorted(homes):
@@ -1133,7 +1145,7 @@ def make_tile(
         )
     homes = available_homes(world)
     biomes = available_biomes(world)
-    home = home_for_cell(eco1, habitat, biomes)
+    home = home_for_cell(eco1, habitat, biomes, biome)
     if home is None:
         if eco1 is None or not (world / "lands" / "index.json").is_file():
             return None, {"reason": "no_home", "habitat": habitat}

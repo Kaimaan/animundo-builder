@@ -12,6 +12,7 @@ from builder.enrich import (
     sort_region_problems,
     write_places,
 )
+from builder.schemas import ROOT
 
 
 def _places(job_dir: Path) -> None:
@@ -138,11 +139,13 @@ def test_region_place_seats_the_new_animal(tmp_path: Path) -> None:
     world = fake_world.make_world(tmp_path)
     fake_world.write_converter_tools(world)
     _reef(world)
+    before = json.loads((world / "regions" / "xx_test_reef.json").read_text())
     place = region_place("xx_test_reef", world, "hammerhead", "animal")
     assert place["id"] == "xx_test_reef"
     assert place["animals"]["playable"] == ["clownfish", "blue_tang", "hammerhead"]
     assert place["animals"]["predators"] == ["reef_shark"]
-    assert place["food"] == [{"kind": "water_plants", "names": ["seagrass"]}]
+    changed = [key for key in place if place[key] != before.get(key)]
+    assert changed == ["animals"]
 
 
 def test_region_place_seats_a_plant_where_it_grows(tmp_path: Path) -> None:
@@ -158,6 +161,20 @@ def test_region_place_seats_a_plant_where_it_grows(tmp_path: Path) -> None:
         "branching_staghorn_coral",
         "paddle_grass",
     ]
+
+
+def test_region_place_leaves_the_reef_otherwise_alone() -> None:
+    """#173.1: the reef before and after differs only in its lists."""
+    import pytest
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "regions" / "au_great_barrier_reef.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    before = json.loads((world / "regions" / "au_great_barrier_reef.json").read_text())
+    place = region_place("au_great_barrier_reef", world, "hammerhead", "animal")
+    changed = [key for key in place if place[key] != before.get(key)]
+    assert changed == ["animals"]
+    assert place["animals"]["playable"][-1] == "hammerhead"
 
 
 def test_place_tiles_maps_a_region_to_itself(tmp_path: Path) -> None:
@@ -179,6 +196,31 @@ def test_place_tiles_maps_a_region_to_itself(tmp_path: Path) -> None:
     assert data["results"] == [
         {"check": "place xx_test_reef", "status": "pass", "problems": []}
     ]
+
+
+def test_split_not_built_names_only_unbuilt_models() -> None:
+    """#173.3: 'build it first' lines are unknown, not failures."""
+    from builder.enrich import split_not_built
+
+    real, models = split_not_built(
+        [
+            "FAIL au_great_barrier_reef",
+            '- "ground_cover.plants[0]": build it first with '
+            "tools/build_model.sh models/plants/branching_staghorn_coral.json",
+            '- "ground_cover.plants[1]": build it first with '
+            "tools/build_model.sh models/plants/giant_sea_fan.json",
+            "- au_great_barrier_reef: no food for clownfish",
+        ]
+    )
+    assert real == [
+        "FAIL au_great_barrier_reef",
+        "- au_great_barrier_reef: no food for clownfish",
+    ]
+    assert models == ["branching_staghorn_coral", "giant_sea_fan"]
+    assert split_not_built(["build it first with tools/build_model.sh "]) == (
+        [],
+        [],
+    )
 
 
 def test_place_tiles_ignores_an_unmanifested_scaffold(tmp_path: Path) -> None:

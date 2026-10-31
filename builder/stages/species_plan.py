@@ -603,7 +603,8 @@ class SpeciesPlanStage:
             if data.get("archetype") == "fish":
                 fish = region.setdefault("fish", [])
                 if stem not in {entry.get("kind") for entry in fish}:
-                    fish.append({"kind": stem, "count": 5})
+                    small = "small_fish" in (data.get("tags") or [])
+                    fish.append({"kind": stem, "count": 5 if small else 2})
             animals = region.setdefault("animals", {})
             if data.get("playable"):
                 group = animals.setdefault("playable", [])

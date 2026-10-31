@@ -279,6 +279,7 @@ class PlantsStage:
             place_tiles,
             sort_problems,
             sort_region_problems,
+            split_not_built,
             write_places,
         )
 
@@ -303,17 +304,19 @@ class PlantsStage:
             )
             region = verdicts.get("region", {})
             if region.get("status") == "fail":
-                region_tiled, region_general = sort_region_problems(
-                    region.get("problems", []), rid_to_tile
-                )
+                real, unbuilt = split_not_built(region.get("problems", []))
+                region_tiled, region_general = sort_region_problems(real, rid_to_tile)
                 for tile, reasons in region_tiled.items():
                     tiled.setdefault(tile, []).extend(reasons)
                 general.extend(region_general)
-            region_note = (
-                region.get("reason")
-                if region.get("status") == "skip" and region.get("reason")
-                else None
-            )
+            else:
+                unbuilt = []
+            notes = []
+            if region.get("status") == "skip" and region.get("reason"):
+                notes.append(region["reason"])
+            if unbuilt:
+                notes.append(f"models not built in this checkout: {', '.join(unbuilt)}")
+            region_note = "; ".join(notes) or None
 
             def record() -> None:
                 write_places(ctx.job_dir, rid_to_tile, tiled, general, region_note)

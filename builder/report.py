@@ -150,11 +150,35 @@ def _thing_line(kind: str, name: str, cost: Any) -> str:
     return f"{html.escape(kind)}: {html.escape(str(name))} — {amount}"
 
 
-def build_report(job_dir: Path, cost_usd: float | None = None) -> Path:
+def failed_checks(job_dir: Path) -> list[str]:
+    """Check files with failing verdicts, sorted (#173.2).
+
+    A checking item with these failed something its stages
+    survived (the place's checks, not the model's): the report
+    and the progress entry say so instead of looking clean.
+    """
+    checks = job_dir / "checks"
+    if not checks.is_dir():
+        return []
+    failed = []
+    for path in sorted(checks.glob("*.json")):
+        data = _read_json(path)
+        if data.get("results") is not None and not data.get("ok"):
+            failed.append(path.stem)
+    return failed
+
+
+def build_report(
+    job_dir: Path,
+    cost_usd: float | None = None,
+    budget_usd: float | None = None,
+) -> Path:
     """Write `report.html` into the job folder and return its path.
 
     The total is the job's ledger total when the caller passes it
     (every worker's calls); otherwise the calls this folder logged.
+    The budget is the job's own when passed or when the state
+    params carry it, else the default.
     """
     state = _read_json(job_dir / "state.json")
     survey = _read_json(job_dir / "survey.json")
@@ -165,14 +189,17 @@ def build_report(job_dir: Path, cost_usd: float | None = None) -> Path:
     if home.get("place_name"):
         params = {**params, "place_name": home["place_name"]}
     species_ids = _new_species(plan, job_dir)
+    if budget_usd is None:
+        maybe = params.get("budget_usd")
+        budget_usd = maybe if isinstance(maybe, (int, float)) else None
     parts = [
-        _head(params, job_dir.name),
+        _head(params, job_dir.name, failed_checks(job_dir)),
         _new_things(job_dir),
         _unmakable(job_dir),
         _later_plants(job_dir),
         _stages(state),
-        _cost(calls, cost_usd),
-        _sources(survey),
+        _cost(calls, cost_usd, budget_usd),
+        _sources(survey, str(params.get("kind", ""))),
         _checks(job_dir),
         *(_species(job_dir, species_id) for species_id in species_ids),
         _foot(),
@@ -202,7 +229,7 @@ _CSS = (
 )
 
 
-def _head(params: dict[str, Any], job_id: str) -> str:
+def _head(params: dict[str, Any], job_id: str, failed: list[str] | None = None) -> str:
     area = (
         params.get("area")
         or params.get("name")
@@ -219,7 +246,14 @@ def _head(params: dict[str, Any], job_id: str) -> str:
         f"<tr><th>{html.escape(key)}</th><td>{html.escape(value)}</td></tr>"
         for key, value in rows
     )
-    return f"<h1>Build report: {html.escape(job_id)}</h1>\n<table>{cells}</table>"
+    text = f"<h1>Build report: {html.escape(job_id)}</h1>\n<table>{cells}</table>"
+    if failed:
+        names = ", ".join(failed)
+        text += (
+            f'\n<p class="blocking">Checks failing: {html.escape(names)}. '
+            "The stages finished; these verdicts did not pass.</p>"
+        )
+    return text
 
 
 def _stages(state: dict[str, Any]) -> str:
@@ -240,7 +274,11 @@ def _stages(state: dict[str, Any]) -> str:
     return text
 
 
-def _cost(calls: list[dict[str, Any]], total: float | None = None) -> str:
+def _cost(
+    calls: list[dict[str, Any]],
+    total: float | None = None,
+    budget_usd: float | None = None,
+) -> str:
     if total is None:
         total = sum(call.get("cost_usd", 0.0) or 0.0 for call in calls)
     duration = sum(call.get("duration_s", 0.0) or 0.0 for call in calls)
@@ -275,20 +313,25 @@ def _cost(calls: list[dict[str, Any]], total: float | None = None) -> str:
         )
         for (call, model), row in sorted(by_model.items())
     ]
-    budget = Config.job_budget_usd
+    budget = Config.job_budget_usd if budget_usd is None else budget_usd
     return (
         "<h2>Cost</h2>\n"
         f"<p>Total <strong>${total:.4f}</strong> over {len(calls)} calls "
         f"and {duration:.0f} seconds of model time. "
-        f"The default job budget is ${budget:.2f}.</p>\n"
+        f"The job budget is ${budget:.2f}.</p>\n"
         "<table><tr><th>Call</th><th>Model</th><th>Calls</th>"
         "<th>Tokens in</th><th>Tokens out</th><th>Searches/images</th>"
         "<th>Seconds</th><th>USD</th></tr>\n" + "\n".join(lines) + "</table>"
     )
 
 
-def _sources(survey: dict[str, Any]) -> str:
+def _sources(survey: dict[str, Any], kind: str = "") -> str:
     if not survey:
+        if kind == "enrich":
+            return (
+                '<h2>Sources</h2>\n<p class="muted">No survey: an enrich item '
+                "builds from the tile's world files.</p>"
+            )
         return '<h2>Sources</h2>\n<p class="muted">No survey yet.</p>'
     facts = "".join(
         '<li><strong>{}</strong>: {} <span class="muted">({})</span></li>'.format(

@@ -942,3 +942,41 @@ def test_backfill_reports_unchecked_animals(tmp_path: Path, monkeypatch: Any) ->
     result = _stage(recorded=flaky).run(_ctx(tmp_path, client, world))
     assert result["backfilled"] == []
     assert result["backfill_unchecked"] == ["mountain_hare"]
+
+
+def test_backfilled_fish_count_follows_their_size(tmp_path: Path) -> None:
+    """#173.1/#173.4: small fish school in fives; sharks cruise in twos."""
+    world = tmp_path / "world"
+    animals = world / "animals"
+    animals.mkdir(parents=True)
+    (animals / "xx_minnow.json").write_text(
+        json.dumps(
+            {"archetype": "fish", "tags": ["fish", "small_fish"], "playable": True}
+        )
+    )
+    (animals / "xx_shark.json").write_text(
+        json.dumps(
+            {"archetype": "fish", "tags": ["fish", "big_fish"], "playable": True}
+        )
+    )
+    region: dict[str, Any] = {}
+    SpeciesPlanStage.place_backfilled(
+        world,
+        region,
+        {
+            "xx_minnow": {
+                "backfilled": True,
+                "file": "xx_minnow",
+                "role": "prey",
+            },
+            "xx_shark": {
+                "backfilled": True,
+                "file": "xx_shark",
+                "role": "predator",
+            },
+        },
+    )
+    counts = {entry["kind"]: entry["count"] for entry in region["fish"]}
+    assert counts == {"xx_minnow": 5, "xx_shark": 2}
+    assert region["animals"]["playable"] == ["xx_minnow", "xx_shark"]
+    assert region["animals"]["predators"] == ["xx_shark"]

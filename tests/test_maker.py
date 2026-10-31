@@ -3516,3 +3516,48 @@ def test_enrich_run_still_fix_rounds_the_new_file(tmp_path: Path) -> None:
     by_check = {entry["check"]: entry for entry in places["results"]}
     assert by_check["place n_413_478"]["status"] == "pass"
     assert by_check["place n_413_479"]["status"] == "pass"
+
+
+def test_migrating_animal_needs_both_dates() -> None:
+    """#173.4: migrates without leaves+returns is a file error."""
+    from builder.stages.maker import _migration_error
+
+    assert _migration_error({"year": {"winter": "active"}}) is None
+    assert (
+        _migration_error(
+            {
+                "year": {
+                    "winter": "migrates",
+                    "migration": {"leaves": "11-01", "returns": "05-01"},
+                }
+            }
+        )
+        is None
+    )
+    assert "MM-DD" in (_migration_error({"year": {"winter": "migrates"}}) or "")
+    assert "MM-DD" in (
+        _migration_error(
+            {"year": {"winter": "migrates", "migration": {"leaves": "11-01"}}}
+        )
+        or ""
+    )
+    assert "MM-DD" in (
+        _migration_error(
+            {
+                "year": {
+                    "winter": "migrates",
+                    "migration": {"leaves": "11-01", "returns": "11-01"},
+                }
+            }
+        )
+        or ""
+    )
+
+
+def test_research_asks_typical_size_and_honest_migration() -> None:
+    """#173.4: research wants a typical adult that stays put by default."""
+    text = (PROMPTS_DIR / "research.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    assert "a typical adult, never a record or maximum" in flat
+    assert "south of the equator winter is June-August" in flat
+    assert "when they don't, say `active`" in flat

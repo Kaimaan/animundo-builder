@@ -104,23 +104,33 @@ def tile_place(
         )
 
 
-_REGION_CONVERT = """
-import json, sys
-tools, region_path, what, kind = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-sys.path.insert(0, tools)
-import food, layers
-region = json.load(open(region_path, encoding="utf-8"))
-if what:
+def region_place(
+    region_id: str,
+    world: Path,
+    what: str = "",
+    kind: str = "",
+) -> dict[str, Any]:
+    """One hand-made region with the new thing seated (#168.1).
+
+    An enrich item only adds: the animal to `playable` (its
+    `fish` seat comes from the maker, which knows its file), a
+    plant to its grown side. Food, terrain and everything else
+    stay exactly as they are: reworking food rewrote the reef's
+    (#173.1).
+    """
+    region_path = world / "regions" / f"{region_id}.json"
+    try:
+        region = json.loads(region_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ConvertError(f"the region file {region_id} won't read: {error}")
+    if not what:
+        return region
     if kind == "plant":
-        spec = layers.spec("plants", what) or {}
-        seabed = "seabed" in (spec.get("grows", {}).get("on") or [])
-        side = "water" if seabed else "cover"
+        side = "water" if _seabed_plant(world, what) else "cover"
         plants = region.setdefault("plants", {})
         grown = plants.get(side)
         if not isinstance(grown, list):
-            grown = next(
-                (v for v in plants.values() if isinstance(v, list)), None
-            )
+            grown = next((v for v in plants.values() if isinstance(v, list)), None)
             if grown is None:
                 grown = []
                 plants[side] = grown
@@ -134,53 +144,16 @@ if what:
             lists = animals
         if what not in lists:
             lists.append(what)
-    region["food"] = food.worked_out(region)
-print(json.dumps(region))
-"""
+    return region
 
 
-def region_place(
-    region_id: str,
-    world: Path,
-    what: str = "",
-    kind: str = "",
-) -> dict[str, Any]:
-    """One hand-made region with the new thing seated (#168.1).
-
-    The region file keeps its id, species and shape; the new
-    animal joins `playable` (a plant its grown side) and the
-    food is worked out again, as for a converted tile place.
-    Needs a world with `tools/food.py`.
-    """
-    tools = world / "tools"
-    if not (tools / "food.py").is_file():
-        raise ConvertError(f"no food rules in this checkout: {tools}")
-    region_path = world / "regions" / f"{region_id}.json"
-    proc = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            _REGION_CONVERT,
-            str(tools),
-            str(region_path),
-            what,
-            kind,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise ConvertError(
-            f"the region file refused {region_id}: "
-            f"{(proc.stdout + proc.stderr).strip()[:300]}"
-        )
+def _seabed_plant(world: Path, what: str) -> bool:
+    """Whether the plant file grows on the seabed (#173.1)."""
     try:
-        return json.loads(proc.stdout)
-    except ValueError:
-        raise ConvertError(
-            f"the region file gave no JSON for {region_id}: {proc.stdout.strip()[:200]}"
-        )
+        spec = json.loads((world / "models" / "plants" / f"{what}.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return "seabed" in ((spec.get("grows") or {}).get("on") or [])
 
 
 MANIFEST = "enrich_places.json"
@@ -269,6 +242,31 @@ def sort_problems(
         else:
             general.append(line)
     return model, tiled, general
+
+
+NOT_BUILT = "build it first with tools/build_model.sh"
+
+
+def split_not_built(problems: list[str]) -> tuple[list[str], list[str]]:
+    """Real region problems, and models only not built here (#173.3).
+
+    A fresh clone has no `.glb` (git-ignored), so "build it
+    first" verdicts are unknown, not failures; the caller notes
+    the models instead of failing their tiles. Returns the real
+    problems and the model names, each in order, de-duplicated.
+    """
+    real: list[str] = []
+    models: list[str] = []
+    for line in problems:
+        if NOT_BUILT not in line:
+            real.append(line)
+            continue
+        rest = line.split(NOT_BUILT, 1)[1].strip().split()
+        model = rest[0].rsplit("/", 1)[-1] if rest else ""
+        model = model[:-5] if model.endswith(".json") else model
+        if model and model not in models:
+            models.append(model)
+    return real, models
 
 
 def sort_region_problems(

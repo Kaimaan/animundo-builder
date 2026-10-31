@@ -140,6 +140,35 @@ _CHOICE_HEX = {"type": "string", "description": "a colour as hex, like #5f9445"}
 HOME_ADAPT_TIMEOUT = 120
 
 
+def _migration_error(animal: dict[str, Any]) -> str | None:
+    """A migrating animal needs both dates, or it stays (#173.4).
+
+    `migrates` with missing or malformed `leaves`/`returns` is a
+    file error for the fix round; the hemisphere fit is the
+    research's call, which sees the sources and the latitude.
+    """
+    year = animal.get("year")
+    if not isinstance(year, dict) or year.get("winter") != "migrates":
+        return None
+    migration = year.get("migration")
+    dates = (
+        [migration.get("leaves"), migration.get("returns")]
+        if isinstance(migration, dict)
+        else []
+    )
+    good = re.compile(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
+    if (
+        len(dates) != 2
+        or not all(isinstance(day, str) and good.match(day) for day in dates)
+        or dates[0] == dates[1]
+    ):
+        return (
+            "year.winter is migrates but migration lacks distinct leaves "
+            "and returns dates (MM-DD); use active when it stays"
+        )
+    return None
+
+
 class AnimalMakerStage:
     """Make the minimum set's animals: prey first, then the animal."""
 
@@ -687,6 +716,9 @@ class AnimalMakerStage:
             jsonschema.validate(animal, animal_schema)
         except jsonschema.ValidationError as error:
             return None, [f"the animal file broke its schema: {error.message}"]
+        migration_error = _migration_error(animal)
+        if migration_error is not None:
+            return None, [migration_error]
         return {"animal": animal}, []
 
     def _place_animal(self, ctx: Any, animal_id: str, files: dict[str, Any]) -> None:
@@ -756,6 +788,10 @@ class AnimalMakerStage:
                 f"{animal_id}: its prey ({', '.join(unseated)}) isn't seated "
                 f"{where}, so this run stops for a person"
             )
+        if "small_fish" in tags:
+            # `fish` would hunt anything with fins, sharks and
+            # turtle-sized fish included; the small stay small (#173.4).
+            tags.discard("fish")
         return sorted(tags)
 
     def _check_animal(
@@ -786,6 +822,7 @@ class AnimalMakerStage:
             place_tiles,
             sort_problems,
             sort_region_problems,
+            split_not_built,
             write_places,
         )
 
@@ -810,22 +847,24 @@ class AnimalMakerStage:
                     "a person looks"
                 )
             if region.get("status") == "fail":
-                region_tiled, region_general = sort_region_problems(
-                    region.get("problems", []), rid_to_tile
-                )
+                real, unbuilt = split_not_built(region.get("problems", []))
+                region_tiled, region_general = sort_region_problems(real, rid_to_tile)
                 for tile, reasons in region_tiled.items():
                     tiled.setdefault(tile, []).extend(reasons)
                 general.extend(region_general)
+            else:
+                unbuilt = []
+            notes = []
+            if region.get("status") == "skip" and region.get("reason"):
+                notes.append(region["reason"])
+            if unbuilt:
+                notes.append(f"models not built in this checkout: {', '.join(unbuilt)}")
             write_places(
                 ctx.job_dir,
                 rid_to_tile,
                 tiled,
                 general,
-                region_note=(
-                    region.get("reason")
-                    if region.get("status") == "skip" and region.get("reason")
-                    else None
-                ),
+                region_note="; ".join(notes) or None,
             )
             errors = _format_lines(model)
         else:

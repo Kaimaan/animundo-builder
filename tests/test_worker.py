@@ -1522,6 +1522,58 @@ def test_enrich_job_on_a_region_tile_reaches_checking(
     assert "review/j1/enrich_lion/report.html" in store.blobs
 
 
+def test_checking_item_with_failing_checks_says_so(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#173.2: survived failures land in progress[] as checks_failed."""
+    import fake_world
+
+    import builder.build as build_mod
+
+    P = "n_413_478"
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(tile=P, tiles=[P])
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    fake_world.write_converter_tools(worker.world)
+    _region_world(worker.world)
+
+    class _Pipe:
+        def run(self, ctx: Any) -> dict[str, Any]:
+            folder = ctx.job_dir / "animals"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "lion.json").write_bytes(b'{"id": "lion"}')
+            checks = ctx.job_dir / "checks"
+            checks.mkdir(exist_ok=True)
+            (checks / "places.json").write_text(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "results": [
+                            {
+                                "check": "place xx_test_reef",
+                                "status": "fail",
+                                "problems": ["no food"],
+                            }
+                        ],
+                    }
+                )
+            )
+            return {}
+
+    monkeypatch.setattr(build_mod, "item_pipeline", lambda **kwargs: _Pipe())
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"
+    (entry,) = job["progress"]
+    assert entry["checks_failed"] == ["places"]
+    text = (tmp_path / "jobs" / "j1" / "enrich_lion" / "report.html").read_text(
+        encoding="utf-8"
+    )
+    assert "Checks failing: places." in text
+
+
 def test_enrich_failure_names_its_stage_and_the_region(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -2235,6 +2287,47 @@ def test_paused_job_with_resume_queues_and_builds(
     assert job["status"] == "checking"
     assert job.get("error") is None
     assert "operator_action" not in job
+
+
+def test_code_hunts_keep_small_fish_not_fish(tmp_path: Path) -> None:
+    """#173.4: a reef hunter hunts small fish, never anything with fins."""
+    from types import SimpleNamespace
+
+    import fake_world
+
+    from builder.stages.maker import AnimalMakerStage
+
+    world = fake_world.make_world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"].append(
+        {"id": "clownfish", "name": "Clownfish", "habitats": ["sea"]}
+    )
+    listed["animals"].append(
+        {"id": "lionfish", "name": "Lionfish", "habitats": ["sea"]}
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    (world / "animals" / "clownfish.json").write_text(
+        json.dumps({"tags": ["fish", "small_fish"]})
+    )
+    (world / "animals" / "lionfish.json").write_text(json.dumps({"tags": ["fish"]}))
+    region = {"animals": {"playable": ["clownfish", "lionfish"]}, "fish": []}
+    ctx = SimpleNamespace(job_dir=tmp_path / "jobs" / "j1")
+    small = AnimalMakerStage()._code_hunts(
+        world,
+        ctx,
+        {"main_food": {"kind": "prey", "name": "Clownfish"}, "other_foods": []},
+        region,
+        "hammerhead",
+    )
+    assert small == ["small_fish"]
+    only = AnimalMakerStage()._code_hunts(
+        world,
+        ctx,
+        {"main_food": {"kind": "prey", "name": "Lionfish"}, "other_foods": []},
+        region,
+        "grouper",
+    )
+    assert only == ["fish"]
 
 
 def test_resume_settles_first_and_marks_items_building(

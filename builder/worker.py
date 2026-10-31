@@ -1266,9 +1266,11 @@ class Worker:
         no published doc and no code remake is left out loudly.
         A tile inside a hand-made region checks in that region
         file instead, once per region, since the region has no
-        tile home to convert from (#168.1). The written stems go
-        in `checks/enrich_places.json`, so the stages read only
-        these files as places, never a build scaffold.
+        tile home to convert from (#168.1). The region only
+        seats the new thing; its food stays as it is (#173.1).
+        The written stems go in `checks/enrich_places.json`, so
+        the stages read only these files as places, never a
+        build scaffold.
         """
         import json
 
@@ -1437,10 +1439,11 @@ class Worker:
         pipeline's own record wins when it ran.
         """
         from . import build as build_mod
-        from .report import build_report
+        from .report import build_report, failed_checks
 
         cost = round(ctx.tracker.spent_usd - start, 6)
         status = status or ("failed" if error is not None else "checking")
+        failing = failed_checks(item_dir) if status == "checking" else []
         failure = ""
         if error is not None and status == "failed":
             import json
@@ -1471,6 +1474,7 @@ class Worker:
                     pass
             state["skipped"] = note
             state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        build_mod.write_state_params(item_dir, {"budget_usd": ctx.tracker.budget_usd})
         build_report(item_dir)
         report = build_mod.upload_bundle(
             self.store, f"review/{job_id}/{item['id']}", item_dir
@@ -1485,6 +1489,8 @@ class Worker:
         }
         if failure:
             entry["error"] = failure
+        if failing:
+            entry["checks_failed"] = failing
         if extra:
             entry.update(extra)
         progress.append(entry)

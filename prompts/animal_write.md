@@ -103,6 +103,10 @@ None. Write from the inputs only.
   true). Every true flag needs its text: `digs` needs `dig`, `hunts`
   needs `safe_tag` (plus `bite` and `caught_you` per prey),
   `territorial` needs `rival_bite` and `rival_caught_you`.
+- `year` follows the researched year: `winter` is `migrates`
+  only when the research says it leaves this place, with
+  `migration` carrying `leaves` and `returns` (MM-DD) from the
+  research; otherwise `active`. Never invent migration dates.
 - Text sounds like the examples: plain words, short sentences, present
   tense, what a child sees. Never a real breeding, nesting, denning or
   resting site for a sensitive species.

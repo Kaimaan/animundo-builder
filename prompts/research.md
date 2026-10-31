@@ -24,8 +24,9 @@ Five searches at most. Answer with JSON only, no prose.
   (tree, plant, ground or water), and `food_kind` when animals
   eat it (one of the food kinds above, not prey). A tree or
   plant that is a species also carries its `latin`.
-- `size`: its own body, `length_cm` (required) and
-  `weight_kg` when known.
+- `size`: its own body, `length_cm` (required: a typical
+  adult, never a record or maximum) and `weight_kg` when
+  known.
 - `looks`: what it looks like, so a sculptor gets it right.
   `shoulder_cm` (or `height_cm` for birds and fish),
   `tail_cm`, `coat` (`main` and `belly` or chest colour in
@@ -39,7 +40,11 @@ Five searches at most. Answer with JSON only, no prose.
 - `year`: how it lives through the seasons: `winter` (active,
   hibernates or migrates), `shelter` (one or two sentences),
   `young` (one or two sentences) and `food` (one sentence
-  about what it eats through the year).
+  about what it eats through the year). It migrates only
+  when the sources show it leaving this place ($LAT, $LON):
+  then give `migration` with `leaves` and `returns` (MM-DD)
+  in this hemisphere's seasons (south of the equator winter
+  is June-August); when they don't, say `active`.
 - `sources`: the pages the facts came from, most important
   first.
 

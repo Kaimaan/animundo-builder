@@ -2134,3 +2134,28 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   (`resume` or `give_up`); the worker clears it once
   obeyed. Details in `docs/worker.md`. Safe to stop
   the old container whenever Kai has decided.
+
+## 2026-10-31: inbox #172 (builder 429ca35)
+
+- The crash was `_update_if_owner`: the only update
+  path that sent `DELETE` untranslated. One helper
+  now serves every update; the test drives the real
+  client's own write builder.
+- The lynx ledger: `_settle_superseded` runs before
+  the crashing write and settles are idempotent, so
+  the held $0.077 almost certainly landed on the
+  first give-up try. I can't reach the volume from
+  here, so verify on the container (files
+  `/jobs/spend-ledger.json`,
+  `/jobs/spend-ledger-allowance.json` and
+  `/jobs/spend-ledger-baseten.json`; pick the
+  provider file by `progress[0].uncertain.host`):
+  each side's receipt id from `progress[0].uncertain`
+  should sit in its file's `settled`, with the
+  amount in `jobs[enrich_20261031_animal_lynx].spent`.
+  If an id is missing, settle it by hand (safe to
+  run regardless):
+  `FileLedger(path).settle(receipt_from_ref(ref),
+  ref["reserved_usd"])` per side from `builder.ledger`.
+- `modal container stop` needs `-y` with no
+  terminal; noted in `deploy/modal_worker.py`.

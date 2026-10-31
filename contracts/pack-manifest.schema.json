@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "anyOf": [
     {"required": ["draft_id", "draft_place_id", "place_id", "new_species", "reused_species"]},
-    {"required": ["pack", "kind", "min_game"]}
+    {"required": ["kind", "min_game"]}
   ],
   "required": [
     "version",
@@ -17,7 +17,6 @@
     "draft_id": {"type": "string", "minLength": 1},
     "draft_place_id": {"type": "string", "pattern": "^(draft_|[a-z]+_[a-z0-9_]+$)"},
     "place_id": {"type": "string", "minLength": 1},
-    "pack": {"type": "string", "minLength": 1},
     "kind": {"type": "string", "const": "enrich"},
     "min_game": {"type": "integer", "minimum": 1},
     "version": {"type": "integer", "minimum": 1},

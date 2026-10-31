@@ -147,6 +147,76 @@ def region_place(
     return region
 
 
+def region_additions_only(
+    before: dict[str, Any], after: dict[str, Any], animal_id: str
+) -> list[str]:
+    """Why the region change is not additions-only, or nothing (#174.1).
+
+    An enrich item only adds: the animal to `fish` (or `animals`)
+    and to `animals.playable` / `predators` / `prey`. Anything
+    else changed, removed, reordered, or added is one problem per
+    offending key.
+    """
+    problems = []
+    for key in after:
+        if key not in before and key not in ("animals", "fish"):
+            problems.append(f"{key} was added")
+            continue
+        if key == "animals":
+            problems.extend(_added_lists(before.get(key, {}), after[key], animal_id))
+        elif key == "fish":
+            problems.extend(_added_fish(before.get(key, []), after[key], animal_id))
+        elif after[key] != before[key]:
+            problems.append(f"{key} changed")
+    for key in before:
+        if key not in after:
+            problems.append(f"{key} was removed")
+    return problems
+
+
+def _added_lists(before: Any, after: Any, animal_id: str) -> list[str]:
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        if after != before:
+            return ["animals changed shape"]
+        return []
+    problems = []
+    for group in ("playable", "predators", "prey"):
+        old = before.get(group, [])
+        new = after.get(group, [])
+        if not isinstance(old, list) or not isinstance(new, list):
+            problems.append(f"animals.{group} changed shape")
+            continue
+        if [i for i in new if i != animal_id] != old:
+            problems.append(f"animals.{group} changed beyond {animal_id}")
+        if new.count(animal_id) > 1:
+            problems.append(f"animals.{group} lists {animal_id} twice")
+    for group in after:
+        if group not in ("playable", "predators", "prey"):
+            if group not in before:
+                problems.append(f"animals.{group} was added")
+            elif after[group] != before[group]:
+                problems.append(f"animals.{group} changed")
+    for group in before:
+        if group not in after:
+            problems.append(f"animals.{group} was removed")
+    return problems
+
+
+def _added_fish(before: Any, after: Any, animal_id: str) -> list[str]:
+    if not isinstance(before, list) or not isinstance(after, list):
+        if after != before:
+            return ["fish changed shape"]
+        return []
+    rest = [
+        e for e in after if not (isinstance(e, dict) and e.get("kind") == animal_id)
+    ]
+    if rest != before:
+        return [f"fish changed beyond {animal_id}"]
+    if sum(1 for e in after if isinstance(e, dict) and e.get("kind") == animal_id) > 1:
+        return [f"fish lists {animal_id} twice"]
+    return []
+
+
 def _seabed_plant(world: Path, what: str) -> bool:
     """Whether the plant file grows on the seabed (#173.1)."""
     try:

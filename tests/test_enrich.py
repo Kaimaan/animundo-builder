@@ -7,6 +7,7 @@ from pathlib import Path
 
 from builder.enrich import (
     place_tiles,
+    region_additions_only,
     region_place,
     sort_problems,
     sort_region_problems,
@@ -231,3 +232,43 @@ def test_place_tiles_ignores_an_unmanifested_scaffold(tmp_path: Path) -> None:
         json.dumps({"id": "zz_work"}), encoding="utf-8"
     )
     assert place_tiles(tmp_path) == {}
+
+
+def _reef_lists() -> dict:
+    return {
+        "food": [{"kind": "water_plants", "names": ["seagrass"]}],
+        "fish": [{"kind": "clownfish", "count": 5}],
+        "animals": {"playable": ["clownfish"], "prey": [], "predators": []},
+    }
+
+
+def test_region_additions_only_passes_a_clean_add() -> None:
+    """#174.1: seating the animal is the only change allowed."""
+    before = _reef_lists()
+    after = json.loads(json.dumps(before))
+    after["fish"].append({"kind": "hammerhead", "count": 2})
+    after["animals"]["playable"].append("hammerhead")
+    assert region_additions_only(before, after, "hammerhead") == []
+
+
+def test_region_additions_only_names_every_other_change() -> None:
+    before = _reef_lists()
+    rewritten = json.loads(json.dumps(before))
+    rewritten["food"] = []
+    assert region_additions_only(before, rewritten, "hammerhead") == ["food changed"]
+    removed = json.loads(json.dumps(before))
+    del removed["animals"]["playable"][0]
+    assert region_additions_only(before, removed, "hammerhead") == [
+        "animals.playable changed beyond hammerhead"
+    ]
+    stranger = json.loads(json.dumps(before))
+    stranger["fish"].append({"kind": "shark", "count": 1})
+    assert region_additions_only(before, stranger, "hammerhead") == [
+        "fish changed beyond hammerhead"
+    ]
+    extra = json.loads(json.dumps(before))
+    extra["insects"] = ["ant"]
+    assert region_additions_only(before, extra, "hammerhead") == ["insects was added"]
+    gone = json.loads(json.dumps(before))
+    del gone["food"]
+    assert region_additions_only(before, gone, "hammerhead") == ["food was removed"]

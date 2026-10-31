@@ -1313,6 +1313,151 @@ def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> No
     assert store.blobs[blob] == before
 
 
+def _region_world(world: Path) -> None:
+    regions = world / "regions"
+    regions.mkdir(exist_ok=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_reef",
+                "name": {"en": "Test Reef", "fi": "Testiriutta"},
+                "center": {"lat": 60.0, "lon": 24.0},
+                "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]},
+                "animals": {
+                    "playable": ["mountain_hare", "vole"],
+                    "prey": ["vole"],
+                    "predators": [],
+                },
+                "plants": {"cover": [{"id": "bilberry", "density": 0.1}]},
+                "food": [{"kind": "grass"}, {"kind": "berries"}],
+            }
+        )
+    )
+
+
+def test_enrich_intake_checks_a_region_tile_in_its_region(
+    tmp_path: Path,
+) -> None:
+    """#168.1: a hand-made region's tile checks in the region file."""
+    import fake_world
+
+    P = "n_413_478"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    fake_world.write_converter_tools(worker.world)
+    _region_world(worker.world)
+    item = {
+        "id": "enrich_lion",
+        "kind": "animal",
+        "what": "lion",
+        "from": "fox",
+        "estimate_usd": 1.0,
+    }
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
+    worker._write_enrich_places("j1", item_dir, [P], item)
+    region = json.loads((item_dir / "regions" / "xx_test_reef.json").read_text())
+    assert region["animals"]["playable"] == ["mountain_hare", "vole", "lion"]
+    assert not (item_dir / "regions" / f"tl_{P}.json").exists()
+    manifest = json.loads((item_dir / "checks" / "enrich_places.json").read_text())
+    assert manifest == {"places": ["xx_test_reef"]}
+
+
+def test_tile_home_falls_back_to_the_region(tmp_path: Path) -> None:
+    """#168.1: a place cell's home is its region file, for the intake."""
+    import fake_world
+
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    fake_world.write_converter_tools(worker.world)
+    _region_world(worker.world)
+    plan = {"format": 1, "items": []}
+    home = worker._tile_home("n_413_478", plan, "j1")
+    assert home["id"] == "xx_test_reef"
+    assert worker._tile_home("n_413_479", plan, "j1")["habitat"] == "boreal_forest"
+
+
+def test_enrich_job_on_a_region_tile_reaches_checking(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#168.1: hammerhead-on-the-reef reaches checking with no model call."""
+    import fake_world
+
+    import builder.build as build_mod
+
+    P = "n_413_478"
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(tile=P, tiles=[P])
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    fake_world.write_converter_tools(worker.world)
+    _region_world(worker.world)
+
+    class _Pipe:
+        def run(self, ctx: Any) -> dict[str, Any]:
+            assert ctx.job_dir.name == "enrich_lion"
+            folder = ctx.job_dir / "animals"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "lion.json").write_bytes(b'{"id": "lion"}')
+            return {}
+
+    monkeypatch.setattr(build_mod, "item_pipeline", lambda **kwargs: _Pipe())
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"
+    assert [(e["id"], e["status"]) for e in job["progress"]] == [
+        ("enrich_lion", "checking")
+    ]
+    assert (
+        tmp_path / "jobs" / "j1" / "enrich_lion" / "regions" / "xx_test_reef.json"
+    ).is_file()
+    assert "review/j1/enrich_lion/report.html" in store.blobs
+
+
+def test_enrich_failure_names_its_stage_and_the_region(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#168.3: a failed item's progress and report say the stage and why."""
+    import fake_world
+
+    P = "n_413_478"
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(tile=P, tiles=[P])
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    fake_world.write_converter_tools(worker.world)
+    _region_world(worker.world)
+
+    def broken(
+        ctx: Any,
+        job_id: str,
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        item_dir: Path,
+        cast: Any = None,
+        enrich_tiles: Any = None,
+    ) -> None:
+        raise ValueError("tile n_413_478 has no home in this checkout")
+
+    monkeypatch.setattr(worker, "_run_stages", broken)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    (entry,) = job["progress"]
+    assert entry["status"] == "failed"
+    assert entry["error"] == "intake: tile n_413_478 has no home in this checkout"
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
+    text = (item_dir / "report.html").read_text(encoding="utf-8")
+    assert "intake: tile n_413_478 has no home in this checkout" in text
+    assert "finished every built stage" not in text
+    state = json.loads((item_dir / "state.json").read_text(encoding="utf-8"))
+    assert state["params"]["area"] == "n_413_478 (Test Reef)"
+
+
 def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) -> None:
     """#143.4: the wanted opener publishes its tile at version 1."""
     import json

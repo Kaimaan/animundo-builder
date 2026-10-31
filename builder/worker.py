@@ -634,16 +634,36 @@ class Worker:
                     ctx, job_id, tile, plan, item, item_dir, cast, enrich_tiles
                 )
         except BudgetExceeded as error:
-            self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
+            self._close_item(
+                job_id,
+                item,
+                item_dir,
+                ctx,
+                start,
+                before,
+                budget,
+                error,
+                stage="budget",
+            )
             raise _BudgetOut("budget") from error
         except (CapExceeded, LedgerError, MetaAuthError) as error:
-            self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
             if isinstance(error, MetaAuthError):
                 code = "auth"
             elif isinstance(error, LedgerError):
                 code = "ledger"
             else:
                 code = "cap"
+            self._close_item(
+                job_id,
+                item,
+                item_dir,
+                ctx,
+                start,
+                before,
+                budget,
+                error,
+                stage=code,
+            )
             raise _BudgetOut(code) from error
         except OffSwitch:
             spent = round(ctx.tracker.spent_usd - start, 6)
@@ -1064,16 +1084,38 @@ class Worker:
         """An enrich item's report labels: its tile and kind (#150.2).
 
         The tile's compass name points from the nearest place, the
-        way a plan would name it; no survey answer is spent.
+        way a plan would name it; no survey answer is spent. A
+        tile inside a hand-made region takes the region's name
+        instead (#168.3).
         """
         from . import build as build_mod
         from .grid import center, parse_tile
         from .plan import plan_name
+        from .tiles import place_cells
 
-        grid, col, row = parse_tile(tile)
-        habitat = self._grids()[grid].habitat(col, row)
-        lat, lon = center(tile)
-        name = plan_name(habitat, lat, lon, None)["en"]
+        name = ""
+        if self.world is not None:
+            hit = place_cells(self.world).get(tile)
+            if hit is not None:
+                import json
+
+                try:
+                    raw = json.loads(
+                        (self.world / "regions" / f"{hit[0]}.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ).get("name")
+                except (OSError, ValueError):
+                    raw = None
+                if isinstance(raw, dict):
+                    name = str(raw.get("en") or "")
+                elif isinstance(raw, str):
+                    name = raw
+        if not name:
+            grid, col, row = parse_tile(tile)
+            habitat = self._grids()[grid].habitat(col, row)
+            lat, lon = center(tile)
+            name = plan_name(habitat, lat, lon, None)["en"]
         build_mod.write_state_params(
             item_dir, {"area": f"{tile} ({name})", "kind": "enrich"}
         )
@@ -1091,15 +1133,43 @@ class Worker:
         the new animal or plant is seated and the food reworked,
         so the item's checks run against real tiles. A tile with
         no published doc and no code remake is left out loudly.
+        A tile inside a hand-made region checks in that region
+        file instead, once per region, since the region has no
+        tile home to convert from (#168.1). The written stems go
+        in `checks/enrich_places.json`, so the stages read only
+        these files as places, never a build scaffold.
         """
         import json
 
-        from .enrich import ConvertError, tile_place
+        from .enrich import MANIFEST, ConvertError, region_place, tile_place
+        from .tiles import place_cells
 
         assert self.world is not None
         regions = item_dir / "regions"
         regions.mkdir(parents=True, exist_ok=True)
+        placed = place_cells(self.world)
+        done: set[str] = set()
         for target in tiles:
+            hit = placed.get(target)
+            if hit is not None:
+                region_id = hit[0]
+                if region_id in done:
+                    continue
+                try:
+                    place = region_place(
+                        region_id, self.world, str(item["what"]), str(item["kind"])
+                    )
+                except ConvertError as error:
+                    print(
+                        f"build job {job_id}: no place for {target}: {error}",
+                        file=sys.stderr,
+                    )
+                    continue
+                (regions / f"{region_id}.json").write_text(
+                    json.dumps(place, indent=2), encoding="utf-8"
+                )
+                done.add(region_id)
+                continue
             try:
                 doc = self._tile_doc(target)
             except Exception as error:  # noqa: BLE001 - left out loudly
@@ -1121,6 +1191,12 @@ class Worker:
             (regions / f"tl_{target}.json").write_text(
                 json.dumps(place, indent=2), encoding="utf-8"
             )
+            done.add(f"tl_{target}")
+        checks = item_dir / "checks"
+        checks.mkdir(parents=True, exist_ok=True)
+        (checks / MANIFEST).write_text(
+            json.dumps({"places": sorted(done)}, indent=2), encoding="utf-8"
+        )
 
     def _tile_doc(self, tile: str) -> dict[str, Any]:
         """The tile's doc: published first, else remade by code, keyless."""
@@ -1220,13 +1296,38 @@ class Worker:
         status: str | None = None,
         note: str | None = None,
         extra: dict[str, Any] | None = None,
+        stage: str = "intake",
     ) -> None:
-        """Report, upload, charge and alert one finished item."""
+        """Report, upload, charge and alert one finished item.
+
+        A failed item carries its failing stage and message in
+        the report and in its progress entry, even when the
+        intake broke before any stage ran (#168.3). The
+        pipeline's own record wins when it ran.
+        """
         from . import build as build_mod
         from .report import build_report
 
         cost = round(ctx.tracker.spent_usd - start, 6)
         status = status or ("failed" if error is not None else "checking")
+        failure = ""
+        if error is not None and status == "failed":
+            import json
+
+            state_path = item_dir / "state.json"
+            state: dict[str, Any] = {"completed": [], "results": {}, "failed": None}
+            if state_path.is_file():
+                try:
+                    state.update(json.loads(state_path.read_text(encoding="utf-8")))
+                except ValueError:
+                    pass
+            recorded = state.get("failed")
+            if isinstance(recorded, dict) and recorded.get("stage"):
+                failure = f"{recorded['stage']}: {recorded.get('error', '')}"
+            else:
+                failure = f"{stage}: {error}"
+                state["failed"] = {"stage": stage, "error": str(error)}
+                state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
         if note is not None:
             import json
 
@@ -1251,6 +1352,8 @@ class Worker:
             "report": report,
             "cost_usd": cost,
         }
+        if failure:
+            entry["error"] = failure
         if extra:
             entry.update(extra)
         progress.append(entry)
@@ -1271,11 +1374,16 @@ class Worker:
     def _tile_home(
         self, tile: str, plan: dict[str, Any], job_id: str
     ) -> dict[str, Any]:
-        """The tile's home: the job's made one, else the world's."""
+        """The tile's home: the job's made one, else the world's.
+
+        A tile inside a hand-made region takes that region file:
+        it has the food names and shape the intake reads, and no
+        tile home exists (#168.1). Build jobs never plan there.
+        """
         import json
 
         from .grid import parse_tile
-        from .tiles import available_homes, home_for_cell
+        from .tiles import available_homes, home_for_cell, place_cells
 
         assert self.world is not None
         for item in plan.get("items", []):
@@ -1285,6 +1393,10 @@ class Worker:
             made = sorted(homes.glob("*.json"))
             if made:
                 return json.loads(made[0].read_text(encoding="utf-8"))
+        hit = place_cells(self.world).get(tile)
+        if hit is not None:
+            path = self.world / "regions" / f"{hit[0]}.json"
+            return json.loads(path.read_text(encoding="utf-8"))
         grid, col, row = parse_tile(tile)
         cells = self._grids()[grid]
         homes = available_homes(self.world)

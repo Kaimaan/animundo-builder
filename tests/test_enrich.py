@@ -7,6 +7,7 @@ from pathlib import Path
 
 from builder.enrich import (
     place_tiles,
+    region_place,
     sort_problems,
     sort_region_problems,
     write_places,
@@ -104,3 +105,87 @@ def test_write_places_lists_every_tile(tmp_path: Path) -> None:
     assert failed["problems"] == ["ERROR: squirrel in tl_n_413_479 eats mushrooms"]
     assert by_check["place"]["status"] == "fail"
     assert by_check["region"]["status"] == "skip"
+
+
+def _reef(world: Path) -> None:
+    regions = world / "regions"
+    regions.mkdir(parents=True, exist_ok=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_reef",
+                "name": {"en": "Test Reef"},
+                "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]},
+                "animals": {
+                    "playable": ["clownfish", "blue_tang"],
+                    "prey": [],
+                    "predators": ["reef_shark"],
+                },
+                "plants": {
+                    "water": [{"id": "branching_staghorn_coral", "density": 0.08}]
+                },
+                "food": [{"kind": "water_plants", "names": ["seagrass"]}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_region_place_seats_the_new_animal(tmp_path: Path) -> None:
+    """#168.1: the region keeps its cast; the new animal joins playable."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    fake_world.write_converter_tools(world)
+    _reef(world)
+    place = region_place("xx_test_reef", world, "hammerhead", "animal")
+    assert place["id"] == "xx_test_reef"
+    assert place["animals"]["playable"] == ["clownfish", "blue_tang", "hammerhead"]
+    assert place["animals"]["predators"] == ["reef_shark"]
+    assert place["food"] == [{"kind": "water_plants", "names": ["seagrass"]}]
+
+
+def test_region_place_seats_a_plant_where_it_grows(tmp_path: Path) -> None:
+    """#168.1: a new plant joins the region's grown side, not a tile's."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    fake_world.write_converter_tools(world)
+    _reef(world)
+    place = region_place("xx_test_reef", world, "paddle_grass", "plant")
+    grown = place["plants"]["water"]
+    assert [p["id"] for p in grown] == [
+        "branching_staghorn_coral",
+        "paddle_grass",
+    ]
+
+
+def test_place_tiles_maps_a_region_to_itself(tmp_path: Path) -> None:
+    """#168.1: a hand-made region's verdict line names the region."""
+    regions = tmp_path / "regions"
+    regions.mkdir(parents=True, exist_ok=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps({"id": "xx_test_reef"}), encoding="utf-8"
+    )
+    checks = tmp_path / "checks"
+    checks.mkdir(parents=True, exist_ok=True)
+    (checks / "enrich_places.json").write_text(
+        json.dumps({"places": ["xx_test_reef"]}), encoding="utf-8"
+    )
+    mapping = place_tiles(tmp_path)
+    assert mapping["xx_test_reef"] == "xx_test_reef"
+    write_places(tmp_path, mapping, {}, [], None)
+    data = json.loads((tmp_path / "checks" / "places.json").read_text())
+    assert data["results"] == [
+        {"check": "place xx_test_reef", "status": "pass", "problems": []}
+    ]
+
+
+def test_place_tiles_ignores_an_unmanifested_scaffold(tmp_path: Path) -> None:
+    """#168.1: a build scaffold is never read as an enrich place."""
+    regions = tmp_path / "regions"
+    regions.mkdir(parents=True, exist_ok=True)
+    (regions / "zz_work.json").write_text(
+        json.dumps({"id": "zz_work"}), encoding="utf-8"
+    )
+    assert place_tiles(tmp_path) == {}

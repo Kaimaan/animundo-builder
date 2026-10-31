@@ -190,6 +190,23 @@ def test_report_names_the_skipped_need(tmp_path: Path) -> None:
     assert "needs home_717" in text
 
 
+def test_report_names_the_failing_stage(tmp_path: Path) -> None:
+    """#168.3: a failed item's report says the stage and its message."""
+    (tmp_path / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research"],
+                "results": {},
+                "failed": {"stage": "oneshot", "error": "the file broke its schema"},
+            }
+        )
+    )
+    text = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "Failed:" in text
+    assert "oneshot: the file broke its schema" in text
+    assert "finished every built stage" not in text
+
+
 def test_report_lists_new_things(tmp_path: Path) -> None:
     (tmp_path / "state.json").write_text(
         json.dumps({"params": {"kind": "animal_home"}, "completed": []})

@@ -232,7 +232,11 @@ def _stages(state: dict[str, Any]) -> str:
     if skipped:
         text += f"<p><strong>Skipped:</strong> {html.escape(str(skipped))}</p>"
     if failed:
-        text += f"<p><strong>Failed:</strong> {html.escape(str(failed))}</p>"
+        if isinstance(failed, dict):
+            detail = f"{failed.get('stage', '?')}: {failed.get('error', '')}"
+        else:
+            detail = str(failed)
+        text += f"<p><strong>Failed:</strong> {html.escape(detail)}</p>"
     return text
 
 

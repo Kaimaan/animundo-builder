@@ -3,7 +3,9 @@
 The hand-built `zz_work` region is gone: for an enrich job each
 target tile becomes its place exactly as the game builds it
 (`tools/tile_region.py`), the new animal or plant is seated, the
-food is worked out again, and the world's checks run there. The
+food is worked out again, and the world's checks run there. A
+tile inside a hand-made region instead checks in that region
+file, which has no tile home to convert from (#168.1). The
 world's code runs in its own process, as for every world tool;
 the builder only feeds it the tile and reads back the place.
 """
@@ -102,13 +104,126 @@ def tile_place(
         )
 
 
+_REGION_CONVERT = """
+import json, sys
+tools, region_path, what, kind = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+sys.path.insert(0, tools)
+import food, layers
+region = json.load(open(region_path, encoding="utf-8"))
+if what:
+    if kind == "plant":
+        spec = layers.spec("plants", what) or {}
+        seabed = "seabed" in (spec.get("grows", {}).get("on") or [])
+        side = "water" if seabed else "cover"
+        plants = region.setdefault("plants", {})
+        grown = plants.get(side)
+        if not isinstance(grown, list):
+            grown = next(
+                (v for v in plants.values() if isinstance(v, list)), None
+            )
+            if grown is None:
+                grown = []
+                plants[side] = grown
+        if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
+            grown.append({"id": what, "density": 0.1})
+    else:
+        animals = region.setdefault("animals", {})
+        if isinstance(animals, dict):
+            lists = animals.setdefault("playable", [])
+        else:
+            lists = animals
+        if what not in lists:
+            lists.append(what)
+    region["food"] = food.worked_out(region)
+print(json.dumps(region))
+"""
+
+
+def region_place(
+    region_id: str,
+    world: Path,
+    what: str = "",
+    kind: str = "",
+) -> dict[str, Any]:
+    """One hand-made region with the new thing seated (#168.1).
+
+    The region file keeps its id, species and shape; the new
+    animal joins `playable` (a plant its grown side) and the
+    food is worked out again, as for a converted tile place.
+    Needs a world with `tools/food.py`.
+    """
+    tools = world / "tools"
+    if not (tools / "food.py").is_file():
+        raise ConvertError(f"no food rules in this checkout: {tools}")
+    region_path = world / "regions" / f"{region_id}.json"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _REGION_CONVERT,
+            str(tools),
+            str(region_path),
+            what,
+            kind,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise ConvertError(
+            f"the region file refused {region_id}: "
+            f"{(proc.stdout + proc.stderr).strip()[:300]}"
+        )
+    try:
+        return json.loads(proc.stdout)
+    except ValueError:
+        raise ConvertError(
+            f"the region file gave no JSON for {region_id}: {proc.stdout.strip()[:200]}"
+        )
+
+
+MANIFEST = "enrich_places.json"
+
+
+def _manifest(job_dir: Path) -> list[str] | None:
+    """The intake's place stems, or None before #168.1 wrote one."""
+    path = job_dir / "checks" / MANIFEST
+    if not path.is_file():
+        return None
+    try:
+        names = json.loads(path.read_text(encoding="utf-8")).get("places")
+    except ValueError:
+        return None
+    if not isinstance(names, list):
+        return None
+    if not all(isinstance(name, str) for name in names):
+        return None
+    return names
+
+
 def enrich_places(job_dir: Path) -> list[Path]:
-    """The job's converter places, sorted; empty for a non-enrich job."""
-    return sorted((job_dir / "regions").glob("tl_*.json"))
+    """The job's checked places, sorted; empty for a non-enrich job.
+
+    The intake manifests its files: converted tiles
+    (`tl_<tile>.json`) and hand-made regions (`<region id>.json`)
+    alike (#168.1). Without a manifest only converted tiles
+    count, so a build scaffold is never read as a place.
+    """
+    names = _manifest(job_dir)
+    if names is None:
+        return sorted((job_dir / "regions").glob("tl_*.json"))
+    regions = job_dir / "regions"
+    paths = [regions / f"{name}.json" for name in names]
+    return sorted(path for path in paths if path.is_file())
 
 
 def place_tiles(job_dir: Path) -> dict[str, str]:
-    """Each place's region id (and file stem) to its tile (#161.2)."""
+    """Each place's region id (and file stem) to its tile (#161.2).
+
+    A hand-made region maps to itself: its verdict line names
+    the region, not one of its tiles (#168.1).
+    """
     out: dict[str, str] = {}
     for path in enrich_places(job_dir):
         tile = path.stem[3:] if path.stem.startswith("tl_") else path.stem

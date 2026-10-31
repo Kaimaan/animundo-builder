@@ -32,6 +32,7 @@ from builder.meta import (
     Usage,
     _ApiKeyAuth,
     is_open_host_refusal,
+    timeout_for,
 )
 from builder.prices import UnknownModelError, prices_for
 
@@ -786,6 +787,31 @@ def test_settle_failure_marks_charge_uncertain(tmp_path: Path) -> None:
     assert lines[0]["result"] == "settle_failed"
     assert lines[0]["spend_uncertain"] is True
     assert lines[0]["reserved_usd"] == pytest.approx(round(ledger.reserved[0], 6))
+
+
+def test_timeout_fits_cap_per_host() -> None:
+    assert timeout_for("meta", 100) == 60
+    assert timeout_for("meta", 16384) == pytest.approx(16384 / 120.0 + 30.0)
+    assert timeout_for("baseten", 8000) == pytest.approx(8000 / 80.0 + 30.0)
+    assert timeout_for("baseten", 16384) > 60
+    assert timeout_for("strange", 8000) == timeout_for("baseten", 8000)
+
+
+def test_chat_sizes_timeout_unless_told(tmp_path: Path) -> None:
+    script = Script([(200, chat_body()), (200, chat_body())])
+    client, _ = make_client(script, tmp_path)
+    calls: list[dict] = []
+    orig = client._client.chat.completions.create
+
+    def spy(**kwargs):  # type: ignore[no-untyped-def]
+        calls.append(kwargs)
+        return orig(**kwargs)
+
+    client._client.chat.completions.create = spy  # type: ignore[method-assign]
+    client.chat([{"role": "user", "content": "hi"}], max_tokens=8000)
+    assert calls[0]["timeout"] == pytest.approx(timeout_for("meta", 8000))
+    client.chat([{"role": "user", "content": "hi"}], max_tokens=8000, timeout=5)
+    assert calls[1]["timeout"] == 5
 
 
 def test_reserve_failure_sends_nothing(tmp_path: Path) -> None:

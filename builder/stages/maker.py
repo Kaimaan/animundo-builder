@@ -554,7 +554,7 @@ class AnimalMakerStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = _ask_with_room(chat, messages)
+        response = _ask_with_room(chat, messages, reasoning_effort="low")
         return (response.choices[0].message.content or "").strip()
 
     def _ask_edits(
@@ -572,7 +572,9 @@ class AnimalMakerStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = _ask_with_room(chat, messages, response_format=request)
+        response = _ask_with_room(
+            chat, messages, response_format=request, reasoning_effort="low"
+        )
         return (response.choices[0].message.content or "").strip()
 
     def _marks_errors(
@@ -633,7 +635,9 @@ class AnimalMakerStage:
             )
             chat = self._chat or ctx.chat
             answer = (
-                _ask_with_room(chat, messages, response_format=request)
+                _ask_with_room(
+                    chat, messages, response_format=request, reasoning_effort="low"
+                )
                 .choices[0]
                 .message.content
                 or ""
@@ -2821,7 +2825,9 @@ class HomeMakerStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = _ask_with_room(chat, messages, response_format=request)
+        response = _ask_with_room(
+            chat, messages, response_format=request, reasoning_effort="low"
+        )
         return (response.choices[0].message.content or "").strip()
 
     def _adapt_try(
@@ -3170,7 +3176,10 @@ def _ask_with_room(chat: Any, messages: list[dict[str, Any]], **kwargs: Any) -> 
     Reasoning counts against the open host's cap, so an answer can
     stop mid-JSON; the retry doubles the room instead of spending a
     fix round on the truncation. Only an explicit length signal
-    retries, never a guess from usage.
+    retries, never a guess from usage. Callers asking for short
+    JSON cap the reasoning like the words and species steps:
+    uncapped, the open model fills the whole cap thinking and the
+    fix rounds run away into a timeout (#166.1).
     """
     response = chat(messages, **kwargs)
     if not is_cut_off(response, 0):

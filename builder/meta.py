@@ -46,6 +46,23 @@ BASETEN_LOW_USD = 20.0
 MAX_TRIES = 5
 TIMEOUT_TEXT = 60
 TIMEOUT_LONG = 180
+# Conservative per-host output floors, so a full-cap answer fits
+# its timeout (#166.2). Meta: 141 tok/s slowest of 22 logged
+# calls; Baseten: one 16k call inside ~31 s, so 80 for variance.
+TOKENS_PER_SEC = {"meta": 120.0, "baseten": 80.0}
+TIMEOUT_SLACK = 30.0
+
+
+def timeout_for(host: str, max_tokens: int, minimum: float = TIMEOUT_TEXT) -> float:
+    """A timeout a full-cap answer fits in, per host (#166.2).
+
+    Unknown hosts size at the slowest floor. A stall still trips
+    the timeout; this only stops clipping healthy long answers.
+    """
+    rate = TOKENS_PER_SEC.get(host, min(TOKENS_PER_SEC.values()))
+    return max(minimum, max_tokens / rate + TIMEOUT_SLACK)
+
+
 DEFAULT_MAX_TOKENS = 16384
 # Muse Spark Open reasons first and the reasoning counts against the
 # cap: a two-image review burns past 2000 tokens before answering.
@@ -318,12 +335,13 @@ class MetaClient:
         tools: list[dict[str, Any]] | None = None,
         response_format: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
-        timeout: float = TIMEOUT_TEXT,
+        timeout: float | None = None,
         max_tokens: int | None = None,
         extra_body: dict[str, Any] | None = None,
     ) -> Any:
         """One Chat Completions call, with caps, retries and cost logging."""
         limit = max_tokens or self.default_max_tokens
+        timeout = timeout if timeout is not None else timeout_for(self.host, limit)
         body = dict(extra_body or {})
         if (
             reasoning_effort
@@ -365,7 +383,7 @@ class MetaClient:
         tools: list[dict[str, Any]] | None = None,
         include: list[str] | None = None,
         images: int = 0,
-        timeout: float = TIMEOUT_LONG,
+        timeout: float | None = None,
         max_tokens: int | None = None,
         max_tool_calls: int | None = None,
         text_format: dict[str, Any] | None = None,
@@ -380,6 +398,8 @@ class MetaClient:
                 f"at most {MAX_IMAGES_PER_CALL} images per call, got {images}"
             )
         limit = max_tokens or self.default_max_tokens
+        if timeout is None:
+            timeout = timeout_for(self.host, limit, minimum=TIMEOUT_LONG)
         searches = MAX_SEARCHES_PER_CALL if _is_grounded(tools) else 0
 
         def call() -> Any:

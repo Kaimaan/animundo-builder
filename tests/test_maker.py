@@ -567,7 +567,8 @@ def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
     assert "only one example: one shot" in prompt
     assert "$FOR_CHILDREN" not in prompt
     assert "Young animals" in prompt
-    assert client.options[0] == {}
+    # #166.1 changed the contract: the ask carries the reasoning cap.
+    assert client.options[0] == {"reasoning_effort": "low"}
 
 
 def test_edits_prompt_carries_looks_and_parts(tmp_path: Path) -> None:
@@ -2234,6 +2235,53 @@ def test_ask_with_room_retries_a_cut_answer() -> None:
     assert response.choices[0].message.content == '{"palette": {}}'
     assert calls[0] == {"response_format": request}
     assert calls[1] == {"response_format": request, "max_tokens": 16384}
+
+
+def test_maker_asks_cap_reasoning() -> None:
+    """#166.1: short-JSON asks stay capped so the open host stays short."""
+
+    def scripted(answer: str, calls: list[dict[str, Any]]):  # type: ignore[no-untyped-def]
+        def chat(messages: list[dict[str, Any]], **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return _whole_response(answer)
+
+        return chat
+
+    animal_calls: list[dict[str, Any]] = []
+    animal = AnimalMakerStage()
+    animal._chat = scripted("{}", animal_calls)
+    assert animal._ask_animal(None, "prompt", None) == "{}"
+    assert animal_calls == [{"reasoning_effort": "low"}]
+
+    edits_calls: list[dict[str, Any]] = []
+    animal._chat = scripted("{}", edits_calls)
+    request = {"type": "json_schema", "json_schema": {"name": "E"}}
+    assert animal._ask_edits(None, "prompt", request, None) == "{}"
+    assert edits_calls == [{"response_format": request, "reasoning_effort": "low"}]
+
+    home_calls: list[dict[str, Any]] = []
+    home = HomeMakerStage()
+    home._chat = scripted("{}", home_calls)
+    assert home._ask(None, "prompt", request, None) == "{}"
+    assert home_calls == [{"response_format": request, "reasoning_effort": "low"}]
+
+
+def test_marks_review_caps_reasoning(tmp_path: Path) -> None:
+    """#166.1: the marks review stays capped too."""
+    calls: list[dict[str, Any]] = []
+
+    def chat(messages: list[dict[str, Any]], **kwargs: Any) -> SimpleNamespace:
+        calls.append(kwargs)
+        return _whole_response('{"shown": [], "missing": []}')
+
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "lynx.png").write_bytes(b"fake-preview")
+    ctx = SimpleNamespace(job_dir=tmp_path, check_budget=lambda: None)
+    animal = AnimalMakerStage()
+    animal._chat = chat
+    target = {"entry": {"name": "Lynx"}}
+    assert animal._marks_errors(ctx, "lynx", target, ["tufted ears"], 1) == []
+    assert calls[0]["reasoning_effort"] == "low"
 
 
 def test_ask_with_room_plays_a_truncated_recording(tmp_path: Path) -> None:

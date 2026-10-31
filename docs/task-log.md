@@ -2002,3 +2002,38 @@ One commit each, all pushed, suite 896 passed + 12 skipped
 - Not green, pre-existing: repo-wide ruff (978, nearly
   all E501) and format (32 files) fail on `main`; every
   file this batch touched passes on its own.
+
+## 2026-10-31: inbox #166, the lynx runaway
+
+- Why (#166.1): the animal step sent no reasoning cap,
+  so Baseten's open model reasoned at default, filled
+  the 8k cap, was cut off mid-JSON, filled the 16k
+  retry the same way, and stalled a fix round past 60 s
+  into a pause. Fix: the four maker asks (animal,
+  edits, marks review, home) now send
+  `reasoning_effort="low"`, the same remedy the words
+  and species steps already use on this host. No host
+  move: the model stays short on Baseten once capped,
+  so moving to Meta would cost more for no reason.
+  Watch item: `low` also applies on Meta now; if maker
+  quality there slips, say so and we'll move the call.
+- Fit (#166.2): chat timeouts size from the cap per
+  host (`timeout_for`): Meta floor 120 tok/s (slowest
+  of 22 logged calls was 141), Baseten 80 (one 16k
+  call inside ~31 s, margined for variance), +30 s
+  slack, never under the old 60 s; explicit timeouts
+  still win. Responses keeps its 180 s floor; images
+  and streams are not token-bound, unchanged.
+- Way out (#166.3): the console writes
+  `operator_action: "resume" | "give_up"` on the job
+  doc. Resume settles the held spend and the normal
+  path goes on; give-up settles it, records
+  `uncertain_usd`, and fails the job as `gave_up`.
+  Game side needs: a console button doing that one
+  direct Firestore write (same path as `admin.mjs`,
+  no rules change); `server/border` needs nothing,
+  the worker's watch picks the field up. Note:
+  restarts and re-enables still re-drive paused jobs
+  (#157 behavior), so a deploy would retry the lynx;
+  nothing live was touched here, it stays paused for
+  Kai's call.

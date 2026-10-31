@@ -2493,6 +2493,98 @@ def test_reenable_protects_owned_terminal_and_planned(
     assert store.build_jobs["live"]["status"] == "building"
 
 
+def _paused_job(store: FakeStore, action: str, receipt) -> None:  # type: ignore[no-untyped-def]
+    """A paused enrich job with a held reservation, awaiting the operator."""
+    from builder.ledger import receipt_refs
+
+    job = _enrich_job(status="building")
+    job["error"] = "paused_spend_uncertain"
+    job["operator_action"] = action
+    job["progress"] = [
+        {
+            "id": "enrich_lion",
+            "status": "paused_spend_uncertain",
+            "uncertain": {"host": "meta", **receipt_refs(receipt)},
+        }
+    ]
+    store.build_jobs["j1"] = job
+
+
+def test_operator_resume_goes_on(tmp_path: Path, monkeypatch: Any) -> None:
+    """#166.3: resume settles the held spend, then the item runs."""
+    from types import SimpleNamespace
+
+    store = FakeStore()
+    provider, allowance, ledger, receipt = _held_pair(tmp_path)
+    _paused_job(store, "resume", receipt)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+    worker.chat = SimpleNamespace(ledger=ledger, model="muse-spark-1.3")
+
+    def fake_stages(*args: Any, **kwargs: Any) -> None:
+        (args[5] / "animals").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "checking"
+    assert "operator_action" not in job
+    assert job.get("error") is None
+    assert job["progress"][-1]["status"] == "checking"
+    for pool, side in ((provider, receipt.provider), (allowance, receipt.allowance)):
+        data = json.loads(pool.path.read_text(encoding="utf-8"))
+        assert side.id in data["settled"]
+        assert pool.job_spent("j1") == pytest.approx(0.05)
+
+
+def test_operator_give_up_fails_and_records(tmp_path: Path, monkeypatch: Any) -> None:
+    """#166.3: give-up settles the held spend, records it, fails the job."""
+    from types import SimpleNamespace
+
+    store = FakeStore()
+    provider, allowance, ledger, receipt = _held_pair(tmp_path)
+    _paused_job(store, "give_up", receipt)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+    worker.chat = SimpleNamespace(ledger=ledger, model="muse-spark-1.3")
+
+    def no_stages(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("no stages run on give-up")
+
+    monkeypatch.setattr(worker, "_run_stages", no_stages)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "gave_up"
+    assert "operator_action" not in job
+    assert job["progress"][0]["status"] == "failed"
+    assert job["uncertain_usd"] == pytest.approx(0.05)
+    for pool, side in ((provider, receipt.provider), (allowance, receipt.allowance)):
+        data = json.loads(pool.path.read_text(encoding="utf-8"))
+        assert side.id in data["settled"]
+
+
+def test_stale_operator_action_clears_and_builds(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#166.3: a command with nothing paused clears; the job builds on."""
+    store = FakeStore()
+    job = _enrich_job(status="building")
+    job["operator_action"] = "resume"
+    store.build_jobs["j1"] = job
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.worker_id = "wA"
+
+    def fake_stages(*args: Any, **kwargs: Any) -> None:
+        (args[5] / "animals").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(worker, "_run_stages", fake_stages)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert "operator_action" not in job
+    assert job["status"] == "checking"
+
+
 def test_resume_settles_superseded_timeout_at_estimate(tmp_path: Path) -> None:
     """#157: a second attempt settles the first one's record at estimate."""
     from types import SimpleNamespace

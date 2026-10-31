@@ -201,12 +201,78 @@ class Worker:
         if job is None or job.get("status") in ("published", "failed"):
             return
         try:
+            if not self._operator_action(job_id, job):
+                return
+            job = self.store.get_build_job(job_id) or job
             if job.get("status") == "checking":
                 self.review_job(job_id, job)
             else:
                 self.build_job(job_id, job)
         except StaleOwner:
             print(f"build job {job_id}: another worker owns it; stopping")
+
+    def _operator_action(self, job_id: str, job: dict[str, Any]) -> bool:
+        """Run an operator resume or give-up on a paused job (#166.3).
+
+        The console writes `operator_action` on the job doc; the
+        watch re-drives the job and the command runs here, then is
+        consumed. Resume clears the way and the normal path goes
+        on (settling the held spend first); give-up settles the
+        held spend, records it, and fails the job. True to go on.
+        """
+        from .jobs import make_context
+
+        action = job.get("operator_action")
+        if not action:
+            return True
+        if not self._claim(job_id):
+            print(f"build job {job_id}: operator action waits for ownership")
+            return False
+        paused = [
+            entry
+            for entry in job.get("progress", [])
+            if entry.get("status") == "paused_spend_uncertain"
+        ]
+        if action == "resume" and paused:
+            print(f"build job {job_id}: operator resumes {len(paused)} paused items")
+            patch: dict[str, Any] = {"operator_action": DELETE}
+            if job.get("error") == "paused_spend_uncertain":
+                patch["error"] = DELETE
+            self._update(job_id, patch)
+            return True
+        if action == "give_up" and paused:
+            print(f"build job {job_id}: operator gives up {len(paused)} paused items")
+            assert self.world is not None
+            ctx = make_context(self.config, job_id, self.jobs_dir / job_id, self.world)
+            if self.chat is not None:
+                ctx.client = self.chat
+            uncertain = 0.0
+            for entry in paused:
+                self._settle_superseded(job_id, {"id": entry["id"]}, ctx)
+                ref = (entry.get("uncertain") or {}).get("provider") or {}
+                try:
+                    uncertain += float(ref.get("reserved_usd", 0.0))
+                except (TypeError, ValueError):
+                    pass
+            progress = [
+                {**entry, "status": "failed"}
+                if entry.get("status") == "paused_spend_uncertain"
+                else entry
+                for entry in job.get("progress", [])
+            ]
+            patch = {"progress": progress, "operator_action": DELETE}
+            if uncertain > 0:
+                try:
+                    prior = float(job.get("uncertain_usd", 0.0))
+                except (TypeError, ValueError):
+                    prior = 0.0
+                patch["uncertain_usd"] = round(prior + uncertain, 6)
+            self._update(job_id, patch)
+            self._fail(job_id, "gave_up")
+            return False
+        print(f"build job {job_id}: ignoring stale operator action {action!r}")
+        self._update(job_id, {"operator_action": DELETE})
+        return True
 
     def _claim(self, job_id: str) -> bool:
         """Own this job or stand down: one live owner, takeovers allowed.

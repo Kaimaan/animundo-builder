@@ -348,9 +348,46 @@ def check_survey(
         "plants": plants,
         "food": [{"name": e["name"], "source": e["source"]} for e in data["food"]],
         "wanted": [w for w in want if w in by_id],
+        "missing": _survey_missing(kept, plants, world, habitat, data["region_id"]),
         "budget_usd": budget_usd,
         "gbif_counts": counts,
     }
+
+
+def _survey_missing(
+    kept: list[dict[str, str]],
+    plants: list[dict[str, Any]],
+    world: Path,
+    part: str,
+    region_id: str,
+) -> list[dict[str, str]]:
+    """What the survey found that the world doesn't have yet (#170.1).
+
+    Kept animals with no animal file, then survey plants with no
+    model, in the tile `wanted` shape, so a place and a tile
+    agree. The survey keeps it; the plan doesn't make it; filed
+    at ship time, enrich reads it later.
+    """
+    from .tiles import WANTED_LIMIT
+
+    drops: list[dict[str, str]] = []
+    animals_dir = world / "animals"
+    for entry in kept:
+        sid = entry["id"]
+        if (animals_dir / f"{sid}.json").is_file():
+            continue
+        drops.append({"kind": "animal", "what": sid, "part": part})
+    have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
+    slugs, _blocked = _missing_plants(
+        {},
+        {"plants": plants},
+        have,
+        region_have=_region_models(world, region_id),
+        latin_have=_plant_latins(world),
+    )
+    for slug, _grounds in slugs:
+        drops.append({"kind": "plant", "what": slug, "part": part})
+    return drops[:WANTED_LIMIT]
 
 
 def write_survey(out_dir: Path, survey: dict[str, Any]) -> Path:

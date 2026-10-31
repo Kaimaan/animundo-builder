@@ -155,6 +155,115 @@ def test_recorded_gbr_survey_surveys_the_reef(
     client.verify_consumed()
 
 
+def test_recorded_gbr_survey_keeps_what_the_world_lacks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#170.1: the reef replay's missing holds unfiled finds only."""
+    from builder.pipeline import BudgetTracker, JobContext
+    from builder.records import ReplayClient
+
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(monkeypatch, _LIVE_GBR)
+    records = tmp_path / "records"
+    records.mkdir()
+    shutil.copy(FIXTURES / "gbr-survey.jsonl", records / "survey.jsonl")
+    client = ReplayClient(records)
+    client.set_stage("survey")
+    ctx = JobContext(
+        job_id="gbr",
+        job_dir=tmp_path,
+        client=client,
+        tracker=BudgetTracker(budget_usd=8.0),
+        world_path=world,
+    )
+    from builder.place import list_homes
+
+    data, _searches = ask_survey(
+        ctx, "Great Barrier Reef", animals, list_homes(world), [], None
+    )
+    survey = check_survey(
+        data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+    )
+    missing = survey["missing"]
+    assert missing
+    assert len(missing) <= 12
+    for entry in missing:
+        assert set(entry) == {"kind", "what", "part"}
+    animals_dir = world / "animals"
+    for entry in missing:
+        if entry["kind"] == "animal":
+            assert not (animals_dir / f"{entry['what']}.json").is_file()
+    assert survey["wanted"] == []
+
+
+def test_survey_missing_lists_unfiled_finds(tmp_path: Path) -> None:
+    """#170.1: kept finds with no file or model, in wanted shape."""
+    import gzip
+
+    world = tmp_path / "world"
+    (world / "homes").mkdir(parents=True)
+    (world / "homes" / "reef.json").write_text(json.dumps({"habitat": "sea"}))
+    (world / "animals").mkdir()
+    (world / "animals" / "clownfish.json").write_text(json.dumps({"id": "clownfish"}))
+    (world / "models" / "plants").mkdir(parents=True)
+    (world / "models" / "plants" / "paddle_grass.json").write_text(
+        json.dumps({"id": "paddle_grass", "latin": "Halophila ovalis"})
+    )
+    grid_path = tmp_path / "ease2_s25.json.gz"
+    with gzip.open(grid_path, "wt", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "grid": "ease2_s25",
+                "cells": {"530,612": [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]},
+            },
+            handle,
+        )
+    grids = {"ease2_s25": HabitatGrid.load(grid_path, "ease2_s25")}
+    animals = [
+        {"id": "clownfish", "gbif_key": 1, "habitats": ["sea"]},
+        {"id": "hammerhead", "gbif_key": 2, "habitats": ["sea"]},
+    ]
+    data = {
+        "tile": "s_530_612",
+        "habitat": "reef",
+        "home_from": "reef",
+        "name": {"en": "Test Reef", "fi": "Testiriutta"},
+        "country": "Australia",
+        "region_id": "xx_test_reef",
+        "animals": [
+            {"id": "clownfish", "source": "https://example.org/c"},
+            {"id": "hammerhead", "source": "https://example.org/h"},
+        ],
+        "plants": [
+            {"name": "Paddle grass (Halophila ovalis)", "source": "https://e.org/p"},
+            {"name": "Dugong grass (Halodule uninervis)", "source": "https://e.org/d"},
+        ],
+        "food": [{"name": "zooplankton", "source": "https://example.org/f"}],
+    }
+    survey = check_survey(
+        data,
+        "Test Reef",
+        grids,  # type: ignore[arg-type]
+        world,
+        animals,
+        [],
+        8.0,
+        None,
+        recorded={
+            "counts": {"clownfish": 5, "hammerhead": 5},
+            "kingdoms": {
+                "Paddle grass (Halophila ovalis)": "Plantae",
+                "Dugong grass (Halodule uninervis)": "Plantae",
+            },
+        },
+    )
+    assert survey["missing"] == [
+        {"kind": "animal", "what": "hammerhead", "part": "sea"},
+        {"kind": "plant", "what": "dugong_grass_halodule_uninervis", "part": "sea"},
+    ]
+
+
 def test_survey_blocks_a_plant_outside_plantae_and_fungi(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

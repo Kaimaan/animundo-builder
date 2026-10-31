@@ -67,6 +67,11 @@
       "type": "array",
       "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
     },
+    "looked_for": {
+      "description": "Habitat-fitting library animals asked about on an improve but in neither the answer nor the place: enrich candidates without --want (#167.4).",
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+    },
     "world": {"type": "string", "minLength": 1},
     "planned_at": {"type": "string", "minLength": 1},
     "blocked": {

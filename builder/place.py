@@ -244,6 +244,7 @@ def check_survey(
     want: list[str],
     budget_usd: float,
     improve: str | None,
+    recorded: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A checked survey in §6a shape, or why not (#137).
 
@@ -252,7 +253,9 @@ def check_survey(
     list with a source and GBIF records within 2 tiles (the
     wanted stay first, records or not); plants and food named
     with sources. Each plant keeps its GBIF kingdom, matched from
-    the Latin name (#146.2).
+    the Latin name (#146.2). The counts ride in the survey, so a
+    `--replay` passes the prior survey's back and stays fast,
+    offline and identical instead of calling GBIF live (#167.3).
     """
     if not isinstance(data, dict):
         raise SurveyError("the survey is not an object")
@@ -307,7 +310,12 @@ def check_survey(
         for entry in data[key]:
             if not entry.get("name") or not entry.get("source"):
                 raise SurveyError(f"a {key} entry has no name or source")
-    counts = gbif_near(tile, animals)
+    recorded_counts = (recorded or {}).get("counts")
+    if recorded_counts is not None:
+        counts = recorded_counts
+    else:
+        counts = gbif_near(tile, animals)
+    recorded_kingdoms = (recorded or {}).get("kingdoms") or {}
     kept: list[dict[str, str]] = []
     for entry in data["animals"]:
         if entry["id"] in want or counts.get(entry["id"], 0) > 0:
@@ -316,11 +324,15 @@ def check_survey(
     plants: list[dict[str, Any]] = []
     for entry in data["plants"]:
         latin = _latin(entry["name"])
+        if entry["name"] in recorded_kingdoms:
+            kingdom = recorded_kingdoms[entry["name"]]
+        else:
+            kingdom = match_kingdom(latin) if latin else None
         plants.append(
             {
                 "name": entry["name"],
                 "source": entry["source"],
-                "kingdom": match_kingdom(latin) if latin else None,
+                "kingdom": kingdom,
             }
         )
     return {
@@ -337,6 +349,7 @@ def check_survey(
         "food": [{"name": e["name"], "source": e["source"]} for e in data["food"]],
         "wanted": [w for w in want if w in by_id],
         "budget_usd": budget_usd,
+        "gbif_counts": counts,
     }
 
 
@@ -354,13 +367,19 @@ def plan_place(
     """The §7 plan from a place survey (T98), not from the grid.
 
     A home item when `home_from` is an example (examples are not
-    buildable); each unfiled survey animal with its food, the
+    buildable) — never for an existing region, where `--improve`
+    adds animals and plants only, no home and no terrain change
+    (#167.2). Each unfiled survey animal with its food, the
     children's animals first; one findable plant per kind the
     home names. Items stop at the budget. An animal with no
     `start_from` and no `"shape": "new"` is `blocked` with
     `needs_reference`, never built; one the list can't make is
     `not_makeable`. Filed animals need nothing: with
     `--improve` the plan holds only what the place lacks.
+    `looked_for` names the habitat-fitting library animals
+    asked about but in neither the answer nor the place, so
+    an enrich round finds something new without `--want`
+    (#167.4).
     """
     from datetime import UTC, datetime
 
@@ -379,7 +398,8 @@ def plan_place(
         return spent + estimate <= budget
 
     home_from = survey["home_from"]
-    if home_from.startswith("examples/"):
+    existing = (world / "regions" / f"{survey['region_id']}.json").is_file()
+    if home_from.startswith("examples/") and not existing:
         stem = home_from.split("/")[-1]
         estimate = ITEM_ESTIMATES["home"]
         if afford(estimate):
@@ -421,7 +441,13 @@ def plan_place(
         made.add(animal_id)
         spent += estimate
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
-    missing, not_plants = _missing_plants(home, survey, have)
+    missing, not_plants = _missing_plants(
+        home,
+        survey,
+        have,
+        region_have=_region_models(world, survey["region_id"]),
+        latin_have=_plant_latins(world),
+    )
     blocked.extend(not_plants)
     for slug, grounds in missing:
         estimate = ITEM_ESTIMATES["plant"]
@@ -445,6 +471,22 @@ def plan_place(
         and e["id"] not in unplanned
         and not (world / "animals" / f"{e['id']}.json").is_file()
     ]
+    residents = region_residents(world, survey["region_id"])
+    looked_for: list[str] = []
+    if residents:
+        habitats: set[str] = set()
+        for resident in residents:
+            habitats |= set(by_id.get(resident, {}).get("habitats") or [])
+        kept = {e["id"] for e in survey["animals"]}
+        for candidate in animals:
+            if (
+                set(candidate.get("habitats") or []) & habitats
+                and candidate["id"] not in kept
+                and candidate["id"] not in residents
+                and candidate.get("can_make", True)
+                and (candidate.get("start_from") or candidate.get("shape") == "new")
+            ):
+                looked_for.append(candidate["id"])
     plan = {
         "format": 1,
         "tile": survey["tile"],
@@ -458,6 +500,7 @@ def plan_place(
         "country": survey["country"],
         "region_id": survey["region_id"],
         "coming": coming,
+        "looked_for": looked_for,
         "world": world_commit,
         "planned_at": datetime.now(UTC).isoformat(),
     }
@@ -469,8 +512,54 @@ def plan_place(
 PLANT_KINGDOMS = ("Plantae", "Fungi")
 
 
+def _common_slug(name: str) -> str:
+    """The slug without a trailing Latin parenthetical (#167.1)."""
+    return plant_slug(re.sub(r"\s*\([^()]*\)\s*$", "", name))
+
+
+def _region_models(world: Path, region_id: str) -> set[str]:
+    """Plant models an existing region already carries (#167.1)."""
+    try:
+        region = json.loads(
+            (world / "regions" / f"{region_id}.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return set()
+    models: set[str] = set()
+    ground = region.get("ground_cover") or {}
+    for entry in ground.get("plants", []) or []:
+        if isinstance(entry, dict) and entry.get("model"):
+            models.add(str(entry["model"]))
+    plants = region.get("plants") or {}
+    groups = plants.values() if isinstance(plants, dict) else [plants]
+    for group in groups:
+        for entry in group or []:
+            if isinstance(entry, dict) and entry.get("id"):
+                models.add(str(entry["id"]))
+    return models
+
+
+def _plant_latins(world: Path) -> dict[str, str]:
+    """Lower Latin name to plant file stem, for survey matching (#167.1)."""
+    latins: dict[str, str] = {}
+    for path in (world / "models" / "plants").glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        latin = data.get("latin")
+        if isinstance(latin, str) and latin.strip():
+            latins[latin.strip().lower()] = path.stem
+    return latins
+
+
 def _missing_plants(
-    home: dict[str, Any], survey: dict[str, Any], have: list[str]
+    home: dict[str, Any],
+    survey: dict[str, Any],
+    have: list[str],
+    *,
+    region_have: set[str] | None = None,
+    latin_have: dict[str, str] | None = None,
 ) -> tuple[list[tuple[str, list[str]]], list[dict[str, str]]]:
     """Named plants with no model yet: the home's, then the survey's.
 
@@ -478,26 +567,45 @@ def _missing_plants(
     survey's `plants` become items, each with the grounds it
     grows on when the home says. A survey plant whose GBIF
     kingdom is outside Plantae and Fungi is blocked, never
-    built (#146.2).
+    built (#146.2). A survey plant the place already has is
+    skipped: the common name without parentheses, the Latin
+    against the world's plant files (or as a stem), and the
+    improved region's own models (#167.1).
     """
+    have_all = set(have) | (region_have or set())
+    latin_have = latin_have or {}
     missing: list[tuple[str, list[str]]] = []
     blocked: list[dict[str, str]] = []
     seen: set[str] = set()
 
     def want(slug: str, grounds: list[str]) -> None:
-        if slug and slug not in have and slug not in seen:
+        if slug and slug not in have_all and slug not in seen:
             seen.add(slug)
             missing.append((slug, grounds))
+
+    def known(name: str) -> bool:
+        latin = _latin(name)
+        return (
+            plant_slug(name) in have_all
+            or _common_slug(name) in have_all
+            or (
+                latin is not None
+                and (latin.lower() in latin_have or plant_slug(latin) in have_all)
+            )
+        )
 
     for entry in home_plant_entries(home):
         model = entry.get("model") or ""
         on = entry.get("on", [])
         want(model, [on] if isinstance(on, str) else [g for g in on if g])
     for entry in survey.get("plants", []):
-        slug = plant_slug(entry.get("name", ""))
+        name = entry.get("name", "")
+        if known(name):
+            continue
+        slug = plant_slug(name)
         kingdom = entry.get("kingdom")
         if kingdom is not None and kingdom not in PLANT_KINGDOMS:
-            if slug and slug not in have and slug not in seen:
+            if slug and slug not in seen:
                 seen.add(slug)
                 blocked.append({"what": slug, "reason": "not_a_plant"})
             continue
@@ -836,6 +944,63 @@ def take_place_job(job_dir: Path, out_dir: Path, world: Path) -> Path:
         raise ValueError(f"the take fails the draft check: {problems[0]}")
     take_report(dest)
     return dest
+
+
+def region_residents(world: Path, region_id: str) -> set[str]:
+    """Animal ids an existing region already carries (#167.4)."""
+    try:
+        region = json.loads(
+            (world / "regions" / f"{region_id}.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return set()
+    residents: set[str] = set()
+    animals = region.get("animals") or {}
+    groups = animals.values() if isinstance(animals, dict) else [animals]
+    for group in groups:
+        for entry in group or []:
+            if isinstance(entry, str):
+                residents.add(entry)
+            elif isinstance(entry, dict) and entry.get("id"):
+                residents.add(str(entry["id"]))
+    for entry in region.get("fish", []) or []:
+        if isinstance(entry, dict) and entry.get("kind"):
+            residents.add(str(entry["kind"]))
+    return residents
+
+
+def improve_habitats(
+    animals: list[dict[str, Any]],
+    world: Path,
+    improve_arg: str,
+    grids: dict[GridName, HabitatGrid],
+) -> set[str]:
+    """The place's habitats for `--improve` asks (#167.4).
+
+    A region's own: its residents' habitats, so the survey asks
+    for more of what lives there. A bare tile's: the cell's grid
+    habitat, the only signal before the answer.
+    """
+    try:
+        grid, col, row = parse_tile(improve_arg)
+        return {grids[grid].habitat(col, row)}
+    except (ValueError, KeyError):
+        pass
+    residents = region_residents(world, improve_arg)
+    by_id = {animal["id"]: animal for animal in animals}
+    habitats: set[str] = set()
+    for resident in residents:
+        habitats |= set((by_id.get(resident) or {}).get("habitats") or [])
+    return habitats
+
+
+def habitat_first(
+    animals: list[dict[str, Any]], habitats: set[str]
+) -> list[dict[str, Any]]:
+    """The library's animals with these habitats first, stable (#167.4)."""
+    return sorted(
+        animals, key=lambda a: 0 if set(a.get("habitats") or []) & habitats else 1
+    )
 
 
 def improve_tile(improve: str, world: Path) -> str:

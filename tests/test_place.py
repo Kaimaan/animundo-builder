@@ -232,7 +232,7 @@ def test_plan_keeps_plants_without_a_matched_kingdom(tmp_path: Path) -> None:
         "plants": [
             {"name": "arctic raspberry", "source": "x", "kingdom": None},
             {
-                "name": "Bilberry (Vaccinium myrtillus)",
+                "name": "Cloudberry (Rubus chamaemorus)",
                 "source": "x",
                 "kingdom": "Plantae",
             },
@@ -244,7 +244,8 @@ def test_plan_keeps_plants_without_a_matched_kingdom(tmp_path: Path) -> None:
     plan = plan_place(survey, world, "abc123")
     whats = [i["what"] for i in plan["items"]]
     assert "arctic_raspberry" in whats
-    assert "bilberry_vaccinium_myrtillus" in whats
+    # Bilberry would skip now: the fake world files it (#167.1).
+    assert "cloudberry_rubus_chamaemorus" in whats
     assert plan["blocked"] == []
 
 
@@ -449,15 +450,10 @@ def test_reef_plan_lists_home_whale_and_plants(
     )
     plan = plan_place(survey, world, "abc123")
     by_id = {i["id"]: i for i in plan["items"]}
-    assert by_id["home_reef"] == {
-        "id": "home_reef",
-        "kind": "home",
-        "what": "reef",
-        "from": "examples/reef",
-        "estimate_usd": 0.2,
-    }
-    # The live reef filed its fish (world f2a9fb3): only the home, the
-    # whale and the survey's Latin-named plants still need making.
+    # #167.2: the reef exists, so no home item and no terrain change.
+    assert "home_reef" not in by_id
+    # The live reef filed its fish (world f2a9fb3), and #167.1 skips
+    # its own plants: only the whale and the sargassum need making.
     assert by_id["animal_humpback_whale"]["from"] == "harbour_porpoise"
     whale = next(a for a in animals if a["id"] == "humpback_whale")
     assert whale["shape"] == "new"
@@ -465,13 +461,39 @@ def test_reef_plan_lists_home_whale_and_plants(
         {"what": "whale_shark", "reason": "not_makeable"},
         {"what": "jellyfish", "reason": "not_makeable"},
     ]
-    assert plan["estimate_usd"] == 0.95
+    assert plan["estimate_usd"] == 0.3
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
     assert plan["country"] == "Australia"
     assert plan["region_id"] == "au_great_barrier_reef"
-    assert [i["kind"] for i in plan["items"]] == (["home"] + ["animal"] + ["plant"] * 4)
-    assert by_id["plant_dugong_grass_halodule_uninervis"]["from"] == "dugong_grass"
+    assert [i["kind"] for i in plan["items"]] == ["animal", "plant"]
+    assert "plant_brown_seaweed_sargassum" in by_id
+
+
+def test_new_region_plan_still_lists_a_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#167.2: only existing regions skip the home item."""
+    from builder.place import plan_place
+
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(monkeypatch, _LIVE_GBR)
+    survey = _replay_survey(
+        tmp_path,
+        "gbr-survey.jsonl",
+        "Great Barrier Reef",
+        [],
+        8.0,
+        None,
+        world,
+        animals,
+    )
+    survey["region_id"] = "au_reef_new"
+    plan = plan_place(survey, world, "abc123")
+    by_id = {i["id"]: i for i in plan["items"]}
+    assert by_id["home_reef"]["kind"] == "home"
+    assert plan["looked_for"] == []
 
 
 def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
@@ -644,7 +666,8 @@ def test_place_plan_writes_plan_json(
     assert code == 0
     plan = json.loads((out / "plan.json").read_text())
     assert plan["tile"] == "s_530_612"
-    assert plan["items"][0]["kind"] == "home"
+    # #167.2: the reef exists, so the first item is the whale, not a home.
+    assert plan["items"][0]["id"] == "animal_humpback_whale"
 
 
 def test_cells_within_two() -> None:
@@ -667,6 +690,258 @@ def test_improve_tile_from_region() -> None:
     assert 405 <= col <= 420 and 470 <= row <= 485
     with pytest.raises(SurveyError, match="neither a tile nor a region"):
         improve_tile("atlantis", world)
+
+
+def test_missing_plants_match_names_latin_and_region(tmp_path: Path) -> None:
+    """#167.1: the place's own plants are never planned again."""
+    from builder.place import _missing_plants, _plant_latins, _region_models
+
+    world = tmp_path / "world"
+    plants_dir = world / "models" / "plants"
+    plants_dir.mkdir(parents=True)
+    (plants_dir / "dugong_grass.json").write_text(
+        json.dumps({"id": "dugong_grass", "latin": "Halodule uninervis"})
+    )
+    regions = world / "regions"
+    regions.mkdir()
+    (regions / "au_reef.json").write_text(
+        json.dumps(
+            {
+                "ground_cover": {"plants": [{"model": "halimeda", "on": ["seabed"]}]},
+                "plants": {"water": [{"id": "sea_fan"}]},
+            }
+        )
+    )
+    survey = {
+        "plants": [
+            {"name": "Dugong grass (Halodule uninervis)"},
+            {"name": "Green algae (Halimeda)"},
+            {"name": "Brown seaweed (Sargassum)"},
+        ]
+    }
+    missing, blocked = _missing_plants(
+        {},
+        survey,
+        ["dugong_grass"],
+        region_have=_region_models(world, "au_reef"),
+        latin_have=_plant_latins(world),
+    )
+    assert [slug for slug, _ in missing] == ["brown_seaweed_sargassum"]
+    assert blocked == []
+    assert _region_models(world, "xx_nowhere") == set()
+
+
+def test_reef_improve_replay_plans_only_what_it_lacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#167.1 + #167.2: no own plants, no home on the reef improve replay."""
+    world = _needs_world()
+    animals = _animals(world)
+    _reef_counts(monkeypatch, _LIVE_GBR)
+    data = _gbr_answer()
+    survey = check_survey(
+        data, "Great Barrier Reef", _grids(), world, animals, [], 2.0, "s_530_612"
+    )
+    plan = plan_place(survey, world, "test")
+    ids = [item["id"] for item in plan["items"]]
+    assert "plant_dugong_grass_halodule_uninervis" not in ids
+    assert "plant_paddle_grass_halophila_ovalis" not in ids
+    assert "plant_green_algae_halimeda" not in ids
+    assert not [i for i in ids if i.startswith("home_")]
+    assert "plant_brown_seaweed_sargassum" in ids
+    assert set(plan["looked_for"]) >= {
+        "parrotfish",
+        "moray_eel",
+        "hammerhead",
+        "manta_ray",
+    }
+    assert "clownfish" not in plan["looked_for"]
+    assert "lionfish" not in plan["looked_for"]
+    assert "lion" not in plan["looked_for"]
+
+
+def test_habitat_first_asks_matching_animals_first() -> None:
+    """#167.4: the improve prompt leads with the place's habitats."""
+    from builder.place import habitat_first
+
+    animals = [
+        {"id": "lion", "habitats": ["savanna"]},
+        {"id": "parrotfish", "habitats": ["reef"]},
+        {"id": "camel", "habitats": ["desert"]},
+        {"id": "moray_eel", "habitats": ["reef", "sea"]},
+    ]
+    ordered = habitat_first(animals, {"reef", "sea"})
+    assert [a["id"] for a in ordered] == [
+        "parrotfish",
+        "moray_eel",
+        "lion",
+        "camel",
+    ]
+
+
+def test_improve_habitats_from_region_and_tile() -> None:
+    """#167.4: residents' habitats for a region, the cell's for a tile."""
+    from builder.place import improve_habitats
+
+    world = _needs_world()
+    animals = _animals(world)
+    habitats = improve_habitats(animals, world, "au_great_barrier_reef", _grids())
+    assert {"reef", "sea"} <= habitats
+    assert improve_habitats(animals, world, "s_530_612", _grids()) == {"open_ocean"}
+    assert improve_habitats(animals, world, "xx_nowhere", _grids()) == set()
+
+
+def test_recorded_gbif_counts_keep_replay_offline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#167.3: a replay replays counts and kingdoms, never calling GBIF."""
+    import builder.place as place_mod
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("GBIF must not be called on a replay")
+
+    monkeypatch.setattr(place_mod, "fetch_raw", boom)
+    monkeypatch.setattr(place_mod, "match_kingdom", boom)
+    world = _needs_world()
+    animals = _animals(world)
+    data = _gbr_answer()
+    recorded = {
+        "counts": {animal_id: 5 for animal_id in _LIVE_GBR},
+        "kingdoms": {
+            "Dugong grass (Halodule uninervis)": "Plantae",
+            "Paddle grass (Halophila ovalis)": "Plantae",
+            "Green algae (Halimeda)": "Plantae",
+            "Brown seaweed (Sargassum)": "Plantae",
+        },
+    }
+    survey = check_survey(
+        data,
+        "Great Barrier Reef",
+        _grids(),
+        world,
+        animals,
+        [],
+        2.0,
+        "s_530_612",
+        recorded,
+    )
+    assert sorted(a["id"] for a in survey["animals"]) == sorted(_LIVE_GBR)
+    assert survey["gbif_counts"] == recorded["counts"]
+    assert all(p["kingdom"] == "Plantae" for p in survey["plants"])
+
+
+def test_survey_replay_reads_prior_counts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    """#167.3: place survey --replay runs offline off the prior survey."""
+    import builder.place as place_mod
+    from builder.cli import main
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("GBIF must not be called on a replay")
+
+    monkeypatch.setattr(place_mod, "fetch_raw", boom)
+    monkeypatch.setattr(place_mod, "match_kingdom", boom)
+    world = _needs_world()
+    out = tmp_path / "gbr"
+    records = out / "records"
+    records.mkdir(parents=True)
+    shutil.copy(FIXTURES / "gbr-survey.jsonl", records / "survey.jsonl")
+    (out / "survey.json").write_text(
+        json.dumps(
+            {
+                "gbif_counts": {animal_id: 5 for animal_id in _LIVE_GBR},
+                "plants": [
+                    {"name": name, "kingdom": "Plantae"}
+                    for name in (
+                        "Dugong grass (Halodule uninervis)",
+                        "Paddle grass (Halophila ovalis)",
+                        "Green algae (Halimeda)",
+                        "Brown seaweed (Sargassum)",
+                    )
+                ],
+            }
+        )
+    )
+    grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+    code = main(
+        [
+            "place",
+            "survey",
+            "Great Barrier Reef",
+            "--budget",
+            "2",
+            "--out",
+            str(out),
+            "--world",
+            str(world),
+            "--habitat-grid",
+            str(grid_dir),
+            "--replay",
+        ]
+    )
+    assert code == 0
+    survey = json.loads((out / "survey.json").read_text())
+    assert sorted(a["id"] for a in survey["animals"]) == sorted(_LIVE_GBR)
+    assert "no recorded GBIF counts" not in capsys.readouterr().err
+
+
+def test_survey_improve_reorders_prompt_animals(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    """#167.4: --improve asks the place's habitats first (prompt changes)."""
+    import builder.place as place_mod
+    from builder.cli import main
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("GBIF must not be called on a replay")
+
+    monkeypatch.setattr(place_mod, "fetch_raw", boom)
+    monkeypatch.setattr(place_mod, "match_kingdom", boom)
+    world = _needs_world()
+    out = tmp_path / "gbr"
+    records = out / "records"
+    records.mkdir(parents=True)
+    shutil.copy(FIXTURES / "gbr-survey.jsonl", records / "survey.jsonl")
+    (out / "survey.json").write_text(
+        json.dumps(
+            {
+                "gbif_counts": {animal_id: 5 for animal_id in _LIVE_GBR},
+                "plants": [
+                    {"name": name, "kingdom": "Plantae"}
+                    for name in (
+                        "Dugong grass (Halodule uninervis)",
+                        "Paddle grass (Halophila ovalis)",
+                        "Green algae (Halimeda)",
+                        "Brown seaweed (Sargassum)",
+                    )
+                ],
+            }
+        )
+    )
+    grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+    code = main(
+        [
+            "place",
+            "survey",
+            "Great Barrier Reef",
+            "--budget",
+            "2",
+            "--out",
+            str(out),
+            "--world",
+            str(world),
+            "--habitat-grid",
+            str(grid_dir),
+            "--improve",
+            "au_great_barrier_reef",
+            "--replay",
+        ]
+    )
+    assert code == 0
+    # The reordered prompt no longer matches the old recording, and the
+    # replay says so while playing it anyway.
+    assert "differs from the recorded one" in capsys.readouterr().err
 
 
 def _grid_dir() -> Path:

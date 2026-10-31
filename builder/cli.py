@@ -11,6 +11,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from .config import load as load_config
 from .jobs import make_context, pipeline_stages
@@ -381,6 +382,27 @@ def cmd_stage(args: argparse.Namespace) -> int:
     return 0
 
 
+def _recorded_gbif(out: Path) -> dict[str, Any] | None:
+    """The prior survey's GBIF counts and kingdoms, for a replay (#167.3)."""
+    prior = out / "survey.json"
+    if not prior.is_file():
+        return None
+    try:
+        old = json.loads(prior.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    if not isinstance(old, dict) or not isinstance(old.get("gbif_counts"), dict):
+        return None
+    return {
+        "counts": old["gbif_counts"],
+        "kingdoms": {
+            plant["name"]: plant.get("kingdom")
+            for plant in old.get("plants", [])
+            if isinstance(plant, dict) and plant.get("name")
+        },
+    }
+
+
 def cmd_place_survey(args: argparse.Namespace) -> int:
     from .animal_list import find_list, load_list
     from .grid import GridName
@@ -432,6 +454,12 @@ def cmd_place_survey(args: argparse.Namespace) -> int:
             ctx = _recording(ctx, out)
     ctx.client.set_stage("survey")
     animals = load_list(find_list(world))["animals"]
+    if args.improve:
+        from .place import habitat_first, improve_habitats
+
+        animals = habitat_first(
+            animals, improve_habitats(animals, world, args.improve, grids)
+        )
     try:
         data, searches = ask_survey(
             ctx, args.place, animals, list_homes(world), want, improve
@@ -439,9 +467,22 @@ def cmd_place_survey(args: argparse.Namespace) -> int:
     except SurveyError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    recorded = None
+    if args.replay:
+        recorded = _recorded_gbif(out)
+        if recorded is None:
+            print("note: no recorded GBIF counts; calling live", file=sys.stderr)
     try:
         survey = check_survey(
-            data, args.place, grids, world, animals, want, args.budget, improve
+            data,
+            args.place,
+            grids,
+            world,
+            animals,
+            want,
+            args.budget,
+            improve,
+            recorded,
         )
     except SurveyError as error:
         print(f"error: {error}", file=sys.stderr)

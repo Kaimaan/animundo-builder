@@ -422,8 +422,13 @@ def _update_index(
     old_group: dict[str, Any],
     tile: str,
     world_commit: str,
+    count: bool = True,
 ) -> None:
-    """The tile index: this group's version, counts by honest delta."""
+    """The tile index: this group's version, counts by honest delta.
+
+    A places-only filing bumps the version with no count delta
+    (#170.2): no tile changed readiness.
+    """
     raw = store.read_blob("tiles/v1/index.json")
     if raw is not None:
         index = json.loads(raw.decode("utf-8"))
@@ -437,11 +442,57 @@ def _update_index(
         }
     key = f"{grid}/{gcol:02d}_{grow:02d}"
     index["groups"][key] = version
-    _apply_index_delta(index, old_group, tile, True, None)
+    if count:
+        _apply_index_delta(index, old_group, tile, True, None)
     index["made_at"] = datetime.now(UTC).isoformat()
     index["world"] = world_commit
     validate("tile-index", index)
     store.write_blob("tiles/v1/index.json", json.dumps(index).encode("utf-8"))
+
+
+def publish_places(
+    tile: str,
+    entry: dict[str, Any],
+    store: Any,
+    world_commit: str,
+) -> str:
+    """One place's wanted list into its group file, under `places`.
+
+    The tile's own entry is untouched: the tile stays the
+    hand-made region (#170.2). Returns the group Storage path.
+    """
+    grid, gcol, grow = group(tile)
+    blob_path = group_path(tile)
+    old_raw = store.read_blob(blob_path)
+    if old_raw is not None:
+        old = json.loads(old_raw.decode("utf-8"))
+    else:
+        old = {"tiles": {}, "blocked": {}}
+    data = {
+        "format": 1,
+        "grid": grid,
+        "group": [gcol, grow],
+        "version": int(old.get("version", 0)) + 1,
+        "tiles": old.get("tiles") or {},
+        "blocked": old.get("blocked") or {},
+    }
+    places = dict(old.get("places") or {})
+    places[tile] = entry
+    data["places"] = places
+    validate("tile-group", data)
+    store.write_blob(blob_path, (json.dumps(data, indent=1) + "\n").encode("utf-8"))
+    _update_index(
+        store,
+        grid,
+        gcol,
+        grow,
+        data["version"],
+        old,
+        tile,
+        world_commit,
+        count=False,
+    )
+    return blob_path
 
 
 class EnrichRemakeError(ValueError):

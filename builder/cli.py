@@ -296,6 +296,17 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
     )
+    filed = place_sub.add_parser(
+        "file", help="File a surveyed place's missing list for enrich."
+    )
+    filed.add_argument("dir", help="The request folder with survey.json.")
+    filed.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    filed.add_argument("--project", required=True, help="The Firebase project.")
+    filed.add_argument(
+        "--storage-bucket", required=True, help="The Storage bucket for tiles."
+    )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
 
@@ -393,7 +404,7 @@ def _recorded_gbif(out: Path) -> dict[str, Any] | None:
         return None
     if not isinstance(old, dict) or not isinstance(old.get("gbif_counts"), dict):
         return None
-    return {
+    recorded: dict[str, Any] = {
         "counts": old["gbif_counts"],
         "kingdoms": {
             plant["name"]: plant.get("kingdom")
@@ -401,6 +412,9 @@ def _recorded_gbif(out: Path) -> dict[str, Any] | None:
             if isinstance(plant, dict) and plant.get("name")
         },
     }
+    if isinstance(old.get("surveyed_at"), str) and old["surveyed_at"]:
+        recorded["surveyed_at"] = old["surveyed_at"]
+    return recorded
 
 
 def cmd_place_survey(args: argparse.Namespace) -> int:
@@ -517,6 +531,33 @@ def cmd_place_plan(args: argparse.Namespace) -> int:
     plan = plan_place(survey, world, git_commit(world))
     path = write_plan(Path(args.dir), plan)
     print(f"wrote {path} ({len(plan['items'])} items, ${plan['estimate_usd']:.2f})")
+    return 0
+
+
+def cmd_place_file(args: argparse.Namespace) -> int:
+    from .place import file_places
+    from .worker import git_commit
+    from .worker_store import FirebaseStore, StoreError
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    survey_path = Path(args.dir) / "survey.json"
+    if not survey_path.is_file():
+        print(f"error: no survey.json in {args.dir}", file=sys.stderr)
+        return 1
+    try:
+        store = FirebaseStore(args.project, args.storage_bucket)
+    except StoreError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        paths = file_places(store, world, Path(args.dir), git_commit(world))
+    except (ValueError, KeyError) as error:
+        print(f"error: cannot file this survey: {error}", file=sys.stderr)
+        return 1
+    for path in paths:
+        print(f"filed {path}")
     return 0
 
 
@@ -937,6 +978,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_place_survey(args)
     if args.command == "place" and args.place_command == "plan":
         return cmd_place_plan(args)
+    if args.command == "place" and args.place_command == "file":
+        return cmd_place_file(args)
     if args.command == "request" and args.request_command == "plan":
         return cmd_request_plan(args)
     if args.command == "request" and args.request_command == "build":

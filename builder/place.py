@@ -18,6 +18,7 @@ from .habitats import HabitatGrid
 from .plan import closest_plant, home_plant_entries, plant_slug
 from .presence import fetch_raw, match_kingdom
 from .prompts import load_prompt
+from .tiles import place_cells
 
 #: Headroom past the round, as research: the model doesn't keep
 #: to the count, so the API caps the runaway (#51.2).
@@ -349,9 +350,17 @@ def check_survey(
         "food": [{"name": e["name"], "source": e["source"]} for e in data["food"]],
         "wanted": [w for w in want if w in by_id],
         "missing": _survey_missing(kept, plants, world, habitat, data["region_id"]),
+        "surveyed_at": (recorded or {}).get("surveyed_at") or _today(),
         "budget_usd": budget_usd,
         "gbif_counts": counts,
     }
+
+
+def _today() -> str:
+    """Today's UTC date: a survey's `surveyed_at` (#170.2)."""
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).date().isoformat()
 
 
 def _survey_missing(
@@ -655,6 +664,70 @@ def write_plan(out_dir: Path, plan: dict[str, Any]) -> Path:
     path = out_dir / "plan.json"
     path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def region_tiles(world: Path, region_id: str, survey_tile: str) -> list[str]:
+    """The tiles a place's wanted list is filed under (#170.2).
+
+    The region file's own grid tiles; its centre's tile when it
+    has none; the surveyed tile when the region isn't filed yet.
+    """
+    try:
+        region = json.loads(
+            (world / "regions" / f"{region_id}.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return [survey_tile]
+    grid = region.get("grid") if isinstance(region, dict) else None
+    listed = grid.get("tiles") if isinstance(grid, dict) else None
+    if isinstance(listed, list) and listed:
+        cells = place_cells(world)
+        found = sorted(t for t, (rid, _part) in cells.items() if rid == region_id)
+        return found or [survey_tile]
+    center = region.get("center") if isinstance(region, dict) else None
+    lat = center.get("lat") if isinstance(center, dict) else None
+    lon = center.get("lon") if isinstance(center, dict) else None
+    if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+        return [tile_at(float(lat), float(lon))]
+    return [survey_tile]
+
+
+def file_places(
+    store: Any, world: Path, survey_dir: Path, world_commit: str
+) -> list[str]:
+    """A surveyed place's missing list into its tiles' groups (#170.2).
+
+    `survey.json`'s `missing` lands under each of the place's own
+    tiles as `places[tile]`; the tiles themselves are untouched.
+    An old survey without `surveyed_at` takes the plan's date,
+    else today. Returns the group paths written.
+    """
+    from .build import publish_places
+
+    survey = json.loads((survey_dir / "survey.json").read_text(encoding="utf-8"))
+    region_id = survey["region_id"]
+    surveyed_at = survey.get("surveyed_at")
+    if not surveyed_at:
+        plan_path = survey_dir / "plan.json"
+        if plan_path.is_file():
+            try:
+                planned = json.loads(plan_path.read_text(encoding="utf-8"))
+                surveyed_at = str(planned.get("planned_at", ""))[:10]
+            except ValueError:
+                surveyed_at = ""
+        else:
+            surveyed_at = ""
+    if not surveyed_at:
+        surveyed_at = _today()
+    entry = {
+        "region": region_id,
+        "wanted": survey.get("missing", []),
+        "surveyed_at": surveyed_at,
+    }
+    paths = []
+    for tile in region_tiles(world, region_id, survey["tile"]):
+        paths.append(publish_places(tile, entry, store, world_commit))
+    return paths
 
 
 #: Fish near the player in a draft: a modest school each; the

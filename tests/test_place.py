@@ -264,6 +264,233 @@ def test_survey_missing_lists_unfiled_finds(tmp_path: Path) -> None:
     ]
 
 
+def _file_world(tmp_path: Path) -> Path:
+    world = tmp_path / "world"
+    regions = world / "regions"
+    regions.mkdir(parents=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_reef",
+                "name": "Test Reef",
+                "center": {"lat": -16.7, "lon": 145.9},
+                "grid": {"grid": "ease2_s25", "tiles": [[530, 612]]},
+            }
+        )
+    )
+    return world
+
+
+def _file_survey(tmp_path: Path, **over: Any) -> Path:
+    survey_dir = tmp_path / "request"
+    survey_dir.mkdir(exist_ok=True)
+    survey = {
+        "tile": "s_530_612",
+        "region_id": "xx_test_reef",
+        "missing": [
+            {"kind": "animal", "what": "hammerhead", "part": "sea"},
+            {
+                "kind": "plant",
+                "what": "dugong_grass_halodule_uninervis",
+                "part": "sea",
+            },
+        ],
+        "surveyed_at": "2026-10-30",
+    }
+    survey.update(over)
+    (survey_dir / "survey.json").write_text(json.dumps(survey))
+    return survey_dir
+
+
+def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
+    """#170.2: the wanted list lands under places; the tile stays put."""
+    from fake_store import FakeStore
+
+    from builder.grid import group_path
+    from builder.place import file_places
+
+    world = _file_world(tmp_path)
+    survey_dir = _file_survey(tmp_path)
+    store = FakeStore()
+    blob = group_path("s_530_612")
+    store.blobs[blob] = json.dumps(
+        {
+            "format": 1,
+            "grid": "ease2_s25",
+            "group": [66, 76],
+            "version": 3,
+            "tiles": {
+                "s_530_612": {
+                    "id": "s_530_612",
+                    "kind": "place",
+                    "place": "xx_test_reef",
+                    "version": 3,
+                }
+            },
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    store.blobs["tiles/v1/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {},
+            "counts": {"ready": 1, "blocked": {}},
+        }
+    ).encode("utf-8")
+    paths = file_places(store, world, survey_dir, "abc123")
+    assert paths == [blob]
+    data = json.loads(store.blobs[blob].decode("utf-8"))
+    assert data["version"] == 4
+    assert data["tiles"]["s_530_612"]["kind"] == "place"
+    assert data["places"] == {
+        "s_530_612": {
+            "region": "xx_test_reef",
+            "wanted": [
+                {"kind": "animal", "what": "hammerhead", "part": "sea"},
+                {
+                    "kind": "plant",
+                    "what": "dugong_grass_halodule_uninervis",
+                    "part": "sea",
+                },
+            ],
+            "surveyed_at": "2026-10-30",
+        }
+    }
+    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    assert index["counts"] == {"ready": 1, "blocked": {}}
+    assert index["groups"] == {blob.removeprefix("tiles/v1/").removesuffix(".json"): 4}
+
+
+def test_file_places_falls_back_to_the_centre_tile(tmp_path: Path) -> None:
+    """#170.2: a region without grid tiles files under its centre."""
+    from fake_store import FakeStore
+
+    from builder.grid import tile_at
+    from builder.place import file_places, region_tiles
+
+    world = tmp_path / "world"
+    regions = world / "regions"
+    regions.mkdir(parents=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_reef",
+                "center": {"lat": -16.7, "lon": 145.9},
+            }
+        )
+    )
+    survey_dir = _file_survey(tmp_path)
+    store = FakeStore()
+    assert region_tiles(world, "xx_test_reef", "s_530_612") == [tile_at(-16.7, 145.9)]
+    assert region_tiles(world, "xx_missing", "s_530_612") == ["s_530_612"]
+    paths = file_places(store, world, survey_dir, "abc123")
+    assert len(paths) == 1
+    data = json.loads(store.blobs[paths[0]].decode("utf-8"))
+    assert data["version"] == 1
+    assert list(data["places"]) == [tile_at(-16.7, 145.9)]
+
+
+def test_file_places_dates_an_old_survey_from_its_plan(tmp_path: Path) -> None:
+    """#170.3: without surveyed_at, the plan's date, else today."""
+    from datetime import UTC, datetime
+
+    from fake_store import FakeStore
+
+    from builder.place import file_places
+
+    world = _file_world(tmp_path)
+    survey_dir = _file_survey(tmp_path)
+    survey = json.loads((survey_dir / "survey.json").read_text())
+    del survey["surveyed_at"]
+    (survey_dir / "survey.json").write_text(json.dumps(survey))
+    (survey_dir / "plan.json").write_text(
+        json.dumps({"planned_at": "2026-10-30T12:00:00+00:00"})
+    )
+    store = FakeStore()
+    (path,) = file_places(store, world, survey_dir, "abc123")
+    data = json.loads(store.blobs[path].decode("utf-8"))
+    assert data["places"]["s_530_612"]["surveyed_at"] == "2026-10-30"
+    (survey_dir / "plan.json").unlink()
+    store = FakeStore()
+    (path,) = file_places(store, world, survey_dir, "abc123")
+    data = json.loads(store.blobs[path].decode("utf-8"))
+    assert data["places"]["s_530_612"]["surveyed_at"] == (
+        datetime.now(UTC).date().isoformat()
+    )
+
+
+def test_improve_survey_writes_missing_too(tmp_path: Path) -> None:
+    """#170.3: an improve survey keeps finds the region still lacks."""
+    import gzip
+
+    world = tmp_path / "world"
+    (world / "homes").mkdir(parents=True)
+    (world / "homes" / "reef.json").write_text(json.dumps({"habitat": "sea"}))
+    (world / "animals").mkdir()
+    (world / "models" / "plants").mkdir(parents=True)
+    (world / "models" / "plants" / "paddle_grass.json").write_text(
+        json.dumps({"id": "paddle_grass"})
+    )
+    regions = world / "regions"
+    regions.mkdir()
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_reef",
+                "ground_cover": {"plants": [{"model": "paddle_grass"}]},
+            }
+        )
+    )
+    grid_path = tmp_path / "ease2_s25.json.gz"
+    with gzip.open(grid_path, "wt", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "grid": "ease2_s25",
+                "cells": {"530,612": [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]},
+            },
+            handle,
+        )
+    grids = {"ease2_s25": HabitatGrid.load(grid_path, "ease2_s25")}
+    animals = [{"id": "hammerhead", "gbif_key": 2, "habitats": ["sea"]}]
+    data = {
+        "tile": "s_530_612",
+        "habitat": "reef",
+        "home_from": "reef",
+        "name": {"en": "Test Reef", "fi": "Testiriutta"},
+        "country": "Australia",
+        "region_id": "xx_test_reef",
+        "animals": [{"id": "hammerhead", "source": "https://example.org/h"}],
+        "plants": [
+            {"name": "Paddle grass (Halophila ovalis)", "source": "https://e.org/p"},
+            {"name": "Dugong grass (Halodule uninervis)", "source": "https://e.org/d"},
+        ],
+        "food": [{"name": "zooplankton", "source": "https://example.org/f"}],
+    }
+    survey = check_survey(
+        data,
+        "Test Reef",
+        grids,  # type: ignore[arg-type]
+        world,
+        animals,
+        [],
+        8.0,
+        "s_530_612",
+        recorded={
+            "counts": {"hammerhead": 5},
+            "kingdoms": {
+                "Paddle grass (Halophila ovalis)": "Plantae",
+                "Dugong grass (Halodule uninervis)": "Plantae",
+            },
+        },
+    )
+    assert survey["missing"] == [
+        {"kind": "animal", "what": "hammerhead", "part": "sea"},
+        {"kind": "plant", "what": "dugong_grass_halodule_uninervis", "part": "sea"},
+    ]
+
+
 def test_survey_blocks_a_plant_outside_plantae_and_fungi(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

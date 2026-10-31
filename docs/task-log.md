@@ -2103,3 +2103,22 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   `wanted` shape (at most 12). Never under `tiles`:
   the tile stays the hand-made region, and the game
   must not load a code-made tile there.
+
+## 2026-10-31: inbox #165 (builder 0d457a4)
+
+- Every tile event lands a row in `tile_history`:
+  made, remade, blocked, left_out, with job, kind,
+  maker and world commits, group version (null when
+  nothing was written), reason and cost. Writes never
+  fail the tile.
+- The command line files to the store with
+  credentials, else `tile-history.jsonl` beside the
+  groups, and says so.
+- Spec 02, new collection, paste-ready:
+  `tile_history/{auto id}` (append-only): `tile`,
+  `event` (made | remade | blocked | left_out), `at`,
+  `job` (or null), `kind` (code | build | enrich |
+  cli), `maker` (builder commit), `world` (commit),
+  `version` (group version after the write, null when
+  nothing was written), `reason`, `cost_usd`. Rules:
+  admins read, no client writes.

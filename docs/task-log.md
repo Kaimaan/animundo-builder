@@ -2183,3 +2183,29 @@ One commit each, all pushed, suite 896 passed + 12 skipped
 - The report shows the job's own budget, not
   the $8 default; enrich items without a survey
   say so plainly.
+
+## 2026-10-31: inbox #175 (builder a9a9c34)
+
+- The whale run's $0.358 is in the ledger by
+  hand under `replay/animal_humpback_whale`
+  (now $0.6073 with the earlier run).
+- A new shape can start from `models/examples/`:
+  the spec read, the bar preview (now also
+  `models/examples/previews/`) and the review
+  title all resolve through the maker's
+  reference lookup, which moved into the models
+  stage (the maker imports it; no cycle). Covers
+  `harbour_porpoise`, `grass_snake` and
+  `peacock_butterfly` starts.
+- A place or enrich item never makes prey. A
+  place item's home is the place's own home
+  (the survey's `home_from` stem), carried into
+  the brief with the region id. When none of
+  its food is in the laid place, the minset
+  says `no_food` and the report carries it.
+- Tests: a new-shape start from
+  `harbour_porpoise` reaches its first build;
+  the lab whale replayed makes no herring and
+  reports `no_food` (its recording runs out in
+  the whale's model loop, past everything
+  fixed here).

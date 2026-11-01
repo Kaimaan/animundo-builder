@@ -925,6 +925,8 @@ class AnimalMakerStage:
             rounds = ctx.job_dir / "rounds" / animal_id
             if not rounds.is_dir() or not any(rounds.iterdir()):
                 raise
+            if animal_id == "humpback_whale":
+                self._code_whale_box_round(ctx, animal_id)
             return self._newshape_not_passed(ctx, animal_id, error)
         return self._newshape_size(ctx, world, research, target)
 
@@ -1299,6 +1301,47 @@ class AnimalMakerStage:
         animal = json.loads(animal_path.read_text(encoding="utf-8"))
         animal["box"] = _spec_box(spec)
         animal_path.write_text(json.dumps(animal, indent=2), encoding="utf-8")
+
+    def _code_whale_box_round(self, ctx: Any, animal_id: str) -> None:
+        """The whale's box from its last built round, best effort (#180.5).
+
+        A loop that never passed leaves no job spec, but its last
+        round's spec still measures the body: the file takes that
+        box instead of the model's. Nothing when no round spec
+        measures yet (the cap stopped the first round's spec).
+        """
+        rounds = ctx.job_dir / "rounds" / animal_id
+        try:
+            numbers = sorted(
+                int(path.name) for path in rounds.iterdir() if path.name.isdigit()
+            )
+        except OSError:
+            return
+        spec: dict[str, Any] | None = None
+        for number in reversed(numbers):
+            try:
+                candidate = json.loads(
+                    (rounds / str(number) / "spec.json").read_text(encoding="utf-8")
+                )
+            except (OSError, ValueError):
+                continue
+            if isinstance(candidate, dict):
+                spec = candidate
+                break
+        if spec is None:
+            return
+        try:
+            box = _spec_box(spec)
+        except Exception:  # noqa: BLE001 - best effort; the model's box stays
+            return
+        animal_path = ctx.job_dir / "animals" / f"{animal_id}.json"
+        try:
+            animal = json.loads(animal_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if isinstance(animal, dict):
+            animal["box"] = box
+            animal_path.write_text(json.dumps(animal, indent=2), encoding="utf-8")
 
     def _save_final(self, ctx: Any, world: Path, animal_id: str) -> None:
         """The passing files, where the pack and the report find them."""

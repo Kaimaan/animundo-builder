@@ -557,6 +557,59 @@ def test_spec_box_measures_the_body() -> None:
     assert _spec_box(spec) == [3.5, 3.0, 14.0]
 
 
+def test_whale_box_comes_from_the_last_built_round(tmp_path: Path) -> None:
+    """#180.5: an unpassed loop still measures the box from its rounds."""
+    from types import SimpleNamespace
+
+    from builder.stages.maker import AnimalMakerStage
+
+    job_dir = tmp_path / "job"
+    round_dir = job_dir / "rounds" / "humpback_whale" / "1"
+    round_dir.mkdir(parents=True)
+    (round_dir / "spec.json").write_text(
+        json.dumps(
+            {
+                "bones": [{"name": "body", "head": [0, 2, -7], "tail": [0, 2, 7]}],
+                "parts": [
+                    {
+                        "name": "body",
+                        "bone": "body",
+                        "at": [0, 2, 0],
+                        "size": [3.5, 3.0, 14.0],
+                    }
+                ],
+            }
+        )
+    )
+    animals = job_dir / "animals"
+    animals.mkdir(parents=True)
+    (animals / "humpback_whale.json").write_text(
+        json.dumps({"id": "humpback_whale", "box": [2, 3, 7]})
+    )
+    ctx = SimpleNamespace(job_dir=job_dir)
+    AnimalMakerStage()._code_whale_box_round(ctx, "humpback_whale")
+    animal = json.loads((animals / "humpback_whale.json").read_text())
+    assert animal["box"] == [3.5, 3.0, 14.0]
+
+
+def test_whale_box_stays_without_a_round_spec(tmp_path: Path) -> None:
+    """#180.5: with no round spec yet the model's box stays, quietly."""
+    from types import SimpleNamespace
+
+    from builder.stages.maker import AnimalMakerStage
+
+    job_dir = tmp_path / "job"
+    animals = job_dir / "animals"
+    animals.mkdir(parents=True)
+    (animals / "humpback_whale.json").write_text(
+        json.dumps({"id": "humpback_whale", "box": [2, 3, 7]})
+    )
+    ctx = SimpleNamespace(job_dir=job_dir)
+    AnimalMakerStage()._code_whale_box_round(ctx, "humpback_whale")
+    animal = json.loads((animals / "humpback_whale.json").read_text())
+    assert animal["box"] == [2, 3, 7]
+
+
 def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

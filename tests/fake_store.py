@@ -26,6 +26,7 @@ class FakeStore:
         self.requests: dict[str, dict[str, Any]] = {}
         self.plans: dict[str, dict[str, Any]] = {}
         self.areas: dict[str, dict[str, Any]] = {}
+        self.packs: dict[str, dict[str, Any]] = {}
         self.build_jobs: dict[str, dict[str, Any]] = {}
         self.alerts: list[dict[str, Any]] = []
         self.tile_history: list[dict[str, Any]] = []
@@ -48,6 +49,9 @@ class FakeStore:
 
     def list_areas(self) -> list[tuple[str, dict[str, Any]]]:
         return list(self.areas.items())
+
+    def list_packs(self) -> list[tuple[str, dict[str, Any]]]:
+        return list(self.packs.items())
 
     def get_enabled(self) -> bool:
         return self.enabled

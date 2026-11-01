@@ -564,6 +564,7 @@ def remake_decision(
     blocked: dict[str, Any] | None,
     world: Path,
     what: str,
+    spread: str | None = None,
 ) -> tuple[Remake, bool]:
     """One remade tile's verdict: publish, refresh, or skip (#143.4).
 
@@ -610,6 +611,10 @@ def remake_decision(
     for_entry = {e.get("what"): e.get("kind") for e in old_tile.get("wanted", [])}
     for missing in sorted(dropped, key=str):
         kind = for_entry.get(missing)
+        if spread is not None and missing != spread:
+            raise EnrichRemakeError(
+                tile, f"spread lost {missing}, not the spread species; a person looks"
+            )
         if kind not in ("animal", "plant") or not _filed_now(world, kind, str(missing)):
             raise EnrichRemakeError(
                 tile, f"wanted lost {missing}, unfiled; a person looks"

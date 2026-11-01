@@ -39,6 +39,7 @@ class Store(Protocol):
     def list_requests(self) -> list[tuple[str, dict[str, Any]]]: ...
     def list_plans(self) -> list[tuple[str, dict[str, Any]]]: ...
     def list_areas(self) -> list[tuple[str, dict[str, Any]]]: ...
+    def list_packs(self) -> list[tuple[str, dict[str, Any]]]: ...
     def get_enabled(self) -> bool: ...
     def read_blob(self, path: str) -> bytes | None: ...
     def write_blob(
@@ -94,6 +95,10 @@ class _BudgetOut(Exception):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+class _SpreadMissing(ValueError):
+    """A spread species in neither the library nor a live pack (#199.2)."""
 
 
 class _NoHome(ValueError):
@@ -385,7 +390,7 @@ class Worker:
             raise StaleOwner(f"build job {job_id}: owned by another worker")
 
     #: Job kinds the worker runs; anything else stays queued (#199.3).
-    JOB_KINDS = ("code", "build", "enrich")
+    JOB_KINDS = ("code", "build", "enrich", "spread")
 
     def build_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Claim the job and build it: code directly, items each alone."""
@@ -402,6 +407,9 @@ class Worker:
         if not self._claim(job_id):
             return
         job = self.store.get_build_job(job_id) or job
+        if job.get("kind") == "spread":
+            self.spread_job(job_id, job)
+            return
         tile = self._job_tile(job_id, job)
         if tile is None:
             return
@@ -445,6 +453,236 @@ class Worker:
             self._set_status(job_id, "published", {"version": made["version"]})
             return
         self.build_items(job_id, job, tile)
+
+    def spread_job(self, job_id: str, job: dict[str, Any]) -> None:
+        """Spread a filed species into the tiles that want it, for $0 (#199.1).
+
+        Like an enrich job's ship step without the build: no
+        research, no model, no model calls. Each listed grid
+        tile remakes by code with the species; place cells
+        spread in packs. A tile where the species doesn't fit
+        is skipped with the reason, not failed.
+        """
+        from . import build as build_mod
+
+        assert self.world is not None
+        spec = job.get("spread") or {}
+        kind, what = spec.get("kind"), spec.get("what")
+        if kind not in ("animal", "plant") or not what:
+            self._fail(job_id, "bad_spread")
+            return
+        staged: list[Any] = []
+        try:
+            self._spread_stage(kind, str(what), staged)
+        except _SpreadMissing as error:
+            self._fail(job_id, str(error))
+            return
+        try:
+            try:
+                versions, skipped, no_food = self._spread_tiles(
+                    job_id, job, kind, str(what)
+                )
+            except build_mod.EnrichRemakeError as error:
+                print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
+                self._fail(job_id, "remake_failed")
+                return
+            self._update(
+                job_id,
+                {
+                    "versions": versions,
+                    "skipped": skipped,
+                    "no_food": no_food,
+                    "cost_usd": 0.0,
+                },
+            )
+            print(
+                f"build job {job_id}: spread {what} to {len(versions)} tiles, "
+                f"{len(skipped)} skipped"
+            )
+            self._set_status(job_id, "published")
+        finally:
+            for path in staged:
+                if path.is_file():
+                    path.unlink()
+
+    def _spread_stage(self, kind: str, what: str, staged: list[Any]) -> None:
+        """The species file where the remake reads it (#199.2).
+
+        The world's library first; else a live pack's copy,
+        staged into the checkout for this job and removed
+        after. Raises _SpreadMissing when neither has it.
+        """
+        import json
+
+        assert self.world is not None
+        if kind == "animal":
+            candidates = [self.world / "animals" / f"{what}.json"]
+        else:
+            candidates = [
+                self.world / "models" / "plants" / f"{what}.json",
+                self.world / "models" / "trees" / f"{what}.json",
+            ]
+        if any(path.is_file() for path in candidates):
+            return
+        for _pack_id, doc in self.store.list_packs():
+            if doc.get("status") != "live" or what not in (doc.get("animals") or []):
+                continue
+            prefix = doc.get("path") or ""
+            raw = self.store.read_blob(f"{prefix}manifest.json")
+            if raw is None:
+                continue
+            try:
+                files = json.loads(raw.decode("utf-8")).get("files", [])
+            except ValueError:
+                continue
+            for entry in files:
+                rel = str(entry.get("path", ""))
+                target = self._spread_target(kind, what, rel)
+                if target is None:
+                    continue
+                blob = self.store.read_blob(f"{prefix}{rel}")
+                if blob is None:
+                    continue
+                try:
+                    json.loads(blob.decode("utf-8"))
+                except ValueError:
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(blob)
+                staged.append(target)
+                print(f"spread {what}: staged from {prefix}{rel}")
+                return
+        raise _SpreadMissing(f"no_{kind}_file")
+
+    def _spread_target(self, kind: str, what: str, rel: str) -> Any | None:
+        """Where a pack file stages in the checkout, or nothing (#199.2)."""
+        assert self.world is not None
+        if kind == "animal" and rel == f"animals/{what}.json":
+            return self.world / "animals" / f"{what}.json"
+        if kind == "plant" and rel in (
+            f"plants/{what}.json",
+            f"models/plants/{what}.json",
+        ):
+            return self.world / "models" / "plants" / f"{what}.json"
+        if kind == "plant" and rel == f"models/trees/{what}.json":
+            return self.world / "models" / "trees" / f"{what}.json"
+        return None
+
+    def _spread_fits(self, job_id: str, kind: str, what: str, tile: str) -> str | None:
+        """None when the species fits the tile, else the skip reason (#199.1)."""
+        from .grid import parse_tile
+        from .species import read_cache
+
+        assert self.world is not None
+        try:
+            house = self._tile_home(tile, {"items": []}, job_id)
+        except _NoHome:
+            return "the tile has no home"
+        col, row = parse_tile(tile)
+        cells = self._habitat_grid()
+        labels = {cells.habitat(col, row), house.get("habitat")} - {None}
+        cached = read_cache(self._species_source().cache_dir, tile)
+        if cached is None:
+            return "the tile has no survey to spread into"
+        if kind == "plant":
+            picks = {
+                pick["id"]
+                for pick in list(cached.get("plants", []))
+                + list(cached.get("trees", []))
+                if isinstance(pick, dict)
+            }
+            if what not in picks:
+                return f"{what} is not in the tile's survey"
+            return None
+        entry = self._spread_entry(what)
+        if entry is None:
+            return f"{what} is not on the animal list"
+        if labels.isdisjoint(entry.get("habitats", [])):
+            return f"{what} doesn't live in {cells.habitat(col, row)}"
+        present = {
+            s
+            for part in cached.get("parts", [])
+            if isinstance(part, dict)
+            for s in part.get("species", [])
+        }
+        if what not in present:
+            return f"{what} is not in the tile's survey"
+        return None
+
+    def _spread_entry(self, what: str) -> dict[str, Any] | None:
+        """The animal list's entry, or nothing off the list (#199.1)."""
+        from .animal_list import find_list, load_list
+
+        assert self.world is not None
+        try:
+            animals = load_list(find_list(self.world))["animals"]
+        except (ValueError, KeyError):
+            return None
+        return next((e for e in animals if e.get("id") == what), None)
+
+    def _spread_tiles(
+        self, job_id: str, job: dict[str, Any], kind: str, what: str
+    ) -> tuple[dict[str, int], dict[str, str], list[str]]:
+        """Every listed grid tile remade keyless; versions and skips."""
+        import dataclasses
+        import json
+
+        from . import build as build_mod
+        from .grid import group_path
+        from .tiles import make_tile, place_cells
+
+        assert self.world is not None
+        placed = place_cells(self.world)
+        source = dataclasses.replace(self._species_source(), client=None)
+        groups: dict[str, dict[str, Any]] = {}
+        decisions: dict[str, build_mod.Remake] = {}
+        skipped: dict[str, str] = {}
+        no_food: list[str] = []
+        for tile in job.get("tiles", []):
+            if tile in placed:
+                skipped[tile] = "place cell"
+                continue
+            try:
+                blob_path = group_path(tile)
+            except ValueError:
+                skipped[tile] = "not a grid tile"
+                continue
+            reason = self._spread_fits(job_id, kind, what, tile)
+            if reason is not None:
+                skipped[tile] = reason
+                continue
+            if blob_path not in groups:
+                raw = self.store.read_blob(blob_path)
+                groups[blob_path] = json.loads(raw.decode("utf-8")) if raw else {}
+            old = groups[blob_path]
+            made, blocked = make_tile(
+                tile,
+                self._habitat_grid(),
+                self.world,
+                builder_root=self.builder_root,
+                species_source=source,
+            )
+            verdict, hungry = build_mod.remake_decision(
+                tile,
+                (old.get("tiles") or {}).get(tile),
+                (old.get("blocked") or {}).get(tile),
+                made,
+                blocked,
+                self.world,
+                what,
+                spread=what,
+            )
+            decisions[tile] = verdict
+            if hungry:
+                no_food.append(tile)
+        versions = build_mod.publish_remakes(
+            self.store,
+            groups,
+            decisions,
+            self.world_commit or "unknown",
+            self._history_context(job_id, "spread"),
+        )
+        return versions, skipped, no_food
 
     def _snapshot_plan(self, job_id: str, job: dict[str, Any], tile: str) -> None:
         """Freeze the plan's approved items into the job folder.

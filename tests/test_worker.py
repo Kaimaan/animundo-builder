@@ -371,7 +371,7 @@ def test_unknown_kind_stays_queued(tmp_path: Path) -> None:
     """#199.3: a kind the worker doesn't know is never failed."""
     store = FakeStore()
     store.build_jobs["j1"] = {
-        "kind": "spread",
+        "kind": "terraform",
         "status": "queued",
         "tile": "z10_0581_0294",
         "tiles": ["z10_0581_0294"],
@@ -3259,3 +3259,219 @@ def test_enrich_review_ships_a_plant_pack_like_an_animal(
     # No cached survey here, so the remake fails loudly: the point
     # is the job sails past the ship, instead of waiting for a hand.
     assert store.build_jobs["j1"]["status"] == "failed"
+
+
+def _spread_job(**over: Any) -> dict[str, Any]:
+    job: dict[str, Any] = {
+        "format": 1,
+        "kind": "spread",
+        "tiles": ["z10_0581_0294"],
+        "spread": {"kind": "animal", "what": "lion"},
+        "status": "queued",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+    job.update(over)
+    return job
+
+
+def _spread_world(
+    tmp_path: Path, store: FakeStore, surveys: dict[str, tuple[str, ...]]
+) -> tuple[Any, Path]:
+    """Surveyed tiles with their cache, filed nothing yet (#199.4)."""
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    block = boreal_3x3()
+    edge = {f"{c},{r}": list(block["581,294"]) for r in (294, 295, 296) for c in (579,)}
+    edge.update({f"{c},296": list(block["581,294"]) for c in (580, 581)})
+    worker = _flow_worker(tmp_path, store, {**block, **edge, **boreal_3x3(590, 298)})
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    by_group: dict[str, dict[str, Any]] = {}
+    for tile, species in surveys.items():
+        made, blocked = make_tile(
+            tile,
+            worker._habitat_grid(),
+            worker.world,
+            builder_root=tmp_path,
+            species_source=SpeciesSource(
+                client=_AnswerClient(_forest_survey(*species)), cache_dir=cache
+            ),
+        )
+        assert blocked is None and made is not None
+        by_group.setdefault(group_path(tile), {})[tile] = made
+    for blob_path, tiles in by_group.items():
+        store.blobs[blob_path] = json.dumps(
+            {
+                "format": 1,
+                "grid": "z10",
+                "group": [0, 0],
+                "version": 1,
+                "tiles": tiles,
+                "blocked": {},
+            }
+        ).encode("utf-8")
+    store.blobs["tiles/v2/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {},
+            "counts": {"ready": len(surveys), "blocked": {}},
+        }
+    ).encode("utf-8")
+    return worker, cache
+
+
+def test_spread_runs_keyless_and_skips_the_tile_without_it(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#199.1: the fit tile remakes with no call; the miss skips."""
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+
+    A, C = "z10_0581_0294", "z10_0590_0298"
+    store = FakeStore()
+    worker, cache = _spread_world(
+        tmp_path,
+        store,
+        {
+            A: ("fox", "mountain_hare", "vole", "lion"),
+            C: ("fox", "mountain_hare", "vole"),
+        },
+    )
+    assert worker.world is not None
+    before_c = store.blobs[group_path(C)]
+    _file_lion(worker.world, ["grass"])
+    store.build_jobs["j1"] = _spread_job(tiles=[A, C])
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["versions"] == {A: 2}
+    assert job["skipped"] == {C: "lion is not in the tile's survey"}
+    assert job["cost_usd"] == 0.0
+    remade = json.loads(store.blobs[group_path(A)].decode("utf-8"))
+    assert "lion" in remade["tiles"][A]["species"]["playable"]
+    assert "wanted" not in remade["tiles"][A]
+    assert store.blobs[group_path(C)] == before_c
+
+
+def test_spread_fails_the_job_when_a_fit_tile_drifts(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#199.4: a remake that moves the tile fails, never skips."""
+    from builder.species import Source as SpeciesSource
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker, cache = _spread_world(
+        tmp_path, store, {A: ("fox", "mountain_hare", "vole", "lion")}
+    )
+    assert worker.world is not None
+    _file_lion(worker.world, ["grass"])
+    store.build_jobs["j1"] = _spread_job(tiles=[A])
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    import builder.tiles as tiles_mod
+
+    real_make = tiles_mod.make_tile
+
+    def drifted(*args: Any, **kwargs: Any) -> Any:
+        made, blocked = real_make(*args, **kwargs)
+        assert made is not None
+        made["seed"] = "drifted"
+        return made, blocked
+
+    monkeypatch.setattr(tiles_mod, "make_tile", drifted)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "remake_failed"
+    assert "skipped" not in job
+
+
+def test_spread_stages_a_pack_only_species(tmp_path: Path, monkeypatch: Any) -> None:
+    """#199.2: a live pack's lion spreads, then leaves no file."""
+    from builder.species import Source as SpeciesSource
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker, cache = _spread_world(
+        tmp_path, store, {A: ("fox", "mountain_hare", "vole", "lion")}
+    )
+    assert worker.world is not None
+    store.packs["p1"] = {"status": "live", "animals": ["lion"], "path": "packs/p1/"}
+    store.blobs["packs/p1/manifest.json"] = json.dumps(
+        {"files": [{"path": "animals/lion.json"}]}
+    ).encode("utf-8")
+    store.blobs["packs/p1/animals/lion.json"] = json.dumps(
+        {"playable": True, "tags": ["big_cat"], "diet": ["grass"]}
+    ).encode("utf-8")
+    store.build_jobs["j1"] = _spread_job(tiles=[A])
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["versions"] == {A: 2}
+    assert not (worker.world / "animals" / "lion.json").exists()
+
+
+def test_spread_fits_a_listed_sea_home_on_a_coast_tile(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#199.4: the coast tile spreads what its sea home holds."""
+    from types import SimpleNamespace
+
+    from builder.species import Source as SpeciesSource
+    from builder.species import write_cache
+
+    T = "z10_0581_0294"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    (worker.world / "homes" / "north_sea.json").write_text(
+        json.dumps({"habitat": "north_sea", "ecoregions": [717]})
+    )
+    listed = json.loads((worker.world / "animal-list.json").read_text())
+    next(e for e in listed["animals"] if e["id"] == "lion")["habitats"] = ["north_sea"]
+    (worker.world / "animal-list.json").write_text(json.dumps(listed))
+    cache = tmp_path / "cache"
+    write_cache(
+        cache,
+        T,
+        _forest_survey("fox", "lion"),
+        1,
+        "",
+        "",
+        "2026-10-28T00:00:00+00:00",
+    )
+    sea_home = json.loads((worker.world / "homes" / "north_sea.json").read_text())
+    monkeypatch.setattr(worker, "_tile_home", lambda tile, plan, job: sea_home)
+    monkeypatch.setattr(
+        worker, "_habitat_grid", lambda: SimpleNamespace(habitat=lambda c, r: "coast")
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda *a, **k: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    assert worker._spread_fits("j1", "animal", "lion", T) is None
+    listed["animals"] = [e for e in listed["animals"] if e["id"] != "lion"]
+    (worker.world / "animal-list.json").write_text(json.dumps(listed))
+    assert worker._spread_fits("j1", "animal", "lion", T) is not None

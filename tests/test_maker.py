@@ -720,7 +720,13 @@ def test_edits_prompt_carries_looks_and_parts(tmp_path: Path) -> None:
         "|---|---|---|\n"
         "| Bear, lynx | `fox`, scaled up | lynx: short tail, ear tufts |\n"
     )
-    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    client = ScriptClient(
+        [
+            _animal_answer("lynx"),
+            _edits_answer(),
+            _marks_answer(["ear tufts", "short black-tipped tail"], []),
+        ]
+    )
     _stage().run(_ctx(tmp_path, world, client))
     prompt = client.prompts[1]
     assert "ear tufts" in prompt
@@ -2880,10 +2886,16 @@ def test_code_fix_rescales_a_missed_tail(tmp_path: Path) -> None:
         calls.append(json.loads(edits_path.read_text(encoding="utf-8")))
         return inner(world, start_from, edits_path, out_path)
 
-    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    client = ScriptClient(
+        [
+            _animal_answer("lynx"),
+            _edits_answer(),
+            _marks_answer(["ear tufts", "short black-tipped tail"], []),
+        ]
+    )
     result = _stage(adapt=adapt).run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/lynx.json"]
-    assert len(client.prompts) == 2, "no model call spent on sizes"
+    assert len(client.prompts) == 3, "the rescale spends no model call"
     assert len(calls) == 2
     assert calls[0]["tail_m"] == 0.15
     assert calls[1]["tail_m"] == pytest.approx(0.075)
@@ -3012,6 +3024,7 @@ def test_prey_looks_reach_the_edits_prompt(tmp_path: Path) -> None:
         [
             _animal_answer("capybara"),
             _edits_answer(),
+            _marks_answer(["blunt snout", "webbed feet"], []),
             _animal_answer("lynx"),
             _edits_answer(),
         ]
@@ -3052,7 +3065,13 @@ def test_code_marks_come_from_the_research_words(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
     _write_looks_research(tmp_path)
-    client = ScriptClient([_animal_answer("lynx"), _edits_answer(unmakable=["mane"])])
+    client = ScriptClient(
+        [
+            _animal_answer("lynx"),
+            _edits_answer(unmakable=["mane"]),
+            _marks_answer(["ear tufts", "short black-tipped tail"], []),
+        ]
+    )
     _stage().run(_ctx(tmp_path, world, client))
     edits = json.loads(
         (tmp_path / "tries" / "lynx" / "edits" / "1" / "edits.json").read_text()
@@ -3071,7 +3090,15 @@ def test_unmatched_mark_words_go_unmakable(tmp_path: Path) -> None:
         {"mark": "long whiskers", "source": "https://example.org/lynx"}
     )
     (tmp_path / "research.json").write_text(json.dumps(research))
-    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    client = ScriptClient(
+        [
+            _animal_answer("lynx"),
+            _edits_answer(),
+            _marks_answer(
+                ["ear tufts", "short black-tipped tail", "long whiskers"], []
+            ),
+        ]
+    )
     _stage().run(_ctx(tmp_path, world, client))
     checks = json.loads((tmp_path / "checks" / "oneshot.json").read_text())
     assert checks["unmakable"] == {"lynx": ["long whiskers"]}
@@ -3193,6 +3220,30 @@ def test_marks_review_sends_a_bandless_render_to_a_fix_round(
     )
     _stage().run(_ctx(tmp_path, world, client))
     assert len(client.calls) == 5
+    errors = json.loads(
+        (tmp_path / "tries" / "clownfish" / "edits" / "1" / "errors.json").read_text()
+    )
+    assert f"the render shows no {bands}" in errors[0]
+    assert f"the render shows no {bands}" in client.prompts[3]
+
+
+def test_marks_review_falls_back_to_the_research_marks(tmp_path: Path) -> None:
+    """#181.3: an answer naming no key marks still gets them judged."""
+    world = _world(tmp_path)
+    _clownfish_inputs(tmp_path, world)
+    bands = "three white bars across the body"
+    client = ScriptClient(
+        [
+            _animal_answer("clownfish"),
+            _edits_answer(),
+            _marks_answer([], [bands]),
+            _edits_answer(),
+            _marks_answer([bands], []),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    assert len(client.calls) == 5
+    assert bands in client.prompts[2]
     errors = json.loads(
         (tmp_path / "tries" / "clownfish" / "edits" / "1" / "errors.json").read_text()
     )

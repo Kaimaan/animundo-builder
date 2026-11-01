@@ -555,8 +555,12 @@ class AnimalMakerStage:
                                 "saturated its range; a person looks"
                             )
                     if spec is not None:
+                        # The answer's key marks, or the research's
+                        # when it names none: a missing mark blocks
+                        # every round, and only fails the job when
+                        # the rounds are used up (#181.3).
                         file_errors += self._marks_errors(
-                            ctx, animal_id, target, key_marks, attempt
+                            ctx, animal_id, target, key_marks or words, attempt
                         )
             self._save_try(
                 ctx, animal_id, f"edits{tag}", attempt, answer, edits, file_errors

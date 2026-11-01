@@ -66,6 +66,11 @@ class PlantsStage:
         if ctx.world_path is None:
             raise ValueError("plants needs --world")
         world = Path(ctx.world_path)
+        if _is_animal_item(ctx.job_dir):
+            # An animal item builds no plants: its plan lists
+            # plants as plant items, which build them in their
+            # own runs. A whale-only plan costs $0 here (#180.3).
+            return self._nothing()
         regions = sorted((ctx.job_dir / "regions").glob("*.json"))
         if not regions:
             return self._nothing()
@@ -491,6 +496,19 @@ class PlantsStage:
         preview = sandbox / "models" / "previews" / "plants" / f"{plant_id}.png"
         if preview.is_file():
             (folder / f"{plant_id}.png").write_bytes(preview.read_bytes())
+
+
+def _is_animal_item(job_dir: Path) -> bool:
+    """Whether the brief is an animal item's: species, no plant (#180.3)."""
+    try:
+        brief = json.loads((job_dir / "home.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (
+        isinstance(brief, dict)
+        and brief.get("species_key") is not None
+        and brief.get("plant") is None
+    )
 
 
 class _Stopped(Exception):

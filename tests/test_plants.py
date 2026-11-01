@@ -196,6 +196,25 @@ def test_skips_when_no_region_names_plants(tmp_path: Path) -> None:
     assert result["plant_files"] == []
 
 
+def test_animal_item_builds_no_plants(tmp_path: Path) -> None:
+    """#180.3: an animal item makes no plant call, even naming one."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (tmp_path / "home.json").write_text(
+        json.dumps({"species_key": 1234, "id": "whale", "latin": "X"})
+    )
+    chat = ScriptChat([])
+    result = PlantsStage(chat=chat).run(_ctx(tmp_path, world))
+    assert result == {
+        "plant_files": [],
+        "rounds": {},
+        "reused": {},
+        "expert_review": [],
+    }
+    assert chat.prompts == []
+    assert not (tmp_path / "sandbox").exists()
+
+
 def test_builds_one_new_plant(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

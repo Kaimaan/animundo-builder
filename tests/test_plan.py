@@ -637,7 +637,7 @@ def test_plan_skips_animal_when_one_serves(tmp_path: Path) -> None:
 
 
 def test_plan_lists_one_thing_to_find(tmp_path: Path) -> None:
-    """The home's first named plant without a file is the find (T74)."""
+    """The home's first grown plant without a file is the find (T74)."""
     world = _world(tmp_path)
     plants = world / "models" / "plants"
     plants.mkdir(parents=True)
@@ -651,6 +651,7 @@ def test_plan_lists_one_thing_to_find(tmp_path: Path) -> None:
                     {"kind": "grass"},
                     {"kind": "berries", "names": ["bilberry", "Arctic Willow"]},
                 ],
+                "ground_cover": {"plants": [{"model": "arctic_willow"}]},
             }
         )
     )
@@ -677,7 +678,7 @@ def test_plan_lists_one_thing_to_find(tmp_path: Path) -> None:
 
 
 def _find_world(tmp_path: Path) -> Path:
-    """Bilberry filed, the home naming cloudberry after it."""
+    """Bilberry filed, the home growing cloudberry after it."""
     world = _world(tmp_path)
     plants = world / "models" / "plants"
     plants.mkdir(parents=True)
@@ -690,6 +691,7 @@ def _find_world(tmp_path: Path) -> Path:
                 "food": [
                     {"kind": "berries", "names": ["bilberry", "cloudberry"]},
                 ],
+                "ground_cover": {"plants": [{"model": "cloudberry"}]},
             }
         )
     )
@@ -853,6 +855,9 @@ def test_plan_adapts_a_find_from_the_same_food_kind(tmp_path: Path) -> None:
                 "food": [
                     {"kind": "berries", "names": ["bilberry", "cloudberry"]},
                 ],
+                "ground_cover": {
+                    "plants": [{"model": "cloudberry", "food": {"kind": "berries"}}]
+                },
             }
         )
     )
@@ -1307,3 +1312,32 @@ def test_finish_blocked_carries_no_improve() -> None:
     assert plan["blocked"] == "open_water"
     assert plan["improve"] == []
     assert plan["coming"] == []
+
+
+def test_plan_never_plans_a_food_name_as_a_plant(tmp_path: Path) -> None:
+    """#200.3: a Coral Sea open-sea tile plans no blue_mussel item."""
+    import pytest
+
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "homes" / "open_sea.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    col, row = 928, 560
+    cell: list[Any] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
+    cells = {
+        f"{c},{r}": list(cell)
+        for r in (row - 1, row, row + 1)
+        for c in (col - 1, col, col + 1)
+    }
+    plan = plan_tile(
+        "z10_0928_0560",
+        None,
+        _habitat_grid(tmp_path, cells),
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+        species=_survey(),
+    )
+    assert "blue_mussel" not in [i["what"] for i in plan["items"]]

@@ -322,11 +322,13 @@ def _missing_find(
     """The plan's thing to find, and the plant it adapts from.
 
     The survey's first unfiled pick goes first (#147.3: the
-    plant that really grows there); then the home's first named
-    plant without a plant file (`food[].names`, say "arctic
-    willow"). The pick adapts from the first plant there is. A
-    pick that is already filed, and a home naming nothing
-    unfiled, need nothing.
+    plant that really grows there); then the home's first
+    grown plant without a plant file (`plants[].model`).
+    Food names are only words for what an animal eats, never
+    items: a name is not a kind, and the wrong kind built a
+    mussel as a plant (#200.3). The pick adapts from the
+    first plant there is. A pick that is already filed, and
+    a home growing nothing unfiled, need nothing.
     """
     have = sorted(p.stem for p in (world / "models" / "plants").glob("*.json"))
     for pick in picks or []:
@@ -335,13 +337,14 @@ def _missing_find(
             if not have:
                 raise ValueError("the world has no plants to adapt from")
             return slug, have[0]
-    for entry in home.get("food", []) or []:
-        for name in entry.get("names", []) or []:
-            slug = plant_slug(name)
-            if slug and slug not in have:
-                if not have:
-                    raise ValueError("the world has no plants to adapt from")
-                return slug, _plant_ref(home, entry.get("kind"), have)
+    for plant in home_plant_entries(home):
+        model = plant.get("model") or ""
+        if model and model not in have:
+            if not have:
+                raise ValueError("the world has no plants to adapt from")
+            food = plant.get("food")
+            kind = food if isinstance(food, str) else (food or {}).get("kind")
+            return model, _plant_ref(home, kind, have)
     return None
 
 

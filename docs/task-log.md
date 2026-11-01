@@ -3,6 +3,74 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #184 (builder 6ddb637, fad4243, 30cd6dc, 6cd0eb7)
+
+- Reef rock counts as water
+  ground (#184.1): the enrich
+  converter and seating, the tile
+  keep test and parts, the draft
+  region's parts, and
+  closest_plant (exact grounds
+  first, then reef across
+  seabed). A reef spec lands in
+  plants.water.
+- A new plant keeps its start
+  plant's grounds (#184.2): the
+  brief carries `from`, code
+  copies grows.on, so a coral
+  from a coral grows reef and
+  grasses keep the seabed. Layered
+  cover and water ids build too,
+  or an enrich plant on a
+  biome-place never starts. The
+  home choices offer on reef.
+- The plant joins the biome,
+  then flatten (#184.3): 0.2 for
+  a coral on the rock, 0.1
+  otherwise, one rule for laid
+  places and filed biomes. The
+  biome diff weighs the one
+  entry; the flattened homes/
+  copy carries it. Proven with
+  the real flattener.
+- A clean plant item stages what
+  a reviewer would commit
+  (#184.4): Finnish, safety, the
+  render review, the region rule,
+  and the world's checks on the
+  filed state, where the filed
+  region resolves the edited
+  biome, budget and all. The
+  ship/ set holds the model,
+  preview, biome or region,
+  homes, merged locale names and
+  catalogue. No pack: the game
+  reads no plant packs, so the
+  job waits for a reviewer and
+  ships the old way.
+- Kai, three things before the
+  live run goes green. First,
+  the reef budget: the rock
+  holds 0.98 already, so
+  table_coral at 0.2 breaks the
+  world's enforced 1.0 (proven
+  with its own validator); the
+  ship stops loud on it. Say
+  whether to rebalance, raise
+  the budget, or lower the
+  coral. Second, the world's
+  adapt_home drops on reef (it
+  maps seabed only); one line
+  wanted there. Third, pull the
+  world checkout: origin holds
+  the region-schema fix, and the
+  whale .glb still wants its
+  local build.
+- Evidence: suite 1049 passed,
+  12 skipped; ruff and gitleaks
+  clean. `check --world` still
+  red on the stale checkout.
+
 ## 2026-11-01: inbox #183 (builder 5a82477, 10f2233)
 
 - The safety review survives a

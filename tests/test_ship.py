@@ -260,23 +260,277 @@ def test_ship_second_publish_makes_version_2(tmp_path: Path) -> None:
     )
 
 
-def test_ship_refuses_a_plant_item(tmp_path: Path) -> None:
-    """Plant packs have no shape yet; they still ship by hand."""
-    world = _world(tmp_path)
-    job_dir = tmp_path / "item"
-    job_dir.mkdir()
+PLANT = "table_coral"
+BIOME = "xx_biome"
+
+_ABOUT = {
+    "about_looks": "A flat plate on a stalk.",
+    "about_grows": "Grows on the coral rock.",
+    "about_fact": "A colony of tiny polyps.",
+    "about_year": "Grows all year.",
+}
+
+
+def _plant_world(
+    tmp_path: Path,
+    results: list[dict[str, Any]] | None = None,
+    biome: bool = False,
+) -> Path:
+    world = _world(tmp_path, results)
+    (world / "tools" / "validate_region.py").write_text(
+        'print("ok   regions/xx_reef.json")\n'
+    )
+    (world / "locale" / "en").mkdir(exist_ok=True)
+    (world / "locale" / "en" / "plants.json").write_text(
+        json.dumps({"plant.bilberry.title": "Bilberry"})
+    )
+    (world / "locale" / "fi").mkdir(exist_ok=True)
+    (world / "locale" / "fi" / "plants.json").write_text(
+        json.dumps({"plant.bilberry.title": "Mustikka"})
+    )
+    region = json.loads((world / "regions" / f"{REGION}.json").read_text())
+    region["plants"] = {
+        "cover": [{"id": "beach_naupaka", "density": 0.3}],
+        "water": [{"id": "branching_staghorn_coral", "density": 0.08}],
+    }
+    if biome:
+        region["biome"] = BIOME
+        biomes = world / "biomes"
+        biomes.mkdir(exist_ok=True)
+        (biomes / f"{BIOME}.json").write_text(
+            json.dumps({"id": BIOME, "plants": dict(region["plants"])})
+        )
+        del region["plants"]
+    (world / "regions" / f"{REGION}.json").write_text(json.dumps(region))
+    return world
+
+
+def _plant_item(tmp_path: Path, biome: bool = False) -> Path:
+    job_dir = tmp_path / "plant_item"
+    job_dir.mkdir(exist_ok=True)
     (job_dir / "home.json").write_text(
-        json.dumps({"plant": "kelp", "home": "reef", "enrich": {"tiles": [TILE]}})
+        json.dumps(
+            {
+                "plant": PLANT,
+                "from": "closed_brain_coral",
+                "home": "reef",
+                "enrich": {"tiles": [TILE]},
+            }
+        )
     )
-    ctx = SimpleNamespace(
-        job_id="enrich_x/plant_kelp",
-        job_dir=job_dir,
-        world_path=world,
-        check_budget=lambda: None,
-        chat=_Chat([]),
+    greens = job_dir / "models" / "plants"
+    greens.mkdir(parents=True, exist_ok=True)
+    (greens / f"{PLANT}.json").write_text(
+        json.dumps(
+            {
+                "id": PLANT,
+                "name": "Table coral",
+                "latin": "Acropora hyacinthus",
+                "kind": "bush",
+                "grows": {"on": ["reef"], "density": 0.2},
+                "colors": {"main": "#c9a06a"},
+                "parts": [],
+            }
+        )
     )
-    with pytest.raises(_Stopped, match="ships by hand"):
-        ShipStage(store=_Store()).run(ctx)
+    (greens / f"{PLANT}.glb").write_bytes(b"glb-bytes")
+    (greens / f"{PLANT}.png").write_bytes(b"png-bytes")
+    laid = _region()
+    laid["plants"] = {
+        "cover": [{"id": "beach_naupaka", "density": 0.3}],
+        "water": [
+            {"id": "branching_staghorn_coral", "density": 0.08},
+            {"id": PLANT, "density": 0.2},
+        ],
+    }
+    if biome:
+        laid["biome"] = BIOME
+    (job_dir / "regions").mkdir(exist_ok=True)
+    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
+    (job_dir / "reviews").mkdir(exist_ok=True)
+    (job_dir / "reviews" / f"{PLANT}-1.json").write_text(
+        json.dumps({"species": PLANT, "round": 1, "issues": []})
+    )
+    texts = {
+        f"plant.{PLANT}.title": "Table coral",
+        f"plant.{PLANT}.latin": "Acropora hyacinthus",
+        **{f"plant.{PLANT}.{key}": text for key, text in _ABOUT.items()},
+    }
+    (job_dir / "locale" / "en").mkdir(parents=True)
+    (job_dir / "locale" / "en" / "plants.json").write_text(json.dumps(texts))
+    (job_dir / "locale" / "fi").mkdir(parents=True)
+    (job_dir / "locale" / "fi" / "plants.json").write_text(
+        json.dumps({key: f"{text} (fi)" for key, text in texts.items()})
+    )
+    return job_dir
+
+
+def _plant_answers() -> list[str]:
+    fi = {
+        f"plant.{PLANT}.title": "Pöytäkoralli",
+        **{f"plant.{PLANT}.{key}": f"{text} (fi)" for key, text in _ABOUT.items()},
+    }
+    return [json.dumps(_ABOUT), json.dumps(fi)]
+
+
+def _fake_flatten(world: Path) -> str:
+    (world / "homes").mkdir(exist_ok=True)
+    (world / "homes" / f"{BIOME}.json").write_text(
+        json.dumps({"id": BIOME, "flat": True})
+    )
+    return f"wrote homes/{BIOME}.json"
+
+
+def _fake_catalogue(world: Path) -> str:
+    (world / "docs").mkdir(exist_ok=True)
+    (world / "docs" / "catalogue.md").write_text("# Catalogue\n")
+    return "wrote docs/catalogue.md"
+
+
+def test_ship_stages_a_passing_plant(tmp_path: Path) -> None:
+    """#184.4: a clean plant item stages what a reviewer would commit."""
+    world = _plant_world(tmp_path)
+    job_dir = _plant_item(tmp_path)
+    result = ShipStage(
+        store=_Store(), flatten=_fake_flatten, catalogue=_fake_catalogue
+    ).run(_ctx(job_dir, world, _plant_answers()))
+    assert result["staged"] == [
+        "docs/catalogue.md",
+        "locale/en/plants.json",
+        "locale/fi/plants.json",
+        f"models/plants/{PLANT}.json",
+        f"models/previews/plants/{PLANT}.png",
+        f"regions/{REGION}.json",
+    ]
+    ship = json.loads((job_dir / "checks" / "ship.json").read_text())
+    assert ship == {"status": "pass", "problems": []}
+    staged = job_dir / "ship"
+    assert json.loads((staged / f"regions/{REGION}.json").read_text()) == json.loads(
+        (job_dir / "regions" / f"{REGION}.json").read_text()
+    )
+    fi = json.loads((staged / "locale/fi/plants.json").read_text())
+    assert fi["plant.bilberry.title"] == "Mustikka"
+    assert fi[f"plant.{PLANT}.title"] == "Pöytäkoralli"
+
+
+def test_ship_stages_a_biome_plant(tmp_path: Path) -> None:
+    """#184.4: on a biome-place the set holds the biome, not the region."""
+    from builder.enrich import biome_additions_only
+
+    world = _plant_world(tmp_path, biome=True)
+    job_dir = _plant_item(tmp_path, biome=True)
+    result = ShipStage(
+        store=_Store(), flatten=_fake_flatten, catalogue=_fake_catalogue
+    ).run(_ctx(job_dir, world, _plant_answers()))
+    assert result["staged"] == [
+        f"biomes/{BIOME}.json",
+        "docs/catalogue.md",
+        f"homes/{BIOME}.json",
+        "locale/en/plants.json",
+        "locale/fi/plants.json",
+        f"models/plants/{PLANT}.json",
+        f"models/previews/plants/{PLANT}.png",
+    ]
+    staged = job_dir / "ship"
+    assert not (staged / "regions").exists()
+    before = json.loads((world / "biomes" / f"{BIOME}.json").read_text())
+    after = json.loads((staged / f"biomes/{BIOME}.json").read_text())
+    assert biome_additions_only(before, after, PLANT) == []
+    assert after["plants"]["water"][-1] == {"id": PLANT, "density": 0.2}
+
+
+def test_ship_plant_fails_a_blocking_review(tmp_path: Path) -> None:
+    """#184.4: a render that doesn't read as its species stops the ship."""
+    world = _plant_world(tmp_path)
+    job_dir = _plant_item(tmp_path)
+    (job_dir / "reviews" / f"{PLANT}-1.json").write_text(
+        json.dumps(
+            {
+                "species": PLANT,
+                "round": 1,
+                "issues": [
+                    {
+                        "part": "plate",
+                        "problem": "no flat plate",
+                        "severity": "blocking",
+                        "fix": "grow the plate",
+                    }
+                ],
+            }
+        )
+    )
+    with pytest.raises(_Stopped, match="review blocks"):
+        ShipStage(store=_Store(), flatten=_fake_flatten).run(
+            _ctx(job_dir, world, _plant_answers())
+        )
+
+
+def test_ship_plant_fails_a_filed_region_break(tmp_path: Path) -> None:
+    """#184.4: the filed files resolve the edited biome, budget and all."""
+    world = _plant_world(tmp_path, biome=True)
+    (world / "tools" / "validate_region.py").write_text(
+        "import sys\n"
+        f'print("FAIL regions/{REGION}.json")\n'
+        'print("  - Plant densities on the reef must add up to 1 or less")\n'
+        "sys.exit(1)\n"
+    )
+    job_dir = _plant_item(tmp_path, biome=True)
+    with pytest.raises(_Stopped, match="must add up to 1 or less"):
+        ShipStage(store=_Store(), flatten=_fake_flatten).run(
+            _ctx(job_dir, world, _plant_answers())
+        )
+
+
+def test_ship_plant_finnish_gate(tmp_path: Path) -> None:
+    """#184.4: every English plant key needs its Finnish, no strangers."""
+    from builder.stages.ship import _gate_finnish_plant
+
+    job_dir = tmp_path / "item"
+    assert _gate_finnish_plant(job_dir, PLANT) == [
+        "finnish: no locale/en/plants.json to ship",
+        "finnish: no locale/fi/plants.json to ship",
+    ]
+    (job_dir / "locale" / "en").mkdir(parents=True)
+    (job_dir / "locale" / "fi").mkdir(parents=True)
+    en = {
+        f"plant.{PLANT}.title": "Table coral",
+        f"plant.{PLANT}.about_looks": "A plate.",
+    }
+    (job_dir / "locale" / "en" / "plants.json").write_text(json.dumps(en))
+    (job_dir / "locale" / "fi" / "plants.json").write_text(
+        json.dumps({f"plant.{PLANT}.title": "Pöytäkoralli"})
+    )
+    assert _gate_finnish_plant(job_dir, PLANT) == [
+        f"finnish: the Finnish texts leave out ['plant.{PLANT}.about_looks']"
+    ]
+    fi = {
+        f"plant.{PLANT}.title": "Pöytäkoralli",
+        f"plant.{PLANT}.about_looks": "Levy.",
+        "plant.bilberry.title": "Mustikka",
+    }
+    (job_dir / "locale" / "fi" / "plants.json").write_text(json.dumps(fi))
+    assert _gate_finnish_plant(job_dir, PLANT) == [
+        "finnish: plant.bilberry.title belongs to no shipped plant"
+    ]
+
+
+def test_ship_plant_region_rule(tmp_path: Path) -> None:
+    """#184.4: the region change is the one plant; tiles remake instead."""
+    from builder.stages.ship import _gate_region_plant
+
+    world = _plant_world(tmp_path)
+    job_dir = _plant_item(tmp_path)
+    spec = {"grows": {"on": ["reef"], "density": 0.2}}
+    assert _gate_region_plant(job_dir, world, PLANT, spec) == []
+    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
+    laid["food"] = []
+    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
+    assert _gate_region_plant(job_dir, world, PLANT, spec) == ["food changed"]
+    (job_dir / "regions" / "tl_z10_0581_0294.json").write_text(json.dumps({"id": "x"}))
+    (world / "regions" / f"{REGION}.json").unlink()
+    assert _gate_region_plant(job_dir, world, PLANT, spec) == [
+        f"region: {REGION} is no region in this checkout"
+    ]
 
 
 def _gate_problems(

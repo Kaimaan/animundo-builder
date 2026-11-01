@@ -3157,3 +3157,31 @@ def test_enrich_review_waits_for_the_ship(tmp_path: Path) -> None:
     worker.review_enrich_job("j1", job)
     assert store.build_jobs["j1"]["status"] == "checking"
     assert "pack" not in store.build_jobs["j1"]
+
+
+def test_enrich_review_waits_for_a_reviewer_on_a_staged_plant(
+    tmp_path: Path,
+) -> None:
+    """#184.4: a staged plant files by hand; no remake, no publish."""
+    store = FakeStore()
+    job = _enrich_job(
+        status="checking",
+        items=["enrich_table_coral"],
+        enrich={"kind": "plant", "what": "table_coral", "from": "closed_brain_coral"},
+    )
+    store.build_jobs["j1"] = job
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_table_coral"
+    item_dir.mkdir(parents=True)
+    (item_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research", "ship"],
+                "results": {"ship": {"staged": ["models/plants/table_coral.json"]}},
+            }
+        )
+    )
+    worker.review_enrich_job("j1", job)
+    assert store.build_jobs["j1"]["status"] == "checking"
+    assert "pack" not in store.build_jobs["j1"]
+    assert "versions" not in store.build_jobs["j1"]

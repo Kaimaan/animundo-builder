@@ -9,6 +9,7 @@ from builder.enrich import (
     biome_add_plant,
     biome_additions_only,
     place_tiles,
+    plant_region_additions_only,
     region_additions_only,
     region_place,
     run_flatten,
@@ -264,6 +265,26 @@ def test_biome_additions_only_allows_the_one_entry() -> None:
     assert biome_additions_only(before, moved, "table_coral") == ["terrain was added"]
     assert biome_additions_only(after, before, "table_coral") == [
         "table_coral is not in the biome's plants"
+    ]
+
+
+def test_plant_region_additions_only_allows_the_one_plant() -> None:
+    """#184.4: an old-place region gains the one plant id, nothing else."""
+    before = {
+        "id": "xx_test_reef",
+        "food": [{"kind": "water_plants"}],
+        "plants": {"water": [{"id": "stag", "density": 1}]},
+    }
+    after = json.loads(json.dumps(before))
+    after["plants"]["water"].append({"id": "table_coral", "density": 0.2})
+    assert plant_region_additions_only(before, after, "table_coral") == []
+    assert plant_region_additions_only(before, before, "table_coral") == [
+        "table_coral is not in the region's plants"
+    ]
+    hungry = json.loads(json.dumps(after))
+    hungry["food"] = []
+    assert plant_region_additions_only(before, hungry, "table_coral") == [
+        "food changed"
     ]
 
 

@@ -222,6 +222,32 @@ def biome_add_plant(
     return biome
 
 
+def plant_region_additions_only(
+    before: dict[str, Any], after: dict[str, Any], what: str
+) -> list[str]:
+    """Why the region change is not the one plant, or nothing (#184.4).
+
+    An enrich plant on a region of its own only appends its id
+    to one plants side. Anything else changed, removed, or
+    added is one problem per offending key.
+    """
+    problems = []
+    if not _plant_listed(after.get("plants"), what):
+        return [f"{what} is not in the region's plants"]
+    for key in after:
+        if key not in before and key != "plants":
+            problems.append(f"{key} was added")
+            continue
+        if key == "plants":
+            problems.extend(_added_plant_side(before.get(key), after[key], what))
+        elif after[key] != before.get(key):
+            problems.append(f"{key} changed")
+    for key in before:
+        if key not in after:
+            problems.append(f"{key} was removed")
+    return problems
+
+
 def biome_additions_only(
     before: dict[str, Any], after: dict[str, Any], what: str
 ) -> list[str]:
@@ -232,13 +258,7 @@ def biome_additions_only(
     added is one problem per offending key.
     """
     problems = []
-    listed = {
-        entry.get("id")
-        for side in ("cover", "water")
-        for entry in ((after.get("plants") or {}).get(side, []) or [])
-        if isinstance(entry, dict)
-    }
-    if what not in listed:
+    if not _plant_listed(after.get("plants"), what):
         return [f"{what} is not in the biome's plants"]
     for key in after:
         if key not in before and key != "plants":
@@ -252,6 +272,16 @@ def biome_additions_only(
         if key not in after:
             problems.append(f"{key} was removed")
     return problems
+
+
+def _plant_listed(plants: Any, what: str) -> bool:
+    """Whether the cover or water lists name the plant."""
+    return any(
+        entry.get("id") == what
+        for side in ("cover", "water")
+        for entry in ((plants or {}).get(side, []) or [])
+        if isinstance(entry, dict)
+    )
 
 
 def _added_plant_side(before: Any, after: Any, what: str) -> list[str]:

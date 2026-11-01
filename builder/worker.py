@@ -887,6 +887,15 @@ class Worker:
             return
         if self._ship_completed(job_id, item_id or ""):
             pack = self._ship_pack(job_id, item_id or "")
+            if (
+                pack is None
+                and (item or {}).get("kind") == "plant"
+                and not (verdict == "shipped" and self._world_has(item, plan))
+            ):
+                # Staged, not published: a person files the set,
+                # marks it shipped, and the old way takes it (#184.4).
+                print(f"build job {job_id}: {item_id} waits for a reviewer")
+                return
         elif verdict == "shipped" and self._world_has(item, plan):
             pack = None
         else:

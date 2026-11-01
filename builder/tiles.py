@@ -1407,7 +1407,7 @@ def make_tile(
         "sources": {
             "habitat": f"resolve2017:{eco1}",
             "elevation": "etopo2022:v1_60s_surface",
-            "water": "naturalearth:lakes:5.0.0",
+            "water": "hydrolakes:v1",
             "species": species_tag,
         },
         "made": {

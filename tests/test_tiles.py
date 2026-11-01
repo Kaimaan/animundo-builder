@@ -2138,6 +2138,7 @@ def test_open_sea_tile_carries_sea_name_and_land(
     assert made["sources"]["name"] == "evs:test"
     assert made["sources"]["land"] == "lands/index.json:nearest_coast:717"
     assert made["sources"]["species"] == "gbif:density"
+    assert made["sources"]["water"] == "hydrolakes:v1"
     assert made["species"]["playable"] == ["herring_gull"]
     assert set(made["requires"]["homes"]) == {"open_sea"}
     assert made["level"] < 8

@@ -305,7 +305,7 @@ def test_unknown_species_id_is_refused(tmp_path: Path) -> None:
 
 
 def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
-    """#131.4: a re-run calls again only when the animal list changes."""
+    """#131.4/#196.4: a re-run calls again only on a new survey round."""
     from builder.grid import center as tile_center
 
     animals = [
@@ -335,7 +335,7 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         _facts(),
     )
@@ -350,7 +350,7 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         _facts(),
     )
@@ -366,23 +366,77 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp2",
+        1,
         "pp1",
         _facts(),
     )
     assert client.calls == 2
 
 
-def test_list_fingerprint_ignores_library_status() -> None:
-    """#143.2: shipping an animal keeps the survey cache key."""
-    from builder.species import list_fingerprint
+def test_growing_the_list_keeps_the_survey_cache(tmp_path: Path) -> None:
+    """#196.4: adding an id gives the same key and no client call."""
+    from builder.grid import center as tile_center
 
-    base = [
+    animals = [
         {"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"},
-        {"id": "lynx", "name": "Eurasian lynx", "latin": "Lynx lynx"},
+        {"id": "vole", "name": "Vole", "latin": "Microtus agrestis"},
     ]
-    shipped = [dict(base[0]), {**base[1], "in_library": "lynx"}]
-    assert list_fingerprint(shipped) == list_fingerprint(base)
+    client = _StubClient(
+        [
+            {
+                "place": "Boreal forest in southern Finland",
+                "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+                "plants": [],
+                "trees": [],
+                "name_en": "Nuuksio forest",
+                "name_fi": "Nuuksion metsä",
+            }
+        ]
+    )
+    source = Source(client=client, cache_dir=tmp_path / "cache")
+    lat, lon = tile_center("z10_0581_0294")
+    fetch_species(
+        "z10_0581_0294",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        0,
+        "pp1",
+        _facts(),
+    )
+    assert client.calls == 1
+    animals.append({"id": "lynx", "name": "Eurasian lynx", "latin": "Lynx lynx"})
+    grown = fetch_species(
+        "z10_0581_0294",
+        animals,
+        _GREENS,
+        _TREES,
+        "boreal_forest",
+        lat,
+        lon,
+        source,
+        0,
+        "pp1",
+        _facts(),
+    )
+    assert client.calls == 1
+    assert grown["present"] == ["fox", "vole"]
+
+
+def test_survey_round_comes_from_the_list(tmp_path: Path) -> None:
+    """#196.4: the round defaults to 0 until Kai bumps the list."""
+    from builder.species import survey_round
+
+    world = _world(tmp_path)
+    assert survey_round(world) == 0
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["survey_round"] = 3
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    assert survey_round(world) == 3
 
 
 def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
@@ -416,7 +470,7 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         _facts(),
     )
@@ -441,7 +495,7 @@ def test_species_without_key_or_cache_fails_clearly(tmp_path: Path) -> None:
             lat,
             lon,
             source,
-            "fp1",
+            0,
             "pp1",
             _facts(),
         )
@@ -662,7 +716,7 @@ def test_retry_carries_the_refusal_back(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         _facts(),
     )
@@ -702,7 +756,7 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         _facts(),
     )
@@ -716,7 +770,7 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         _facts(),
     )
@@ -731,7 +785,7 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         moved,
     )
@@ -747,7 +801,7 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp2",
         moved,
     )
@@ -784,7 +838,7 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp1",
         _facts(),
     )
@@ -802,7 +856,7 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp2",
         _facts(),
     )
@@ -816,7 +870,7 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
         lat,
         lon,
         source,
-        "fp1",
+        0,
         "pp3",
         _facts(),
     )

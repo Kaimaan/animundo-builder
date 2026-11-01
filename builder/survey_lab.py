@@ -24,8 +24,8 @@ from .species import (
     fetch_species,
     library_fingerprint,
     list_animals,
-    list_fingerprint,
     list_library,
+    survey_round,
 )
 from .tiles import available_biomes, home_for_cell, tile_facts
 
@@ -50,7 +50,7 @@ def run_lab(
     from .plan import nearest_home
 
     animals = list_animals(world)
-    fingerprint = list_fingerprint(animals)
+    list_round = survey_round(world)
     greens = list_library(world, "plants")
     trees = list_library(world, "trees")
     plants_print = library_fingerprint(greens, trees)
@@ -78,7 +78,7 @@ def run_lab(
                 lat,
                 lon,
                 source,
-                fingerprint,
+                list_round,
                 plants_print,
                 facts,
             )

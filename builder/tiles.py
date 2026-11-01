@@ -43,10 +43,10 @@ from .species import (
     fetch_species,
     library_fingerprint,
     list_animals,
-    list_fingerprint,
     list_library,
     rank_weights,
     survey_facts,
+    survey_round,
 )
 
 #: The shared water level every home builds to.
@@ -1392,7 +1392,7 @@ def make_tile(
                     lat,
                     lon,
                     source,
-                    list_fingerprint(animals),
+                    survey_round(world),
                     library_fingerprint(greens_list, trees_list),
                     facts,
                 )

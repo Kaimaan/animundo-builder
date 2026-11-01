@@ -640,12 +640,15 @@ def check_name(
     return None
 
 
-def list_fingerprint(animals: list[dict[str, Any]]) -> str:
-    """The animal list's short hash: a re-run calls only on change."""
-    text = "\n".join(
-        f"{a['id']}:{a.get('name', '')}:{a.get('latin', '')}" for a in animals
-    )
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+def survey_round(world: Path) -> int:
+    """The list's resurvey round: only a new round resurveys (#196.4).
+
+    Kai bumps `survey_round` in `animal-list.json` to ask every
+    tile's survey again; growing the list alone never does.
+    """
+    from .animal_list import find_list, load_list
+
+    return int(load_list(find_list(world)).get("survey_round", 0))
 
 
 @dataclass
@@ -719,7 +722,7 @@ def write_cache(
     cache_dir: Path,
     tile: str,
     answer: dict[str, Any],
-    fingerprint: str,
+    list_round: int,
     plants_print: str,
     facts_print: str,
     date: str,
@@ -738,7 +741,7 @@ def write_cache(
                 "name_fi": answer.get("name_fi"),
                 "model": MODEL,
                 "date": date,
-                "list": fingerprint,
+                "survey_round": list_round,
                 "plants_list": plants_print,
                 "facts": facts_print,
                 "outside_animals": answer.get("outside_animals", []),
@@ -811,23 +814,24 @@ def fetch_species(
     lat: float,
     lon: float,
     source: Source,
-    fingerprint: str,
+    list_round: int,
     plants_print: str,
     facts: dict[str, Any],
 ) -> dict[str, Any]:
     """One tile's survey: the cache, else one call, else a retry.
 
     A cached survey is checked again (cheap, no network) and used
-    only when the animal list and the facts are unchanged and the
-    library still holds every cached plant pick. On a mismatch
-    the call goes out once more, carrying the refusal; a second
-    mismatch blocks the tile.
+    only when the resurvey round and the facts are unchanged and
+    the library still holds every cached plant pick (#196.4).
+    Growing the animal list alone never resurveys. On a
+    mismatch the call goes out once more, carrying the refusal;
+    a second mismatch blocks the tile.
     """
     facts_print = facts_fingerprint(facts)
     cached = read_cache(source.cache_dir, tile)
     if (
         cached is not None
-        and cached.get("list") == fingerprint
+        and cached.get("survey_round", 0) == list_round
         and _library_covers(cached, plants, trees)
         and cached.get("facts") == facts_print
     ):
@@ -864,7 +868,7 @@ def fetch_species(
                     source.cache_dir,
                     tile,
                     {**answer, "outside_keys": keys},
-                    fingerprint,
+                    list_round,
                     plants_print,
                     facts_print,
                     cached.get("date", "unknown"),
@@ -886,7 +890,7 @@ def fetch_species(
             tile, first["outside_animals"], first["outside_plants"], {}
         )
         write_cache(
-            source.cache_dir, tile, first, fingerprint, plants_print, facts_print, date
+            source.cache_dir, tile, first, list_round, plants_print, facts_print, date
         )
         return {**first, "date": date}
     second = ask(source.client, lat, lon, animals, plants, trees, facts, note=refused)
@@ -897,7 +901,7 @@ def fetch_species(
             tile, second["outside_animals"], second["outside_plants"], {}
         )
         write_cache(
-            source.cache_dir, tile, second, fingerprint, plants_print, facts_print, date
+            source.cache_dir, tile, second, list_round, plants_print, facts_print, date
         )
         return {**second, "date": date}
     raise SpeciesPlaceError(tile, second["place"], problem)

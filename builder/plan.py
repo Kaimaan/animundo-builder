@@ -32,8 +32,8 @@ from .species import (
     fetch_species,
     library_fingerprint,
     list_animals,
-    list_fingerprint,
     list_library,
+    survey_round,
 )
 from .tiles import (
     available_biomes,
@@ -726,7 +726,7 @@ def _resolve_species(
             lat,
             lon,
             source,
-            list_fingerprint(animals),
+            survey_round(world),
             library_fingerprint(greens, trees),
             facts,
         )

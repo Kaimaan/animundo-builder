@@ -93,6 +93,10 @@ class HabitatGrid:
         data = json.loads(raw)
         return cls(data["cells"], grid)
 
+    def cells(self) -> list[str]:
+        """Every baked cell key (`"col,row"`)."""
+        return list(self._cells)
+
     def cell_data(
         self, col: int, row: int
     ) -> tuple[Any, Any, Any, Any, Any, float, float, float]:

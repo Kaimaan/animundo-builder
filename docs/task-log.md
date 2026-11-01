@@ -4,6 +4,56 @@ What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
 ## 2026-11-01: inbox #202.3
+  conversion 4 of 4
+  (builder 8210cd5)
+
+- Place requests
+  file places
+  (D20): the job
+  writes
+  places/<id>.json
+  (names, centre,
+  tile, cast,
+  start, live
+  false), checked
+  against the
+  place schema. No
+  land, no fish,
+  no seed.
+- Stays playable:
+  tile index + all
+  six groups hash-
+  identical to the
+  #202 baseline,
+  live
+  enrich_hammerhead
+  manifest 1053
+  bytes. Your
+  uncommitted
+  world places
+  work untouched.
+- Reef, old
+  region -> new
+  place: playable
+  the same 7,
+  predators
+  (reef_shark,
+  lionfish) and
+  prey (the 3
+  small fish) the
+  same; English
+  name the same,
+  Finnish added;
+  tiles [[927,
+  560]] and centre
+  the same; start
+  at the centre,
+  facing north.
+  The region file
+  still plays
+  (live false).
+
+## 2026-11-01: inbox #202.3
   conversion 3 of 4
   (builder 3d5901a)
 

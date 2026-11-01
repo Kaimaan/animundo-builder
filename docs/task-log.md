@@ -3,6 +3,85 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #194
+  (WAITING: report, no
+  spend; mussel needs a
+  ruling, not a cap)
+
+- `common_tern`: DONE at
+  $0.149, under every cap.
+  Research $0.055 (5
+  searches), looks $0.047
+  (3 searches), maker,
+  edits and checks $0.041,
+  Finnish $0.006. New cap
+  needed: $0.
+- `blue_mussel`: $0.304
+  spent, and it cannot
+  finish as a plant at any
+  cap. Research $0.195 (10
+  searches), four stage
+  chats $0.109, then the
+  plants stage refuses it:
+  GBIF resolves
+  `Mytilus edulis` to
+  Animalia, not Plantae
+  (#190 called this: it is
+  an animal planned as a
+  plant). Paid research is
+  kept, but a rebuild as
+  an animal would research
+  again (different stage).
+- Sunk, both items: $0.45
+  (#189 $0.30 + #191
+  $0.15), inside the $1.10
+  ceiling. All caps held
+  (tracked from the run
+  logs; the ledger stamps
+  one id per run, so the
+  $0.40 bound each run,
+  not each item total).
+- Total for both reef
+  tiles, tern filed once:
+  $0 more past the sunk
+  $0.45, except the mussel
+  ruling. Both items file
+  once; the second tile
+  then replans with
+  nothing missing and
+  remakes by code. No
+  duplicate builds.
+- Filing blocker, tern:
+  its `.glb` won't build
+  on this Mac — Blender
+  5.2.3 crashes in Metal
+  GPU detection before any
+  Python runs (the mallard
+  fails the same way).
+  The spec, animal file
+  (reviewed: diet
+  bottom_bugs+insects,
+  shelter shore), Finnish
+  and list entry are
+  ready; the world checks
+  fail without the `.glb`.
+- #191.3 done in this
+  push (`ecc6215`, whose
+  message mangled $0.42 —
+  the code reads 0.42):
+  animal $0.42, plant
+  $0.13, medians from 10
+  finished animals and 5
+  finished plants, mussel
+  excluded as unfinished.
+- Waiting, as asked: no
+  building, no publishing,
+  until Kai approves the
+  total and rules the
+  mussel (build as animal,
+  hand spec, drop, or gate
+  exception).
+
 ## 2026-11-01: inbox #193
   (builder 19b209e)
 

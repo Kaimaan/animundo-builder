@@ -3,6 +3,74 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #188
+  (builder 1c9fbec,
+  4b23f5a)
+
+- .1: #184.1 and #184.2
+  stand, untouched.
+- .2 (`1c9fbec`): additions
+  take `plants` on `cover`
+  or `water`: exactly `id`
+  and `density` (above 0,
+  at most 1), 20 a side.
+  `trees` and any other key
+  refuse the pack. No biome
+  or region is edited: the
+  laid side only proves the
+  additions add the one
+  plant.
+- .3 (`1c9fbec`): a passing
+  plant item publishes
+  `packs/plant_<id>/1/`
+  (spec, built `.glb`,
+  preview, its own locale
+  keys, one additions file
+  per built-in place) after
+  the spec, render,
+  Finnish, region and
+  laid-over-world gates,
+  and the job goes
+  `published` with `pack`.
+  The reviewer staging, the
+  merged locale and the
+  catalogue step are gone;
+  the worker's reviewer
+  wait with them. Pack ids
+  are kind-prefixed on both
+  paths: the enrich item id
+  would have published
+  `packs/enrich_X/`, never
+  a live pack yet.
+- .4 (`4b23f5a`): a shipped
+  place request files its
+  `missing` itself:
+  `replay_place` and
+  `record_place` take a
+  store, and the local
+  place build wires
+  `--project` through.
+  Without a project the
+  replay stays keyless.
+- Evidence: a plant pack
+  test whose manifest
+  verifies and whose
+  additions add only the
+  coral to `plants.water`,
+  with the biome file
+  byte-identical; a replayed
+  place test that writes
+  `places[tile]`. Suite:
+  1057 passed, only the
+  known stale-checkout
+  failure.
+- Also in this push:
+  `b602e8f` finishes #187
+  (the rights wording
+  missed `7009782`'s
+  staging; LICENSE alone
+  went in it).
+
 ## 2026-11-01: inbox #187
   (builder 7009782)
 

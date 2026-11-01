@@ -837,6 +837,15 @@ def write_region(
         if not isinstance(region.get(key), dict):
             # Old homes mark "none"; new regions leave it out.
             region.pop(key, None)
+    trees = region.get("trees")
+    if (
+        isinstance(trees, dict)
+        and not trees.get("mix")
+        and not isinstance(trees.get("density"), (int, float))
+    ):
+        # Old homes mark no trees "none"; new regions leave them
+        # out, since the schema wants a number (#180.4).
+        region.pop("trees", None)
     translated = _region_plants(home, job_dir, world)
     if translated is None:
         region.pop("plants", None)

@@ -1416,6 +1416,29 @@ def test_write_region_leaves_out_a_nameless_lake() -> None:
     assert region["lakes"] == []
 
 
+def test_write_region_leaves_out_treeless_none() -> None:
+    """#180.4: a home marking no trees "none" leaves trees out."""
+    from builder.place import write_region
+
+    world = _needs_world()
+    home = json.loads((world / "homes" / "examples" / "reef.json").read_text())
+    assert home["trees"] == {"density": "none", "mix": []}
+    survey = {
+        "tile": "s_530_612",
+        "name": {"en": "Test reef", "fi": "Testiriutta"},
+        "country": "Australia",
+        "region_id": "xx_test_reef",
+        "animals": [],
+        "plants": [],
+    }
+    region = write_region(home, survey, Path.cwd(), world)
+    assert "trees" not in region
+    numbered = dict(home)
+    numbered["trees"] = {"density": 0.0, "mix": []}
+    region = write_region(numbered, survey, Path.cwd(), world)
+    assert region["trees"] == {"density": 0.0, "mix": []}
+
+
 def test_request_build_local_rejects_a_split_answers_dir(tmp_path: Path) -> None:
     """T99: with --local the answers live under the place folder itself."""
     from builder.cli import main

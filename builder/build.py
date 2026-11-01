@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .grid import GridName, group, group_path
+from .grid import NAME, group, group_path
 from .pipeline import Pipeline, StageFailedError
 from .report import build_report
 from .schemas import validate
@@ -388,21 +388,21 @@ def publish_group(
     from . import history as history_mod
     from .tiles import write_group
 
-    grid, gcol, grow = group(tile)
+    gcol, grow = group(tile)
     blob_path = group_path(tile)
     old_raw = store.read_blob(blob_path)
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         if old_raw is not None:
             old = json.loads(old_raw.decode("utf-8"))
-            (tmp_dir / grid).mkdir(parents=True, exist_ok=True)
-            (tmp_dir / grid / f"{gcol:02d}_{grow:02d}.json").write_bytes(old_raw)
+            (tmp_dir / NAME).mkdir(parents=True, exist_ok=True)
+            (tmp_dir / NAME / f"{gcol:03d}_{grow:03d}.json").write_bytes(old_raw)
         else:
             old = {"tiles": {}, "blocked": {}}
         path = write_group(tmp_dir, tile, made_tile, None)
         data = json.loads(path.read_bytes())
         store.write_blob(blob_path, path.read_bytes())
-    _update_index(store, grid, gcol, grow, data["version"], old, tile, world_commit)
+    _update_index(store, gcol, grow, data["version"], old, tile, world_commit)
     if history is not None:
         event = (
             "remade"
@@ -451,7 +451,6 @@ def _apply_index_delta(
 
 def _update_index(
     store: Any,
-    grid: GridName,
     gcol: int,
     grow: int,
     version: int,
@@ -465,7 +464,7 @@ def _update_index(
     A places-only filing bumps the version with no count delta
     (#170.2): no tile changed readiness.
     """
-    raw = store.read_blob("tiles/v1/index.json")
+    raw = store.read_blob("tiles/v2/index.json")
     if raw is not None:
         index = json.loads(raw.decode("utf-8"))
     else:
@@ -476,14 +475,14 @@ def _update_index(
             "groups": {},
             "counts": {"ready": 0, "blocked": {}},
         }
-    key = f"{grid}/{gcol:02d}_{grow:02d}"
+    key = f"{NAME}/{gcol:03d}_{grow:03d}"
     index["groups"][key] = version
     if count:
         _apply_index_delta(index, old_group, tile, True, None)
     index["made_at"] = datetime.now(UTC).isoformat()
     index["world"] = world_commit
     validate("tile-index", index)
-    store.write_blob("tiles/v1/index.json", json.dumps(index).encode("utf-8"))
+    store.write_blob("tiles/v2/index.json", json.dumps(index).encode("utf-8"))
 
 
 def publish_places(
@@ -497,7 +496,7 @@ def publish_places(
     The tile's own entry is untouched: the tile stays the
     hand-made region (#170.2). Returns the group Storage path.
     """
-    grid, gcol, grow = group(tile)
+    gcol, grow = group(tile)
     blob_path = group_path(tile)
     old_raw = store.read_blob(blob_path)
     if old_raw is not None:
@@ -506,7 +505,7 @@ def publish_places(
         old = {"tiles": {}, "blocked": {}}
     data = {
         "format": 1,
-        "grid": grid,
+        "grid": NAME,
         "group": [gcol, grow],
         "version": int(old.get("version", 0)) + 1,
         "tiles": old.get("tiles") or {},
@@ -519,7 +518,6 @@ def publish_places(
     store.write_blob(blob_path, (json.dumps(data, indent=1) + "\n").encode("utf-8"))
     _update_index(
         store,
-        grid,
         gcol,
         grow,
         data["version"],
@@ -635,7 +633,7 @@ def publish_remakes(
     made/remade/blocked row in the tile history (#165).
     """
     from . import history as history_mod
-    from .grid import group, group_path
+    from .grid import NAME, group, group_path
 
     by_blob: dict[str, list[str]] = {}
     for tile, (kind, entry) in decisions.items():
@@ -643,7 +641,7 @@ def publish_remakes(
             continue
         by_blob.setdefault(group_path(tile), []).append(tile)
     versions: dict[str, int] = {}
-    raw = store.read_blob("tiles/v1/index.json")
+    raw = store.read_blob("tiles/v2/index.json")
     if raw is not None:
         index = json.loads(raw.decode("utf-8"))
     else:
@@ -655,7 +653,7 @@ def publish_remakes(
             "counts": {"ready": 0, "blocked": {}},
         }
     for blob_path, tiles in by_blob.items():
-        grid, gcol, grow = group(tiles[0])
+        gcol, grow = group(tiles[0])
         data = groups.get(blob_path)
         if data is None:
             raw_group = store.read_blob(blob_path)
@@ -664,7 +662,7 @@ def publish_remakes(
                 if raw_group is not None
                 else {
                     "format": 1,
-                    "grid": grid,
+                    "grid": NAME,
                     "group": [gcol, grow],
                     "version": 0,
                     "tiles": {},
@@ -686,7 +684,7 @@ def publish_remakes(
         data["version"] = int(data.get("version", 0)) + 1
         validate("tile-group", data)
         store.write_blob(blob_path, json.dumps(data, indent=1).encode("utf-8"))
-        index["groups"][f"{grid}/{gcol:02d}_{grow:02d}"] = data["version"]
+        index["groups"][f"{NAME}/{gcol:03d}_{grow:03d}"] = data["version"]
         for tile in tiles:
             kind, entry = decisions[tile]
             assert entry is not None
@@ -717,7 +715,7 @@ def publish_remakes(
     index["made_at"] = datetime.now(UTC).isoformat()
     index["world"] = world_commit
     validate("tile-index", index)
-    store.write_blob("tiles/v1/index.json", json.dumps(index).encode("utf-8"))
+    store.write_blob("tiles/v2/index.json", json.dumps(index).encode("utf-8"))
     return versions
 
 

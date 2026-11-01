@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .grid import GridName, center, parse_tile
+from .grid import center, parse_tile
 from .habitats import HabitatGrid
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
 from .prices import ITEM_ESTIMATES, SURVEY_ESTIMATE_USD
@@ -206,7 +206,7 @@ WATER_HABITATS = frozenset({"sea", "open_ocean"})
 
 def nearest_home(
     tile: str,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     homes: dict[str, dict[str, Any]],
     habitat: str,
 ) -> str:
@@ -223,8 +223,7 @@ def nearest_home(
     """
     if not homes:
         raise ValueError("the world has no homes to adapt from")
-    grid, col, row = parse_tile(tile)
-    habitat_grid = grids[grid]
+    col, row = parse_tile(tile)
     rings = list(ring_cells(habitat_grid, col, row))
     for eco, neighbour in rings:
         found = home_for_cell(eco, neighbour, homes)
@@ -403,7 +402,7 @@ def closest_plant(
 def plan_tile(
     tile: str,
     request: dict[str, Any] | None,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     world_commit: str,
     presence: dict[str, float] | None = None,
@@ -421,8 +420,7 @@ def plan_tile(
     code-only probe makes the tile the worker would make: a recorded
     `species` answer, else the cache or one model call.
     """
-    grid, col, row = parse_tile(tile)
-    habitat_grid = grids[grid]
+    col, row = parse_tile(tile)
     eco1 = habitat_grid.cell_data(col, row)[0]
     biome_number = habitat_grid.cell_data(col, row)[4]
     habitat = habitat_grid.habitat(col, row)
@@ -494,7 +492,7 @@ def plan_tile(
     if home is None:
         assert eco1 is not None  # narrowed above; mypy can't see it
         if not (world / "lands" / "index.json").is_file():
-            home_id = nearest_home(tile, grids, biomes, habitat)
+            home_id = nearest_home(tile, habitat_grid, biomes, habitat)
             adapt = True
         else:
             style = land_style_for(world, biome_number)
@@ -514,7 +512,7 @@ def plan_tile(
                     "no_land",
                     world=world,
                 )
-            bundle = default_bundle(tile, grids, biomes, habitat, style)
+            bundle = default_bundle(tile, habitat_grid, biomes, habitat, style)
             if bundle is None:
                 return _finish(
                     tile,
@@ -550,7 +548,7 @@ def plan_tile(
             builder_root,
             species,
             species_source,
-            tile_facts(tile, grids, world, home_id, adapt),
+            tile_facts(tile, habitat_grid, world, home_id, adapt),
         )
     if home is None and bundle is None:
         items.append(
@@ -569,7 +567,7 @@ def plan_tile(
             try:
                 made, _blocked = make_tile(
                     tile,
-                    grids,
+                    habitat_grid,
                     world,
                     presence=presence,
                     builder_root=builder_root,

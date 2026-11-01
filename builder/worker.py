@@ -134,7 +134,7 @@ class Worker:
     chat: Any | None = None
     adapt: Any | None = None
     build: Any | None = None
-    _grid_cache: dict[str, Any] | None = field(default=None, repr=False)
+    _grid_cache: Any | None = field(default=None, repr=False)
     _was_enabled: bool = field(default=True, repr=False)
     _guard_job: str | None = field(default=None, repr=False)
 
@@ -190,7 +190,7 @@ class Worker:
             plan = plan_tile(
                 tile,
                 request,
-                self._grids(),
+                self._habitat_grid(),
                 self.world,
                 self.world_commit or "unknown",
                 builder_root=self.builder_root,
@@ -400,7 +400,7 @@ class Worker:
                 self.world_commit = git_commit(self.world)
             made, blocked = make_tile(
                 tile,
-                self._grids(),
+                self._habitat_grid(),
                 self.world,
                 builder_root=self.builder_root,
                 species=self.species,
@@ -824,7 +824,7 @@ class Worker:
             return
         made, blocked = make_tile(
             tile,
-            self._grids(),
+            self._habitat_grid(),
             self.world,
             builder_root=self.builder_root,
             species=self.species,
@@ -1109,7 +1109,7 @@ class Worker:
             old = groups[blob_path]
             made, blocked = make_tile(
                 tile,
-                self._grids(),
+                self._habitat_grid(),
                 self.world,
                 builder_root=self.builder_root,
                 species_source=source,
@@ -1293,8 +1293,8 @@ class Worker:
                 elif isinstance(raw, str):
                     name = raw
         if not name:
-            grid, col, row = parse_tile(tile)
-            habitat = self._grids()[grid].habitat(col, row)
+            col, row = parse_tile(tile)
+            habitat = self._habitat_grid().habitat(col, row)
             lat, lon = center(tile)
             name = plan_name(habitat, lat, lon, None, self.world)["en"]
         build_mod.write_state_params(
@@ -1391,19 +1391,19 @@ class Worker:
         """
         import json
 
-        from .grid import CELLS, group_path, parse_tile, tile_id
+        from .grid import N, group_path, parse_tile, tile_id
         from .tiles import near_made_place_or_noted
 
         assert self.world is not None
-        grid, col, row = parse_tile(tile)
+        col, row = parse_tile(tile)
         made: set[str] = set()
         seen: set[str] = set()
         for dcol in range(-3, 4):
             for drow in range(-3, 4):
-                ncol, nrow = col + dcol, row + drow
-                if not (0 <= ncol < CELLS and 0 <= nrow < CELLS):
+                ncol, nrow = (col + dcol) % N, row + drow
+                if not 0 <= nrow < N:
                     continue
-                path = group_path(tile_id(grid, ncol, nrow))
+                path = group_path(tile_id(ncol, nrow))
                 if path in seen:
                     continue
                 seen.add(path)
@@ -1429,8 +1429,8 @@ class Worker:
         """An open-sea tile far from everything fails before making (#177.6)."""
         from .grid import parse_tile
 
-        grid, col, row = parse_tile(tile)
-        if self._grids()[grid].habitat(col, row) != "open_ocean":
+        col, row = parse_tile(tile)
+        if self._habitat_grid().habitat(col, row) != "open_ocean":
             return False
         if self._near_made_tile(tile):
             return False
@@ -1459,7 +1459,7 @@ class Worker:
         source = dataclasses.replace(self._species_source(), client=None)
         made, _blocked = make_tile(
             tile,
-            self._grids(),
+            self._habitat_grid(),
             self.world,
             builder_root=self.builder_root,
             species_source=source,
@@ -1485,8 +1485,8 @@ class Worker:
         from .grid import center, parse_tile
 
         assert self.world is not None
-        grid, col, row = parse_tile(tile)
-        habitat = self._grids()[grid].habitat(col, row)
+        col, row = parse_tile(tile)
+        habitat = self._habitat_grid().habitat(col, row)
         lat, lon = center(tile)
         entry = None
         if item["kind"] == "animal":
@@ -1650,8 +1650,8 @@ class Worker:
         if hit is not None:
             path = self.world / "regions" / f"{hit[0]}.json"
             return json.loads(path.read_text(encoding="utf-8"))
-        grid, col, row = parse_tile(tile)
-        cells = self._grids()[grid]
+        col, row = parse_tile(tile)
+        cells = self._habitat_grid()
         homes = available_homes(self.world)
         found = home_for_cell(
             cells.cell_data(col, row)[0],
@@ -1853,16 +1853,13 @@ class Worker:
 
         return source_from_config(self.config, self.builder_root)
 
-    def _grids(self) -> dict[str, Any]:
-        """Both baked habitat grids, loaded once."""
+    def _habitat_grid(self) -> Any:
+        """The baked habitat grid, loaded once."""
         if self._grid_cache is None:
-            from .habitats import HabitatGrid
+            from .habitats import load_grid
 
             assert self.grid_dir is not None
-            self._grid_cache = {
-                name: HabitatGrid.load(self.grid_dir / f"{name}.json.gz", name)
-                for name in ("ease2_n25", "ease2_s25")
-            }
+            self._grid_cache = load_grid(self.grid_dir)
         return self._grid_cache
 
 

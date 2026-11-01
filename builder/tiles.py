@@ -21,11 +21,12 @@ from pathlib import Path
 from typing import Any
 
 from .grid import (
-    CELL_M,
-    CELLS,
-    GridName,
+    EQUATOR_M,
+    TILE_M,
+    N,
     center,
-    grid_north,
+    lat_of,
+    lon_of,
     parse_tile,
     tile_at,
     tile_id,
@@ -169,23 +170,23 @@ def _open_sea_name(tile: str, builder_root: Path, world: Path) -> dict[str, Any]
 
 
 def _nearest_land(
-    tile: str, grids: dict[GridName, HabitatGrid]
+    tile: str, habitat_grid: HabitatGrid
 ) -> tuple[int | None, int | None]:
     """The nearest land cell's ecoregion and biome number (#177.1).
 
-    Expanding rings around the cell, same grid; the first cell
-    with an ecoregion wins, so the Gulf of Finland takes the
-    boreal coast's. Nothing when the grid holds no land cell.
+    Expanding rings around the cell, wrapping at the date
+    line; the first cell with an ecoregion wins, so the Gulf
+    of Finland takes the boreal coast's. Nothing when the
+    grid holds no land cell.
     """
-    grid, col, row = parse_tile(tile)
-    habitat_grid = grids[grid]
-    for radius in range(1, CELLS + 1):
+    col, row = parse_tile(tile)
+    for radius in range(1, N + 1):
         for dcol in range(-radius, radius + 1):
             for drow in range(-radius, radius + 1):
                 if max(abs(dcol), abs(drow)) != radius:
                     continue
-                ncol, nrow = col + dcol, row + drow
-                if not (0 <= ncol < CELLS and 0 <= nrow < CELLS):
+                ncol, nrow = (col + dcol) % N, row + drow
+                if not 0 <= nrow < N:
                     continue
                 try:
                     cell = habitat_grid.cell_data(ncol, nrow)
@@ -204,21 +205,21 @@ def near_made_place_or_noted(
 ) -> bool:
     """Whether building reaches within 3 cells of this tile (#177.6).
 
-    Same grid, Chebyshev distance: a made tile, a hand-made
-    place, or a tile with border notes. `made` carries the
-    published ids the caller knows (the worker reads the
-    groups); `noted` the tiles with notes. Around a noted
-    tile counts the same 3 cells: players waiting there
-    want the sea made.
+    Chebyshev distance, wrapping at the date line: a made
+    tile, a hand-made place, or a tile with border notes.
+    `made` carries the published ids the caller knows (the
+    worker reads the groups); `noted` the tiles with notes.
+    Around a noted tile counts the same 3 cells: players
+    waiting there want the sea made.
     """
-    grid, col, row = parse_tile(tile)
+    col, row = parse_tile(tile)
     cells = place_cells(world)
     for dcol in range(-3, 4):
         for drow in range(-3, 4):
-            ncol, nrow = col + dcol, row + drow
-            if not (0 <= ncol < CELLS and 0 <= nrow < CELLS):
+            ncol, nrow = (col + dcol) % N, row + drow
+            if not 0 <= nrow < N:
                 continue
-            cell = tile_id(grid, ncol, nrow)
+            cell = tile_id(ncol, nrow)
             if cell in cells:
                 return True
             if made is not None and cell in made:
@@ -235,8 +236,8 @@ def ring_cells(habitat_grid: Any, col: int, row: int) -> Any:
             for drow in range(-radius, radius + 1):
                 if max(abs(dcol), abs(drow)) != radius:
                     continue
-                ncol = min(max(col + dcol, 0), CELLS - 1)
-                nrow = min(max(row + drow, 0), CELLS - 1)
+                ncol = (col + dcol) % N
+                nrow = min(max(row + drow, 0), N - 1)
                 try:
                     yield (
                         habitat_grid.cell_data(ncol, nrow)[0],
@@ -248,7 +249,7 @@ def ring_cells(habitat_grid: Any, col: int, row: int) -> Any:
 
 def default_bundle(
     tile: str,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     biomes: dict[str, dict[str, Any]],
     habitat: str,
     style: str,
@@ -260,8 +261,7 @@ def default_bundle(
     come first in expanding rings, then the first anywhere. None
     when no filed biome pairs this habitat with this style.
     """
-    grid, col, row = parse_tile(tile)
-    habitat_grid = grids[grid]
+    col, row = parse_tile(tile)
     rings = list(ring_cells(habitat_grid, col, row))
     for eco, neighbour in rings:
         found = home_for_cell(eco, neighbour, biomes)
@@ -367,18 +367,15 @@ def cell_level(habitat: str, elevation_m: float) -> int:
     return 9 + round(50 * (1 - math.exp(-max(elevation_m, 0) / 1500)))
 
 
-def _level_at(
-    grid: GridName, col: int, row: int, grids: dict[GridName, HabitatGrid]
-) -> int:
-    col = min(max(col, 0), CELLS - 1)
-    row = min(max(row, 0), CELLS - 1)
-    habitat_grid = grids[grid]
+def _level_at(col: int, row: int, habitat_grid: HabitatGrid) -> int:
+    col = col % N
+    row = min(max(row, 0), N - 1)
     habitat = habitat_grid.habitat(col, row)
     _e1, _s1, _e2, _s2, _b, _l, _w, elev = habitat_grid.cell_data(col, row)
     return cell_level(habitat, elev)
 
 
-def _noise(grid: GridName, x: float, y: float) -> float:
+def _noise(x: float, y: float) -> float:
     """Gentle value noise, at most ±2 blocks, seeded by grid position."""
     gx = x / NOISE_LATTICE_M
     gy = y / NOISE_LATTICE_M
@@ -386,7 +383,7 @@ def _noise(grid: GridName, x: float, y: float) -> float:
     fx, fy = gx - x0, gy - y0
 
     def lattice(lx: int, ly: int) -> float:
-        key = f"{grid}:{lx}:{ly}".encode()
+        key = f"z10:{lx}:{ly}".encode()
         digest = hashlib.sha256(key).digest()
         return int.from_bytes(digest[:2], "big") / 65535 - 0.5
 
@@ -395,60 +392,85 @@ def _noise(grid: GridName, x: float, y: float) -> float:
     return (top * (1 - fy) + bottom * fy) * 4
 
 
-def _sample_xy(
-    grid: GridName, col: int, row: int, side: str, index: int
-) -> tuple[float, float]:
-    """Global projected metres of one edge sample.
+def _mercator_y(lat: float) -> float:
+    """Web Mercator metres north of the equator for this latitude."""
+    return math.asinh(math.tan(math.radians(lat))) / math.pi * EQUATOR_M / 2
 
-    Sides run n and s west to east, w and e south to north, so
-    shared sides meet sample for sample and corners agree.
+
+def _mercator_x(lon: float) -> float:
+    """Web Mercator metres east of Greenwich for this longitude."""
+    return lon / 360.0 * EQUATOR_M
+
+
+def _corners(col: int, row: int) -> tuple[float, float, float, float]:
+    """The cell's west, east, north and south in Mercator metres."""
+    west = _mercator_x(lon_of(col))
+    east = _mercator_x(lon_of(col + 1))
+    north = _mercator_y(lat_of(row))
+    south = _mercator_y(lat_of(row + 1))
+    return west, east, north, south
+
+
+def _side_points(
+    start: tuple[float, float], end: tuple[float, float]
+) -> list[tuple[float, float]]:
+    """The side's samples from corner to corner in Mercator metres.
+
+    The shared corner tuples stand at both ends, so corners
+    agree by construction; the middle interpolates, so a side
+    shared with a neighbour computes identical positions.
     """
-    x0 = -9_000_000 + col * CELL_M
-    y1 = 9_000_000 - row * CELL_M
-    step = CELL_M / (EDGE_SAMPLES - 1)
-    if side == "n":
-        return x0 + index * step, y1
-    if side == "s":
-        return x0 + index * step, y1 - CELL_M
-    if side == "w":
-        return x0, y1 - (EDGE_SAMPLES - 1 - index) * step
-    if side == "e":
-        return x0 + CELL_M, y1 - (EDGE_SAMPLES - 1 - index) * step
-    raise ValueError(f"bad side {side!r}")
+    points = [start]
+    for index in range(1, EDGE_SAMPLES - 1):
+        frac = index / (EDGE_SAMPLES - 1)
+        points.append(
+            (
+                start[0] + frac * (end[0] - start[0]),
+                start[1] + frac * (end[1] - start[1]),
+            )
+        )
+    points.append(end)
+    return points
 
 
 def edge_height(
-    grid: GridName,
     x: float,
     y: float,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
 ) -> int:
     """Ground height for one global position: levels blended, noise on top."""
-    fx = (x + 9_000_000) / CELL_M - 0.5
-    fy = (9_000_000 - y) / CELL_M - 0.5
+    # One spelling per meridian: 180°E is 180°W, so the two
+    # tiles either side of the date line meet exactly.
+    x = (x + EQUATOR_M / 2) % EQUATOR_M - EQUATOR_M / 2
+    fx = (x + EQUATOR_M / 2) / TILE_M - 0.5
+    fy = (EQUATOR_M / 2 - y) / TILE_M - 0.5
     c0, r0 = math.floor(fx), math.floor(fy)
     tx, ty = fx - c0, fy - r0
     top = (
-        _level_at(grid, c0, r0, grids) * (1 - tx)
-        + _level_at(grid, c0 + 1, r0, grids) * tx
+        _level_at(c0, r0, habitat_grid) * (1 - tx)
+        + _level_at(c0 + 1, r0, habitat_grid) * tx
     )
     bottom = (
-        _level_at(grid, c0, r0 + 1, grids) * (1 - tx)
-        + _level_at(grid, c0 + 1, r0 + 1, grids) * tx
+        _level_at(c0, r0 + 1, habitat_grid) * (1 - tx)
+        + _level_at(c0 + 1, r0 + 1, habitat_grid) * tx
     )
-    return max(1, round(top * (1 - ty) + bottom * ty + _noise(grid, x, y)))
+    return max(1, round(top * (1 - ty) + bottom * ty + _noise(x, y)))
 
 
-def tile_edges(tile: str, grids: dict[GridName, HabitatGrid]) -> dict[str, list[int]]:
-    """The 65 ground heights per side, agreeing with neighbours."""
-    grid, col, row = parse_tile(tile)
+def tile_edges(tile: str, habitat_grid: HabitatGrid) -> dict[str, list[int]]:
+    """The 65 ground heights per side, agreeing with neighbours.
+
+    Sides run n and s west to east, w and e south to north.
+    """
+    col, row = parse_tile(tile)
+    west, east, north, south = _corners(col, row)
+    nw, ne, sw, se = (west, north), (east, north), (west, south), (east, south)
+    sides = {"n": (nw, ne), "e": (se, ne), "s": (sw, se), "w": (sw, nw)}
     edges: dict[str, list[int]] = {}
-    for side in ("n", "e", "s", "w"):
-        heights = []
-        for index in range(EDGE_SAMPLES):
-            x, y = _sample_xy(grid, col, row, side, index)
-            heights.append(edge_height(grid, x, y, grids))
-        edges[side] = heights
+    for side, (start, end) in sides.items():
+        edges[side] = [
+            edge_height(x, y, habitat_grid) for x, y in _side_points(start, end)
+        ]
     return edges
 
 
@@ -1083,20 +1105,19 @@ def check_with_world(
 
 def tile_facts(
     tile: str,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     home: str,
     adapt: bool,
 ) -> dict[str, Any]:
     """Our own facts for one tile's survey, maker and planner alike."""
-    grid, col, row = parse_tile(tile)
-    habitat_grid = grids[grid]
+    col, row = parse_tile(tile)
     eco1, share1, eco2, share2, _biome, land, water, elev = habitat_grid.cell_data(
         col, row
     )
     habitat = habitat_grid.habitat(col, row)
     level = cell_level(habitat, elev)
-    edges = tile_edges(tile, grids)
+    edges = tile_edges(tile, habitat_grid)
     samples = [level, *(s for side in edges.values() for s in side)]
     return survey_facts(
         habitat=habitat,
@@ -1118,12 +1139,13 @@ def tile_facts(
 def place_cells(world: Path) -> dict[str, tuple[str, list[int]]]:
     """Place cells by tile id: the region and its `[i, j]` part (#147.1).
 
-    From each region file's `grid` section; the part counts
-    from the region's smallest col and row. Nothing else in
-    the region is read: layered files keep colours, plants
-    and food elsewhere now. An unreadable file is skipped; a
-    malformed grid section, or two regions on one cell, fail
-    loudly, so a code tile is never made in a place cell.
+    From each region file's `grid` section (`z10` cells); the
+    part counts from the region's smallest col and row.
+    Nothing else in the region is read: layered files keep
+    colours, plants and food elsewhere now. An unreadable
+    file is skipped; a malformed grid section, a section on
+    another grid, or two regions on one cell, fail loudly,
+    so a code tile is never made in a place cell.
     """
     cells: dict[str, tuple[str, list[int]]] = {}
     folder = world / "regions"
@@ -1140,7 +1162,7 @@ def place_cells(world: Path) -> dict[str, tuple[str, list[int]]]:
         name = grid.get("grid") if isinstance(grid, dict) else None
         listed = grid.get("tiles") if isinstance(grid, dict) else None
         if (
-            name not in ("ease2_n25", "ease2_s25")
+            name != "z10"
             or not isinstance(listed, list)
             or not listed
             or any(
@@ -1155,7 +1177,7 @@ def place_cells(world: Path) -> dict[str, tuple[str, list[int]]]:
         min_col = min(cell[0] for cell in listed)
         min_row = min(cell[1] for cell in listed)
         for col, row in listed:
-            made = tile_id(name, col, row)
+            made = tile_id(col, row)
             if made in cells:
                 raise ValueError(f"{made} is in two place regions")
             cells[made] = (region_id, [col - min_col, row - min_row])
@@ -1164,7 +1186,7 @@ def place_cells(world: Path) -> dict[str, tuple[str, list[int]]]:
 
 def make_place_tile(
     tile: str,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     region_id: str,
     part: list[int],
@@ -1182,13 +1204,12 @@ def make_place_tile(
     """
     from .schemas import ROOT as BUILDER_ROOT
 
-    grid, col, row = parse_tile(tile)
-    habitat_grid = grids[grid]
+    col, row = parse_tile(tile)
     habitat = habitat_grid.habitat(col, row)
     elev = habitat_grid.cell_data(col, row)[7]
     lat, lon = center(tile)
     level = cell_level(habitat, elev)
-    edges = tile_edges(tile, grids)
+    edges = tile_edges(tile, habitat_grid)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
     entry: dict[str, Any] = {
         "format": 1,
@@ -1196,7 +1217,6 @@ def make_place_tile(
         "kind": "place",
         "version": 1,
         "center": {"lat": round(lat, 2), "lon": round(lon, 2)},
-        "grid_north": round(grid_north(tile), 1),
         "level": level,
         "height": tile_height(level, edges),
         "place": region_id,
@@ -1227,7 +1247,7 @@ def make_place_tile(
 
 def make_tile(
     tile: str,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     presence: dict[str, float] | None = None,
     builder_root: Path | None = None,
@@ -1243,8 +1263,7 @@ def make_tile(
     """
     from .schemas import ROOT as BUILDER_ROOT
 
-    grid, col, row = parse_tile(tile)
-    habitat_grid = grids[grid]
+    col, row = parse_tile(tile)
     eco1, _share1, eco2, share2, biome, land, water, elev = habitat_grid.cell_data(
         col, row
     )
@@ -1255,7 +1274,7 @@ def make_tile(
     if placed is not None:
         region_id, part = placed
         return (
-            make_place_tile(tile, grids, world, region_id, part, builder_root),
+            make_place_tile(tile, habitat_grid, world, region_id, part, builder_root),
             None,
         )
     homes = available_homes(world)
@@ -1267,7 +1286,7 @@ def make_tile(
         style = land_style_for(world, biome)
         if style is None:
             return None, {"reason": "no_land", "habitat": habitat}
-        home = default_bundle(tile, grids, biomes, habitat, style)
+        home = default_bundle(tile, habitat_grid, biomes, habitat, style)
         if home is None:
             return None, {"reason": "no_home", "habitat": habitat}
     house = homes.get(home, biomes[home])
@@ -1282,7 +1301,7 @@ def make_tile(
         sea = _open_sea_name(tile, builder_root or BUILDER_ROOT, world)
         if sea is None:
             return None, {"reason": "open_water", "habitat": habitat}
-        land_eco, land_biome = _nearest_land(tile, grids)
+        land_eco, land_biome = _nearest_land(tile, habitat_grid)
         if land_eco is None:
             return None, {"reason": "no_land", "habitat": habitat}
         land_style = land_style_for(world, land_biome)
@@ -1325,7 +1344,7 @@ def make_tile(
         ids = [a["id"] for a in animals]
         greens_list = list_library(world, "plants")
         trees_list = list_library(world, "trees")
-        facts = tile_facts(tile, grids, world, home, False)
+        facts = tile_facts(tile, habitat_grid, world, home, False)
         if species is not None:
             answer = check_answer(
                 species,
@@ -1365,7 +1384,7 @@ def make_tile(
         wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
         greens, needs, wants = tile_plants(world, answer)
     level = cell_level(habitat, elev)
-    edges = tile_edges(tile, grids)
+    edges = tile_edges(tile, habitat_grid)
     provisional: dict[str, Any] = {
         "id": tile,
         "home": home,
@@ -1411,7 +1430,6 @@ def make_tile(
         "kind": "code",
         "version": 1,
         "center": {"lat": round(lat, 2), "lon": round(lon, 2)},
-        "grid_north": round(grid_north(tile), 1),
         "level": level,
         "height": tile_height(level, edges),
         "habitat": habitat,
@@ -1475,10 +1493,10 @@ def write_group(
     blocked: dict[str, Any] | None,
 ) -> Path:
     """Write the tile or blocked cell into its group file, merged."""
-    from .grid import group
+    from .grid import NAME, group
 
-    grid, gcol, grow = group(tile)
-    path = out_dir / grid / f"{gcol:02d}_{grow:02d}.json"
+    gcol, grow = group(tile)
+    path = out_dir / NAME / f"{gcol:03d}_{grow:03d}.json"
     data: dict[str, Any]
     if path.is_file():
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -1486,7 +1504,7 @@ def write_group(
     else:
         data = {
             "format": 1,
-            "grid": grid,
+            "grid": NAME,
             "group": [gcol, grow],
             "version": 1,
             "tiles": {},
@@ -1510,7 +1528,7 @@ def write_group(
 def make_at(
     lat: float,
     lon: float,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     out_dir: Path,
     builder_root: Path | None = None,
@@ -1524,14 +1542,18 @@ def make_at(
     else to `tile-history.jsonl` beside the groups (#165.2).
     """
     from . import history as history_mod
-    from .grid import group
+    from .grid import NAME, group
 
     tile = tile_at(lat, lon)
     made, blocked = make_tile(
-        tile, grids, world, builder_root=builder_root, species_source=species_source
+        tile,
+        habitat_grid,
+        world,
+        builder_root=builder_root,
+        species_source=species_source,
     )
-    grid, gcol, grow = group(tile)
-    group_file = out_dir / grid / f"{gcol:02d}_{grow:02d}.json"
+    gcol, grow = group(tile)
+    group_file = out_dir / NAME / f"{gcol:03d}_{grow:03d}.json"
     old: dict[str, Any] = {}
     if group_file.is_file():
         try:

@@ -100,8 +100,8 @@ def run_request(
     job_dir = out_dir / JOB_ID
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / "plan.json").write_text(json.dumps(plan, indent=1), encoding="utf-8")
-    grid, col, row = parse_tile(tile)
-    habitat = worker._grids()[grid].habitat(col, row)
+    col, row = parse_tile(tile)
+    habitat = worker._habitat_grid().habitat(col, row)
     lat, lon = center(tile)
     reports: dict[str, Path] = {}
     built: dict[str, Path] = {}
@@ -240,7 +240,7 @@ def record_request(
     plan = plan_tile(
         tile,
         None,
-        worker._grids(),
+        worker._habitat_grid(),
         world,
         git_commit(world),
         species_source=source_from_config(config, worker.builder_root),

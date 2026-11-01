@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .grid import GridName, center, parse_tile
+from .grid import center, parse_tile
 from .habitats import HabitatGrid
 from .species import (
     SpeciesPlaceError,
@@ -31,18 +31,18 @@ from .tiles import available_biomes, home_for_cell, tile_facts
 
 #: The six tiles we have: five border tiles and a Saimaa-side one.
 TILES = (
-    "n_414_478",
-    "n_414_480",
-    "n_415_479",
-    "n_414_481",
-    "n_416_482",
-    "n_417_469",
+    "z10_0582_0294",
+    "z10_0581_0297",
+    "z10_0582_0296",
+    "z10_0580_0298",
+    "z10_0582_0300",
+    "z10_0590_0285",
 )
 
 
 def run_lab(
     tiles: list[str],
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     source: Any,
 ) -> list[dict[str, Any]]:
@@ -57,16 +57,16 @@ def run_lab(
     homes = available_biomes(world)
     results: list[dict[str, Any]] = []
     for tile in tiles:
-        grid, col, row = parse_tile(tile)
-        habitat = grids[grid].habitat(col, row)
-        eco1 = grids[grid].cell_data(col, row)[0]
+        col, row = parse_tile(tile)
+        habitat = habitat_grid.habitat(col, row)
+        eco1 = habitat_grid.cell_data(col, row)[0]
         home = home_for_cell(eco1, habitat, homes)
         if home is None:
-            home = nearest_home(tile, grids, homes, habitat)
+            home = nearest_home(tile, habitat_grid, homes, habitat)
             adapt = True
         else:
             adapt = False
-        facts = tile_facts(tile, grids, world, home, adapt)
+        facts = tile_facts(tile, habitat_grid, world, home, adapt)
         lat, lon = center(tile)
         try:
             survey = fetch_species(
@@ -213,14 +213,14 @@ def old_name_problems(
 
 def old_place_problems(
     old: dict[str, dict[str, Any]],
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
 ) -> dict[str, str | None]:
     """Each old answer's place against its cell, for the verdict."""
     problems: dict[str, str | None] = {}
     for tile, entry in old.items():
         answer = entry.get("answer", entry)
-        grid, col, row = parse_tile(tile)
-        habitat = grids[grid].habitat(col, row)
+        col, row = parse_tile(tile)
+        habitat = habitat_grid.habitat(col, row)
         lat, lon = center(tile)
         problems[tile] = check_place(answer["place"], habitat, lat, lon)
     return problems

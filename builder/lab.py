@@ -14,7 +14,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw
 
-from .grid import GridName, center, tile_at
+from .grid import center, tile_at
 from .habitats import HabitatGrid
 from .tiles import make_tile
 
@@ -55,7 +55,7 @@ HEIGHT = 720
 
 
 def run_lab(
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     builder_root: Path | None = None,
     species_source: Any | None = None,
@@ -71,7 +71,7 @@ def run_lab(
         try:
             made, blocked = make_tile(
                 tile,
-                grids,
+                habitat_grid,
                 world,
                 builder_root=builder_root,
                 species_source=species_source,

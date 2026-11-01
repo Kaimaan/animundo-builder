@@ -149,18 +149,14 @@ def make_world(tmp_path: Path) -> Path:
 
 
 def write_grids(grid_dir: Path, cells: dict[str, list[Any]]) -> Path:
-    """Both baked grid files with these northern cells (south empty)."""
+    """The baked grid file with these cells."""
     grid_dir.mkdir(parents=True, exist_ok=True)
-    for name, content in (
-        ("ease2_n25", cells),
-        ("ease2_s25", {}),
-    ):
-        with gzip.open(grid_dir / f"{name}.json.gz", "wt", encoding="utf-8") as handle:
-            json.dump({"grid": name, "cells": content}, handle)
+    with gzip.open(grid_dir / "z10.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump({"grid": "z10", "cells": cells}, handle)
     return grid_dir
 
 
-def boreal_3x3(col: int = 413, row: int = 478) -> dict[str, list[Any]]:
+def boreal_3x3(col: int = 581, row: int = 294) -> dict[str, list[Any]]:
     """A 3 by 3 boreal taiga block for neighbour reads."""
     cell = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
     return {

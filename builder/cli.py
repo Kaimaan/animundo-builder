@@ -98,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     worker.add_argument(
         "--habitat-grid",
         default="data/habitat-grid",
-        help="Baked habitat grids (default: data/habitat-grid).",
+        help="Baked habitat grid (default: data/habitat-grid).",
     )
     habitats = sub.add_parser("habitats", help="The world habitat grid.")
     habitats_sub = habitats.add_subparsers(dest="habitats_command", required=True)
@@ -137,7 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     make.add_argument(
         "--habitat-grid",
         default="data/habitat-grid",
-        help="Baked habitat grids (default: data/habitat-grid).",
+        help="Baked habitat grid (default: data/habitat-grid).",
     )
     make.add_argument("--project", default=None, help="The Firebase project.")
     make.add_argument(
@@ -153,7 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     lab.add_argument(
         "--habitat-grid",
         default="data/habitat-grid",
-        help="Baked habitat grids (default: data/habitat-grid).",
+        help="Baked habitat grid (default: data/habitat-grid).",
     )
     lab.add_argument(
         "--land",
@@ -182,19 +182,19 @@ def build_parser() -> argparse.ArgumentParser:
     survey_lab.add_argument(
         "--habitat-grid",
         default="data/habitat-grid",
-        help="Baked habitat grids (default: data/habitat-grid).",
+        help="Baked habitat grid (default: data/habitat-grid).",
     )
     request = sub.add_parser("request", help="Border requests: plan them, build them.")
     request_sub = request.add_subparsers(dest="request_command", required=True)
     plan = request_sub.add_parser("plan", help="Print one tile's border plan.")
-    plan.add_argument("tile", help="The border tile id, e.g. n_413_478.")
+    plan.add_argument("tile", help="The border tile id, e.g. z10_0581_0294.")
     plan.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
     )
     plan.add_argument(
         "--habitat-grid",
         default="data/habitat-grid",
-        help="Baked habitat grids (default: data/habitat-grid).",
+        help="Baked habitat grid (default: data/habitat-grid).",
     )
     build = request_sub.add_parser("build", help="Run one build round for a job.")
     build.add_argument(
@@ -232,7 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--habitat-grid",
         default="data/habitat-grid",
-        help="Baked habitat grids (default: data/habitat-grid).",
+        help="Baked habitat grid (default: data/habitat-grid).",
     )
     build.add_argument("--project", default=None, help="The Firebase project.")
     build.add_argument(
@@ -285,7 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
     survey.add_argument(
         "--habitat-grid",
         default="data/habitat-grid",
-        help="Baked habitat grids (default: data/habitat-grid).",
+        help="Baked habitat grid (default: data/habitat-grid).",
     )
     survey.add_argument(
         "--record",
@@ -425,8 +425,7 @@ def _recorded_gbif(out: Path) -> dict[str, Any] | None:
 
 def cmd_place_survey(args: argparse.Namespace) -> int:
     from .animal_list import find_list, load_list
-    from .grid import GridName
-    from .habitats import HabitatGrid
+    from .habitats import BAKED_GRID_FILE, load_grid
     from .jobs import make_context
     from .place import (
         SurveyError,
@@ -444,13 +443,11 @@ def cmd_place_survey(args: argparse.Namespace) -> int:
     if world is None:
         return 1
     grid_dir = Path(args.habitat_grid)
-    grids: dict[GridName, HabitatGrid] = {}
-    for name in ("ease2_n25", "ease2_s25"):
-        path = grid_dir / f"{name}.json.gz"
-        if not path.is_file():
-            print(f"error: no baked grid: {path}", file=sys.stderr)
-            return 1
-        grids[name] = HabitatGrid.load(path, name)  # type: ignore[arg-type]
+    path = grid_dir / BAKED_GRID_FILE
+    if not path.is_file():
+        print(f"error: no baked grid: {path}", file=sys.stderr)
+        return 1
+    habitat_grid = load_grid(grid_dir)
     out = Path(args.out)
     want = [w for w in args.want.split(",") if w] if args.want else []
     try:
@@ -478,7 +475,7 @@ def cmd_place_survey(args: argparse.Namespace) -> int:
         from .place import habitat_first, improve_habitats
 
         animals = habitat_first(
-            animals, improve_habitats(animals, world, args.improve, grids)
+            animals, improve_habitats(animals, world, args.improve, habitat_grid)
         )
     try:
         data, searches = ask_survey(
@@ -496,7 +493,7 @@ def cmd_place_survey(args: argparse.Namespace) -> int:
         survey = check_survey(
             data,
             args.place,
-            grids,
+            habitat_grid,
             world,
             animals,
             want,
@@ -644,8 +641,7 @@ def cmd_presence_fetch(args: argparse.Namespace) -> int:
 
 
 def cmd_tiles_make(args: argparse.Namespace) -> int:
-    from .grid import GridName
-    from .habitats import HabitatGrid
+    from .habitats import BAKED_GRID_FILE, load_grid
     from .species import source_from_config
     from .tiles import make_at
 
@@ -659,12 +655,11 @@ def cmd_tiles_make(args: argparse.Namespace) -> int:
     if world is None:
         return 1
     grid_dir = Path(args.habitat_grid)
-    name: GridName = "ease2_n25" if lat >= 0 else "ease2_s25"
-    path = grid_dir / f"{name}.json.gz"
+    path = grid_dir / BAKED_GRID_FILE
     if not path.is_file():
         print(f"error: no baked grid: {path}", file=sys.stderr)
         return 1
-    grids: dict[GridName, HabitatGrid] = {name: HabitatGrid.load(path, name)}
+    habitat_grid = load_grid(grid_dir)
     history_store = None
     if args.project or args.storage_bucket:
         if not (args.project and args.storage_bucket):
@@ -681,7 +676,7 @@ def cmd_tiles_make(args: argparse.Namespace) -> int:
         tile, path, status = make_at(
             lat,
             lon,
-            grids,
+            habitat_grid,
             world,
             Path(args.out),
             species_source=source_from_config(load_config()),
@@ -698,8 +693,7 @@ def cmd_tiles_make(args: argparse.Namespace) -> int:
 
 
 def cmd_tiles_lab(args: argparse.Namespace) -> int:
-    from .grid import GridName
-    from .habitats import HabitatGrid
+    from .habitats import BAKED_GRID_FILE, load_grid
     from .lab import run_lab, write_lab
     from .species import source_from_config
 
@@ -707,16 +701,14 @@ def cmd_tiles_lab(args: argparse.Namespace) -> int:
     if world is None:
         return 1
     grid_dir = Path(args.habitat_grid)
-    grids: dict[GridName, HabitatGrid] = {}
-    for name in ("ease2_n25", "ease2_s25"):
-        path = grid_dir / f"{name}.json.gz"
-        if not path.is_file():
-            print(f"error: no baked grid: {path}", file=sys.stderr)
-            return 1
-        grids[name] = HabitatGrid.load(path, name)  # type: ignore[arg-type]
+    path = grid_dir / BAKED_GRID_FILE
+    if not path.is_file():
+        print(f"error: no baked grid: {path}", file=sys.stderr)
+        return 1
+    habitat_grid = load_grid(grid_dir)
     try:
         results = run_lab(
-            grids, world, species_source=source_from_config(load_config())
+            habitat_grid, world, species_source=source_from_config(load_config())
         )
     except ConnectionError as error:
         print(f"error: {error}", file=sys.stderr)
@@ -730,8 +722,7 @@ def cmd_tiles_lab(args: argparse.Namespace) -> int:
 
 
 def cmd_survey_lab(args: argparse.Namespace) -> int:
-    from .grid import GridName
-    from .habitats import HabitatGrid
+    from .habitats import BAKED_GRID_FILE, load_grid
     from .species import list_animals, source_from_config
     from .survey_lab import TILES, run_lab, write_lab
 
@@ -744,16 +735,14 @@ def cmd_survey_lab(args: argparse.Namespace) -> int:
         print(f"error: cannot read old answers: {error}", file=sys.stderr)
         return 1
     grid_dir = Path(args.habitat_grid)
-    grids: dict[GridName, HabitatGrid] = {}
-    for name in ("ease2_n25", "ease2_s25"):
-        path = grid_dir / f"{name}.json.gz"
-        if not path.is_file():
-            print(f"error: no baked grid: {path}", file=sys.stderr)
-            return 1
-        grids[name] = HabitatGrid.load(path, name)  # type: ignore[arg-type]
+    path = grid_dir / BAKED_GRID_FILE
+    if not path.is_file():
+        print(f"error: no baked grid: {path}", file=sys.stderr)
+        return 1
+    habitat_grid = load_grid(grid_dir)
     tiles = args.tiles.split(",") if args.tiles else list(TILES)
     try:
-        results = run_lab(tiles, grids, world, source_from_config(load_config()))
+        results = run_lab(tiles, habitat_grid, world, source_from_config(load_config()))
     except ConnectionError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -769,8 +758,8 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
     import json
     import subprocess
 
-    from .grid import GridName, parse_tile
-    from .habitats import HabitatGrid
+    from .grid import parse_tile
+    from .habitats import BAKED_GRID_FILE, load_grid
     from .plan import plan_tile
     from .species import source_from_config
 
@@ -778,15 +767,15 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
     if world is None:
         return 1
     try:
-        grid, _col, _row = parse_tile(args.tile)
+        parse_tile(args.tile)
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    path = Path(args.habitat_grid) / f"{grid}.json.gz"
+    path = Path(args.habitat_grid) / BAKED_GRID_FILE
     if not path.is_file():
         print(f"error: no baked grid: {path}", file=sys.stderr)
         return 1
-    grids: dict[GridName, HabitatGrid] = {grid: HabitatGrid.load(path, grid)}
+    habitat_grid = load_grid(Path(args.habitat_grid))
     try:
         commit = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -801,7 +790,7 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
         plan = plan_tile(
             args.tile,
             None,
-            grids,
+            habitat_grid,
             world,
             commit or "unknown",
             species_source=source_from_config(load_config()),

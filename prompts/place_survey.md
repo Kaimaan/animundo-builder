@@ -9,7 +9,7 @@ A few web searches at most. Answer with JSON only, no prose.
 ## Wanted
 
 - `tile`: the tile id of the spot you pick for the place's start
-  (like `s_530_612`), on the 25 km EASE grid. $TILE_LINE
+  (like `z10_0927_0560`), on the zoom 10 web-map grid. $TILE_LINE
 - `habitat`: the habitat there, in a few words.
 - `home_from`: the home file to adapt the place's home from,
   one of the homes below.

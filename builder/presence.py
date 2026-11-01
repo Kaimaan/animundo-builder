@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .animal_list import find_list, load_list
-from .grid import CELL_M, HALF_M, neighbours, parse_tile
+from .grid import bounds, neighbours
 
 GBIF_SEARCH = "https://api.gbif.org/v1/occurrence/search"
 GBIF_MATCH = "https://api.gbif.org/v1/species/match"
@@ -33,20 +33,17 @@ WILD = {
 
 
 def cell_wkt(tile: str) -> str:
-    """The tile cell corners as WKT for GBIF's geometry filter."""
-    from pyproj import Transformer
-
-    grid, col, row = parse_tile(tile)
-    epsg = 6931 if grid == "ease2_n25" else 6932
-    back = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
-    x0 = -HALF_M + col * CELL_M
-    x1 = x0 + CELL_M
-    y1 = HALF_M - row * CELL_M
-    y0 = y1 - CELL_M
+    """The tile's box as WKT for GBIF's geometry filter (#182.2)."""
+    south, north, west, east = bounds(tile)
     # Counter-clockwise, as GBIF's geometry filter requires.
-    corners = [(x0, y1), (x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-    lonlats = [back.transform(x, y) for x, y in corners]
-    ring = ", ".join(f"{lon:.6f} {lat:.6f}" for lon, lat in lonlats)
+    corners = [
+        (west, north),
+        (west, south),
+        (east, south),
+        (east, north),
+        (west, north),
+    ]
+    ring = ", ".join(f"{lon:.6f} {lat:.6f}" for lon, lat in corners)
     return f"POLYGON (({ring}))"
 
 

@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .grid import GridName, parse_tile, tile_at
+from .grid import N, parse_tile, tile_at
 from .habitats import HabitatGrid
 from .plan import closest_plant, home_plant_entries, plant_slug
 from .presence import fetch_raw, match_kingdom
@@ -44,7 +44,7 @@ def survey_schema(ids: list[str]) -> dict[str, Any]:
         "properties": {
             "tile": {
                 "type": "string",
-                "description": "The start's tile id, like s_530_612.",
+                "description": "The start's tile id, like z10_0927_0560.",
             },
             "habitat": {
                 "type": "string",
@@ -207,17 +207,16 @@ class SurveyError(Exception):
 
 
 def cells_within(tile: str, radius: int = GBIF_RADIUS) -> list[str]:
-    """The tile and its cells out to `radius`, clamped to the grid."""
-    from .grid import CELLS
+    """The tile and its cells out to `radius`, wrapping the date line."""
+    from .grid import tile_id
 
-    grid, col, row = parse_tile(tile)
-    prefix = "n" if grid == "ease2_n25" else "s"
+    col, row = parse_tile(tile)
     out = []
     for dc in range(-radius, radius + 1):
         for dr in range(-radius, radius + 1):
-            c, r = col + dc, row + dr
-            if 0 <= c < CELLS and 0 <= r < CELLS:
-                out.append(f"{prefix}_{c:03d}_{r:03d}")
+            c, r = (col + dc) % N, row + dr
+            if 0 <= r < N:
+                out.append(tile_id(c, r))
     return out
 
 
@@ -239,7 +238,7 @@ def _latin(name: str) -> str | None:
 def check_survey(
     data: Any,
     place: str,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
     world: Path,
     animals: list[dict[str, Any]],
     want: list[str],
@@ -281,13 +280,11 @@ def check_survey(
         raise SurveyError(f"{data['region_id']} is no region id")
     tile = data["tile"]
     try:
-        grid, col, row = parse_tile(tile)
+        col, row = parse_tile(tile)
     except ValueError:
         raise SurveyError(f"{tile} is no tile id") from None
-    if grid not in grids:
-        raise SurveyError(f"{tile} is on no baked grid")
     try:
-        habitat = grids[grid].habitat(col, row)
+        habitat = habitat_grid.habitat(col, row)
     except KeyError:
         raise SurveyError(f"{tile} is no baked cell") from None
     if improve is not None and tile != improve:
@@ -1135,7 +1132,7 @@ def improve_habitats(
     animals: list[dict[str, Any]],
     world: Path,
     improve_arg: str,
-    grids: dict[GridName, HabitatGrid],
+    habitat_grid: HabitatGrid,
 ) -> set[str]:
     """The place's habitats for `--improve` asks (#167.4).
 
@@ -1144,8 +1141,8 @@ def improve_habitats(
     habitat, the only signal before the answer.
     """
     try:
-        grid, col, row = parse_tile(improve_arg)
-        return {grids[grid].habitat(col, row)}
+        col, row = parse_tile(improve_arg)
+        return {habitat_grid.habitat(col, row)}
     except (ValueError, KeyError):
         pass
     residents = region_residents(world, improve_arg)

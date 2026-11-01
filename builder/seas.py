@@ -34,7 +34,7 @@ def bake_seas(
 ) -> dict[str, Any]:
     """Bake `{tile: sea id}` for every named open-ocean cell.
 
-    `grid_dir` holds the baked `ease2_*.json.gz` grids, `shapes`
+    `grid_dir` holds the baked `z10.json.gz` grid, `shapes`
     the marine areas shapefile, `names` the world's `seas/names.json`
     `seas` table. A cell's sea is the table id whose `ne_ids` hold
     the covering area; the smallest area wins when areas overlap.
@@ -59,11 +59,9 @@ def bake_seas(
         raise ValueError(f"{len(missing)} table seas miss their shapes: {missing[:5]}")
     tree = STRtree(geoms)
     cells: dict[str, str] = {}
-    for grid in ("ease2_n25", "ease2_s25"):
-        path = grid_dir / f"{grid}.json.gz"
-        if not path.is_file():
-            continue
-        cells.update(_bake_grid(grid, path, tree, geoms, ne_ids, want))
+    path = grid_dir / "z10.json.gz"
+    if path.is_file():
+        cells.update(_bake_grid(path, tree, geoms, ne_ids, want))
     doc = {
         "source": SOURCE,
         "names": NAMES_SOURCE,
@@ -76,7 +74,6 @@ def bake_seas(
 
 
 def _bake_grid(
-    grid: str,
     path: Path,
     tree: Any,
     geoms: list[Any],
@@ -89,7 +86,7 @@ def _bake_grid(
     from .habitats import HabitatGrid
 
     cells: dict[str, str] = {}
-    baked = HabitatGrid.load(path, grid)  # type: ignore[arg-type]
+    baked = HabitatGrid.load(path)
     for key in baked.cells():
         col, row = (int(v) for v in key.split(","))
         try:
@@ -98,7 +95,7 @@ def _bake_grid(
             continue
         if habitat != "open_ocean":
             continue
-        tile = tile_id(grid, col, row)
+        tile = tile_id(col, row)
         lat, lon = center(tile)
         point = Point(lon, lat)
         hits = [

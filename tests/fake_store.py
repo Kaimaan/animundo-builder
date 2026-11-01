@@ -28,6 +28,7 @@ class FakeStore:
         self.build_jobs: dict[str, dict[str, Any]] = {}
         self.alerts: list[dict[str, Any]] = []
         self.tile_history: list[dict[str, Any]] = []
+        self.tile_docs: dict[str, dict[str, Any]] = {}
         self.jobs: dict[str, dict[str, Any]] = {}
         self.watchers: list[tuple[str, Any]] = []
         self.unsubscribed: list[str] = []
@@ -121,6 +122,10 @@ class FakeStore:
     def add_tile_history(self, item: dict[str, Any]) -> str:
         self.tile_history.append(item)
         return f"history-{len(self.tile_history)}"
+
+    def set_tile_history(self, tile: str, item: dict[str, Any]) -> str:
+        self.tile_docs[tile] = item
+        return tile
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         return self.jobs.get(job_id)

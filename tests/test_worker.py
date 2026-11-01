@@ -352,6 +352,21 @@ def test_handle_request_alerts_when_unplannable(
     assert store.alerts[-1]["kind"] == "plan_failed"
 
 
+def test_handle_request_skips_old_grid_quietly(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    """#195.5: retired EASE ids log nothing and raise no alert."""
+    store = FakeStore()
+    store.requests["n_414_478"] = {"tile": "n_414_478"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+    worker.handle_request("n_414_478")
+    assert "n_414_478" not in store.plans
+    assert store.alerts == []
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
 def test_sync_world_replans_on_move(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
     store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
@@ -3157,6 +3172,26 @@ def test_enrich_review_waits_for_the_ship(tmp_path: Path) -> None:
     worker.review_enrich_job("j1", job)
     assert store.build_jobs["j1"]["status"] == "checking"
     assert "pack" not in store.build_jobs["j1"]
+
+
+def test_history_context_adds_the_tile_survey_cost(tmp_path: Path) -> None:
+    """#195.2: the row carries the job cost plus the tile's survey."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _enrich_job(status="checking", cost_usd=0.10)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    (tmp_path / "ledger.json").write_text(
+        json.dumps(
+            {
+                "jobs": {"survey:z10_0581_0294": {"spent": 0.02, "updated": "x"}},
+                "days": {},
+                "total": 0.02,
+            }
+        )
+    )
+    context = worker._history_context("j1", "code", "z10_0581_0294")
+    assert context["cost_usd"] == pytest.approx(0.12)
+    plain = worker._history_context("j1", "code")
+    assert plain["cost_usd"] == 0.10
 
 
 def test_enrich_review_ships_a_plant_pack_like_an_animal(

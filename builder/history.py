@@ -78,6 +78,19 @@ def record(store: Any, entry: dict[str, Any]) -> str | None:
         return None
 
 
+def record_tile(store: Any, entry: dict[str, Any]) -> None:
+    """The tile's latest row at `tile_history/<tile>` (#195.2).
+
+    Rows stay the append-only event log; the tile doc carries
+    the latest publish (and its cost) where it reads directly.
+    A failure prints, never raises.
+    """
+    try:
+        store.set_tile_history(entry["tile"], entry)
+    except Exception as error:  # noqa: BLE001 - history never fails the tile
+        print(f"warning: tile history not recorded: {error}", file=sys.stderr)
+
+
 def record_local(path: Path, entry: dict[str, Any]) -> None:
     """The row appended to a local jsonl; a failure prints, never raises."""
     try:

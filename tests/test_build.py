@@ -345,6 +345,24 @@ def test_publish_group_writes_group_and_index() -> None:
     assert index["world"] == "abc123"
 
 
+def test_publish_group_writes_tile_history_doc() -> None:
+    """#195.2: the tile's latest row lands at tile_history/<tile>."""
+    store = FakeStore()
+    build_mod.publish_group(
+        "z10_0581_0294",
+        _made_tile(),
+        store,
+        "abc123",
+        {"job": "job1", "kind": "code", "cost_usd": 0.02},
+    )
+    doc = store.tile_docs["z10_0581_0294"]
+    assert doc["tile"] == "z10_0581_0294"
+    assert doc["event"] == "made"
+    assert doc["cost_usd"] == 0.02
+    assert doc["version"] == 1
+    assert store.tile_history[-1]["tile"] == "z10_0581_0294"
+
+
 def test_publish_group_moves_counts_by_delta() -> None:
     store = FakeStore()
     store.write_blob(

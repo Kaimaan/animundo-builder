@@ -386,7 +386,8 @@ def publish_group(
     by the honest delta (this tile newly ready, or no longer
     blocked for its old reason). Returns the group Storage path.
     With `history` (job, kind, cost_usd), a made/remade row lands
-    in the tile history (#165).
+    in the tile history (#165), and the tile's latest row at
+    `tile_history/<tile>` (#195.2).
     """
     from . import history as history_mod
     from .tiles import write_group
@@ -412,18 +413,17 @@ def publish_group(
             if tile in (old.get("tiles") or {}) or tile in (old.get("blocked") or {})
             else "made"
         )
-        history_mod.record(
-            store,
-            history_mod.row(
-                tile,
-                event,
-                job=history.get("job"),
-                kind=history["kind"],
-                world=world_commit,
-                version=data["version"],
-                cost_usd=history.get("cost_usd"),
-            ),
+        entry = history_mod.row(
+            tile,
+            event,
+            job=history.get("job"),
+            kind=history["kind"],
+            world=world_commit,
+            version=data["version"],
+            cost_usd=history.get("cost_usd"),
         )
+        history_mod.record(store, entry)
+        history_mod.record_tile(store, entry)
     return blob_path
 
 
@@ -633,7 +633,8 @@ def publish_remakes(
     with a changed tile are written, their version up by one.
     Returns `versions` for the tiles whose content changed. With
     `history` (job, kind, cost_usd), every written tile lands a
-    made/remade/blocked row in the tile history (#165).
+    made/remade/blocked row in the tile history (#165), and its
+    latest row at `tile_history/<tile>` (#195.2).
     """
     from . import history as history_mod
     from .grid import NAME, group, group_path
@@ -702,19 +703,18 @@ def publish_remakes(
                     event = "remade"
                 else:
                     event = "made"
-                history_mod.record(
-                    store,
-                    history_mod.row(
-                        tile,
-                        event,
-                        job=history.get("job"),
-                        kind=history["kind"],
-                        world=world_commit,
-                        version=data["version"],
-                        reason=reason,
-                        cost_usd=history.get("cost_usd"),
-                    ),
+                entry = history_mod.row(
+                    tile,
+                    event,
+                    job=history.get("job"),
+                    kind=history["kind"],
+                    world=world_commit,
+                    version=data["version"],
+                    reason=reason,
+                    cost_usd=history.get("cost_usd"),
                 )
+                history_mod.record(store, entry)
+                history_mod.record_tile(store, entry)
     index["made_at"] = datetime.now(UTC).isoformat()
     index["world"] = world_commit
     validate("tile-index", index)

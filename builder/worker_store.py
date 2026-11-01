@@ -124,6 +124,11 @@ class FirebaseStore:
         _, ref = self._db.collection("tile_history").add(item)
         return ref.id
 
+    def set_tile_history(self, tile: str, item: dict[str, Any]) -> str:
+        ref = self._db.collection("tile_history").document(tile)
+        ref.set(item)
+        return ref.id
+
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         snap = self._db.collection("jobs").document(job_id).get()
         return snap.to_dict() if snap.exists else None
@@ -176,6 +181,7 @@ STORE_METHODS = (
     "renew_build_job",
     "set_job",
     "set_plan",
+    "set_tile_history",
     "update_build_job",
     "update_build_job_if_owner",
     "update_job",

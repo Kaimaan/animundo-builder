@@ -631,13 +631,16 @@ class Source:
     cache_dir: Path
 
 
-def source_from_config(config: Any, builder_root: Path | None = None) -> Source:
+def source_from_config(
+    config: Any, builder_root: Path | None = None, job_id: str = "species"
+) -> Source:
     """The tile species source: the Meta client, the cache on disk.
 
     Without a key the client stays None: cached tiles still make,
     and a miss fails clearly instead of calling. The cache defaults
     under `data/` (git-ignored); the live worker keeps it on the
-    jobs Volume.
+    jobs Volume. `job_id` attributes the survey spend per tile
+    (`survey:<tile>`) instead of the shared `species` bucket (#195.2).
     """
     from .schemas import ROOT as BUILDER_ROOT
 
@@ -649,7 +652,7 @@ def source_from_config(config: Any, builder_root: Path | None = None) -> Source:
             api_key=config.model_api_key,
             model=config.model,
             ledger=FileLedger(config.ledger_path),
-            job_id="species",
+            job_id=job_id,
             caps=Caps(
                 job_usd=config.job_budget_usd,
                 day_usd=config.daily_budget_usd,

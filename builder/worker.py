@@ -171,8 +171,21 @@ class Worker:
 
     # -- top-level flows ----------------------------------------------
 
+    @staticmethod
+    def _is_old_grid(tile: str) -> bool:
+        """Retired EASE-grid request ids (`n_414_478` style, #195.5)."""
+        parts = tile.split("_")
+        return (
+            len(parts) == 3
+            and parts[0] in {"n", "s"}
+            and parts[1].isdigit()
+            and parts[2].isdigit()
+        )
+
     def handle_request(self, tile: str) -> None:
         """Plan one border request into `plans/{tile}` (T74)."""
+        if self._is_old_grid(tile):
+            return
         if not self.store.get_enabled():
             print(f"request {tile}: the off switch is off, skipping")
             return
@@ -195,7 +208,7 @@ class Worker:
                 self.world_commit or "unknown",
                 builder_root=self.builder_root,
                 species=self.species,
-                species_source=self._species_source(),
+                species_source=self._species_source(tile),
             )
         except (ValueError, RuntimeError, FileNotFoundError, ConnectionError) as error:
             print(f"request {tile}: cannot plan: {error}", file=sys.stderr)
@@ -404,7 +417,7 @@ class Worker:
                 self.world,
                 builder_root=self.builder_root,
                 species=self.species,
-                species_source=self._species_source(),
+                species_source=self._species_source(tile),
             )
             if made is None:
                 reason = (blocked or {}).get("reason", "no_home")
@@ -417,7 +430,7 @@ class Worker:
                 made,
                 self.store,
                 self.world_commit or "unknown",
-                self._history_context(job_id, "code"),
+                self._history_context(job_id, "code", tile),
             )
             print(f"build job {job_id}: published {path}")
             # The published copy's own version, so areas/{tile} shows it (#143.5).
@@ -828,7 +841,7 @@ class Worker:
             self.world,
             builder_root=self.builder_root,
             species=self.species,
-            species_source=self._species_source(),
+            species_source=self._species_source(tile),
         )
         if made is None:
             reason = (blocked or {}).get("reason", "no_home")
@@ -841,7 +854,7 @@ class Worker:
             made,
             self.store,
             self.world_commit or "unknown",
-            self._history_context(job_id, "build"),
+            self._history_context(job_id, "build", tile),
         )
         print(f"build job {job_id}: published {path}")
         # The published copy's own version, so areas/{tile} shows it (#143.5).
@@ -1202,14 +1215,28 @@ class Worker:
         self._update(job_id, {"status": "failed", "error": error})
         self.alert({"kind": "job_failed", "id": job_id, "error": error})
 
-    def _history_context(self, job_id: str, kind: str) -> dict[str, Any]:
-        """The job's half of a tile history row (#165.1)."""
+    def _history_context(
+        self, job_id: str, kind: str, tile: str | None = None
+    ) -> dict[str, Any]:
+        """The job's half of a tile history row (#165.1, #195.2).
+
+        With a tile, the tile's own survey spend joins the job's
+        cost, so the row carries what the tile really cost.
+        """
+        from .ledger import FileLedger
+
         job = self.store.get_build_job(job_id) or {}
         cost = job.get("cost_usd", 0.0)
+        total = cost if isinstance(cost, (int, float)) else 0.0
+        if tile is not None:
+            try:
+                total += FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
+            except OSError:
+                pass
         return {
             "job": job_id,
             "kind": kind,
-            "cost_usd": cost if isinstance(cost, (int, float)) else None,
+            "cost_usd": total,
         }
 
     def _history_blocked(self, job_id: str, tile: str, kind: str, reason: str) -> None:
@@ -1848,11 +1875,19 @@ class Worker:
         full = {"at": now_iso(), **item}
         return self.store.add_alert(full)
 
-    def _species_source(self) -> Any:
-        """Tile species: the cache, and the Meta client for misses."""
+    def _species_source(self, tile: str | None = None) -> Any:
+        """Tile species: the cache, and the Meta client for misses.
+
+        With a tile, the survey spend lands under `survey:<tile>`
+        so the tile's history can include it (#195.2).
+        """
         from .species import source_from_config
 
-        return source_from_config(self.config, self.builder_root)
+        return source_from_config(
+            self.config,
+            self.builder_root,
+            job_id=f"survey:{tile}" if tile else "species",
+        )
 
     def _habitat_grid(self) -> Any:
         """The baked habitat grid, loaded once."""

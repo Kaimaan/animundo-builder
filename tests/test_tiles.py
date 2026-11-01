@@ -452,6 +452,82 @@ def test_remake_after_ship_adds_the_animal_with_no_new_call(
     assert _Stub.calls == 1
 
 
+def test_remake_moves_the_13th_into_wanted_without_a_call(tmp_path: Path) -> None:
+    """#196.2: a cached answer with 15 missing; one gains a file."""
+    from types import SimpleNamespace
+
+    from builder.species import Source as SpeciesSource
+
+    world = _world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    names = {
+        "fox": ("Red fox", "Vulpes vulpes"),
+        "mountain_hare": ("Mountain hare", "Lepus timidus"),
+        "vole": ("Vole", "Microtus agrestis"),
+    }
+    for entry in listed["animals"]:
+        entry["name"], entry["latin"] = names[entry["id"]]
+    beasts = [f"beast_{n}" for n in range(15)]
+    for n, beast in enumerate(beasts):
+        listed["animals"].append(
+            {
+                "id": beast,
+                "name": f"Beast {n}",
+                "latin": f"Beastus numerus{n}",
+                "gbif_key": 1000 + n,
+                "habitats": ["boreal_forest"],
+            }
+        )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox", "mountain_hare", *beasts]}],
+        "plants": [],
+        "trees": [],
+        "name_en": "Beast woods",
+        "name_fi": "Petojen metsä",
+    }
+
+    class _Stub:
+        calls = 0
+
+        def chat(self, **kwargs: object) -> object:
+            _Stub.calls += 1
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))
+                ]
+            )
+
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=_Stub(), cache_dir=cache),
+    )
+    assert blocked is None
+    assert made is not None
+    assert [w["what"] for w in made["wanted"]] == beasts[:12]
+    assert _Stub.calls == 1
+    (world / "animals" / "beast_0.json").write_text(
+        json.dumps({"playable": True, "tags": ["beast"], "diet": ["grass"]})
+    )
+    again, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=None, cache_dir=cache),
+    )
+    assert blocked is None
+    assert again is not None
+    assert [w["what"] for w in again["wanted"]] == beasts[1:13]
+    assert _Stub.calls == 1
+
+
 def test_wanted_lists_drops_in_survey_order_capped_at_twelve(
     tmp_path: Path,
 ) -> None:

@@ -37,6 +37,19 @@ issue naming that part:
 - Coat colours and markings: the species' real colours, flat only,
   no textures, no pure black or white.
 
+If the animal is a whale, check these against the game's animal
+too; a whale has no legs, walk frames or run pose, so never ask
+for legs, feet on the ground, or a run:
+
+- Head: the width and roundness of the reference; too narrow or
+  boxy is an issue naming the head.
+- Flippers: each reads as one white piece from the front of the
+  body; grey boxes between are an issue naming the flippers.
+- Tail stalk and fluke: the stalk merges into the fluke with no
+  box between; a visible join is an issue naming the tail.
+- Body: one even mid blue-grey like the reference, top and sides
+  the same; a two-tone or patchy body is an issue naming the body.
+
 Then check every animation frame on its own:
 
 - Run, eat, sleep: the pose reads clearly; nothing floats, detaches

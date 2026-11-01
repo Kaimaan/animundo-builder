@@ -366,6 +366,16 @@ def test_review_prompts_check_parts_and_frames() -> None:
             "game's own",
         ):
             assert anchor in text, name
+    text = (PROMPTS_DIR / "model_review_mammal_none.md").read_text(encoding="utf-8")
+    for anchor in (
+        "If the animal is a whale",
+        "width and roundness of the reference",
+        "one white piece",
+        "merges into the fluke",
+        "one even mid blue-grey",
+        "never ask for legs",
+    ):
+        assert anchor in text
 
 
 def test_review_prompt_names() -> None:

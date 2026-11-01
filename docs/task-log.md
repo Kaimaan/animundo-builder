@@ -3,6 +3,84 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #201
+  (builder ec73e2a;
+  world 6517ff5)
+
+- .1 (builder
+  ec73e2a):
+  home_for_cell
+  skips retired
+  biomes at every
+  return: listed
+  sea, generic sea,
+  open_sea and the
+  first-match loop.
+  default_bundle,
+  resurvey and the
+  lab follow. A 717
+  lake cell gets
+  boreal_lakeland;
+  forest cells are
+  unchanged (test
+  fails pre-fix).
+  _closest_home
+  stays.
+- .2: the four
+  published lake
+  tiles remade by
+  code from their
+  recorded surveys
+  ($0, no model)
+  and published to
+  tiles/v2/z10/
+  074_035.json,
+  group version 9:
+  z10_0592_0284 v8,
+  z10_0593_0283 v6,
+  z10_0593_0285 v7,
+  z10_0594_0284 v9.
+  Index 23 ready at
+  world 6517ff5.
+  fi_saimaa left
+  alone.
+- .2 drift to know:
+  each tile also
+  gains the filed
+  common_tern in
+  playable (its
+  survey named it;
+  wanted's cap of
+  12 had cut it).
+  Nothing else
+  moves: edges,
+  level, water,
+  plants, names and
+  the other species
+  are byte-same;
+  one wanted cap
+  refill (muskrat).
+- .3 (world
+  6517ff5):
+  check_tile fails
+  a single tile on
+  a retired home or
+  blend home;
+  tiles in a group
+  file (already
+  published) keep
+  theirs. World
+  tests: 41 as
+  expected.
+- Suite: 1066 + 41
+  passed, 12
+  skipped; the one
+  known world
+  selftest failure
+  counts 72/72
+  both before and
+  after .3.
+
 ## 2026-11-01: inbox #200
   (world 03c8657,
   f436c32; builder

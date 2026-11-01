@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .animal_list import find_list, load_list
-from .grid import bounds, neighbours
+from .grid import N, bounds, lat_of, lon_of, neighbours, parse_tile
 
 GBIF_SEARCH = "https://api.gbif.org/v1/occurrence/search"
 GBIF_MATCH = "https://api.gbif.org/v1/species/match"
@@ -71,6 +71,50 @@ def match_kingdom(name: str) -> str | None:
     if data.get("matchType", "NONE") == "NONE":
         return None
     return data.get("kingdom")
+
+
+def match_key(name: str) -> int | None:
+    """The GBIF species key a Latin name matches, or nothing (#196.3)."""
+    data = _gbif({"name": name}, GBIF_MATCH)
+    if data.get("matchType", "NONE") == "NONE":
+        return None
+    key = data.get("speciesKey", data.get("usageKey"))
+    return int(key) if key is not None else None
+
+
+def near_wkt(tile: str, span: int = 2) -> str:
+    """The tile's box grown by `span` cells each way, as WKT (#196.3).
+
+    Clamped at the map's edges (and the antimeridian), where a
+    grown box would wrap.
+    """
+    x, y = parse_tile(tile)
+    south = lat_of(min(y + 1 + span, N))
+    north = lat_of(max(y - span, 0))
+    west = lon_of(max(x - span, 0))
+    east = lon_of(min(x + 1 + span, N))
+    corners = [
+        (west, north),
+        (west, south),
+        (east, south),
+        (east, north),
+        (west, north),
+    ]
+    ring = ", ".join(f"{lon:.6f} {lat:.6f}" for lon, lat in corners)
+    return f"POLYGON (({ring}))"
+
+
+def has_records_near(key: int, tile: str, span: int = 2) -> bool:
+    """A wild GBIF record for this key near the tile, or not (#196.3)."""
+    data = _gbif(
+        {
+            **WILD,
+            "taxon_key": str(key),
+            "geometry": near_wkt(tile, span),
+            "limit": 0,
+        }
+    )
+    return int(data.get("count", 0)) > 0
 
 
 #: GBIF answers 50 taxon keys per call; more is a 400.

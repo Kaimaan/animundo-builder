@@ -528,6 +528,150 @@ def test_remake_moves_the_13th_into_wanted_without_a_call(tmp_path: Path) -> Non
     assert _Stub.calls == 1
 
 
+def test_replayed_unknown_plant_wants_a_gbif_plant(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#196.3: a replayed nomination resolves once and sticks in wanted."""
+    from types import SimpleNamespace
+
+    import builder.species as species_mod
+    from builder.species import Source as SpeciesSource
+
+    world = _world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    names = {
+        "fox": ("Red fox", "Vulpes vulpes"),
+        "mountain_hare": ("Mountain hare", "Lepus timidus"),
+        "vole": ("Vole", "Microtus agrestis"),
+    }
+    for entry in listed["animals"]:
+        entry["name"], entry["latin"] = names[entry["id"]]
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox", "mountain_hare"]}],
+        "plants": [],
+        "trees": [],
+        "name_en": "Fox and hare woods",
+        "name_fi": "Kettujen ja jänisten metsä",
+    }
+
+    class _Stub:
+        calls = 0
+
+        def chat(self, **kwargs: object) -> object:
+            _Stub.calls += 1
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))
+                ]
+            )
+
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=_Stub(), cache_dir=cache),
+    )
+    assert blocked is None
+    assert made is not None
+    assert "wanted" not in made
+    cached = json.loads((cache / "z10_0581_0294.json").read_text())
+    cached["outside_plants"] = ["Rubus chamaemorus"]
+    (cache / "z10_0581_0294.json").write_text(json.dumps(cached))
+
+    matched: list[str] = []
+
+    def fake_match(name: str) -> int | None:
+        matched.append(name)
+        return 2886150
+
+    monkeypatch.setattr(species_mod, "match_key", fake_match)
+    monkeypatch.setattr(species_mod, "has_records_near", lambda key, tile, span=2: True)
+    again, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=None, cache_dir=cache),
+    )
+    assert blocked is None
+    assert again is not None
+    assert again["wanted"] == [
+        {"kind": "plant", "what": "gbif:2886150", "part": "wild"}
+    ]
+    assert _Stub.calls == 1
+    assert matched == ["Rubus chamaemorus"]
+    written = json.loads((cache / "z10_0581_0294.json").read_text())
+    assert written["outside_keys"] == {"Rubus chamaemorus": 2886150}
+    third, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=None, cache_dir=cache),
+    )
+    assert blocked is None
+    assert third is not None
+    assert third["wanted"] == again["wanted"]
+    assert matched == ["Rubus chamaemorus"]
+
+
+def test_replayed_made_up_name_wants_nothing(tmp_path: Path, monkeypatch: Any) -> None:
+    """#196.3: a nomination with no GBIF match drops out quietly."""
+    from types import SimpleNamespace
+
+    import builder.species as species_mod
+    from builder.species import Source as SpeciesSource
+
+    world = _world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    names = {
+        "fox": ("Red fox", "Vulpes vulpes"),
+        "mountain_hare": ("Mountain hare", "Lepus timidus"),
+        "vole": ("Vole", "Microtus agrestis"),
+    }
+    for entry in listed["animals"]:
+        entry["name"], entry["latin"] = names[entry["id"]]
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox", "mountain_hare"]}],
+        "plants": [],
+        "trees": [],
+        "name_en": "Fox and hare woods",
+        "name_fi": "Kettujen ja jänisten metsä",
+        "outside_animals": ["Fictus fictionalis"],
+    }
+
+    class _Stub:
+        calls = 0
+
+        def chat(self, **kwargs: object) -> object:
+            _Stub.calls += 1
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))
+                ]
+            )
+
+    monkeypatch.setattr(species_mod, "match_key", lambda name: None)
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(client=_Stub(), cache_dir=tmp_path / "cache"),
+    )
+    assert blocked is None
+    assert made is not None
+    assert "wanted" not in made
+
+
 def test_wanted_lists_drops_in_survey_order_capped_at_twelve(
     tmp_path: Path,
 ) -> None:

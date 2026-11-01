@@ -846,3 +846,77 @@ def test_model_order_ranks_species(tmp_path: Path) -> None:
     assert made["species"]["playable"] == ["mountain_hare", "fox"]
     assert made["species"]["prey"] == ["mountain_hare", "vole"]
     assert made["sources"]["species"].startswith("muse-spark-1.3:")
+
+
+def test_check_answer_carries_outside_nominations() -> None:
+    """#196.3: outside names pass the schema through, defaulting empty."""
+    from builder.species import check_answer
+
+    ids = ["fox", "vole"]
+    base = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox"]}],
+        "plants": [],
+        "trees": [],
+        "name_en": "Fox woods",
+        "name_fi": "Kettujen metsä",
+    }
+    plain = check_answer({**base}, ids, ["bilberry"], [])
+    assert plain["outside_animals"] == []
+    assert plain["outside_plants"] == []
+    named = check_answer(
+        {
+            **base,
+            "outside_animals": ["Gulo gulo"],
+            "outside_plants": ["Vaccinium myrtillus"],
+        },
+        ids,
+        ["bilberry"],
+        [],
+    )
+    assert named["outside_animals"] == ["Gulo gulo"]
+    assert named["outside_plants"] == ["Vaccinium myrtillus"]
+
+
+def test_resolve_outside_keeps_only_confirmed_names(monkeypatch: Any) -> None:
+    """#196.3: no match, no records, or GBIF down all drop the name."""
+    import builder.species as species_mod
+    from builder.species import resolve_outside
+
+    matched = {"Gulo gulo": 5219175, "Far away": 9, "Down down": 10}
+
+    def fake_match(name: str) -> int | None:
+        if name == "Down down":
+            raise ConnectionError("GBIF stayed down")
+        return matched.get(name)
+
+    def fake_near(key: int, tile: str, span: int = 2) -> bool:
+        return key == 5219175
+
+    monkeypatch.setattr(species_mod, "match_key", fake_match)
+    monkeypatch.setattr(species_mod, "has_records_near", fake_near)
+    resolved = resolve_outside(
+        "z10_0581_0294",
+        ["Gulo gulo", "Made up", "Far away", "Down down"],
+        ["Vaccinium myrtillus"],
+        {},
+    )
+    assert resolved == {"Gulo gulo": 5219175}
+
+
+def test_resolve_outside_reuses_known_keys_without_gbif(monkeypatch: Any) -> None:
+    """#196.3: resolved keys never match again."""
+    import builder.species as species_mod
+    from builder.species import resolve_outside
+
+    def boom(name: str) -> int | None:
+        raise AssertionError("must not call GBIF")
+
+    def crash(key: int, tile: str, span: int = 2) -> bool:
+        raise AssertionError("must not call GBIF")
+
+    monkeypatch.setattr(species_mod, "match_key", boom)
+    monkeypatch.setattr(species_mod, "has_records_near", crash)
+    assert resolve_outside(
+        "z10_0581_0294", ["Gulo gulo"], [], {"Gulo gulo": 5219175}
+    ) == {"Gulo gulo": 5219175}

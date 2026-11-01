@@ -25,6 +25,7 @@ from typing import Any
 import jsonschema
 
 from .ledger import Caps, FileLedger
+from .presence import has_records_near, match_key
 
 #: The species call, as the lab ran it: Chat Completions on Muse
 #: Spark, low effort (default effort spent its whole reasoning
@@ -139,6 +140,25 @@ def species_schema(
             },
             "plants": _picks_schema(plant_ids, "plants"),
             "trees": _picks_schema(tree_ids, "trees"),
+            "outside_animals": {
+                "type": "array",
+                "description": (
+                    "Up to 6 real animals with a wild population in "
+                    "the square that are not on the animal list, as "
+                    "Latin names."
+                ),
+                "maxItems": 6,
+                "items": {"type": "string", "minLength": 1},
+            },
+            "outside_plants": {
+                "type": "array",
+                "description": (
+                    "Up to 6 real plants growing in the square that "
+                    "are on neither plant list, as Latin names."
+                ),
+                "maxItems": 6,
+                "items": {"type": "string", "minLength": 1},
+            },
             "name_en": {
                 "type": "string",
                 "description": (
@@ -281,7 +301,10 @@ def user_message(
         f"from the plant and tree lists with how many of each grow "
         f"there, and the square's name in English and Finnish. Only "
         f"list plants and trees that really grow in the square; every "
-        f"id must come from the lists.\n\n"
+        f"id must come from the lists. Up to 6 real animals and 6 real "
+        f"plants living there that are on none of the lists go in "
+        f"outside_animals and outside_plants as Latin names; leave "
+        f"out anything unsure.\n\n"
         f"Animals:\n{listing}\n\n"
         f"Plants:\n{greens or 'none'}\n\n"
         f"Trees:\n{woods or 'none'}"
@@ -334,6 +357,8 @@ def check_answer(
         "present": present,
         "name_en": data["name_en"],
         "name_fi": data["name_fi"],
+        "outside_animals": list(data.get("outside_animals") or []),
+        "outside_plants": list(data.get("outside_plants") or []),
     }
 
 
@@ -716,6 +741,9 @@ def write_cache(
                 "list": fingerprint,
                 "plants_list": plants_print,
                 "facts": facts_print,
+                "outside_animals": answer.get("outside_animals", []),
+                "outside_plants": answer.get("outside_plants", []),
+                "outside_keys": answer.get("outside_keys", {}),
             },
             indent=1,
         ),
@@ -741,6 +769,37 @@ def _library_covers(
     return all(pick.get("id") in greens for pick in picks) and all(
         pick.get("id") in kinds for pick in timbers
     )
+
+
+#: Outside nominations per kind: the survey may name this many (#196.3).
+OUTSIDE_LIMIT = 6
+
+
+def resolve_outside(
+    tile: str,
+    animals: list[str],
+    plants: list[str],
+    known: dict[str, int],
+) -> dict[str, int]:
+    """Latin nominations to GBIF keys, confirmed near the tile (#196.3).
+
+    A name with no GBIF match or no wild record within 2 tiles
+    drops out. Best effort: a name GBIF can't confirm now
+    (a made-up name, or GBIF down) drops and retries on the
+    next remake, never blocking the tile.
+    """
+    resolved = dict(known)
+    for latin in [*animals[:OUTSIDE_LIMIT], *plants[:OUTSIDE_LIMIT]]:
+        if latin in resolved:
+            continue
+        try:
+            key = match_key(latin)
+            confirmed = key is not None and has_records_near(key, tile)
+        except Exception:  # noqa: BLE001 - unconfirmed now, retried later
+            continue
+        if confirmed and key is not None:
+            resolved[latin] = key
+    return resolved
 
 
 def fetch_species(
@@ -780,6 +839,8 @@ def fetch_species(
                 "trees": cached.get("trees", []),
                 "name_en": cached.get("name_en"),
                 "name_fi": cached.get("name_fi"),
+                "outside_animals": cached.get("outside_animals", []),
+                "outside_plants": cached.get("outside_plants", []),
             }
             answer["present"] = list(
                 dict.fromkeys(s for p in answer["parts"] for s in p["species"])
@@ -792,7 +853,27 @@ def fetch_species(
         except (KeyError, TypeError, AttributeError):
             usable = False
         if usable:
-            return {**answer, "date": cached.get("date", "unknown")}
+            keys = resolve_outside(
+                tile,
+                answer["outside_animals"],
+                answer["outside_plants"],
+                cached.get("outside_keys", {}),
+            )
+            if keys != cached.get("outside_keys", {}):
+                write_cache(
+                    source.cache_dir,
+                    tile,
+                    {**answer, "outside_keys": keys},
+                    fingerprint,
+                    plants_print,
+                    facts_print,
+                    cached.get("date", "unknown"),
+                )
+            return {
+                **answer,
+                "date": cached.get("date", "unknown"),
+                "outside_keys": keys,
+            }
     if source.client is None:
         raise ValueError(
             f"no usable cached species for {tile} and MODEL_API_KEY is not set"
@@ -801,6 +882,9 @@ def fetch_species(
     refused = check_survey(first, habitat, lat, lon, facts, animals)
     if refused is None:
         date = datetime.now(UTC).date().isoformat()
+        first["outside_keys"] = resolve_outside(
+            tile, first["outside_animals"], first["outside_plants"], {}
+        )
         write_cache(
             source.cache_dir, tile, first, fingerprint, plants_print, facts_print, date
         )
@@ -809,6 +893,9 @@ def fetch_species(
     problem = check_survey(second, habitat, lat, lon, facts, animals)
     if problem is None:
         date = datetime.now(UTC).date().isoformat()
+        second["outside_keys"] = resolve_outside(
+            tile, second["outside_animals"], second["outside_plants"], {}
+        )
         write_cache(
             source.cache_dir, tile, second, fingerprint, plants_print, facts_print, date
         )

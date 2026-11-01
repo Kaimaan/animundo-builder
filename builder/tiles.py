@@ -730,7 +730,9 @@ def wanted_drops(
     the survey's order, each in its first part. Filed animals
     dropped for food stay out: building them again wouldn't help.
     Ids only, never model text. Plants are picked from the
-    library now, never wanted (#147.3).
+    library now, never wanted (#147.3); outside nominations the
+    survey confirmed come after the library ids as `gbif:<key>`
+    (#196.3).
     """
     animals_dir = world / "animals"
     parts = answer["parts"]
@@ -749,6 +751,17 @@ def wanted_drops(
         drops.append(
             {"kind": "animal", "what": species_id, "part": part_of[species_id]}
         )
+    keys = answer.get("outside_keys") or {}
+    for latin in answer.get("outside_animals") or []:
+        if keys.get(latin) is not None:
+            drops.append(
+                {"kind": "animal", "what": f"gbif:{keys[latin]}", "part": "wild"}
+            )
+    for latin in answer.get("outside_plants") or []:
+        if keys.get(latin) is not None:
+            drops.append(
+                {"kind": "plant", "what": f"gbif:{keys[latin]}", "part": "wild"}
+            )
     return drops[:WANTED_LIMIT]
 
 

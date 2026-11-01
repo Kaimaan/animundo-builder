@@ -99,3 +99,68 @@ def test_nuuksio_fixture_has_boreal_birds() -> None:
     assert len(counts) >= 20
     assert counts.get("blue_tit", 0) > 100
     assert counts.get("fox", 0) > 0
+
+
+def test_match_key_reads_the_gbif_species_key(monkeypatch: Any) -> None:
+    """#196.3: a Latin name resolves to its GBIF key, or nothing."""
+    import builder.presence as presence
+
+    def fake_gbif(params: dict[str, Any], base: str) -> dict[str, Any]:
+        assert base == presence.GBIF_MATCH
+        if params["name"] == "Vaccinium myrtillus":
+            return {"matchType": "EXACT", "speciesKey": 2886162, "usageKey": 7}
+        if params["name"] == "Genus only":
+            return {"matchType": "HIGHERRANK", "usageKey": 42}
+        return {"matchType": "NONE"}
+
+    monkeypatch.setattr(presence, "_gbif", fake_gbif)
+    assert presence.match_key("Vaccinium myrtillus") == 2886162
+    assert presence.match_key("Genus only") == 42
+    assert presence.match_key("Not a name") is None
+
+
+def test_has_records_near_counts_wild_records(monkeypatch: Any) -> None:
+    """#196.3: a key counts as near with a wild record in the grown box."""
+    import builder.presence as presence
+
+    seen: dict[str, Any] = {}
+
+    def fake_gbif(
+        params: dict[str, Any], base: str = presence.GBIF_SEARCH
+    ) -> dict[str, Any]:
+        assert base == presence.GBIF_SEARCH
+        seen.update(params)
+        return {"count": 2 if params["taxon_key"] == "2886162" else 0}
+
+    monkeypatch.setattr(presence, "_gbif", fake_gbif)
+    assert presence.has_records_near(2886162, "z10_0581_0294") is True
+    assert presence.has_records_near(1, "z10_0581_0294") is False
+    assert seen["taxon_key"] == "1"
+    assert seen["limit"] == 0
+    assert seen["geometry"].startswith("POLYGON ((")
+
+
+def test_near_wkt_grows_the_cell_and_clamps_at_edges() -> None:
+    """#196.3: ±2 cells by default; the map's edges clamp the box."""
+    import builder.presence as presence
+
+    assert presence.near_wkt("z10_0581_0294", span=0) == presence.cell_wkt(
+        "z10_0581_0294"
+    )
+    grown = presence.near_wkt("z10_0581_0294")
+    cell = presence.cell_wkt("z10_0581_0294")
+
+    def corners(wkt: str) -> list[tuple[float, float]]:
+        ring = wkt[len("POLYGON ((") : -len("))")].split(", ")
+        return [tuple(map(float, pair.split(" "))) for pair in ring]  # type: ignore[misc]
+
+    grown_lons = [lon for lon, _ in corners(grown)]
+    grown_lats = [lat for _, lat in corners(grown)]
+    cell_lons = [lon for lon, _ in corners(cell)]
+    cell_lats = [lat for _, lat in corners(cell)]
+    assert min(grown_lons) < min(cell_lons)
+    assert max(grown_lons) > max(cell_lons)
+    assert min(grown_lats) < min(cell_lats)
+    assert max(grown_lats) > max(cell_lats)
+    edge = presence.near_wkt("z10_0000_0000")
+    assert "-180.000000" in edge

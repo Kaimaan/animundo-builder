@@ -22,7 +22,7 @@ VALID = {
         {"name": "mossy rocks", "kind": "ground"},
         {"name": "forest pond", "kind": "water"},
     ],
-    "size": {"length_cm": 70, "weight_kg": 6.5},
+    "size": {"length_cm": 70, "largest_cm": 90, "weight_kg": 6.5},
     "year": {
         "winter": "active",
         "shelter": "Sleeps curled up in the open.",

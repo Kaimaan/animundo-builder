@@ -115,6 +115,7 @@ class Size(_Strict):
     """Its own body."""
 
     length_cm: float = Field(description="Body length in centimetres")
+    largest_cm: float = Field(description="Largest adult's length in centimetres")
     weight_kg: float | None = Field(
         description="Weight in kilograms when known, else null"
     )

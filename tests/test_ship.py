@@ -76,7 +76,7 @@ def _animal(**over: Any) -> dict[str, Any]:
 
 def _research(**over: Any) -> dict[str, Any]:
     research = {
-        "size": {"length_cm": 350},
+        "size": {"length_cm": 350, "largest_cm": 400},
         "year": {"winter": "active"},
         "main_food": {"name": "small fish", "kind": "prey"},
         "other_foods": [],
@@ -740,11 +740,62 @@ def test_gate_counts_not_built_as_unknown(tmp_path: Path) -> None:
 
 
 def test_gate_fails_a_record_length(tmp_path: Path) -> None:
-    """#174.1: 4.97 m is the record; the researched adult is 3.5 m."""
+    """#197.1: 4.97 m stands past the researched largest adult (400 cm)."""
     animal = _animal(model={"archetype": "fish", "length": 4.97}, cam_dist=6.0)
     problems = _gate_problems(tmp_path, animal=animal)
     assert problems == [
-        f"{REGION}: length: 4.97 m is no typical adult (350 cm researched)"
+        f"{REGION}: length: 4.97 m is past the largest adult (400 cm researched)"
+    ]
+
+
+def test_gate_passes_the_six_reviewed_lengths(tmp_path: Path) -> None:
+    """#197.1: 0.8 x typical to largest; small species read double."""
+    from builder.stages.ship import _gate_reef
+
+    world = _world(tmp_path)
+    region = _region()
+    cases = [
+        ("reef_shark", 2.209, 150, 250),
+        ("lionfish", 0.432, 30, 45),
+        ("clownfish", 0.126, 8, 12),
+        ("green_sea_turtle", 1.0, 100, 150),
+        ("bottlenose_dolphin", 2.183, 250, 300),
+        ("hammerhead", 3.5, 275, 400),
+    ]
+    for aid, length, typical, largest in cases:
+        animal = {
+            "id": aid,
+            "model": {"length": length},
+            "tags": [],
+            "hunts": [],
+            "year": {"winter": "active"},
+            "cam_dist": max(length, 1.0),
+            "cam_height": 0.5,
+        }
+        research = {
+            "size": {"length_cm": typical, "largest_cm": largest},
+            "year": {"winter": "active"},
+        }
+        assert _gate_reef(animal, research, REGION, region, world) == [], aid
+    oversized = {
+        "id": "hammerhead",
+        "model": {"length": 4.97},
+        "tags": [],
+        "hunts": [],
+        "year": {"winter": "active"},
+        "cam_dist": 6.0,
+        "cam_height": 0.5,
+    }
+    research = {
+        "size": {"length_cm": 275, "largest_cm": 400},
+        "year": {"winter": "active"},
+    }
+    assert _gate_reef(oversized, research, REGION, region, world) == [
+        f"{REGION}: length: 4.97 m is past the largest adult (400 cm researched)"
+    ]
+    no_largest = {"size": {"length_cm": 275}, "year": {"winter": "active"}}
+    assert _gate_reef(oversized, no_largest, REGION, region, world) == [
+        f"{REGION}: length: the research names no largest adult length"
     ]
 
 

@@ -58,7 +58,7 @@ def _strict_answer() -> dict[str, Any]:
                 "note": None,
             },
         ],
-        "size": {"length_cm": 100.0, "weight_kg": 20.0},
+        "size": {"length_cm": 100.0, "largest_cm": 120.0, "weight_kg": 20.0},
         "year": {
             "winter": "active",
             "shelter": "It dens in rocky hollows.",

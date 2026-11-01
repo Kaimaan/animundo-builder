@@ -25,8 +25,9 @@ Five searches at most. Answer with JSON only, no prose.
   eat it (one of the food kinds above, not prey). A tree or
   plant that is a species also carries its `latin`.
 - `size`: its own body, `length_cm` (required: a typical
-  adult, never a record or maximum) and `weight_kg` when
-  known.
+  adult, never a record or maximum), `largest_cm`
+  (required: the largest adult's length) and `weight_kg`
+  when known.
 - `looks`: what it looks like, so a sculptor gets it right.
   `shoulder_cm` (or `height_cm` for birds and fish),
   `tail_cm`, `coat` (`main` and `belly` or chest colour in

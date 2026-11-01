@@ -32,9 +32,10 @@
     "size": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["length_cm"],
+      "required": ["length_cm", "largest_cm"],
       "properties": {
         "length_cm": { "type": "number", "exclusiveMinimum": 0 },
+        "largest_cm": { "type": "number", "exclusiveMinimum": 0 },
         "weight_kg": { "type": "number", "exclusiveMinimum": 0 }
       }
     },

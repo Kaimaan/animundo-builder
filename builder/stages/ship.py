@@ -493,9 +493,14 @@ def _additions(
     return additions
 
 
-#: How far the file's length may stray from the researched typical
-#: adult before the gate calls it a record, not an adult (#174.1).
-LENGTH_TOLERANCE = 0.20
+#: How small the file's length may run against the researched
+#: typical adult; above, the researched largest adult bounds it,
+#: doubled for small species a child must see (#197.1).
+LENGTH_MINIMUM = 0.80
+
+#: Typical adults below this length read at twice their size,
+#: so small fish stay visible (#197.1).
+SMALL_SPECIES_CM = 20
 
 
 def gate_checks(
@@ -812,15 +817,28 @@ def _gate_reef(
     length = model.get("length")
     size = research.get("size", {}) or {}
     typical_cm = size.get("length_cm")
+    largest_cm = size.get("largest_cm")
     problems = []
     if not isinstance(typical_cm, (int, float)) or typical_cm <= 0:
         problems.append("length: the research names no typical adult length")
+    elif not isinstance(largest_cm, (int, float)) or largest_cm <= 0:
+        problems.append("length: the research names no largest adult length")
     elif not isinstance(length, (int, float)) or length <= 0:
         problems.append("length: the file names no length")
-    elif abs(length * 100 - typical_cm) / typical_cm > LENGTH_TOLERANCE:
-        problems.append(
-            f"length: {length} m is no typical adult ({typical_cm} cm researched)"
-        )
+    else:
+        top = largest_cm
+        if typical_cm < SMALL_SPECIES_CM:
+            top = max(top, 2 * typical_cm)
+        length_cm = length * 100
+        if length_cm < LENGTH_MINIMUM * typical_cm:
+            problems.append(
+                f"length: {length} m is below 0.8 x typical adult "
+                f"({typical_cm} cm researched)"
+            )
+        elif length_cm > top:
+            problems.append(
+                f"length: {length} m is past the largest adult ({top:g} cm researched)"
+            )
     problems.extend(_gate_year(animal, research, region))
     hunts = animal.get("hunts", []) or []
     allowed = _world_hunts(world)

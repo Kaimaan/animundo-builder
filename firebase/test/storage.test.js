@@ -14,6 +14,8 @@ import { grownUp, jobDoc, makeEnv, player, seed } from "./helper.js";
 
 const TILE = "tiles/v1/ease2_n25/51_37.json";
 const INDEX = "tiles/v1/index.json";
+const TILE_V2 = "tiles/v2/z10/072_036.json";
+const INDEX_V2 = "tiles/v2/index.json";
 const REVIEW = "review/job1/tundra-home/report.html";
 const PREVIEW = "previews/job1/1/manifest.json";
 
@@ -27,7 +29,7 @@ describe("tiles and review batches", () => {
     await seed(env, [["admins/chief", {}]]);
     await env.withSecurityRulesDisabled(async (ctx) => {
       const storage = ctx.storage();
-      for (const file of [TILE, INDEX, REVIEW]) {
+      for (const file of [TILE, INDEX, TILE_V2, INDEX_V2, REVIEW]) {
         await uploadBytes(ref(storage, file), new TextEncoder().encode("{}"));
       }
     });
@@ -41,6 +43,14 @@ describe("tiles and review batches", () => {
     );
     await assertFails(
       getBytes(ref(env.unauthenticatedContext().storage(), TILE)),
+    );
+  });
+
+  it("the z10 tiles read like v1 (#192)", async () => {
+    await assertSucceeds(getBytes(ref(player(env, "kid").storage(), TILE_V2)));
+    await assertSucceeds(getBytes(ref(player(env, "kid").storage(), INDEX_V2)));
+    await assertFails(
+      getBytes(ref(env.unauthenticatedContext().storage(), TILE_V2)),
     );
   });
 
@@ -59,6 +69,7 @@ describe("tiles and review batches", () => {
     );
     await assertFails(deleteObject(ref(storage, TILE)));
     await assertFails(listAll(ref(storage, "tiles/v1")));
+    await assertFails(listAll(ref(storage, "tiles/v2")));
     await assertFails(listAll(ref(storage, "review/job1")));
   });
 });

@@ -16,6 +16,13 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // The z10 tiles (#192): same get-only rule as v1, which stays
+    // until Kai says otherwise.
+    match /tiles/v2/{file=**} {
+      allow get: if request.auth != null;
+      allow write: if false;
+    }
+
     // Review batches: what `builder take` downloads, and each
     // item's build report. Admins only.
     match /review/{job}/{item}/{file=**} {

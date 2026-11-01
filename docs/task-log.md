@@ -3,6 +3,56 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #182 (builder b5f7692, cc126cc, a27cc51, 58eda73)
+
+- `builder/grid.py` is the zoom
+  10 slippy-map grid (#182.1):
+  `z10_XXXX_YYYY` ids, a lat/lon
+  box, neighbours with a wrapped
+  date line, 8x8 groups. No
+  pyproj. It meets the game's
+  three check points, and a
+  point on a line falls south
+  or east of it.
+- One baked grid (#182.2):
+  `z10.json.gz`, all 1,048,576
+  cells, coast samples north-up;
+  the presence cell is the
+  tile's box. The EASE files
+  are gone.
+- Tiles are true north-up
+  squares (#182.3): no
+  `grid_north`, edges and coast
+  in true directions, each side
+  sample-equal to its one
+  neighbour, `center` at row
+  `y + 0.5`.
+- Groups at `tiles/v2/z10/`,
+  the index at `tiles/v2/`
+  (#182.4); the tile, group and
+  index contracts follow. Game:
+  please copy them into
+  `tools/contracts/`.
+- `place.py` reads a region's
+  `grid` as `z10` cells
+  (#182.5).
+- Point 6 (re-make round the
+  places) waits for Kai's go:
+  no live run yet.
+- Evidence: suite 1023 passed,
+  12 skipped; ruff and gitleaks
+  clean. `check --world` is red
+  on two world-side breaks, the
+  same on 5210119: the region
+  schema takes ease2 row 720
+  (f02a3a5 widened every grid
+  to 1023), and the humpback
+  `.glb` is missing (24abe76),
+  which fails all 72 broken
+  cases. The Helsinki test tile
+  moved one cell east, out of
+  Nuuksio's new place cells.
+
 ## 2026-11-01: inbox #181 (builder 320cb9c, f492969, 09a05a1, 39f304b)
 
 - On a place with a biome, every

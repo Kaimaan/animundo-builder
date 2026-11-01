@@ -804,7 +804,7 @@ def test_reef_plan_lists_home_whale_and_plants(
         {"what": "whale_shark", "reason": "not_makeable"},
         {"what": "jellyfish", "reason": "not_makeable"},
     ]
-    assert plan["estimate_usd"] == 0.15
+    assert plan["estimate_usd"] == 0.13
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
     assert plan["country"] == "Australia"
@@ -842,7 +842,7 @@ def test_new_region_plan_still_lists_a_home(
 def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """T98's done-when: improve fi_nuuksio, bear first, $1 stops it."""
+    """T98's done-when: improve fi_nuuksio, bear first, $2.60 stops it."""
     from builder.place import plan_place
 
     world = _needs_world()
@@ -865,7 +865,7 @@ def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
         "nuuksio-survey.jsonl",
         "Nuuksio National Park",
         ["brown_bear"],
-        1.0,
+        2.60,
         "z10_0581_0295",
         world,
         animals,
@@ -873,7 +873,7 @@ def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
     plan = plan_place(survey, world, "abc123")
     assert [i["kind"] for i in plan["items"]] == ["animal"] * 6
     assert plan["items"][0]["id"] == "animal_brown_bear"
-    assert plan["estimate_usd"] == 0.9
+    assert plan["estimate_usd"] == 2.52
     assert len(plan["coming"]) >= 1
 
 
@@ -916,7 +916,7 @@ def test_improve_with_room_plans_the_missing_plant_from_its_kind(
             "kind": "plant",
             "what": "arctic_raspberry",
             "from": "wild_raspberry",
-            "estimate_usd": 0.15,
+            "estimate_usd": 0.13,
         }
     ]
 

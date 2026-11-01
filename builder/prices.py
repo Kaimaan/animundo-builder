@@ -67,15 +67,19 @@ def prices_for(model: str) -> Prices:
 
 
 #: Measured build costs per plan item kind in US dollars, first
-#: Measured medians from the first border batches' spend ledger
-#: (#141.5): Helsinki's home cost $0.15 to $0.49, its kelp $0.17.
-#: The old $0.02 guesses failed the second Helsinki build on
-#: `budget`, since the job's budget is the plan's estimate. Food
-#: is a code-only home edit. Re-measure when there is more data.
+#: Measured medians from the ledger's finished item jobs (#191.3,
+#: #194): `replay/animal_*` and `replay/plant_*` per-item totals.
+#: The tern ($0.149) is in; the mussel ($0.304) is out, unfinished
+#: (the plants stage refuses it: GBIF says Animalia, #194). Runs
+#: whose kind the ledger can't tell are out too. The whale ($1.44
+#: over three new-shape rounds) finished and counts. 10 animals
+#: median $0.42, 5 plants median $0.13; home and food keep their
+#: old values for lack of new data. The job's budget is the plan's
+#: estimate, so an estimate below reality fails builds on `budget`.
 ITEM_ESTIMATES: dict[str, float] = {
     "home": 0.20,
-    "animal": 0.15,
-    "plant": 0.15,
+    "animal": 0.42,
+    "plant": 0.13,
     "food": 0.0,
 }
 

@@ -384,6 +384,9 @@ class Worker:
         ):
             raise StaleOwner(f"build job {job_id}: owned by another worker")
 
+    #: Job kinds the worker runs; anything else stays queued (#199.3).
+    JOB_KINDS = ("code", "build", "enrich")
+
     def build_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Claim the job and build it: code directly, items each alone."""
         from .build import publish_group
@@ -392,6 +395,9 @@ class Worker:
         assert self.world is not None
         if self._job_paused(job) and not job.get("operator_action"):
             print(f"build job {job_id}: paused, waiting for an operator")
+            return
+        if job.get("kind") not in self.JOB_KINDS:
+            print(f"build job {job_id}: unknown kind; staying queued")
             return
         if not self._claim(job_id):
             return

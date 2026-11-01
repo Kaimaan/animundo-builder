@@ -367,6 +367,24 @@ def test_handle_request_skips_old_grid_quietly(
     assert captured.err == ""
 
 
+def test_unknown_kind_stays_queued(tmp_path: Path) -> None:
+    """#199.3: a kind the worker doesn't know is never failed."""
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "kind": "spread",
+        "status": "queued",
+        "tile": "z10_0581_0294",
+        "tiles": ["z10_0581_0294"],
+        "items": [],
+    }
+    worker = _worker(tmp_path, store)
+    worker.world = make_world(tmp_path)
+    worker.grid_dir = tmp_path
+    worker.build_job("j1", store.build_jobs["j1"])
+    assert store.build_jobs["j1"]["status"] == "queued"
+    assert "owner" not in store.build_jobs["j1"]
+
+
 def test_handle_request_writes_a_blocked_plan(tmp_path: Path, monkeypatch: Any) -> None:
     """#198.1: an unplannable request ends blocked, never waiting."""
     import builder.plan as plan_mod

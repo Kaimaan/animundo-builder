@@ -6,9 +6,12 @@ import json
 from pathlib import Path
 
 from builder.enrich import (
+    biome_add_plant,
+    biome_additions_only,
     place_tiles,
     region_additions_only,
     region_place,
+    run_flatten,
     sort_problems,
     sort_region_problems,
     write_places,
@@ -205,6 +208,120 @@ def test_region_place_seats_a_reef_plant_in_water(tmp_path: Path) -> None:
         "table_coral",
     ]
     assert [p["id"] for p in place["plants"]["cover"]] == ["beach_naupaka"]
+
+
+def test_region_place_seats_a_coral_at_coral_density(tmp_path: Path) -> None:
+    """#184.3: a coral seats at 0.2 on the rock, grasses at 0.1."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    fake_world.write_converter_tools(world)
+    greens = world / "models" / "plants"
+    (greens / "table_coral.json").write_text(
+        json.dumps({"grows": {"on": ["reef"], "density": 0.2}})
+    )
+    (greens / "dugong_grass.json").write_text(
+        json.dumps({"grows": {"on": ["seabed"], "density": 0.85}})
+    )
+    regions = world / "regions"
+    regions.mkdir(parents=True, exist_ok=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps({"id": "xx_test_reef", "plants": {"water": []}})
+    )
+    place = region_place("xx_test_reef", world, "table_coral", "plant")
+    assert place["plants"]["water"] == [{"id": "table_coral", "density": 0.2}]
+    place = region_place("xx_test_reef", world, "dugong_grass", "plant")
+    assert place["plants"]["water"] == [{"id": "dugong_grass", "density": 0.1}]
+
+
+def test_biome_add_plant_appends_once() -> None:
+    """#184.3: the biome gains the plant on its side, never twice."""
+    biome = {"id": "xx_test_biome", "plants": {"water": [{"id": "stag", "density": 1}]}}
+    after = biome_add_plant(biome, "table_coral", "water", 0.2)
+    assert after["plants"]["water"] == [
+        {"id": "stag", "density": 1},
+        {"id": "table_coral", "density": 0.2},
+    ]
+    assert biome["plants"]["water"] == [{"id": "stag", "density": 1}]
+    again = biome_add_plant(after, "table_coral", "water", 0.2)
+    assert again["plants"]["water"] == after["plants"]["water"]
+    sided = biome_add_plant({"id": "x"}, "table_coral", "water", 0.2)
+    assert sided["plants"]["water"] == [{"id": "table_coral", "density": 0.2}]
+
+
+def test_biome_additions_only_allows_the_one_entry() -> None:
+    """#184.3: the biome change is the one appended plant id, nothing else."""
+    before = {
+        "id": "xx_test_biome",
+        "plants": {"water": [{"id": "stag", "density": 1}]},
+    }
+    after = biome_add_plant(before, "table_coral", "water", 0.2)
+    assert biome_additions_only(before, after, "table_coral") == []
+    assert biome_additions_only(before, before, "table_coral") == [
+        "table_coral is not in the biome's plants"
+    ]
+    moved = {"id": "xx_test_biome", "terrain": {}, "plants": after["plants"]}
+    assert biome_additions_only(before, moved, "table_coral") == ["terrain was added"]
+    assert biome_additions_only(after, before, "table_coral") == [
+        "table_coral is not in the biome's plants"
+    ]
+
+
+def test_reef_biome_and_flattened_home_differ_by_one_entry(
+    tmp_path: Path,
+) -> None:
+    """#184.3: flatten carries the one new biome entry into its homes/ copy."""
+    import shutil
+
+    import pytest
+
+    checkout = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (checkout / "tools" / "biomes.py").is_file():
+        pytest.skip("needs a world checkout beside the builder")
+    world = tmp_path / "world"
+    (world / "tools").mkdir(parents=True)
+    for tool in ("biomes.py", "layers.py", "food.py"):
+        shutil.copy(checkout / "tools" / tool, world / "tools" / tool)
+    shutil.copytree(checkout / "food", world / "food")
+    (world / "animals").mkdir(parents=True)
+    (world / "models" / "trees").mkdir(parents=True)
+    (world / "lands").mkdir(parents=True)
+    (world / "lands" / "xx_test.json").write_text(json.dumps({"id": "xx_test"}))
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True)
+    for stem, on in (("stag", ["reef"]), ("table_coral", ["reef"])):
+        (greens / f"{stem}.json").write_text(
+            json.dumps({"id": stem, "grows": {"on": on, "density": 0.2}})
+        )
+    biomes = world / "biomes"
+    biomes.mkdir(parents=True)
+    before = {
+        "id": "xx_test_biome",
+        "land": "xx_test",
+        "terrain": {"size": 512},
+        "plants": {"water": [{"id": "stag", "density": 0.3}]},
+    }
+    (biomes / "xx_test_biome.json").write_text(json.dumps(before))
+    (world / "homes").mkdir(parents=True)
+    run_flatten(world)
+    home_before = json.loads((world / "homes" / "xx_test_biome.json").read_text())
+    after = biome_add_plant(before, "table_coral", "water", 0.2)
+    assert biome_additions_only(before, after, "table_coral") == []
+    (biomes / "xx_test_biome.json").write_text(json.dumps(after))
+    run_flatten(world)
+    home_after = json.loads((world / "homes" / "xx_test_biome.json").read_text())
+    assert [p["model"] for p in home_after["ground_cover"]["plants"]] == [
+        "stag",
+        "table_coral",
+    ]
+    assert home_after["ground_cover"]["plants"][1]["density"] == 0.2
+    assert (
+        home_after["ground_cover"]["plants"][0]
+        == home_before["ground_cover"]["plants"][0]
+    )
+    assert {key: home_after[key] for key in home_after if key != "ground_cover"} == {
+        key: home_before[key] for key in home_before if key != "ground_cover"
+    }
 
 
 def _biome_place(world: Path) -> None:

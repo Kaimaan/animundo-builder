@@ -46,7 +46,7 @@ if what:
             grown = []
             plants[side] = grown
         if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
-            grown.append({"id": what, "density": 0.1})
+            grown.append({"id": what, "density": 0.2 if "reef" in on else 0.1})
         layers.use_plants(region, plants)
     else:
         lists = region.setdefault("animals", {}).setdefault("playable", [])
@@ -130,7 +130,9 @@ def region_place(
         return region
     biome_id = region.get("biome") if isinstance(region, dict) else None
     if kind == "plant":
-        side = "water" if _water_plant(world, what) else "cover"
+        grows = _plant_grows(world, what)
+        on = grows.get("on") or []
+        side = "water" if "seabed" in on or "reef" in on else "cover"
         if biome_id is not None and not isinstance(
             (region.get("plants") or {}).get(side), list
         ):
@@ -139,7 +141,7 @@ def region_place(
             region.setdefault("plants", {})[side] = _biome_list(
                 world, biome_id, region_id, "plants", side
             )
-        _seat_plant(region, what, side)
+        _seat_plant(region, what, side, plant_entry_density(grows))
     elif biome_id is not None:
         species = region.setdefault("species", {})
         if isinstance(species, dict):
@@ -168,7 +170,9 @@ def region_place(
     return region
 
 
-def _seat_plant(region: dict[str, Any], what: str, side: str) -> None:
+def _seat_plant(
+    region: dict[str, Any], what: str, side: str, density: float = 0.1
+) -> None:
     """The plant onto its grown side, once (#168.1)."""
     plants = region.setdefault("plants", {})
     grown = plants.get(side)
@@ -178,7 +182,135 @@ def _seat_plant(region: dict[str, Any], what: str, side: str) -> None:
             grown = []
             plants[side] = grown
     if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
-        grown.append({"id": what, "density": 0.1})
+        grown.append({"id": what, "density": density})
+
+
+#: A coral's density on the rock when an enrich item adds it (#184.3).
+CORAL_DENSITY = 0.2
+
+#: Any other plant's density when seated (#168.1).
+SEAT_DENSITY = 0.1
+
+
+def plant_entry_density(grows: dict[str, Any]) -> float:
+    """The density a new plant takes on its grown side (#184.3).
+
+    A coral on the rock takes 0.2; everything else the 0.1 a
+    seating has always used. Laid places and filed biomes use
+    the same rule, so the checks run on what ships.
+    """
+    return CORAL_DENSITY if "reef" in (grows.get("on") or []) else SEAT_DENSITY
+
+
+def biome_add_plant(
+    biome: dict[str, Any], what: str, side: str, density: float
+) -> dict[str, Any]:
+    """A copy of the biome with the plant on its grown side (#184.3).
+
+    The biome itself is never touched. Once, never twice: an
+    id already listed stays as it is.
+    """
+    import copy
+
+    biome = copy.deepcopy(biome)
+    grown = (biome.get("plants") or {}).get(side)
+    if not isinstance(grown, list):
+        grown = []
+        biome.setdefault("plants", {})[side] = grown
+    if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
+        grown.append({"id": what, "density": density})
+    return biome
+
+
+def biome_additions_only(
+    before: dict[str, Any], after: dict[str, Any], what: str
+) -> list[str]:
+    """Why the biome change is not the one addition, or nothing (#184.3).
+
+    An enrich plant on a biome-place only appends its id to one
+    plants side. Anything else changed, removed, reordered, or
+    added is one problem per offending key.
+    """
+    problems = []
+    listed = {
+        entry.get("id")
+        for side in ("cover", "water")
+        for entry in ((after.get("plants") or {}).get(side, []) or [])
+        if isinstance(entry, dict)
+    }
+    if what not in listed:
+        return [f"{what} is not in the biome's plants"]
+    for key in after:
+        if key not in before and key != "plants":
+            problems.append(f"{key} was added")
+            continue
+        if key == "plants":
+            problems.extend(_added_plant_side(before.get(key), after[key], what))
+        elif after[key] != before.get(key):
+            problems.append(f"{key} changed")
+    for key in before:
+        if key not in after:
+            problems.append(f"{key} was removed")
+    return problems
+
+
+def _added_plant_side(before: Any, after: Any, what: str) -> list[str]:
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return ["plants changed shape"] if after != before else []
+    problems = []
+    for side in after:
+        if side not in before and side not in ("cover", "water", "trees"):
+            problems.append(f"plants.{side} was added")
+            continue
+        if side not in ("cover", "water"):
+            if after[side] != before.get(side):
+                problems.append(f"plants.{side} changed")
+            continue
+        first = before.get(side, [])
+        second = after[side]
+        if not isinstance(first, list) or not isinstance(second, list):
+            if second != first:
+                problems.append(f"plants.{side} changed shape")
+            continue
+        if len(second) == len(first) + 1 and second[:-1] == first:
+            last = second[-1]
+            if not isinstance(last, dict) or last.get("id") != what:
+                problems.append(f"plants.{side} added no {what}")
+            elif not isinstance(last.get("density"), (int, float)):
+                problems.append(f"plants.{side} added {what} with no density")
+        elif second != first:
+            problems.append(f"plants.{side} changed")
+    for side in before:
+        if side not in after:
+            problems.append(f"plants.{side} was removed")
+    return problems
+
+
+def run_flatten(world: Path) -> str:
+    """The world's flatten in this checkout: biomes/ to homes/ (#184.3).
+
+    Returns its output. A missing tool or a failing run stops
+    loudly: homes/ is made from biomes/, never by hand.
+    """
+    tool = world / "tools" / "biomes.py"
+    if not tool.is_file():
+        raise ConvertError(f"no biome flattener in this checkout: {tool}")
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(tool), "flatten"],
+            cwd=world,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ConvertError(f"biomes.py flatten did not run: {error}")
+    if proc.returncode != 0:
+        raise ConvertError(
+            f"biomes.py flatten failed: {(proc.stdout + proc.stderr).strip()[:300]}"
+        )
+    return (proc.stdout or "").strip()
 
 
 def _biome_list(
@@ -352,17 +484,23 @@ def _added_fish(before: Any, after: Any, animal_id: str) -> list[str]:
     return []
 
 
+def _plant_grows(world: Path, what: str) -> dict[str, Any]:
+    """The plant file's grows, or nothing when it won't read."""
+    try:
+        spec = json.loads((world / "models" / "plants" / f"{what}.json").read_text())
+    except (OSError, ValueError):
+        return {}
+    grows = spec.get("grows") or {}
+    return grows if isinstance(grows, dict) else {}
+
+
 def _water_plant(world: Path, what: str) -> bool:
     """Whether the plant file grows under the water (#173.1, #184.1).
 
     Seabed and reef rock both grow in water; everything else
     grows in cover.
     """
-    try:
-        spec = json.loads((world / "models" / "plants" / f"{what}.json").read_text())
-    except (OSError, ValueError):
-        return False
-    on = (spec.get("grows") or {}).get("on") or []
+    on = _plant_grows(world, what).get("on") or []
     return "seabed" in on or "reef" in on
 
 

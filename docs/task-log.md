@@ -3,6 +3,35 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #202.3
+  conversion 1 of 4
+  (builder c56045a)
+
+- Enrich into a
+  region (#168) is
+  gone: the intake
+  converted every
+  tile already, so
+  region_place and
+  its seat/fish
+  helpers go, with
+  their ten tests.
+- Stays playable:
+  tile index + all
+  six groups hash-
+  identical to the
+  #202 baseline,
+  live
+  enrich_hammerhead
+  manifest 1053
+  bytes, world
+  clean. The game
+  still reads its
+  region files;
+  this commit only
+  narrows builder
+  checks to tiles.
+
 ## 2026-11-01: inbox #201
   (builder ec73e2a;
   world 6517ff5)

@@ -3,6 +3,50 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #183 (builder 5a82477, 10f2233)
+
+- The safety review survives a
+  cut-off answer (#183.1): one
+  short reason per verdict, no
+  echo of the texts (the prompt
+  says it, the schema enforces
+  it), big sets in chunks of 40,
+  and a cut-off answer splits
+  its texts in half and asks
+  fresh, never resending the
+  same prompt. The cap stays:
+  8000 is the Baseten host's own
+  ceiling. A replay of the
+  hammerhead safety prompt now
+  writes valid verdicts.
+- A fix round adds the mark that
+  makes a missing shape (#183.2):
+  the edits answer gains the
+  tool's marks, and the miss note
+  sends shapes there instead of
+  to paint. Head marks are judged
+  in the FRONT and TOP views, and
+  a mark the review cannot see is
+  missing, never a false shown.
+- Hammerhead seeds the hammer
+  mark from its name, so the
+  first spec carries the part,
+  always, checked before any fix
+  round (#183.3). Sawfish and
+  swordfish stop loud for the
+  reviewer to add their mark to
+  the tool, and never build
+  without the part. Say the word
+  if those two should ship
+  unmakable-reported instead, or
+  if their part names should be
+  other than `saw` and `sword`.
+- Evidence: suite 1031 passed,
+  12 skipped; ruff and gitleaks
+  clean. `check --world` still
+  red on the two world-side
+  breaks from #182's reply.
+
 ## 2026-11-01: inbox #182 (builder b5f7692, cc126cc, a27cc51, 58eda73)
 
 - `builder/grid.py` is the zoom

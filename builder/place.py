@@ -972,14 +972,20 @@ def write_job_region(
 
 
 def replay_place(
-    place_dir: Path, out_dir: Path, world: Path, grid_dir: Path | None
+    place_dir: Path,
+    out_dir: Path,
+    world: Path,
+    grid_dir: Path | None,
+    store: Any | None = None,
+    world_commit: str = "unknown",
 ) -> tuple[dict[str, Path], Path]:
     """Rebuild a place job from its own answers: no key, no cost.
 
     The plan and survey come from the place folder, the answers
     from its `items/` records; then the job writes its region.
     Anything failing — an item, the region — raises instead of
-    reaching review.
+    reaching review. With a store, the shipped job files its
+    survey's `missing` as #170.2 says, with no extra step (#188.4).
     """
     from .replay import JOB_ID, replay_request
 
@@ -988,6 +994,8 @@ def replay_place(
     region_path, problems = write_job_region(place_dir, out_dir / JOB_ID, world)
     if problems:
         raise ValueError(f"the draft region fails the world's checks: {problems[0]}")
+    if store is not None:
+        file_places(store, world, place_dir, world_commit)
     return reports, region_path
 
 
@@ -997,8 +1005,14 @@ def record_place(
     world: Path,
     grid_dir: Path | None,
     config: Any,
+    store: Any | None = None,
+    world_commit: str = "unknown",
 ) -> tuple[dict[str, Path], Path]:
-    """Run a place job live, saving its answers under the place folder."""
+    """Run a place job live, saving its answers under the place folder.
+
+    With a store, the shipped job files its survey's `missing`
+    as #170.2 says, with no extra step (#188.4).
+    """
     from .jobs import make_context
     from .meta import MetaAuthError
     from .records import RecordingClient
@@ -1027,6 +1041,8 @@ def record_place(
     region_path, problems = write_job_region(place_dir, out_dir / JOB_ID, world)
     if problems:
         raise ValueError(f"the draft region fails the world's checks: {problems[0]}")
+    if store is not None:
+        file_places(store, world, place_dir, world_commit)
     return reports, region_path
 
 

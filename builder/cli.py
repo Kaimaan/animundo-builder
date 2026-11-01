@@ -885,6 +885,7 @@ def cmd_place_build(args: argparse.Namespace, world: Path) -> int:
     from .pipeline import StageFailedError
     from .place import record_place, replay_place
     from .records import ReplayError
+    from .worker import git_commit
 
     place_dir = Path(args.local)
     for flag in (args.replay, args.record):
@@ -894,15 +895,35 @@ def cmd_place_build(args: argparse.Namespace, world: Path) -> int:
                 file=sys.stderr,
             )
             return 1
+    store: Any | None = None
+    if args.project is not None:
+        from .worker_store import FirebaseStore, StoreError
+
+        try:
+            store = FirebaseStore(args.project, args.storage_bucket)
+        except StoreError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
     out = Path(args.out) if args.out is not None else Path(f"replay-{place_dir.name}")
     try:
         if args.record is not None:
             reports, region = record_place(
-                place_dir, out, world, Path(args.habitat_grid), load_config()
+                place_dir,
+                out,
+                world,
+                Path(args.habitat_grid),
+                load_config(),
+                store,
+                git_commit(world),
             )
         else:
             reports, region = replay_place(
-                place_dir, out, world, Path(args.habitat_grid)
+                place_dir,
+                out,
+                world,
+                Path(args.habitat_grid),
+                store,
+                git_commit(world),
             )
     except (StageFailedError, CapExceeded, MetaAuthError, ReplayError) as error:
         return _explain_stop(f"replay-{place_dir.name}", error)

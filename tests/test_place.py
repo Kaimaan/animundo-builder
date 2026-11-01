@@ -1420,6 +1420,41 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
     assert (dest / "report.html").is_file()
 
 
+def test_replayed_place_files_its_missing_on_ship(tmp_path: Path) -> None:
+    """#188.4: shipping a replayed place writes places[tile] itself."""
+    import shutil
+
+    from fake_store import FakeStore
+
+    from builder.grid import group_path
+    from builder.place import replay_place
+
+    world = _needs_world()
+    place_dir = tmp_path / "reef-home"
+    shutil.copytree(FIXTURES / "reef-home", place_dir)
+    survey_path = place_dir / "survey.json"
+    survey = json.loads(survey_path.read_text())
+    survey["surveyed_at"] = "2026-11-01"
+    survey["missing"] = [
+        {"kind": "animal", "what": "hammerhead", "part": "sea"},
+        {"kind": "plant", "what": "table_coral", "part": "sea"},
+    ]
+    survey_path.write_text(json.dumps(survey))
+    store = FakeStore()
+    reports, region_path = replay_place(
+        place_dir, tmp_path / "out", world, _grid_dir(), store, "abc123"
+    )
+    assert list(reports) == ["home_reef"]
+    data = json.loads(store.blobs[group_path("z10_0927_0560")].decode("utf-8"))
+    assert data["places"] == {
+        "z10_0927_0560": {
+            "region": "au_great_barrier_reef",
+            "wanted": survey["missing"],
+            "surveyed_at": "2026-11-01",
+        }
+    }
+
+
 def test_write_region_derives_groups_and_fish_from_filed_animals(
     tmp_path: Path,
 ) -> None:

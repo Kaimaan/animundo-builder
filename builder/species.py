@@ -747,6 +747,8 @@ def write_cache(
                 "outside_animals": answer.get("outside_animals", []),
                 "outside_plants": answer.get("outside_plants", []),
                 "outside_keys": answer.get("outside_keys", {}),
+                "surveyed_ids": answer.get("surveyed_ids", []),
+                "resurveyed": answer.get("resurveyed", []),
             },
             indent=1,
         ),
@@ -845,6 +847,8 @@ def fetch_species(
                 "name_fi": cached.get("name_fi"),
                 "outside_animals": cached.get("outside_animals", []),
                 "outside_plants": cached.get("outside_plants", []),
+                "surveyed_ids": cached.get("surveyed_ids", []),
+                "resurveyed": cached.get("resurveyed", []),
             }
             answer["present"] = list(
                 dict.fromkeys(s for p in answer["parts"] for s in p["species"])
@@ -889,6 +893,8 @@ def fetch_species(
         first["outside_keys"] = resolve_outside(
             tile, first["outside_animals"], first["outside_plants"], {}
         )
+        first["surveyed_ids"] = [a["id"] for a in animals]
+        first["resurveyed"] = []
         write_cache(
             source.cache_dir, tile, first, list_round, plants_print, facts_print, date
         )
@@ -900,6 +906,8 @@ def fetch_species(
         second["outside_keys"] = resolve_outside(
             tile, second["outside_animals"], second["outside_plants"], {}
         )
+        second["surveyed_ids"] = [a["id"] for a in animals]
+        second["resurveyed"] = []
         write_cache(
             source.cache_dir, tile, second, list_round, plants_print, facts_print, date
         )

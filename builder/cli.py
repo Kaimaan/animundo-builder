@@ -145,6 +145,45 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="The Storage bucket: history goes to tile_history, else jsonl.",
     )
+    resurvey = tiles_sub.add_parser(
+        "resurvey", help="Resurvey tiles for animals added to the list."
+    )
+    resurvey.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        help="Resurvey at most this many tiles, by play (default: 10).",
+    )
+    resurvey.add_argument(
+        "--budget",
+        type=float,
+        default=None,
+        help="Cap the round at this many USD (default: no cap).",
+    )
+    resurvey.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    resurvey.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grid (default: data/habitat-grid).",
+    )
+    resurvey.add_argument(
+        "--cache-dir",
+        default="data/species",
+        help="Survey cache (default: data/species).",
+    )
+    resurvey.add_argument("--project", default=None, help="The Firebase project.")
+    resurvey.add_argument(
+        "--storage-bucket",
+        default=None,
+        help="The Storage bucket (default: the project's default bucket).",
+    )
+    resurvey.add_argument(
+        "--spend",
+        action="store_true",
+        help="Ask for real; without it, report the tiles, calls and price only.",
+    )
     lab = tiles_sub.add_parser("lab", help="Run the $0 lab over sample spots.")
     lab.add_argument("--out", required=True, help="Directory for counts and globe.")
     lab.add_argument(
@@ -721,6 +760,74 @@ def cmd_tiles_lab(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tiles_resurvey(args: argparse.Namespace) -> int:
+    from .habitats import BAKED_GRID_FILE, load_grid
+    from .resurvey import plan_round, run_round
+    from .species import source_from_config
+    from .worker_store import FirebaseStore, StoreError
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    grid_dir = Path(args.habitat_grid)
+    path = grid_dir / BAKED_GRID_FILE
+    if not path.is_file():
+        print(f"error: no baked grid: {path}", file=sys.stderr)
+        return 1
+    try:
+        store = FirebaseStore(args.project, args.storage_bucket)
+    except StoreError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        plan = plan_round(
+            cache_dir=Path(args.cache_dir),
+            world=world,
+            habitat_grid=load_grid(grid_dir),
+            store=store,
+            top=args.top,
+            budget_usd=args.budget,
+        )
+    except RuntimeError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    for entry in plan["tiles"]:
+        print(
+            f"  {entry['tile']}: play {entry['play']:g}, "
+            f"{len(entry['new_ids'])} new: {', '.join(entry['new_ids'])}"
+        )
+    for entry in plan["skipped"]:
+        print(f"  {entry['tile']}: skipped ({entry['reason']})")
+    print(
+        f"{len(plan['tiles'])} tiles, {plan['calls']} calls, "
+        f"about ${plan['price_usd']:.2f} at ${plan['estimate_usd']:.2f} a call"
+    )
+    if not args.spend:
+        print("dry run: spends nothing; add --spend to ask for real")
+        return 0
+    config = load_config()
+    if not config.model_api_key:
+        print("error: --spend needs MODEL_API_KEY", file=sys.stderr)
+        return 1
+
+    def client_for(tile: str) -> Any:
+        source = source_from_config(config, None, f"survey:{tile}")
+        assert source.client is not None
+        return source.client
+
+    for result in run_round(
+        planned=plan["tiles"],
+        cache_dir=Path(args.cache_dir),
+        world=world,
+        habitat_grid=load_grid(grid_dir),
+        client_for=client_for,
+    ):
+        merged = ", ".join(result["merged"]) or "nothing"
+        reason = f" ({result['reason']})" if result.get("reason") else ""
+        print(f"  {result['tile']}: merged {merged}{reason}")
+    return 0
+
+
 def cmd_survey_lab(args: argparse.Namespace) -> int:
     from .habitats import BAKED_GRID_FILE, load_grid
     from .species import list_animals, source_from_config
@@ -1001,6 +1108,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_tiles_make(args)
     if args.command == "tiles" and args.tiles_command == "lab":
         return cmd_tiles_lab(args)
+    if args.command == "tiles" and args.tiles_command == "resurvey":
+        return cmd_tiles_resurvey(args)
     if args.command == "survey" and args.survey_command == "lab":
         return cmd_survey_lab(args)
     if args.command == "place" and args.place_command == "survey":

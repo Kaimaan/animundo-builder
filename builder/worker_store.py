@@ -73,6 +73,13 @@ class FirebaseStore:
             for snap in self._db.collection("plans").stream()
         ]
 
+    def list_areas(self) -> list[tuple[str, dict[str, Any]]]:
+        """Every area doc, for the resurvey ranking (#196.5)."""
+        return [
+            (snap.id, snap.to_dict() or {})
+            for snap in self._db.collection("areas").stream()
+        ]
+
     # -- build jobs ------------------------------------------------------
 
     def get_build_job(self, job_id: str) -> dict[str, Any] | None:
@@ -173,6 +180,7 @@ STORE_METHODS = (
     "get_job",
     "get_plan",
     "get_request",
+    "list_areas",
     "list_blobs",
     "list_plans",
     "list_requests",

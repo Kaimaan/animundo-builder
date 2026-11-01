@@ -2,11 +2,11 @@
 
 RESOLVE Ecoregions 2017 gives the ecoregions and biome; Natural Earth
 gives land and lakes; ETOPO 2022 gives elevation. `bake()` samples
-5 by 5 points per cell and writes one compact file per grid: each
-cell keeps `[eco1, share1, eco2, share2, biome, land, water,
-elevation_m, coast]`, the last the 25 land samples in coast order
-(`1` land, `0` sea). `HabitatGrid` reads them back and
-`habitat_for()` maps one cell to a habitat id.
+5 by 5 points per cell and writes one compact file: each cell keeps
+`[eco1, share1, eco2, share2, biome, land, water, elevation_m,
+coast]`, the last the 25 land samples in coast order (`1` land, `0`
+sea). `HabitatGrid` reads it back and `habitat_for()` maps one cell
+to a habitat id.
 """
 
 from __future__ import annotations
@@ -22,7 +22,10 @@ import shapely
 from shapely.geometry import shape
 from shapely.strtree import STRtree
 
-from .grid import CELL_M, CELLS, HALF_M, GridName, parse_tile
+from .grid import NAME, N, lat_of, lon_of, parse_tile
+
+#: The baked grid file's name inside a grid directory.
+BAKED_GRID_FILE = f"{NAME}.json.gz"
 
 #: RESOLVE biome number to habitat id. Boreal forest becomes
 #: `boreal_lake` when wet; see `habitat_for()`.
@@ -79,22 +82,28 @@ def habitat_for(
     return habitat
 
 
-class HabitatGrid:
-    """One baked grid file: cell data and habitats by tile."""
+def load_grid(grid_dir: Path) -> HabitatGrid:
+    """The baked habitat grid from its directory."""
+    return HabitatGrid.load(grid_dir / BAKED_GRID_FILE)
 
-    def __init__(self, cells: dict[str, list[Any]], grid: GridName) -> None:
+
+class HabitatGrid:
+    """The baked grid file: cell data and habitats by tile."""
+
+    def __init__(self, cells: dict[str, list[Any]]) -> None:
         self._cells = cells
-        self.grid = grid
 
     @classmethod
-    def load(cls, path: Path, grid: GridName) -> HabitatGrid:
-        """Read a baked `ease2_*.json.gz` file."""
+    def load(cls, path: Path) -> HabitatGrid:
+        """Read a baked `z10.json.gz` file; older grids refuse."""
         raw = gzip.open(path, "rt", encoding="utf-8").read()
         data = json.loads(raw)
-        return cls(data["cells"], grid)
+        if data.get("grid") != NAME:
+            raise ValueError(f"{path} is a {data.get('grid')} grid, not {NAME}")
+        return cls(data["cells"])
 
     def cells(self) -> list[str]:
-        """Every baked cell key (`"col,row"`)."""
+        """Every baked cell key (`"x,y"`)."""
         return list(self._cells)
 
     def cell_data(
@@ -132,31 +141,23 @@ class HabitatGrid:
 
     def habitat_at(self, tile: str) -> str:
         """The habitat id for one tile id."""
-        grid, col, row = parse_tile(tile)
-        if grid != self.grid:
-            raise ValueError(f"{tile} is not on {self.grid}")
+        col, row = parse_tile(tile)
         return self.habitat(col, row)
 
     def water_at(self, tile: str) -> float:
         """The lake-water share for one tile id."""
-        grid, col, row = parse_tile(tile)
-        if grid != self.grid:
-            raise ValueError(f"{tile} is not on {self.grid}")
+        col, row = parse_tile(tile)
         return self.cell_data(col, row)[6]
 
     def ecoregions_at(self, tile: str) -> tuple[Any, float, Any, float]:
         """The (eco1, share1, eco2, share2) for one tile id."""
-        grid, col, row = parse_tile(tile)
-        if grid != self.grid:
-            raise ValueError(f"{tile} is not on {self.grid}")
+        col, row = parse_tile(tile)
         eco1, share1, eco2, share2, _b, _l, _w, _e = self.cell_data(col, row)
         return eco1, share1, eco2, share2
 
     def elevation_at(self, tile: str) -> float:
         """The mean land elevation in metres for one tile id."""
-        grid, col, row = parse_tile(tile)
-        if grid != self.grid:
-            raise ValueError(f"{tile} is not on {self.grid}")
+        col, row = parse_tile(tile)
         return self.cell_data(col, row)[7]
 
 
@@ -187,26 +188,23 @@ def _load_shapes(
 
 
 def _sample_points(
-    grid: GridName, cols: list[int], rows: list[int]
+    cols: list[int], rows: list[int]
 ) -> tuple[Any, list[tuple[int, int]]]:
-    """The 5 by 5 sample points per cell, as a shapely point array."""
-    from pyproj import Transformer
+    """The 5 by 5 sample points per cell, as a shapely point array.
 
-    epsg = 6931 if grid == "ease2_n25" else 6932
-    back = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
+    Fractions run west to east, north to south: row 0 sits
+    along the true north side (#182.2).
+    """
     fracs = [(i + 0.5) / SAMPLES for i in range(SAMPLES)]
-    xs: list[float] = []
-    ys: list[float] = []
+    lons: list[float] = []
+    lats: list[float] = []
     owners: list[tuple[int, int]] = []
     for col, row in zip(cols, rows):
-        x0 = -HALF_M + col * CELL_M
-        y1 = HALF_M - row * CELL_M
         for fx in fracs:
             for fy in fracs:
-                xs.append(x0 + fx * CELL_M)
-                ys.append(y1 - fy * CELL_M)
+                lons.append(lon_of(col + fx))
+                lats.append(lat_of(row + fy))
                 owners.append((col, row))
-    lons, lats = back.transform(np.array(xs), np.array(ys))
     return shapely.points(lons, lats), owners
 
 
@@ -216,15 +214,14 @@ def bake(
     lakes_path: Path,
     dem_path: Path | None,
     out_dir: Path,
-    grids: tuple[GridName, ...] = ("ease2_n25", "ease2_s25"),
     bbox: tuple[int, int, int, int] | None = None,
 ) -> dict[str, int]:
     """Bake the habitat grid from the sources and the DEM.
 
-    `bbox` is (col0, row0, col1, row1), baked instead of the whole
+    `bbox` is (x0, y0, x1, y1), baked instead of the whole
     grid, for tests. Without a DEM every cell's elevation is 0.
-    Returns counts per grid. The raw downloads are read from their
-    staging paths and never committed.
+    Returns the cell count. The raw downloads are read from
+    their staging paths and never committed.
     """
     import rasterio
 
@@ -240,27 +237,23 @@ def bake(
     dem = rasterio.open(dem_path) if dem_path is not None else None
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
-        counts: dict[str, int] = {}
-        for grid in grids:
-            cells = _bake_grid(
-                grid,
-                resolve_geoms,
-                resolve_props,
-                resolve_tree,
-                land_tree,
-                lakes_tree,
-                bbox,
-                masks,
-                dem,
-            )
-            out_path = out_dir / f"{grid}.json.gz"
-            with gzip.open(out_path, "wt", encoding="utf-8") as handle:
-                json.dump({"grid": grid, "cells": cells}, handle)
-            counts[grid] = len(cells)
+        cells = _bake_grid(
+            resolve_geoms,
+            resolve_props,
+            resolve_tree,
+            land_tree,
+            lakes_tree,
+            bbox,
+            masks,
+            dem,
+        )
+        out_path = out_dir / BAKED_GRID_FILE
+        with gzip.open(out_path, "wt", encoding="utf-8") as handle:
+            json.dump({"grid": NAME, "cells": cells}, handle)
     finally:
         if dem is not None:
             dem.close()
-    return counts
+    return {NAME: len(cells)}
 
 
 def _build_masks(
@@ -331,8 +324,8 @@ def _batches(
     bbox: tuple[int, int, int, int] | None,
 ) -> list[tuple[list[int], list[int]]]:
     if bbox is None:
-        cols = list(range(CELLS))
-        rows = list(range(CELLS))
+        cols = list(range(N))
+        rows = list(range(N))
     else:
         c0, r0, c1, r1 = bbox
         cols = list(range(c0, c1 + 1))
@@ -346,7 +339,6 @@ def _batches(
 
 
 def _bake_grid(
-    grid: GridName,
     resolve_geoms: list[Any],
     resolve_props: list[dict[str, Any]],
     resolve_tree: STRtree,
@@ -358,7 +350,7 @@ def _bake_grid(
 ) -> dict[str, list[Any]]:
     cells: dict[str, list[Any]] = {}
     for cols, rows in _batches(bbox):
-        points, owners = _sample_points(grid, cols, rows)
+        points, owners = _sample_points(cols, rows)
         lons = shapely.get_x(points)
         lats = shapely.get_y(points)
         exact_idx: list[int] = []

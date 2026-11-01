@@ -2,8 +2,9 @@
 
 An enrich item that passes every check ships as a public pack (#176,
 #179): `packs/<item id>/<version>/` with the animal file, its built
-model and preview, its English and Finnish texts, one `additions/`
-file per hand-made place, and a manifest. Spec 02 §8b is the
+model and preview, its English and Finnish texts, and a manifest;
+no additions since #202.3 (old packs keep theirs, and the game
+still merges them). Spec 02 §8b is the
 contract; the rules mirror the game's own `scripts/preview.gd`
 (`files_error`, `file_error`: paths, extensions, sizes, hashes) and
 `scripts/content_packs.gd` (`addition_error`), enforced at the §8b

@@ -326,18 +326,47 @@ def collect_texts(job_dir: Path, world: Path) -> list[dict[str, Any]]:
                     "sources": sources.get(path.stem, []),
                 }
             )
-    region_path = next((job_dir / "regions").glob("*.json"))
+    items.extend(_region_texts(job_dir))
+    en_plants = _locale(job_dir, "en", "plants")
+    fi_plants = _locale(job_dir, "fi", "plants")
+    for key in sorted(en_plants):
+        if key.endswith(".latin"):
+            continue
+        items.append(
+            {
+                "key": key,
+                "en": en_plants[key],
+                "fi": fi_plants.get(key),
+                "sources": _plant_sources(job_dir, key),
+            }
+        )
+    return [item for item in items if item["en"]]
+
+
+def _region_texts(job_dir: Path) -> list[dict[str, Any]]:
+    """The laid place's texts, or nothing with no place (#202.3).
+
+    An enrich item that seats nothing lays no region; its texts
+    are only the animal's or plant's own. With a laid place the
+    review reads its name, welcome, description, places, food,
+    flowers and plant names as before.
+    """
+    regions = job_dir / "regions"
+    paths = sorted(regions.glob("*.json")) if regions.is_dir() else []
+    if not paths:
+        return []
+    region_path = paths[0]
     region = json.loads(region_path.read_text(encoding="utf-8"))
     rid = region.get("id", region_path.stem)
     fi_regions = _locale(job_dir, "fi", "regions")
-    items.append(
+    items = [
         {
             "key": f"region.{rid}.name",
             "en": region.get("name", ""),
             "fi": fi_regions.get(f"region.{rid}.name"),
             "sources": region.get("sources", []),
         }
-    )
+    ]
     if region.get("welcome"):
         items.append(
             {
@@ -393,20 +422,7 @@ def collect_texts(job_dir: Path, world: Path) -> list[dict[str, Any]]:
                     "sources": region.get("sources", []),
                 }
             )
-    en_plants = _locale(job_dir, "en", "plants")
-    fi_plants = _locale(job_dir, "fi", "plants")
-    for key in sorted(en_plants):
-        if key.endswith(".latin"):
-            continue
-        items.append(
-            {
-                "key": key,
-                "en": en_plants[key],
-                "fi": fi_plants.get(key),
-                "sources": _plant_sources(job_dir, key),
-            }
-        )
-    return [item for item in items if item["en"]]
+    return items
 
 
 def _locale(job_dir: Path, language: str, name: str) -> dict[str, str]:
@@ -453,7 +469,7 @@ def _write_animal(
 def _write_region(
     job_dir: Path, rid: str, rest: list[str], texts: dict[str, str]
 ) -> None:
-    path = next((job_dir / "regions").glob("*.json"))
+    path = sorted((job_dir / "regions").glob("*.json"))[0]
     region = json.loads(path.read_text(encoding="utf-8"))
     if rest == ["name"]:
         region["name"] = texts["en"]

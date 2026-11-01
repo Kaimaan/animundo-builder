@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from builder.packs import check_additions, check_pack
+from builder.packs import check_pack
 from builder.stages.ship import ShipStage, _Stopped, gate_checks
 
 TILE = "z10_0927_0560"
@@ -104,11 +104,6 @@ def _item(tmp_path: Path, animal: dict[str, Any], research: dict[str, Any]) -> P
     (job_dir / "animals").mkdir(exist_ok=True)
     (job_dir / "animals" / "hammerhead.json").write_text(json.dumps(animal))
     (job_dir / "research.json").write_text(json.dumps(research))
-    laid = _region()
-    laid["fish"].append({"kind": "hammerhead", "count": 2})
-    laid["animals"]["playable"].append("hammerhead")
-    (job_dir / "regions").mkdir(exist_ok=True)
-    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
     review = job_dir / "tries" / "hammerhead" / "edits" / "1"
     review.mkdir(parents=True)
     (review / "marks_review.json").write_text(
@@ -207,28 +202,6 @@ def _passing_run(tmp_path: Path, store: _Store) -> tuple[Path, Path, dict[str, A
     return world, job_dir, result
 
 
-def test_additions_read_a_biome_place_species() -> None:
-    """#178: on a biome the lists come from species, as the game merges."""
-    from builder.stages.ship import _additions
-
-    region = _region()
-    region["biome"] = "xx_biome"
-    region["species"] = {
-        "playable": ["clownfish", "hammerhead"],
-        "prey": [],
-        "predators": ["reef_shark"],
-    }
-    del region["animals"]
-    region["fish"].append({"kind": "hammerhead", "count": 2})
-    additions = _additions(region, "hammerhead", _animal())
-    assert check_additions(additions) == []
-    assert additions == {
-        "format": 1,
-        "fish": [{"kind": "hammerhead", "count": 2}],
-        "playable": ["hammerhead"],
-    }
-
-
 def test_ship_publishes_a_passing_pack(tmp_path: Path) -> None:
     """#174.1, #176.1: a clean item ships `packs/animal_hammerhead/1/`."""
     store = _Store()
@@ -248,15 +221,7 @@ def test_ship_publishes_a_passing_pack(tmp_path: Path) -> None:
         "models/previews/hammerhead.png",
         "locale/en/animals.json",
         "locale/fi/animals.json",
-        f"additions/{REGION}.json",
         "manifest.json",
-    }
-    additions = json.loads(pack[f"additions/{REGION}.json"].decode("utf-8"))
-    assert check_additions(additions) == []
-    assert additions == {
-        "format": 1,
-        "fish": [{"kind": "hammerhead", "count": 2}],
-        "playable": ["hammerhead"],
     }
     en = json.loads(pack["locale/en/animals.json"].decode("utf-8"))
     fi = json.loads(pack["locale/fi/animals.json"].decode("utf-8"))
@@ -266,102 +231,6 @@ def test_ship_publishes_a_passing_pack(tmp_path: Path) -> None:
     }
     assert fi["animal.hammerhead.name"] == "Kampavasarahai"
     assert (job_dir / "pack" / "manifest.json").is_file()
-
-
-def _unbuilt_checker(world: Path) -> None:
-    """A draft check that fails the region until the plant models build."""
-    (world / "tools" / "check_draft.py").write_text(
-        "import json, sys\n"
-        "from pathlib import Path\n"
-        "draft, at, where = sys.argv[1], sys.argv[2], sys.argv[3]\n"
-        "assert at == '--world'\n"
-        "missing = []\n"
-        "for path in sorted((Path(draft) / 'regions').glob('*.json')):\n"
-        "    region = json.loads(path.read_text())\n"
-        "    cover = (region.get('ground_cover') or {}).get('plants', [])\n"
-        "    for plant in cover:\n"
-        "        model = (plant or {}).get('model', '')\n"
-        "        built = Path(where) / 'assets' / 'plants' / f'{model}.glb'\n"
-        "        if model and not built.is_file():\n"
-        "            missing.append(f'build it first: {model}')\n"
-        "if missing:\n"
-        "    fail = {'check': 'region', 'status': 'fail'}\n"
-        "    fail['problems'] = missing\n"
-        "    print(json.dumps({'results': [fail]}))\n"
-        "else:\n"
-        "    print(json.dumps({'results': []}))\n"
-    )
-
-
-def _fake_build(world: Path, spec: str) -> dict[str, Any]:
-    dest = world / "assets" / "plants" / f"{Path(spec).stem}.glb"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(b"glb-bytes")
-    return {"ok": True, "summary": f"{spec}: built", "log": f"BUILT {spec}: built"}
-
-
-def test_ship_builds_the_place_plants_before_the_world_check(
-    tmp_path: Path,
-) -> None:
-    """#193.1: the ship builds missing plant models, then the check passes."""
-    world = _world(tmp_path)
-    _unbuilt_checker(world)
-    greens = world / "models" / "plants"
-    greens.mkdir(parents=True)
-    for stem in ("staghorn", "seagrass"):
-        (greens / f"{stem}.json").write_text(json.dumps({"id": stem}))
-    cover = {"plants": [{"model": "staghorn"}, {"model": "seagrass"}]}
-    region = json.loads((world / "regions" / f"{REGION}.json").read_text())
-    region["ground_cover"] = cover
-    (world / "regions" / f"{REGION}.json").write_text(json.dumps(region))
-    job_dir = _item(tmp_path, _animal(), _research())
-    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
-    laid["ground_cover"] = cover
-    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
-    store = _Store()
-    translated = {
-        "map_name": "Kampavasarahai",
-        "name": "Kampavasarahai",
-        "intro": "Hai, jolla on leveä pää.",
-    }
-    result = ShipStage(store=store, build=_fake_build).run(
-        _ctx(job_dir, world, [json.dumps(translated)], look=_look())
-    )
-    assert result["pack"] == "packs/animal_hammerhead/1/"
-    assert (world / "assets" / "plants" / "staghorn.glb").is_file()
-    assert (world / "assets" / "plants" / "seagrass.glb").is_file()
-    ship = json.loads((job_dir / "checks" / "ship.json").read_text())
-    assert ship == {"status": "pass", "problems": []}
-
-
-def test_ship_stops_when_a_plant_model_would_not_build(tmp_path: Path) -> None:
-    """#193.1: a failing plant build stops the ship loudly."""
-    world = _world(tmp_path)
-    _unbuilt_checker(world)
-    greens = world / "models" / "plants"
-    greens.mkdir(parents=True)
-    (greens / "staghorn.json").write_text(json.dumps({"id": "staghorn"}))
-    cover = {"plants": [{"model": "staghorn"}]}
-    region = json.loads((world / "regions" / f"{REGION}.json").read_text())
-    region["ground_cover"] = cover
-    (world / "regions" / f"{REGION}.json").write_text(json.dumps(region))
-    job_dir = _item(tmp_path, _animal(), _research())
-    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
-    laid["ground_cover"] = cover
-    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
-
-    def _broken(world: Path, spec: str) -> dict[str, Any]:
-        return {"ok": False, "summary": "the build failed", "log": "ERROR: boom"}
-
-    translated = {
-        "map_name": "Kampavasarahai",
-        "name": "Kampavasarahai",
-        "intro": "Hai, jolla on leveä pää.",
-    }
-    with pytest.raises(_Stopped, match="would not build"):
-        ShipStage(store=_Store(), build=_broken).run(
-            _ctx(job_dir, world, [json.dumps(translated)], look=_look())
-        )
 
 
 def test_ship_writes_the_finnish_map_name(tmp_path: Path) -> None:
@@ -407,7 +276,6 @@ def test_ship_second_publish_makes_version_2(tmp_path: Path) -> None:
 
 
 PLANT = "table_coral"
-BIOME = "xx_biome"
 
 _ABOUT = {
     "about_looks": "A flat plate on a stalk.",
@@ -420,12 +288,8 @@ _ABOUT = {
 def _plant_world(
     tmp_path: Path,
     results: list[dict[str, Any]] | None = None,
-    biome: bool = False,
 ) -> Path:
     world = _world(tmp_path, results)
-    (world / "tools" / "validate_region.py").write_text(
-        'print("ok   regions/xx_reef.json")\n'
-    )
     (world / "locale" / "en").mkdir(exist_ok=True)
     (world / "locale" / "en" / "plants.json").write_text(
         json.dumps({"plant.bilberry.title": "Bilberry"})
@@ -434,24 +298,10 @@ def _plant_world(
     (world / "locale" / "fi" / "plants.json").write_text(
         json.dumps({"plant.bilberry.title": "Mustikka"})
     )
-    region = json.loads((world / "regions" / f"{REGION}.json").read_text())
-    region["plants"] = {
-        "cover": [{"id": "beach_naupaka", "density": 0.3}],
-        "water": [{"id": "branching_staghorn_coral", "density": 0.08}],
-    }
-    if biome:
-        region["biome"] = BIOME
-        biomes = world / "biomes"
-        biomes.mkdir(exist_ok=True)
-        (biomes / f"{BIOME}.json").write_text(
-            json.dumps({"id": BIOME, "plants": dict(region["plants"])})
-        )
-        del region["plants"]
-    (world / "regions" / f"{REGION}.json").write_text(json.dumps(region))
     return world
 
 
-def _plant_item(tmp_path: Path, biome: bool = False) -> Path:
+def _plant_item(tmp_path: Path) -> Path:
     job_dir = tmp_path / "plant_item"
     job_dir.mkdir(exist_ok=True)
     (job_dir / "home.json").write_text(
@@ -489,21 +339,6 @@ def _plant_item(tmp_path: Path, biome: bool = False) -> Path:
     )
     (greens / f"{PLANT}.glb").write_bytes(b"glb-bytes")
     (greens / f"{PLANT}.png").write_bytes(b"png-bytes")
-    laid = _region()
-    laid["plants"] = {
-        "cover": [{"id": "beach_naupaka", "density": 0.3}],
-        "water": [
-            {"id": "branching_staghorn_coral", "density": 0.08},
-            {"id": PLANT, "density": 0.2},
-        ],
-    }
-    if biome:
-        # A biome-place lays only the grown side, as region_place
-        # writes it: the biome's list with the plant seated.
-        laid["biome"] = BIOME
-        del laid["plants"]["cover"]
-    (job_dir / "regions").mkdir(exist_ok=True)
-    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
     (job_dir / "reviews").mkdir(exist_ok=True)
     (job_dir / "reviews" / f"{PLANT}-1.json").write_text(
         json.dumps({"species": PLANT, "round": 1, "issues": []})
@@ -530,20 +365,12 @@ def _plant_answers() -> list[str]:
     return [json.dumps(_ABOUT), json.dumps(fi)]
 
 
-def _fake_flatten(world: Path) -> str:
-    (world / "homes").mkdir(exist_ok=True)
-    (world / "homes" / f"{BIOME}.json").write_text(
-        json.dumps({"id": BIOME, "flat": True})
-    )
-    return f"wrote homes/{BIOME}.json"
-
-
 def test_ship_publishes_a_passing_plant_pack(tmp_path: Path) -> None:
     """#188.3: a clean plant item ships `packs/plant_table_coral/1/`."""
     store = _Store()
     world = _plant_world(tmp_path)
     job_dir = _plant_item(tmp_path)
-    result = ShipStage(store=store, flatten=_fake_flatten).run(
+    result = ShipStage(store=store).run(
         _ctx(job_dir, world, _plant_answers(), f"enrich_x/enrich_{PLANT}")
     )
     assert result["pack"] == f"packs/plant_{PLANT}/1/"
@@ -561,14 +388,7 @@ def test_ship_publishes_a_passing_plant_pack(tmp_path: Path) -> None:
         f"models/previews/plants/{PLANT}.png",
         "locale/en/plants.json",
         "locale/fi/plants.json",
-        f"additions/{REGION}.json",
         "manifest.json",
-    }
-    additions = json.loads(pack[f"additions/{REGION}.json"].decode("utf-8"))
-    assert check_additions(additions) == []
-    assert additions == {
-        "format": 1,
-        "plants": {"water": [{"id": PLANT, "density": 0.2}]},
     }
     en = json.loads(pack["locale/en/plants.json"].decode("utf-8"))
     assert set(en) == {
@@ -579,29 +399,6 @@ def test_ship_publishes_a_passing_plant_pack(tmp_path: Path) -> None:
     fi = json.loads(pack["locale/fi/plants.json"].decode("utf-8"))
     assert fi[f"plant.{PLANT}.title"] == "Pöytäkoralli"
     assert (job_dir / "pack" / "manifest.json").is_file()
-
-
-def test_ship_plant_pack_edits_no_biome(tmp_path: Path) -> None:
-    """#188.2: on a biome-place the biome file stays as it was."""
-    store = _Store()
-    world = _plant_world(tmp_path, biome=True)
-    before = (world / "biomes" / f"{BIOME}.json").read_text()
-    job_dir = _plant_item(tmp_path, biome=True)
-    result = ShipStage(store=store, flatten=_fake_flatten).run(
-        _ctx(job_dir, world, _plant_answers(), f"enrich_x/enrich_{PLANT}")
-    )
-    assert result["pack"] == f"packs/plant_{PLANT}/1/"
-    assert (world / "biomes" / f"{BIOME}.json").read_text() == before
-    pack = {
-        name.removeprefix(f"packs/plant_{PLANT}/1/"): data
-        for name, data in store.blobs.items()
-    }
-    assert check_pack(pack) == []
-    additions = json.loads(pack[f"additions/{REGION}.json"].decode("utf-8"))
-    assert additions == {
-        "format": 1,
-        "plants": {"water": [{"id": PLANT, "density": 0.2}]},
-    }
 
 
 def test_ship_plant_fails_a_blocking_review(tmp_path: Path) -> None:
@@ -625,25 +422,7 @@ def test_ship_plant_fails_a_blocking_review(tmp_path: Path) -> None:
         )
     )
     with pytest.raises(_Stopped, match="review blocks"):
-        ShipStage(store=_Store(), flatten=_fake_flatten).run(
-            _ctx(job_dir, world, _plant_answers())
-        )
-
-
-def test_ship_plant_fails_a_filed_region_break(tmp_path: Path) -> None:
-    """#184.4: the filed files resolve the edited biome, budget and all."""
-    world = _plant_world(tmp_path, biome=True)
-    (world / "tools" / "validate_region.py").write_text(
-        "import sys\n"
-        f'print("FAIL regions/{REGION}.json")\n'
-        'print("  - Plant densities on the reef must add up to 1 or less")\n'
-        "sys.exit(1)\n"
-    )
-    job_dir = _plant_item(tmp_path, biome=True)
-    with pytest.raises(_Stopped, match="must add up to 1 or less"):
-        ShipStage(store=_Store(), flatten=_fake_flatten).run(
-            _ctx(job_dir, world, _plant_answers())
-        )
+        ShipStage(store=_Store()).run(_ctx(job_dir, world, _plant_answers()))
 
 
 def test_ship_plant_finnish_gate(tmp_path: Path) -> None:
@@ -679,41 +458,6 @@ def test_ship_plant_finnish_gate(tmp_path: Path) -> None:
     ]
 
 
-def test_ship_plant_region_rule(tmp_path: Path) -> None:
-    """#184.4: the region change is the one plant; tiles remake instead."""
-    from builder.stages.ship import _gate_region_plant
-
-    world = _plant_world(tmp_path)
-    job_dir = _plant_item(tmp_path)
-    spec = {"grows": {"on": ["reef"], "density": 0.2}}
-    assert _gate_region_plant(job_dir, world, PLANT, spec) == []
-    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
-    laid["food"] = []
-    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
-    assert _gate_region_plant(job_dir, world, PLANT, spec) == ["food changed"]
-    (job_dir / "regions" / "tl_z10_0581_0294.json").write_text(json.dumps({"id": "x"}))
-    (world / "regions" / f"{REGION}.json").unlink()
-    assert _gate_region_plant(job_dir, world, PLANT, spec) == [
-        f"region: {REGION} is no region in this checkout"
-    ]
-
-
-def test_ship_plant_region_rule_on_a_biome(tmp_path: Path) -> None:
-    """#188.2: the laid side is the biome's side plus the one plant."""
-    from builder.stages.ship import _gate_region_plant
-
-    world = _plant_world(tmp_path, biome=True)
-    job_dir = _plant_item(tmp_path, biome=True)
-    spec = {"grows": {"on": ["reef"], "density": 0.2}}
-    assert _gate_region_plant(job_dir, world, PLANT, spec) == []
-    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
-    laid["plants"]["water"].append({"id": "sneaky_weed", "density": 0.1})
-    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
-    assert _gate_region_plant(job_dir, world, PLANT, spec) == [
-        f"plants.water is not the biome's side plus {PLANT}"
-    ]
-
-
 def test_ship_plant_spec_gate(tmp_path: Path) -> None:
     """#188.3: a spec without parts and colors stops the ship."""
     from builder.stages.ship import _gate_spec_plant
@@ -730,7 +474,7 @@ def test_ship_plant_spec_gate(tmp_path: Path) -> None:
     del spec["parts"]
     (job_dir / "models" / "plants" / f"{PLANT}.json").write_text(json.dumps(spec))
     with pytest.raises(_Stopped, match="has no parts to build"):
-        ShipStage(store=_Store(), flatten=_fake_flatten).run(
+        ShipStage(store=_Store()).run(
             _ctx(job_dir, world, _plant_answers(), f"enrich_x/enrich_{PLANT}")
         )
 
@@ -739,13 +483,10 @@ def _gate_problems(
     tmp_path: Path,
     animal: dict[str, Any] | None = None,
     research: dict[str, Any] | None = None,
-    laid: dict[str, Any] | None = None,
     results: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     world = _world(tmp_path, results)
     job_dir = _item(tmp_path, animal or _animal(), research or _research())
-    if laid is not None:
-        (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
     brief = json.loads((job_dir / "home.json").read_text())
     made = json.loads((job_dir / "animals" / "hammerhead.json").read_text())
     ctx = SimpleNamespace(job_dir=job_dir, world_path=world)
@@ -764,16 +505,6 @@ def test_reviewed_prey_tags_come_from_shipped_hunters(tmp_path: Path) -> None:
     world = _world(tmp_path)
     assert _hunt_tags(world) == {"small_fish"}
     assert _world_hunts(world) == {"small_fish"}
-
-
-def test_gate_fails_a_region_that_rewrites_food(tmp_path: Path) -> None:
-    """#174.5: the same job with food changed fails at the region check."""
-    laid = _region()
-    laid["fish"].append({"kind": "hammerhead", "count": 2})
-    laid["animals"]["playable"].append("hammerhead")
-    laid["food"] = [{"kind": "carrion", "names": ["leftovers"]}]
-    problems = _gate_problems(tmp_path, laid=laid)
-    assert problems == [f"region {REGION}: food changed"]
 
 
 def test_gate_fails_the_world_checks(tmp_path: Path) -> None:
@@ -795,63 +526,18 @@ def test_gate_counts_not_built_as_unknown(tmp_path: Path) -> None:
     assert _gate_problems(tmp_path, results=results) == []
 
 
-def test_gate_counts_a_big_fish_by_its_tags(tmp_path: Path) -> None:
-    """#197.3: tags say the fish; no archetype anywhere."""
-    from builder.stages.ship import _gate_reef
-
-    world = _world(tmp_path)
-    region = _region()
-    region["fish"].append({"kind": "hammerhead", "count": 2})
-    animal = _animal(model={"length": 3.5}, tags=["fish", "big_fish"])
-    assert "archetype" not in animal["model"]
-    research = _research(size={"length_cm": 350, "largest_cm": 400})
-    assert _gate_reef(animal, research, REGION, region, world) == []
-    region["fish"][-1]["count"] = 5
-    assert _gate_reef(animal, research, REGION, region, world) == [
-        f"{REGION}: fish: count 5 is no fewer than the small fish (5)"
-    ]
-    small = _animal(model={"length": 0.126}, tags=["fish", "small_fish"])
-    small_found = _research(size={"length_cm": 8, "largest_cm": 12})
-    assert _gate_reef(small, small_found, REGION, region, world) == []
-
-
-def test_gate_reads_the_biome_depth_on_a_biome_place(tmp_path: Path) -> None:
-    """#197.3: cam_height 40 fails against the reef biome's 35."""
-    from builder.stages.ship import _gate_reef
-
-    world = _world(tmp_path)
-    (world / "biomes").mkdir()
-    (world / "biomes" / "xx_biome.json").write_text(
-        json.dumps({"terrain": {"sea_depth": 35}})
-    )
-    region = _region()
-    region["biome"] = "xx_biome"
-    del region["terrain"]["sea_depth"]
-    region["fish"].append({"kind": "hammerhead", "count": 2})
-    animal = _animal(cam_height=40)
-    research = _research()
-    assert _gate_reef(animal, research, REGION, region, world) == [
-        f"{REGION}: camera: cam_height 40 is above the water (35 m)"
-    ]
-    region["terrain"]["sea_depth"] = 50
-    assert _gate_reef(animal, research, REGION, region, world) == []
-
-
 def test_gate_fails_a_record_length(tmp_path: Path) -> None:
     """#197.1: 4.97 m stands past the researched largest adult (400 cm)."""
     animal = _animal(model={"archetype": "fish", "length": 4.97}, cam_dist=6.0)
     problems = _gate_problems(tmp_path, animal=animal)
-    assert problems == [
-        f"{REGION}: length: 4.97 m is past the largest adult (400 cm researched)"
-    ]
+    assert problems == ["length: 4.97 m is past the largest adult (400 cm researched)"]
 
 
 def test_gate_passes_the_six_reviewed_lengths(tmp_path: Path) -> None:
     """#197.1: 0.8 x typical to largest; small species read double."""
-    from builder.stages.ship import _gate_reef
+    from builder.stages.ship import _gate_file
 
     world = _world(tmp_path)
-    region = _region()
     cases = [
         ("reef_shark", 2.209, 150, 250),
         ("lionfish", 0.432, 30, 45),
@@ -874,7 +560,7 @@ def test_gate_passes_the_six_reviewed_lengths(tmp_path: Path) -> None:
             "size": {"length_cm": typical, "largest_cm": largest},
             "year": {"winter": "active"},
         }
-        assert _gate_reef(animal, research, REGION, region, world) == [], aid
+        assert _gate_file(animal, research, [], world) == [], aid
     oversized = {
         "id": "hammerhead",
         "model": {"length": 4.97},
@@ -888,21 +574,19 @@ def test_gate_passes_the_six_reviewed_lengths(tmp_path: Path) -> None:
         "size": {"length_cm": 275, "largest_cm": 400},
         "year": {"winter": "active"},
     }
-    assert _gate_reef(oversized, research, REGION, region, world) == [
-        f"{REGION}: length: 4.97 m is past the largest adult (400 cm researched)"
+    assert _gate_file(oversized, research, [], world) == [
+        "length: 4.97 m is past the largest adult (400 cm researched)"
     ]
     no_largest = {"size": {"length_cm": 275}, "year": {"winter": "active"}}
-    assert _gate_reef(oversized, no_largest, REGION, region, world) == [
-        f"{REGION}: length: the research names no largest adult length"
+    assert _gate_file(oversized, no_largest, [], world) == [
+        "length: the research names no largest adult length"
     ]
 
 
 def test_gate_fails_migration_against_the_research(tmp_path: Path) -> None:
     animal = _animal(year={"winter": "migrates"})
     problems = _gate_problems(tmp_path, animal=animal)
-    assert problems == [
-        f"{REGION}: year: the file says migrates, the research says active"
-    ]
+    assert problems == ["year: the file says migrates, the research says active"]
 
 
 def test_gate_fails_a_departure_in_the_wrong_season(tmp_path: Path) -> None:
@@ -911,7 +595,8 @@ def test_gate_fails_a_departure_in_the_wrong_season(tmp_path: Path) -> None:
     animal = _animal(year={"winter": "migrates", "migration": migration})
     problems = _gate_problems(tmp_path, animal=animal, research=research)
     assert problems == [
-        f"{REGION}: year: it leaves in month 11, no southern autumn departure"
+        f"year: {TILE} leaves in month 11, no southern autumn departure",
+        f"year: {TILE} returns in month 4, no southern spring return",
     ]
 
 
@@ -919,27 +604,13 @@ def test_gate_fails_a_hunt_no_reviewed_animal_hunts(tmp_path: Path) -> None:
     """#174.1: `fish` would hunt sharks and turtle-sized fish."""
     animal = _animal(hunts=["small_fish", "fish"])
     problems = _gate_problems(tmp_path, animal=animal)
-    assert problems == [f"{REGION}: hunts: fish is no reviewed prey tag"]
-
-
-def test_gate_fails_a_shark_no_fewer_than_the_small_fish(tmp_path: Path) -> None:
-    laid = _region()
-    laid["fish"].append({"kind": "hammerhead", "count": 5})
-    laid["animals"]["playable"].append("hammerhead")
-    problems = _gate_problems(tmp_path, laid=laid)
-    assert problems == [f"{REGION}: fish: count 5 is no fewer than the small fish (5)"]
+    assert problems == ["hunts: fish is no reviewed prey tag"]
 
 
 def test_gate_fails_a_camera_inside_the_body(tmp_path: Path) -> None:
     animal = _animal(cam_dist=2.0)
     problems = _gate_problems(tmp_path, animal=animal)
-    assert problems == [f"{REGION}: camera: cam_dist 2.0 sits inside the body (3.5 m)"]
-
-
-def test_gate_fails_a_camera_above_the_water(tmp_path: Path) -> None:
-    animal = _animal(cam_height=40.0)
-    problems = _gate_problems(tmp_path, animal=animal)
-    assert problems == [f"{REGION}: camera: cam_height 40.0 is above the water (35 m)"]
+    assert problems == ["camera: cam_dist 2.0 sits inside the body (3.5 m)"]
 
 
 def test_gate_fails_missing_marks(tmp_path: Path) -> None:

@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
 from builder.enrich import (
-    biome_add_plant,
-    biome_additions_only,
     place_tiles,
-    plant_region_additions_only,
-    region_additions_only,
     run_flatten,
     sort_problems,
     sort_region_problems,
@@ -114,59 +109,6 @@ def test_write_places_lists_every_tile(tmp_path: Path) -> None:
     assert by_check["region"]["status"] == "skip"
 
 
-def test_biome_add_plant_appends_once() -> None:
-    """#184.3: the biome gains the plant on its side, never twice."""
-    biome = {"id": "xx_test_biome", "plants": {"water": [{"id": "stag", "density": 1}]}}
-    after = biome_add_plant(biome, "table_coral", "water", 0.2)
-    assert after["plants"]["water"] == [
-        {"id": "stag", "density": 1},
-        {"id": "table_coral", "density": 0.2},
-    ]
-    assert biome["plants"]["water"] == [{"id": "stag", "density": 1}]
-    again = biome_add_plant(after, "table_coral", "water", 0.2)
-    assert again["plants"]["water"] == after["plants"]["water"]
-    sided = biome_add_plant({"id": "x"}, "table_coral", "water", 0.2)
-    assert sided["plants"]["water"] == [{"id": "table_coral", "density": 0.2}]
-
-
-def test_biome_additions_only_allows_the_one_entry() -> None:
-    """#184.3: the biome change is the one appended plant id, nothing else."""
-    before = {
-        "id": "xx_test_biome",
-        "plants": {"water": [{"id": "stag", "density": 1}]},
-    }
-    after = biome_add_plant(before, "table_coral", "water", 0.2)
-    assert biome_additions_only(before, after, "table_coral") == []
-    assert biome_additions_only(before, before, "table_coral") == [
-        "table_coral is not in the biome's plants"
-    ]
-    moved = {"id": "xx_test_biome", "terrain": {}, "plants": after["plants"]}
-    assert biome_additions_only(before, moved, "table_coral") == ["terrain was added"]
-    assert biome_additions_only(after, before, "table_coral") == [
-        "table_coral is not in the biome's plants"
-    ]
-
-
-def test_plant_region_additions_only_allows_the_one_plant() -> None:
-    """#184.4: an old-place region gains the one plant id, nothing else."""
-    before = {
-        "id": "xx_test_reef",
-        "food": [{"kind": "water_plants"}],
-        "plants": {"water": [{"id": "stag", "density": 1}]},
-    }
-    after = json.loads(json.dumps(before))
-    after["plants"]["water"].append({"id": "table_coral", "density": 0.2})
-    assert plant_region_additions_only(before, after, "table_coral") == []
-    assert plant_region_additions_only(before, before, "table_coral") == [
-        "table_coral is not in the region's plants"
-    ]
-    hungry = json.loads(json.dumps(after))
-    hungry["food"] = []
-    assert plant_region_additions_only(before, hungry, "table_coral") == [
-        "food changed"
-    ]
-
-
 def test_reef_biome_and_flattened_home_differ_by_one_entry(
     tmp_path: Path,
 ) -> None:
@@ -205,8 +147,8 @@ def test_reef_biome_and_flattened_home_differ_by_one_entry(
     (world / "homes").mkdir(parents=True)
     run_flatten(world)
     home_before = json.loads((world / "homes" / "xx_test_biome.json").read_text())
-    after = biome_add_plant(before, "table_coral", "water", 0.2)
-    assert biome_additions_only(before, after, "table_coral") == []
+    after = json.loads(json.dumps(before))
+    after["plants"]["water"].append({"id": "table_coral", "density": 0.2})
     (biomes / "xx_test_biome.json").write_text(json.dumps(after))
     run_flatten(world)
     home_after = json.loads((world / "homes" / "xx_test_biome.json").read_text())
@@ -222,72 +164,6 @@ def test_reef_biome_and_flattened_home_differ_by_one_entry(
     assert {key: home_after[key] for key in home_after if key != "ground_cover"} == {
         key: home_before[key] for key in home_before if key != "ground_cover"
     }
-
-
-def _biome_place(world: Path) -> None:
-    regions = world / "regions"
-    regions.mkdir(parents=True, exist_ok=True)
-    (regions / "xx_test_place.json").write_text(
-        json.dumps(
-            {
-                "id": "xx_test_place",
-                "name": {"en": "Test Place"},
-                "biome": "xx_test_biome",
-                "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]},
-                "species": {
-                    "playable": ["fox", "perch"],
-                    "prey": ["vole"],
-                    "predators": ["fox"],
-                },
-                "terrain": {"water_level": 8, "height": 32},
-            }
-        ),
-        encoding="utf-8",
-    )
-    biomes = world / "biomes"
-    biomes.mkdir(parents=True, exist_ok=True)
-    (biomes / "xx_test_biome.json").write_text(
-        json.dumps(
-            {
-                "id": "xx_test_biome",
-                "fish": [{"kind": "perch", "count": 6}],
-                "plants": {"cover": [{"id": "bilberry", "density": 0.2}]},
-            }
-        ),
-        encoding="utf-8",
-    )
-
-
-def test_region_additions_only_weighs_the_biome_base(tmp_path: Path) -> None:
-    """#178: species and biome-started fish additions pass; the rest fails."""
-    import fake_world
-
-    world = fake_world.make_world(tmp_path)
-    _biome_place(world)
-    (world / "animals" / "minnow.json").write_text(
-        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
-    )
-    before = json.loads((world / "regions" / "xx_test_place.json").read_text())
-    fished = copy.deepcopy(before)
-    fished["species"]["playable"].append("minnow")
-    fished["fish"] = [{"kind": "perch", "count": 6}, {"kind": "minnow", "count": 5}]
-    assert region_additions_only(before, fished, "minnow", world) == []
-    (world / "animals" / "marten.json").write_text(
-        json.dumps({"playable": True, "tags": ["predator"], "diet": ["berries"]})
-    )
-    furred = copy.deepcopy(before)
-    furred["species"]["playable"].append("marten")
-    assert region_additions_only(before, furred, "marten", world) == []
-    tampered = copy.deepcopy(fished)
-    tampered["fish"] = [{"kind": "minnow", "count": 5}]
-    assert region_additions_only(before, tampered, "minnow", world) == [
-        "fish changed beyond minnow"
-    ]
-    renamed = copy.deepcopy(furred)
-    renamed["species"]["playable"] = ["marten"]
-    assert region_additions_only(before, renamed, "marten", world) == [
-        "species.playable changed beyond marten"
-    ]
 
 
 def test_place_tiles_maps_a_region_to_itself(tmp_path: Path) -> None:
@@ -344,43 +220,3 @@ def test_place_tiles_ignores_an_unmanifested_scaffold(tmp_path: Path) -> None:
         json.dumps({"id": "zz_work"}), encoding="utf-8"
     )
     assert place_tiles(tmp_path) == {}
-
-
-def _reef_lists() -> dict:
-    return {
-        "food": [{"kind": "water_plants", "names": ["seagrass"]}],
-        "fish": [{"kind": "clownfish", "count": 5}],
-        "animals": {"playable": ["clownfish"], "prey": [], "predators": []},
-    }
-
-
-def test_region_additions_only_passes_a_clean_add() -> None:
-    """#174.1: seating the animal is the only change allowed."""
-    before = _reef_lists()
-    after = json.loads(json.dumps(before))
-    after["fish"].append({"kind": "hammerhead", "count": 2})
-    after["animals"]["playable"].append("hammerhead")
-    assert region_additions_only(before, after, "hammerhead") == []
-
-
-def test_region_additions_only_names_every_other_change() -> None:
-    before = _reef_lists()
-    rewritten = json.loads(json.dumps(before))
-    rewritten["food"] = []
-    assert region_additions_only(before, rewritten, "hammerhead") == ["food changed"]
-    removed = json.loads(json.dumps(before))
-    del removed["animals"]["playable"][0]
-    assert region_additions_only(before, removed, "hammerhead") == [
-        "animals.playable changed beyond hammerhead"
-    ]
-    stranger = json.loads(json.dumps(before))
-    stranger["fish"].append({"kind": "shark", "count": 1})
-    assert region_additions_only(before, stranger, "hammerhead") == [
-        "fish changed beyond hammerhead"
-    ]
-    extra = json.loads(json.dumps(before))
-    extra["insects"] = ["ant"]
-    assert region_additions_only(before, extra, "hammerhead") == ["insects was added"]
-    gone = json.loads(json.dumps(before))
-    del gone["food"]
-    assert region_additions_only(before, gone, "hammerhead") == ["food was removed"]

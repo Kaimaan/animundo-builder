@@ -3,6 +3,93 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #200
+  (world 03c8657,
+  f436c32; builder
+  5b28f24)
+
+- .1: blue_mussel
+  goes nowhere. No
+  live plan or job
+  names it; ocean
+  tiles carry no
+  wanted, and fresh
+  plans can't add
+  it (.3). Its
+  records stay in
+  jobs/out189 and
+  jobs/rec189,
+  untouched. The
+  $0.304 is spent.
+- .2: tern filed
+  (world 03c8657):
+  the lab spec
+  (== the job spec)
+  to models/, its
+  preview, the Mac
+  .glb kept as the
+  local ignored
+  build (the game
+  sync builds its
+  own), the animal
+  file with the
+  build's length
+  0.126 and yaw
+  0.0, Finnish
+  strings and the
+  library mark.
+- .2 traits (world
+  f436c32): the
+  #194 review's
+  diet bottom_bugs
+  and insects,
+  shelter shore,
+  and the open_sea
+  mark, without
+  which no ocean
+  tile can want
+  it. World checks
+  pass except the
+  known missing
+  whale .glb.
+- .3 (builder
+  5b28f24): food
+  names are never
+  planned. The find
+  is the survey
+  pick, else the
+  home's grown
+  plants[].model.
+  Test: a Coral Sea
+  open-sea tile
+  with today's
+  world plans no
+  blue_mussel item
+  (fails on the old
+  code).
+- .4: both reef
+  tiles remade by
+  code, tern
+  playable from
+  GBIF records,
+  and published:
+  tiles/v2/z10/
+  116_070.json
+  (z10_0928_0560)
+  and 115_069.json
+  (z10_0927_0559),
+  tile version 1,
+  index 23 ready at
+  world f436c32.
+- Real spend: $0
+  new (GBIF only,
+  no model calls).
+  Sunk $0.45 total
+  (#189 $0.30 and
+  #191 $0.15), in
+  the $1.10
+  ceiling.
+
 ## 2026-11-01: inbox #199
   (builder 3fe2020,
   98579f3)

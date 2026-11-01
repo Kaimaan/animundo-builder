@@ -57,13 +57,17 @@ The schema arrives with the call; its shape:
   bands or bars; 0 when they name none.
 - `band_color`: the bands' colour name from `colors` or
   `new_colors`; empty when `bands` is 0.
+- `marks`: tool marks to add, from the tool's list; usually
+  empty, since code adds them from the research. A fix round
+  adds the mark that makes its missing shape here.
 
-Marks need no entry: code adds ear tufts, ruffs, tail tips,
-bands and stripes, spots, spines and hammer heads from the
-research's own words. Few wide bars are bands (a clownfish's
-three white bands); many thin stripes are stripes (a zebra,
-a tiger). A fish that is mostly its colour keeps the colour:
-bands only when the research names bars.
+Marks need no entry on the first round: code adds ear tufts,
+ruffs, tail tips, bands and stripes, spots, spines and hammer
+heads from the research's own words and the animal's name.
+Few wide bars are bands (a clownfish's three white bands);
+many thin stripes are stripes (a zebra, a tiger). A fish that
+is mostly its colour keeps the colour: bands only when the
+research names bars.
 
 ## Tools
 

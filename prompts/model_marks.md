@@ -13,7 +13,10 @@ The key marks:
 
 $MARKS
 
-The render is attached.
+The render is attached: four views of the model, FRONT,
+SIDE, BACK 3/4 and TOP. For a mark on the head, judge it
+in the FRONT and TOP views; it shows only when visible
+there.
 
 ## Output
 
@@ -26,7 +29,8 @@ commentary. The schema arrives with the call; its shape:
   words.
 
 Every key mark lands in exactly one of the two. A mark
-that shows faintly or partly still shows.
+that shows faintly or partly still shows. When unsure
+whether a mark shows at all, it is missing.
 
 ## Stop
 

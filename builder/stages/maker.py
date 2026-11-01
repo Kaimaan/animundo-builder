@@ -511,6 +511,12 @@ class AnimalMakerStage:
                 ][:2]
                 keyed, _ = _tool_marks(key_marks)
                 marks = [*marks, *[m for m in keyed if m not in marks]]
+                # A name that is a shape seeds its tool mark, always (#183.3).
+                seeded = [m for m in _name_shapes(target) if m in SHAPE_MARKS]
+                marks = [*marks, *[m for m in seeded if m not in marks]]
+                # A fix round adds the mark that makes a missing shape (#183.2).
+                asked = [m for m in (edits.get("marks") or []) if isinstance(m, str)]
+                marks = [*marks, *[m for m in asked if m not in marks]]
                 edits["marks"] = marks
                 if "bands" not in marks:
                     # Unbanded animals carry no band fields; the
@@ -575,6 +581,10 @@ class AnimalMakerStage:
                                 "saturated its range; a person looks"
                             )
                     if spec is not None:
+                        # The animal round's first spec carries its
+                        # shape part, checked before any fix round
+                        # (#183.3).
+                        file_errors += _shape_part_errors(target, edits["marks"], spec)
                         # The answer's key marks, or the research's
                         # when it names none: a missing mark blocks
                         # every round, and only fails the job when
@@ -2236,6 +2246,7 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
             "key_marks",
             "bands",
             "band_color",
+            "marks",
         ],
         "properties": {
             "colors": {
@@ -2312,6 +2323,15 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
                     "new_colors; empty when bands is 0"
                 ),
             },
+            "marks": {
+                "type": "array",
+                "description": (
+                    "Tool marks to add; usually empty, since code adds "
+                    "them from the research. A fix round adds the mark "
+                    "that makes its missing shape here (#183.2)"
+                ),
+                "items": {"type": "string", "enum": list(TOOL_MARKS)},
+            },
         },
     }
 
@@ -2364,7 +2384,76 @@ def _edits_files(
             return None, [f"repaint names no part {item.get('part')!r}"]
         if item.get("color") not in colours:
             return None, [f"repaint names no colour {item.get('color')!r}"]
+    for mark in edits.get("marks") or []:
+        if mark not in TOOL_MARKS:
+            return None, [f"marks names no tool mark {mark!r}"]
     return edits, []
+
+
+#: The adapt tool's marks (mirrors its MARKS): the only ones an
+#: answer may ask for, and the only ones code seeds.
+TOOL_MARKS = (
+    "ear_tufts",
+    "ruff",
+    "tail_tip",
+    "horns",
+    "stripes",
+    "bands",
+    "hammer",
+    "spots",
+    "spines",
+)
+
+#: Marks that add or reshape parts, rather than painting (#183.2).
+SHAPE_MARKS = ("ear_tufts", "ruff", "horns", "hammer", "spines")
+
+#: Name words that are the animal's shape, to the part the spec
+#: must carry (#183.3). The tool grows into this list: a part it
+#: has no mark for yet stops loud for the reviewer to add.
+NAME_SHAPES = {"hammerhead": "hammer", "sawfish": "saw", "swordfish": "sword"}
+
+
+def _name_shapes(target: dict[str, Any]) -> list[str]:
+    """Required shape-part words from the animal's own name (#183.3)."""
+    hay = (
+        f"{target.get('id', '')} {(target.get('entry') or {}).get('name', '')}"
+    ).lower()
+    return [part for word, part in NAME_SHAPES.items() if word in hay]
+
+
+def _shape_part_errors(
+    target: dict[str, Any], asked: list[str], spec: dict[str, Any]
+) -> list[str]:
+    """Every name-shape part the spec lacks (#183.3).
+
+    The animal round's first spec carries its shape part,
+    always: seeded from the name, checked before any fix
+    round. A shape the tool has no mark for yet (saw, sword)
+    stops loud for the reviewer to add it to the tool, and
+    never builds without it.
+    """
+    parts = " ".join(
+        part.get("name", "") for part in spec.get("parts", []) if isinstance(part, dict)
+    ).lower()
+    errors = []
+    for word in _name_shapes(target):
+        if word in parts:
+            continue
+        if word in asked:
+            errors.append(
+                f"the spec has no {word} part though the {word} mark was "
+                "asked: the tool skipped it; a person looks"
+            )
+        elif word in SHAPE_MARKS:
+            errors.append(
+                f"the spec has no {word} part: add the {word} mark in `marks`"
+            )
+        else:
+            errors.append(
+                f"the spec has no {word} part and the tool has no {word} "
+                "mark: the reviewer adds it to the tool; a person makes it"
+            )
+    return errors
 
 
 def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
@@ -2412,13 +2501,18 @@ def _mark_miss(mark: str) -> str:
     """A missing key mark as a fix-round error (#146.3).
 
     When a tool mark paints it, the fix keeps the mark and
-    its colours; otherwise colours and repaints must.
+    its colours; otherwise the round adds the part or paints
+    it: a shape the reference lacks takes its tool mark in
+    `marks`, as the animal round can (#183.2).
     """
     tools, _ = _tool_marks([mark])
     if not tools:
         return (
-            f"the render shows no {mark}: paint it with colours "
-            "and repaints, never with factors"
+            f"the render shows no {mark}: add the part or paint it. "
+            "When it is a shape the reference lacks, add the tool mark "
+            "that makes it in `marks` (hammer, horns, spines, ear_tufts, "
+            "ruff); otherwise paint it with colours and repaints, never "
+            "with factors"
         )
     names = " and ".join(f"the {tool} mark" for tool in tools)
     return (

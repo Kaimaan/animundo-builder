@@ -2839,8 +2839,11 @@ def test_mark_miss_points_at_the_tool_mark() -> None:
         "colours, and don't repaint its parts away"
     )
     assert _mark_miss("yellow body") == (
-        "the render shows no yellow body: paint it with colours "
-        "and repaints, never with factors"
+        "the render shows no yellow body: add the part or paint it. "
+        "When it is a shape the reference lacks, add the tool mark "
+        "that makes it in `marks` (hammer, horns, spines, ear_tufts, "
+        "ruff); otherwise paint it with colours and repaints, never "
+        "with factors"
     )
 
 
@@ -3270,6 +3273,211 @@ def test_marks_review_falls_back_to_the_research_marks(tmp_path: Path) -> None:
     )
     assert f"the render shows no {bands}" in errors[0]
     assert f"the render shows no {bands}" in client.prompts[3]
+
+
+def test_edits_answer_may_add_tool_marks(tmp_path: Path) -> None:
+    """#183.2: a fix round adds the mark that makes a missing shape."""
+    from builder.stages.maker import TOOL_MARKS
+
+    schema = _edits_schema({"colors": {}, "parts": []})
+    assert "marks" in schema["required"]
+    assert schema["properties"]["marks"]["items"]["enum"] == list(TOOL_MARKS)
+    ref = {"colors": {"fur": "#8b7355", "belly": "#f0e8d8"}, "parts": []}
+    edits, errors = _edits_files(_edits_answer(marks=["hammer"]), ref)
+    assert edits is not None and errors == []
+    edits, errors = _edits_files(_edits_answer(marks=["saw"]), ref)
+    assert edits is None and errors == ["marks names no tool mark 'saw'"]
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer(marks=["spines"])])
+    _stage().run(_ctx(tmp_path, world, client))
+    edits = json.loads(
+        (tmp_path / "tries" / "lynx" / "edits" / "1" / "edits.json").read_text()
+    )
+    assert edits["marks"] == ["spines"]
+
+
+def test_marks_prompt_names_head_views() -> None:
+    """#183.2: head marks are judged in the front and top views."""
+    text = (PROMPTS_DIR / "model_marks.md").read_text(encoding="utf-8")
+    assert "FRONT" in text and "TOP" in text
+    assert "head" in text
+    assert "When unsure" in text
+
+
+HAMMERHEAD = {
+    "id": "hammerhead",
+    "name": "Scalloped hammerhead",
+    "latin": "Sphyrna lewini",
+    "gbif_key": 5215228,
+    "start_from": "fox",
+    "habitats": ["reef"],
+    "can_make": True,
+}
+
+
+def _hammerhead_inputs(tmp_path: Path, world: Path) -> None:
+    """#183.3: the hammerhead's brief and research, naming no hammer."""
+    listing = json.loads((world / "animal-list.json").read_text())
+    listing["animals"].append(HAMMERHEAD)
+    (world / "animal-list.json").write_text(json.dumps(listing))
+    _inputs(
+        tmp_path,
+        brief={
+            "species_key": 5215228,
+            "id": "hammerhead",
+            "latin": "Sphyrna lewini",
+            "name": "Scalloped hammerhead",
+            "in_library": None,
+            "start_from": "fox",
+            "habitats": ["reef"],
+            "home": "boreal_forest",
+            "needs_home": False,
+        },
+    )
+    research = json.loads((tmp_path / "research.json").read_text())
+    research.update(
+        {
+            "size": {"length_cm": 8, "weight_kg": 0.02},
+            "looks": {
+                "shoulder_cm": None,
+                "tail_cm": 3,
+                "coat": {"main": "grey", "belly": "white"},
+                "marks": [
+                    {"mark": "wide flat head"},
+                    {"mark": "scalloped front edge with central dent"},
+                ],
+            },
+        }
+    )
+    (tmp_path / "research.json").write_text(json.dumps(research))
+
+
+def _adapt_with_marks(
+    world: Path, start_from: str, edits_path: Path, out_path: Path
+) -> dict[str, Any]:
+    """The adapt tool, stubbed: marks become parts, like the real one."""
+    result = _adapt_ok(world, start_from, edits_path, out_path)
+    edits = json.loads(edits_path.read_text(encoding="utf-8"))
+    if "hammer" in (edits.get("marks") or []):
+        spec = json.loads(out_path.read_text(encoding="utf-8"))
+        length = edits.get("length_m", 1.0)
+        spec["parts"].append(
+            {
+                "name": "hammer",
+                "shape": "ball",
+                "size": [0.5, 0.05, 0.05],
+                "at": [0, 0.05, length / 2 - 0.03],
+                "color": "fur",
+                "bone": "body",
+            }
+        )
+        out_path.write_text(json.dumps(spec), encoding="utf-8")
+    return result
+
+
+def test_hammerhead_seeds_hammer_from_its_name(tmp_path: Path) -> None:
+    """#183.3: the first spec carries the hammer, from the name alone."""
+    world = _world(tmp_path)
+    _hammerhead_inputs(tmp_path, world)
+    dent = "scalloped front edge with central dent"
+    client = ScriptClient(
+        [
+            _animal_answer("hammerhead"),
+            _edits_answer(key_marks=[dent]),
+            _marks_answer([dent], []),
+        ]
+    )
+    _stage(adapt=_adapt_with_marks).run(_ctx(tmp_path, world, client))
+    assert len(client.calls) == 3
+    edits = json.loads(
+        (tmp_path / "tries" / "hammerhead" / "edits" / "1" / "edits.json").read_text()
+    )
+    assert "hammer" in edits["marks"]
+    spec = json.loads((tmp_path / "models" / "hammerhead.json").read_text())
+    assert "hammer" in [part["name"] for part in spec["parts"]]
+    errors = json.loads(
+        (tmp_path / "tries" / "hammerhead" / "edits" / "1" / "errors.json").read_text()
+    )
+    assert errors == []
+
+
+def test_name_shapes_cover_the_class() -> None:
+    """#183.3: hammerhead, sawfish and swordfish need their part."""
+    from builder.stages.maker import _name_shapes, _shape_part_errors
+
+    assert _name_shapes({"id": "hammerhead", "entry": {}}) == ["hammer"]
+    assert _name_shapes({"id": "x", "entry": {"name": "Scalloped Hammerhead"}}) == [
+        "hammer"
+    ]
+    assert _name_shapes({"id": "sawfish", "entry": {}}) == ["saw"]
+    assert _name_shapes({"id": "swordfish", "entry": {}}) == ["sword"]
+    assert _name_shapes({"id": "lynx", "entry": {"name": "Eurasian lynx"}}) == []
+    assert _name_shapes({"id": "saw_whet_owl", "entry": {}}) == []
+    target = {"id": "sawfish", "entry": {}}
+    assert _shape_part_errors(target, [], {"parts": [{"name": "body"}]}) == [
+        "the spec has no saw part and the tool has no saw mark: "
+        "the reviewer adds it to the tool; a person makes it"
+    ]
+    assert (
+        _shape_part_errors(target, [], {"parts": [{"name": "saw"}, {"name": "body"}]})
+        == []
+    )
+    missed = _shape_part_errors(
+        {"id": "hammerhead", "entry": {}}, ["hammer"], {"parts": [{"name": "body"}]}
+    )
+    assert missed == [
+        "the spec has no hammer part though the hammer mark was asked: "
+        "the tool skipped it; a person looks"
+    ]
+
+
+def test_sawfish_without_a_saw_stops_loud(tmp_path: Path) -> None:
+    """#183.3: a shape the tool can't make stops, never builds wrong."""
+    world = _world(tmp_path)
+    listing = json.loads((world / "animal-list.json").read_text())
+    listing["animals"].append(
+        {
+            "id": "sawfish",
+            "name": "Smalltooth sawfish",
+            "latin": "Pristis pectinata",
+            "gbif_key": 5215229,
+            "start_from": "fox",
+            "habitats": ["reef"],
+            "can_make": True,
+        }
+    )
+    (world / "animal-list.json").write_text(json.dumps(listing))
+    _inputs(
+        tmp_path,
+        brief={
+            "species_key": 5215229,
+            "id": "sawfish",
+            "latin": "Pristis pectinata",
+            "name": "Smalltooth sawfish",
+            "in_library": None,
+            "start_from": "fox",
+            "habitats": ["reef"],
+            "home": "boreal_forest",
+            "needs_home": False,
+        },
+    )
+    client = ScriptClient(
+        [
+            _animal_answer("sawfish"),
+            _edits_answer(),
+            _edits_answer(),
+        ]
+    )
+    with pytest.raises(_Stopped, match="a person makes it"):
+        _stage().run(_ctx(tmp_path, world, client))
+    errors = json.loads(
+        (tmp_path / "tries" / "sawfish" / "edits" / "1" / "errors.json").read_text()
+    )
+    assert errors == [
+        "the spec has no saw part and the tool has no saw mark: "
+        "the reviewer adds it to the tool; a person makes it"
+    ]
 
 
 def test_fix_round_resends_the_answer_as_assistant(tmp_path: Path) -> None:

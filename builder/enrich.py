@@ -1,13 +1,11 @@
 """Enrich checks in real target tiles, through the world's converter (#161).
 
-The hand-built `zz_work` region is gone: for an enrich job each
-target tile becomes its place exactly as the game builds it
-(`tools/tile_region.py`), the new animal or plant is seated, the
-food is worked out again, and the world's checks run there. A
-tile inside a hand-made region instead checks in that region
-file, which has no tile home to convert from (#168.1). The
-world's code runs in its own process, as for every world tool;
-the builder only feeds it the tile and reads back the place.
+For an enrich job each target tile becomes its place exactly
+as the game builds it (`tools/tile_region.py`), the new animal
+or plant is seated, the food is worked out again, and the
+world's checks run there. The world's code runs in its own
+process, as for every world tool; the builder only feeds it
+the tile and reads back the place.
 """
 
 from __future__ import annotations
@@ -102,87 +100,6 @@ def tile_place(
             f"tile_region.py gave no JSON for {tile.get('id')}: "
             f"{proc.stdout.strip()[:200]}"
         )
-
-
-def region_place(
-    region_id: str,
-    world: Path,
-    what: str = "",
-    kind: str = "",
-) -> dict[str, Any]:
-    """One hand-made region with the new thing seated (#168.1).
-
-    An enrich item only adds: the animal to `playable`, a
-    plant to its grown side. Food, terrain and everything else
-    stay exactly as they are: reworking food rewrote the reef's
-    (#173.1). A place on a `biome` writes the new way, as the
-    game reads it (#178): the animal to `species.playable`,
-    never `animals` (the region check refuses that); a plant
-    or fish onto its side's biome list when the place writes
-    none of its own, or the resolved place loses the biome's.
-    """
-    region_path = world / "regions" / f"{region_id}.json"
-    try:
-        region = json.loads(region_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise ConvertError(f"the region file {region_id} won't read: {error}")
-    if not what:
-        return region
-    biome_id = region.get("biome") if isinstance(region, dict) else None
-    if kind == "plant":
-        grows = _plant_grows(world, what)
-        on = grows.get("on") or []
-        side = "water" if "seabed" in on or "reef" in on else "cover"
-        if biome_id is not None and not isinstance(
-            (region.get("plants") or {}).get(side), list
-        ):
-            # No list of its own: the biome's, or resolve drops
-            # every plant on this side (#178.2).
-            region.setdefault("plants", {})[side] = _biome_list(
-                world, biome_id, region_id, "plants", side
-            )
-        _seat_plant(region, what, side, plant_entry_density(grows))
-    elif biome_id is not None:
-        species = region.setdefault("species", {})
-        if isinstance(species, dict):
-            lists = species.setdefault("playable", [])
-        else:
-            lists = species
-        if what not in lists:
-            lists.append(what)
-        small: bool | None = _fish_size(world, what)
-        if small is not None:
-            # A fish: the biome's fish first, like the game's
-            # live packs, then the new one with its count (#178.3).
-            if not isinstance(region.get("fish"), list):
-                region["fish"] = _biome_list(world, biome_id, region_id, "fish")
-            fish = region["fish"]
-            if what not in [e.get("kind") for e in fish if isinstance(e, dict)]:
-                fish.append({"kind": what, "count": 5 if small else 2})
-    else:
-        animals = region.setdefault("animals", {})
-        if isinstance(animals, dict):
-            lists = animals.setdefault("playable", [])
-        else:
-            lists = animals
-        if what not in lists:
-            lists.append(what)
-    return region
-
-
-def _seat_plant(
-    region: dict[str, Any], what: str, side: str, density: float = 0.1
-) -> None:
-    """The plant onto its grown side, once (#168.1)."""
-    plants = region.setdefault("plants", {})
-    grown = plants.get(side)
-    if not isinstance(grown, list):
-        grown = next((v for v in plants.values() if isinstance(v, list)), None)
-        if grown is None:
-            grown = []
-            plants[side] = grown
-    if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
-        grown.append({"id": what, "density": density})
 
 
 #: A coral's density on the rock when an enrich item adds it (#184.3).
@@ -367,53 +284,6 @@ def _biome_list(
     return copy.deepcopy(found) if isinstance(found, list) else []
 
 
-def _fish_size(world: Path, what: str) -> bool | None:
-    """Whether the new animal swims small, or nothing when it doesn't.
-
-    The animal file says (tags, or a made file's archetype);
-    before it is written the animal list's file example does:
-    a fish adapts from a fish, a whale from a seal (#178.3).
-    None when neither says fish, or nothing says anything.
-    """
-    data = _animal_data(world, what)
-    if data is None:
-        data = _animal_data(world, _file_example(world, what))
-    if data is None:
-        return None
-    tags = data.get("tags") or []
-    if (data.get("model") or {}).get("archetype") == "fish" or "fish" in tags:
-        return "small_fish" in tags
-    return None
-
-
-def _animal_data(world: Path, what: str | None) -> dict[str, Any] | None:
-    """The animal file's JSON, or nothing without one."""
-    if not what:
-        return None
-    try:
-        data = json.loads(
-            (world / "animals" / f"{what}.json").read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError):
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def _file_example(world: Path, what: str) -> str | None:
-    """The animal list's file example for this id, if it names one."""
-    try:
-        listed = json.loads((world / "animal-list.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    animals = listed.get("animals") if isinstance(listed, dict) else None
-    if not isinstance(animals, list):
-        return None
-    for entry in animals:
-        if isinstance(entry, dict) and entry.get("id") == what:
-            return entry.get("file_from") or entry.get("start_from")
-    return None
-
-
 def region_additions_only(
     before: dict[str, Any],
     after: dict[str, Any],
@@ -556,10 +426,9 @@ def _manifest(job_dir: Path) -> list[str] | None:
 def enrich_places(job_dir: Path) -> list[Path]:
     """The job's checked places, sorted; empty for a non-enrich job.
 
-    The intake manifests its files: converted tiles
-    (`tl_<tile>.json`) and hand-made regions (`<region id>.json`)
-    alike (#168.1). Without a manifest only converted tiles
-    count, so a build scaffold is never read as a place.
+    The intake manifests its converted tiles (`tl_<tile>.json`).
+    Without a manifest only converted tiles count, so a build
+    scaffold is never read as a place.
     """
     names = _manifest(job_dir)
     if names is None:
@@ -570,11 +439,7 @@ def enrich_places(job_dir: Path) -> list[Path]:
 
 
 def place_tiles(job_dir: Path) -> dict[str, str]:
-    """Each place's region id (and file stem) to its tile (#161.2).
-
-    A hand-made region maps to itself: its verdict line names
-    the region, not one of its tiles (#168.1).
-    """
+    """Each place's file stem (and region id) to its tile (#161.2)."""
     out: dict[str, str] = {}
     for path in enrich_places(job_dir):
         tile = path.stem[3:] if path.stem.startswith("tl_") else path.stem

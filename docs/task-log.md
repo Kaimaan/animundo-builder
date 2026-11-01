@@ -2311,3 +2311,45 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   remake writes the grid's 0.0 and computed
   edges; "around noted tiles" counts the
   same 3 cells as the made-tile rule.
+
+## 2026-11-01: inbox #180 (builder 8d291e7, e00b7dd, 5978ccd, 42a6354, b12a383, 4402f0f, bf065c5)
+
+- The cap counted stale runs, not open
+  reservations (#180.1): every `--record`
+  run of an item shared one `replay/<item>`
+  ledger id, so the provider counted the
+  old $0.61 with the run's $0.29 (the
+  $0.90; the settle mechanics reconcile
+  exactly, nothing leaks). Record runs now
+  mint a run-unique ledger id, so the cap
+  compares this run's real spend plus the
+  one reservation in flight. The worker's
+  stable job ids are untouched.
+- A rerun continues stopped model rounds
+  (#180.2): minimum says make when the
+  animal file is made but its model spec
+  is not built yet, and the model loop
+  resumes from the last `rounds/<id>/<n>`
+  (spec, review issues, check errors,
+  now persisted per round), rebuilding
+  and re-reviewing an interrupted round
+  when its review never ran. A loop that
+  used its round limit still stops.
+- The plants stage builds nothing for an
+  animal item's brief, for $0 (#180.3);
+  home and plant runs are unchanged.
+- Draft regions leave out treeless
+  `"none"` densities, which the schema
+  wants as a number (#180.4). Named
+  densities WITH trees (mangrove dense
+  and kin) still break the schema and
+  need a number mapping: saying nothing
+  here instead of guessing it.
+- The whale's box comes from its last
+  built round's spec even when the loop
+  never passed, best effort (#180.5);
+  the review prompt now checks whale
+  head width, one-piece flippers, the
+  stalk merging into the fluke, and one
+  even blue-grey, and never asks a whale
+  for legs.

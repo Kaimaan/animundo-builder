@@ -1,0 +1,8135 @@
+{
+ "source": "Natural Earth 1:10m lakes 5.0.0 (public domain) joined by ne_id; en and fi labels from Wikidata (CC0) where the feature carries a wikidataid, else the Natural Earth name",
+ "lakes": {
+  "1159106675": {
+   "name": "Eğirdir",
+   "en": "Lake Eğirdir",
+   "fi": "Eğirdirjärvi",
+   "wikidata": "Q1334148"
+  },
+  "1159106685": {
+   "name": "Beyşehir",
+   "en": "Lake Beyşehir",
+   "fi": "Beyşehirjärvi",
+   "wikidata": "Q369923"
+  },
+  "1159106693": {
+   "name": "Engozero",
+   "en": "Engozero",
+   "fi": "Enkijärvi (järvi)",
+   "wikidata": "Q1342950"
+  },
+  "1159106703": {
+   "name": "Pääjärvi",
+   "en": "Pyaozero",
+   "fi": "Pääjärvi",
+   "wikidata": "Q1458409"
+  },
+  "1159106711": {
+   "name": "Ozero Pitlyarskiy Sor",
+   "en": "Ozero Pitlyarskiy Sor",
+   "fi": "Ozero Pitlyarskiy Sor",
+   "wikidata": ""
+  },
+  "1159106721": {
+   "name": "Great Bear Lake",
+   "en": "Great Bear Lake",
+   "fi": "Iso Karhujärvi",
+   "wikidata": "Q5525"
+  },
+  "1159106729": {
+   "name": "Great Slave Lake",
+   "en": "Great Slave Lake",
+   "fi": "Iso Orjajärvi",
+   "wikidata": "Q5539"
+  },
+  "1159106739": {
+   "name": "McLeod Bay",
+   "en": "McLeod Bay",
+   "fi": "McLeod Bay",
+   "wikidata": ""
+  },
+  "1159106747": {
+   "name": "Lake Winnipeg",
+   "en": "Lake Winnipeg",
+   "fi": "Winnipegjärvi",
+   "wikidata": "Q3272"
+  },
+  "1159106757": {
+   "name": "Lake Erie",
+   "en": "Lake Erie",
+   "fi": "Eriejärvi",
+   "wikidata": "Q5492"
+  },
+  "1159106765": {
+   "name": "Lake Ontario",
+   "en": "Lake Ontario",
+   "fi": "Ontariojärvi",
+   "wikidata": "Q1062"
+  },
+  "1159106775": {
+   "name": "Lake Saint Clair",
+   "en": "Lake Saint Clair",
+   "fi": "Lake St. Clair",
+   "wikidata": "Q736707"
+  },
+  "1159106781": {
+   "name": "Lake Okeechobee",
+   "en": "Lake Okeechobee",
+   "fi": "Okeechobeejärvi",
+   "wikidata": "Q202905"
+  },
+  "1159106791": {
+   "name": "Lago de Nicaragua",
+   "en": "Lake Nicaragua",
+   "fi": "Nicaraguajärvi",
+   "wikidata": "Q173862"
+  },
+  "1159106799": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159106809": {
+   "name": "Wollaston Lake",
+   "en": "Wollaston Lake",
+   "fi": "Wollaston Lake",
+   "wikidata": "Q1640500"
+  },
+  "1159106817": {
+   "name": "Reindeer Lake",
+   "en": "Reindeer Lake",
+   "fi": "Peurajärvi",
+   "wikidata": "Q1134446"
+  },
+  "1159106825": {
+   "name": "Lake of the Woods",
+   "en": "Lake of the Woods",
+   "fi": "Lake of the Woods",
+   "wikidata": "Q845876"
+  },
+  "1159106833": {
+   "name": "Lake Nipigon",
+   "en": "Lake Nipigon",
+   "fi": "Nipigonjärvi",
+   "wikidata": "Q122184"
+  },
+  "1159106843": {
+   "name": "Lake Manitoba",
+   "en": "Lake Manitoba",
+   "fi": "Manitobajärvi",
+   "wikidata": "Q645901"
+  },
+  "1159106851": {
+   "name": "Lake Winnipegosis",
+   "en": "Lake Winnipegosis",
+   "fi": "Winnipegosisjärvi",
+   "wikidata": "Q934638"
+  },
+  "1159106863": {
+   "name": "Lake Athabasca",
+   "en": "Lake Athabasca",
+   "fi": "Athabascajärvi",
+   "wikidata": "Q272463"
+  },
+  "1159106873": {
+   "name": "Lake Mistassini",
+   "en": "Lake Mistassini",
+   "fi": "Lake Mistassini",
+   "wikidata": "Q1458051"
+  },
+  "1159106881": {
+   "name": "Oneida Lake",
+   "en": "Oneida Lake",
+   "fi": "Oneida Lake",
+   "wikidata": "Q1247231"
+  },
+  "1159106893": {
+   "name": "Iliamna Lake",
+   "en": "Iliamna Lake",
+   "fi": "Iliamna Lake",
+   "wikidata": "Q965436"
+  },
+  "1159106899": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159106907": {
+   "name": "Lake Tahoe",
+   "en": "Lake Tahoe",
+   "fi": "Tahoejärvi",
+   "wikidata": "Q169962"
+  },
+  "1159106917": {
+   "name": "Lake Winnebago",
+   "en": "Lake Winnebago",
+   "fi": "Lake Winnebago",
+   "wikidata": "Q1801110"
+  },
+  "1159106925": {
+   "name": "Nettilling Lake",
+   "en": "Nettilling Lake",
+   "fi": "Nettillingjärvi",
+   "wikidata": "Q1132211"
+  },
+  "1159106935": {
+   "name": "Dubawnt Lake",
+   "en": "Dubawnt Lake",
+   "fi": "Dubawnt Lake",
+   "wikidata": "Q1262967"
+  },
+  "1159106943": {
+   "name": "Baker Lake",
+   "en": "Baker Lake",
+   "fi": "Baker Lake",
+   "wikidata": "Q1391737"
+  },
+  "1159106953": {
+   "name": "Lake Champlain",
+   "en": "Lake Champlain",
+   "fi": "Champlainjärvi",
+   "wikidata": "Q68467"
+  },
+  "1159106961": {
+   "name": "Churchill Lake",
+   "en": "Churchill Lake",
+   "fi": "Churchill Lake",
+   "wikidata": "Q1089891"
+  },
+  "1159106971": {
+   "name": "Lac la Martre",
+   "en": "Lac La Martre",
+   "fi": "Lac La Martre",
+   "wikidata": "Q1516443"
+  },
+  "1159106979": {
+   "name": "Keuka Lake",
+   "en": "Keuka Lake",
+   "fi": "Keuka Lake",
+   "wikidata": "Q1335725"
+  },
+  "1159106989": {
+   "name": "Seneca Lake",
+   "en": "Seneca Lake",
+   "fi": "Seneca Lake",
+   "wikidata": "Q1552706"
+  },
+  "1159106997": {
+   "name": "Cayuga Lake",
+   "en": "Cayuga Lake",
+   "fi": "Cayuga Lake",
+   "wikidata": "Q731175"
+  },
+  "1159107007": {
+   "name": "Cree Lake",
+   "en": "Cree Lake",
+   "fi": "Cree Lake",
+   "wikidata": "Q945023"
+  },
+  "1159107015": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107025": {
+   "name": "Kasba Lake",
+   "en": "Kasba Lake",
+   "fi": "Kasba Lake",
+   "wikidata": "Q719538"
+  },
+  "1159107033": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107045": {
+   "name": "Lac-à-l'Eau-Claire",
+   "en": "Wiyâshâkimî Lake",
+   "fi": "Wiyâshâkimî Lake",
+   "wikidata": "Q1699973"
+  },
+  "1159107053": {
+   "name": "Lake Nipissing",
+   "en": "Lake Nipissing",
+   "fi": "Lake Nipissing",
+   "wikidata": "Q1356838"
+  },
+  "1159107065": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107077": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107087": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107099": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107115": {
+   "name": "Lake Sakami",
+   "en": "Lac Sakami",
+   "fi": "Lac Sakami",
+   "wikidata": "Q1799611"
+  },
+  "1159107123": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107139": {
+   "name": "Scott Lake",
+   "en": "Scott Lake",
+   "fi": "Scott Lake",
+   "wikidata": "Q7359166"
+  },
+  "1159107149": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107159": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107173": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107185": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107195": {
+   "name": "Yellowstone Lake",
+   "en": "Yellowstone Lake",
+   "fi": "Yellowstonejärvi",
+   "wikidata": "Q923693"
+  },
+  "1159107207": {
+   "name": "Teshekpuk Lake",
+   "en": "Teshekpuk Lake",
+   "fi": "Teshekpuk Lake",
+   "wikidata": "Q3518981"
+  },
+  "1159107217": {
+   "name": "Flathead Lake",
+   "en": "Flathead Lake",
+   "fi": "Flathead Lake",
+   "wikidata": "Q1427364"
+  },
+  "1159107229": {
+   "name": "Lake Claire",
+   "en": "Lake Claire",
+   "fi": "Lake Claire",
+   "wikidata": "Q1534419"
+  },
+  "1159107241": {
+   "name": "Lago de Izabal",
+   "en": "Lake Izabal",
+   "fi": "Lake Izabal",
+   "wikidata": "Q138637"
+  },
+  "1159107251": {
+   "name": "Lago de Chapala",
+   "en": "Lake Chapala",
+   "fi": "Chapalajärvi",
+   "wikidata": "Q318350"
+  },
+  "1159107259": {
+   "name": "Lago de Managua",
+   "en": "Lake Managua",
+   "fi": "Managuajärvi",
+   "wikidata": "Q21052208"
+  },
+  "1159107275": {
+   "name": "Rainy Lake",
+   "en": "Rainy Lake",
+   "fi": "Rainy Lake",
+   "wikidata": "Q202019"
+  },
+  "1159107285": {
+   "name": "Split Lake",
+   "en": "Split Lake",
+   "fi": "Split Lake",
+   "wikidata": "Q7375301"
+  },
+  "1159107297": {
+   "name": "Lake St. Joseph",
+   "en": "Lake St. Joseph",
+   "fi": "Lake St. Joseph",
+   "wikidata": "Q659225"
+  },
+  "1159107307": {
+   "name": "Amadjuak Lake",
+   "en": "Amadjuak Lake",
+   "fi": "Amadjuak Lake",
+   "wikidata": "Q452088"
+  },
+  "1159107319": {
+   "name": "Teslin Lake",
+   "en": "Teslin Lake",
+   "fi": "Teslin Lake",
+   "wikidata": "Q283793"
+  },
+  "1159107323": {
+   "name": "Lake Bienville",
+   "en": "Lac Bienville",
+   "fi": "Lac Bienville",
+   "wikidata": "Q1496993"
+  },
+  "1159107335": {
+   "name": "Lake Pend Oreille",
+   "en": "Lake Pend Oreille",
+   "fi": "Lake Pend Oreille",
+   "wikidata": "Q1632195"
+  },
+  "1159107347": {
+   "name": "Canandaigua Lake",
+   "en": "Canandaigua Lake",
+   "fi": "Canandaigua Lake",
+   "wikidata": "Q1032768"
+  },
+  "1159107357": {
+   "name": "Owasco Lake",
+   "en": "Owasco Lake",
+   "fi": "Owasco Lake",
+   "wikidata": "Q1339170"
+  },
+  "1159107371": {
+   "name": "Skaneateles Lake",
+   "en": "Skaneateles Lake",
+   "fi": "Skaneateles Lake",
+   "wikidata": "Q1333432"
+  },
+  "1159107379": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107393": {
+   "name": "Bear Lake",
+   "en": "Bear Lake",
+   "fi": "Bear Lake",
+   "wikidata": "Q812997"
+  },
+  "1159107397": {
+   "name": "Utah Lake",
+   "en": "Utah Lake",
+   "fi": "Utahjärvi",
+   "wikidata": "Q729974"
+  },
+  "1159107413": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107427": {
+   "name": "Leech Lake",
+   "en": "Leech Lake",
+   "fi": "Leechjärvi",
+   "wikidata": "Q1812063"
+  },
+  "1159107441": {
+   "name": "Lac des Mille Lacs",
+   "en": "Lac des Mille Lacs",
+   "fi": "Lac des Mille Lacs",
+   "wikidata": "Q3215670"
+  },
+  "1159107451": {
+   "name": "Trout Lake",
+   "en": "Trout Lake",
+   "fi": "Trout Lake",
+   "wikidata": "Q1638242"
+  },
+  "1159107465": {
+   "name": "Lake Rossignol",
+   "en": "Lake Rossignol",
+   "fi": "Lake Rossignol",
+   "wikidata": "Q3215164"
+  },
+  "1159107475": {
+   "name": "Grand Lake",
+   "en": "Grand Lake",
+   "fi": "Grand Lake",
+   "wikidata": "Q1275436"
+  },
+  "1159107491": {
+   "name": "Black Lake",
+   "en": "Black Lake",
+   "fi": "Black Lake",
+   "wikidata": "Q880358"
+  },
+  "1159107499": {
+   "name": "Lake Louise",
+   "en": "Lake Louise",
+   "fi": "Lake Louise",
+   "wikidata": "Q1343275"
+  },
+  "1159107513": {
+   "name": "Bluenose Lake",
+   "en": "Bluenose Lake",
+   "fi": "Bluenose Lake",
+   "wikidata": "Q886010"
+  },
+  "1159107521": {
+   "name": "Grand Lake",
+   "en": "Grand Lake",
+   "fi": "Grand Lake",
+   "wikidata": "Q1275436"
+  },
+  "1159107535": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107549": {
+   "name": "Colville Lake",
+   "en": "Colville Lake",
+   "fi": "Colville Lake",
+   "wikidata": "Q1112986"
+  },
+  "1159107563": {
+   "name": "Hottah Lake",
+   "en": "Hottah Lake",
+   "fi": "Hottah Lake",
+   "wikidata": "Q1631233"
+  },
+  "1159107573": {
+   "name": "Big Trout Lake",
+   "en": "Big Trout Lake",
+   "fi": "Big Trout Lake",
+   "wikidata": "Q859461"
+  },
+  "1159107587": {
+   "name": "Trout Lake",
+   "en": "Trout Lake",
+   "fi": "Trout Lake",
+   "wikidata": "Q1638242"
+  },
+  "1159107599": {
+   "name": "Island Lake",
+   "en": "Island Lake",
+   "fi": "Island Lake",
+   "wikidata": "Q179505"
+  },
+  "1159107609": {
+   "name": "Lake Naococane",
+   "en": "Lac Naococane",
+   "fi": "Lac Naococane",
+   "wikidata": "Q3215083"
+  },
+  "1159107627": {
+   "name": "Lac la Ronge",
+   "en": "Lac la Ronge",
+   "fi": "Lac la Ronge",
+   "wikidata": "Q250257"
+  },
+  "1159107635": {
+   "name": "Mille Lacs Lake",
+   "en": "Mille Lacs Lake",
+   "fi": "Mille Lacs",
+   "wikidata": "Q1600016"
+  },
+  "1159107655": {
+   "name": "Lower Red Lake",
+   "en": "Red Lake",
+   "fi": "Red Lake",
+   "wikidata": "Q1320568"
+  },
+  "1159107661": {
+   "name": "Upper Red Lake",
+   "en": "Red Lake",
+   "fi": "Red Lake",
+   "wikidata": "Q1320568"
+  },
+  "1159107675": {
+   "name": "Lake Winnipesaukee",
+   "en": "Lake Winnipesaukee",
+   "fi": "Lake Winnipesaukee",
+   "wikidata": "Q224872"
+  },
+  "1159107689": {
+   "name": "Lake Simcoe",
+   "en": "Lake Simcoe",
+   "fi": "Lake Simcoe",
+   "wikidata": "Q366985"
+  },
+  "1159107699": {
+   "name": "Gods Lake",
+   "en": "Gods Lake",
+   "fi": "Gods Lake",
+   "wikidata": "Q1533897"
+  },
+  "1159107715": {
+   "name": "Yathkyed Lake",
+   "en": "Yathkyed Lake",
+   "fi": "Yathkyed Lake",
+   "wikidata": "Q1888261"
+  },
+  "1159107735": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107747": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107757": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107859": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107873": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107889": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107899": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107913": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107927": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159107937": {
+   "name": "Aylmer Lake",
+   "en": "Aylmer Lake",
+   "fi": "Aylmer Lake",
+   "wikidata": "Q793085"
+  },
+  "1159107951": {
+   "name": "Clinton-Colden Lake",
+   "en": "Clinton-Colden Lake",
+   "fi": "Clinton-Colden Lake",
+   "wikidata": "Q1101640"
+  },
+  "1159107967": {
+   "name": "Lac Île-à-la-Crosse",
+   "en": "Lac Île-à-la-Crosse",
+   "fi": "Lac Île-à-la-Crosse",
+   "wikidata": "Q6468085"
+  },
+  "1159107971": {
+   "name": "Wholdaia Lake",
+   "en": "Wholdaia Lake",
+   "fi": "Wholdaia Lake",
+   "wikidata": "Q1606564"
+  },
+  "1159107987": {
+   "name": "Tehek Lake",
+   "en": "Tehek Lake",
+   "fi": "Tehek Lake",
+   "wikidata": "Q1328351"
+  },
+  "1159108003": {
+   "name": "Lake George",
+   "en": "Lake George",
+   "fi": "Lake George",
+   "wikidata": "Q1800933"
+  },
+  "1159108013": {
+   "name": "Lake Havasu",
+   "en": "Lake Havasu",
+   "fi": "Lake Havasu",
+   "wikidata": "Q451522"
+  },
+  "1159108035": {
+   "name": "Point Lake",
+   "en": "Point Lake",
+   "fi": "Point Lake",
+   "wikidata": "Q1233362"
+  },
+  "1159108051": {
+   "name": "Upper Klamath Lake",
+   "en": "Upper Klamath Lake",
+   "fi": "Upper Klamath Lake",
+   "wikidata": "Q1972978"
+  },
+  "1159108063": {
+   "name": "Chiputneticook Lakes",
+   "en": "Chiputneticook Lakes",
+   "fi": "Chiputneticook Lakes",
+   "wikidata": "Q3215856"
+  },
+  "1159108077": {
+   "name": "Aishihik Lake",
+   "en": "Aishihik Lake",
+   "fi": "Aishihik Lake",
+   "wikidata": "Q3214697"
+  },
+  "1159108091": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108105": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108117": {
+   "name": "Lake Clark",
+   "en": "Lake Clark",
+   "fi": "Lake Clark",
+   "wikidata": "Q1476428"
+  },
+  "1159108131": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108145": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108157": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108171": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108183": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108199": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108211": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108225": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108237": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108251": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108267": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108279": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108291": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108305": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108319": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108339": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108347": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108359": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108369": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108391": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108399": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108417": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108429": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108445": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108453": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108469": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108483": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108493": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108505": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108519": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108539": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108549": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108561": {
+   "name": "Canyon Ferry Lake",
+   "en": "Canyon Ferry Lake",
+   "fi": "Canyon Ferry Lake",
+   "wikidata": "Q5034204"
+  },
+  "1159108581": {
+   "name": "Jackson Lake",
+   "en": "Jackson Lake",
+   "fi": "Jackson Lake",
+   "wikidata": "Q1589175"
+  },
+  "1159108595": {
+   "name": "Cass Lake",
+   "en": "Cass Lake",
+   "fi": "Cass Lake",
+   "wikidata": "Q5049166"
+  },
+  "1159108611": {
+   "name": "Lake Winnibigoshish",
+   "en": "Lake Winnibigoshish",
+   "fi": "Lake Winnibigoshish",
+   "wikidata": "Q6478519"
+  },
+  "1159108619": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108635": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108645": {
+   "name": "Marmion Lake",
+   "en": "Marmion Lake",
+   "fi": "Marmion Lake",
+   "wikidata": "Q6772137"
+  },
+  "1159108663": {
+   "name": "Lac du Bonnet",
+   "en": "Lac du Bonnet",
+   "fi": "Lac du Bonnet",
+   "wikidata": ""
+  },
+  "1159108673": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108693": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108703": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108715": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108729": {
+   "name": "Sandy Lake",
+   "en": "Sandy Lake",
+   "fi": "Sandy Lake",
+   "wikidata": "Q1888921"
+  },
+  "1159108745": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108763": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108773": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108791": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108805": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108815": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108825": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108835": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108847": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108859": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108871": {
+   "name": "Kluane Lake",
+   "en": "Kluane Lake",
+   "fi": "Kluane Lake",
+   "wikidata": "Q1776556"
+  },
+  "1159108887": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108899": {
+   "name": "Lynx Lake",
+   "en": "Lynx Lake",
+   "fi": "Lynx Lake",
+   "wikidata": "Q4262256"
+  },
+  "1159108915": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108931": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108939": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108953": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108967": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159108979": {
+   "name": "Lake Traverse",
+   "en": "Lake Traverse",
+   "fi": "Lake Traverse",
+   "wikidata": "Q1493200"
+  },
+  "1159108993": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109007": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109021": {
+   "name": "Washburn Lake",
+   "en": "Washburn Lake",
+   "fi": "Washburn Lake",
+   "wikidata": ""
+  },
+  "1159109029": {
+   "name": "Napaktulik",
+   "en": "Napaktulik Lake",
+   "fi": "Napaktulik Lake",
+   "wikidata": "Q1546823"
+  },
+  "1159109043": {
+   "name": "Sebago Lake",
+   "en": "Sebago Lake",
+   "fi": "Sebago Lake",
+   "wikidata": "Q1781818"
+  },
+  "1159109051": {
+   "name": "Moosehead Lake",
+   "en": "Moosehead Lake",
+   "fi": "Moosehead Lake",
+   "wikidata": ""
+  },
+  "1159109065": {
+   "name": "Lake Kissimmee",
+   "en": "Lake Kissimmee",
+   "fi": "Lake Kissimmee",
+   "wikidata": "Q3214981"
+  },
+  "1159109075": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109085": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109097": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109111": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109119": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109135": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109147": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109155": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109169": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109179": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109187": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109203": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109213": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109223": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109239": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109245": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109261": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109275": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109285": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109299": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109305": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109317": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109329": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109347": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109353": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109369": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109377": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109385": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109395": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109407": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109421": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109439": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109455": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109471": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109483": {
+   "name": "Keller Lake",
+   "en": "Keller Lake",
+   "fi": "Keller Lake",
+   "wikidata": "Q1328483"
+  },
+  "1159109497": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109515": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109533": {
+   "name": "Tathlina Lake",
+   "en": "Tathlina Lake",
+   "fi": "Tathlina Lake",
+   "wikidata": "Q1630256"
+  },
+  "1159109547": {
+   "name": "Selwyn Lake",
+   "en": "Selwyn Lake",
+   "fi": "Selwyn Lake",
+   "wikidata": "Q671712"
+  },
+  "1159109553": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109567": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109581": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109593": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109607": {
+   "name": "Nonacho Lake",
+   "en": "Nonacho Lake",
+   "fi": "Nonacho Lake",
+   "wikidata": "Q733206"
+  },
+  "1159109619": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109627": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109645": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109661": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109675": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109687": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109693": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109709": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109723": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109735": {
+   "name": "Aberdeen Lake",
+   "en": "Aberdeen Lake",
+   "fi": "Aberdeen Lake",
+   "wikidata": "Q319492"
+  },
+  "1159109747": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109759": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109773": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109791": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109803": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109819": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109835": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109845": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109861": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109871": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109885": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109903": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109913": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109931": {
+   "name": "Long Lake",
+   "en": "Long Lake",
+   "fi": "Long Lake",
+   "wikidata": "Q14638483"
+  },
+  "1159109945": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109963": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109971": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159109993": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110005": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110015": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110033": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110041": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110055": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110071": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110087": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110095": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110107": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110121": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110133": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110147": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110157": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110179": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110193": {
+   "name": "Sturgeon Lake",
+   "en": "Sturgeon Lake",
+   "fi": "Sturgeon Lake",
+   "wikidata": "Q7348501"
+  },
+  "1159110201": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110219": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110231": {
+   "name": "Minnitaki Lake",
+   "en": "Minnitaki Lake",
+   "fi": "Minnitaki Lake",
+   "wikidata": "Q6868864"
+  },
+  "1159110247": {
+   "name": "Contwoyto Lake",
+   "en": "Contwoyto Lake",
+   "fi": "Contwoyto Lake",
+   "wikidata": "Q917094"
+  },
+  "1159110257": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110273": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110287": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110303": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110309": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110323": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110337": {
+   "name": "Nueltin Lake",
+   "en": "Nueltin Lake",
+   "fi": "Nueltin Lake",
+   "wikidata": "Q1514307"
+  },
+  "1159110357": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110371": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110415": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110443": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110447": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110463": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110475": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110485": {
+   "name": "Lesser Slave Lake",
+   "en": "Lesser Slave Lake",
+   "fi": "Pieni Orjajärvi",
+   "wikidata": "Q956201"
+  },
+  "1159110499": {
+   "name": "Lake Payne",
+   "en": "Lac Payne",
+   "fi": "Lac Payne",
+   "wikidata": "Q1328159"
+  },
+  "1159110517": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110523": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110537": {
+   "name": "Lac Minto",
+   "en": "Lac Minto",
+   "fi": "Lac Minto",
+   "wikidata": "Q546661"
+  },
+  "1159110551": {
+   "name": "Hebgen Lake",
+   "en": "Hebgen Lake",
+   "fi": "Hebgen Lake",
+   "wikidata": "Q3214923"
+  },
+  "1159110565": {
+   "name": "Lake Walcott",
+   "en": "Lake Walcott",
+   "fi": "Lake Walcott",
+   "wikidata": "Q6478379"
+  },
+  "1159110583": {
+   "name": "Lake Granby",
+   "en": "Lake Granby",
+   "fi": "Lake Granby",
+   "wikidata": "Q6476029"
+  },
+  "1159110591": {
+   "name": "Garry Lake",
+   "en": "Garry Lake",
+   "fi": "Garry Lake",
+   "wikidata": "Q1494524"
+  },
+  "1159110611": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110627": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110635": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110649": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110667": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110683": {
+   "name": "Lake Minchumina",
+   "en": "Lake Minchumina",
+   "fi": "Lake Minchumina",
+   "wikidata": ""
+  },
+  "1159110689": {
+   "name": "Travaillant Lake",
+   "en": "Travaillant Lake",
+   "fi": "Travaillant Lake",
+   "wikidata": ""
+  },
+  "1159110705": {
+   "name": "Lac Chavigny",
+   "en": "Lac Chavigny",
+   "fi": "Lac Chavigny",
+   "wikidata": "Q15824957"
+  },
+  "1159110717": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110723": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110735": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110749": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110757": {
+   "name": "Presa Miguel Hidalgo",
+   "en": "Presa Miguel Hidalgo",
+   "fi": "Presa Miguel Hidalgo",
+   "wikidata": ""
+  },
+  "1159110767": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110779": {
+   "name": "Lake Apopka",
+   "en": "Lake Apopka",
+   "fi": "Lake Apopka",
+   "wikidata": "Q455153"
+  },
+  "1159110795": {
+   "name": "Lake Istokpoga",
+   "en": "Lake Istokpoga",
+   "fi": "Lake Istokpoga",
+   "wikidata": "Q1793276"
+  },
+  "1159110809": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110823": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110829": {
+   "name": "Laguna de Pueblo Viejo",
+   "en": "Laguna de Pueblo Viejo",
+   "fi": "Laguna de Pueblo Viejo",
+   "wikidata": ""
+  },
+  "1159110843": {
+   "name": "Laguna Chil",
+   "en": "Laguna Chil",
+   "fi": "Laguna Chil",
+   "wikidata": ""
+  },
+  "1159110857": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110865": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110881": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110907": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110923": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110931": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110957": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110965": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110979": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159110995": {
+   "name": "Zeta Lake",
+   "en": "Zeta Lake",
+   "fi": "Zeta Lake",
+   "wikidata": ""
+  },
+  "1159111011": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111025": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111039": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111051": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111065": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111079": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111093": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111105": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111119": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111133": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111149": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111159": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111173": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111187": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111199": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111213": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111227": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111245": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111263": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111289": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111295": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111315": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111331": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111345": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111357": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111371": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111385": {
+   "name": "Tetlin Lake",
+   "en": "Tetlin Lake",
+   "fi": "Tetlin Lake",
+   "wikidata": ""
+  },
+  "1159111397": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111411": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111427": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111541": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111553": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111563": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111587": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111597": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111613": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111627": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111643": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111657": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111721": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111735": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111751": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111767": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111783": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111799": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111817": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111821": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111825": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111831": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111847": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111861": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111871": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111889": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111903": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111919": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111933": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111955": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111973": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111983": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159111997": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112015": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112023": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112037": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112053": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112067": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112083": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112095": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112107": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112121": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112135": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112147": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112161": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112175": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112189": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112207": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112221": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112235": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112237": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112251": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112265": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112279": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112291": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112305": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112319": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112329": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112345": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112351": {
+   "name": "North Caribou Lake",
+   "en": "North Caribou Lake",
+   "fi": "North Caribou Lake",
+   "wikidata": "Q7054368"
+  },
+  "1159112363": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112377": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112391": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112405": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112417": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112431": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112445": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112459": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112471": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112485": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112499": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112513": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112523": {
+   "name": "Lake Plétipi",
+   "en": "Lac Plétipi",
+   "fi": "Lac Plétipi",
+   "wikidata": "Q3215139"
+  },
+  "1159112539": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112553": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112569": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112581": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112597": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112603": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112623": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112633": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112651": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112669": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112683": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112697": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112717": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112731": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112747": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112761": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112777": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112789": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112801": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112821": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112839": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112861": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112875": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112899": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112915": {
+   "name": "Lake Kipawa",
+   "en": "Lac Kipawa",
+   "fi": "Lac Kipawa",
+   "wikidata": "Q6476463"
+  },
+  "1159112939": {
+   "name": "Big Rideau Lake",
+   "en": "Big Rideau Lake",
+   "fi": "Big Rideau Lake",
+   "wikidata": "Q3113637"
+  },
+  "1159112953": {
+   "name": "Chesuncook Lake",
+   "en": "Chesuncook Lake",
+   "fi": "Chesuncook Lake",
+   "wikidata": "Q3214801"
+  },
+  "1159112969": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159112991": {
+   "name": "Lake Superior",
+   "en": "Lake Superior",
+   "fi": "Yläjärvi",
+   "wikidata": "Q1066"
+  },
+  "1159113005": {
+   "name": "Lake Michigan",
+   "en": "Lake Michigan",
+   "fi": "Michiganjärvi",
+   "wikidata": "Q1169"
+  },
+  "1159113021": {
+   "name": "Lake Huron",
+   "en": "Lake Huron",
+   "fi": "Huronjärvi",
+   "wikidata": "Q1383"
+  },
+  "1159113039": {
+   "name": "Whitefish Bay",
+   "en": "Whitefish Bay",
+   "fi": "Whitefish Bay",
+   "wikidata": "Q12341531"
+  },
+  "1159113055": {
+   "name": "Saginaw Bay",
+   "en": "Saginaw Bay",
+   "fi": "Saginaw Bay",
+   "wikidata": "Q2211837"
+  },
+  "1159113071": {
+   "name": "North Channel",
+   "en": "North Channel",
+   "fi": "North Channel",
+   "wikidata": "Q2000567"
+  },
+  "1159113081": {
+   "name": "Georgian Bay",
+   "en": "Georgian Bay",
+   "fi": "Georgian Bay",
+   "wikidata": "Q1267413"
+  },
+  "1159113095": {
+   "name": "Lake Ladoga",
+   "en": "Lake Ladoga",
+   "fi": "Laatokka",
+   "wikidata": "Q15288"
+  },
+  "1159113111": {
+   "name": "Lake Balkhash",
+   "en": "Lake Balkhash",
+   "fi": "Balhašjärvi",
+   "wikidata": "Q134485"
+  },
+  "1159113127": {
+   "name": "Lake Baikal",
+   "en": "Lake Baikal",
+   "fi": "Baikaljärvi",
+   "wikidata": "Q5513"
+  },
+  "1159113145": {
+   "name": "Lake Albert",
+   "en": "Lake Albert",
+   "fi": "Albertjärvi",
+   "wikidata": "Q125888"
+  },
+  "1159113163": {
+   "name": "Lake Malawi",
+   "en": "Lake Malawi",
+   "fi": "Njassajärvi",
+   "wikidata": "Q5532"
+  },
+  "1159113185": {
+   "name": "Lake Tanganyika",
+   "en": "Lake Tanganyika",
+   "fi": "Tanganjikajärvi",
+   "wikidata": "Q5511"
+  },
+  "1159113191": {
+   "name": "Lake Victoria",
+   "en": "Lake Victoria",
+   "fi": "Victorianjärvi",
+   "wikidata": "Q5505"
+  },
+  "1159113219": {
+   "name": "Lake Chad",
+   "en": "Lake Chad",
+   "fi": "Tšadjärvi",
+   "wikidata": "Q125309"
+  },
+  "1159113235": {
+   "name": "Vänern",
+   "en": "Vänern",
+   "fi": "Vänern",
+   "wikidata": "Q173596"
+  },
+  "1159113251": {
+   "name": "Lake Onega",
+   "en": "Lake Onega",
+   "fi": "Ääninen",
+   "wikidata": "Q166162"
+  },
+  "1159113265": {
+   "name": "Lake Tana",
+   "en": "Lake Tana",
+   "fi": "Tanajärvi",
+   "wikidata": "Q116685"
+  },
+  "1159113279": {
+   "name": "Lago Titicaca",
+   "en": "Titicaca",
+   "fi": "Titicaca",
+   "wikidata": "Q35342"
+  },
+  "1159113295": {
+   "name": "Lake Saimaa",
+   "en": "Saimaa",
+   "fi": "Saimaa",
+   "wikidata": "Q192770"
+  },
+  "1159113307": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113323": {
+   "name": "Lago Buenos Aires",
+   "en": "Lake General Carrera/Buenos Aires",
+   "fi": "Lake General Carrera/Buenos Aires",
+   "wikidata": "Q503842"
+  },
+  "1159113343": {
+   "name": "Lago Llanquihue",
+   "en": "Llanquihue Lake",
+   "fi": "Llanquihue",
+   "wikidata": "Q826464"
+  },
+  "1159113359": {
+   "name": "Hongze Hu",
+   "en": "Hongze Lake",
+   "fi": "Hongzejärvi",
+   "wikidata": "Q31845950"
+  },
+  "1159113373": {
+   "name": "Khövsgöl Nuur",
+   "en": "Khövsgöl Lake",
+   "fi": "Hövsgöl",
+   "wikidata": "Q192215"
+  },
+  "1159113395": {
+   "name": "Päijänne",
+   "en": "Päijänne",
+   "fi": "Päijänne",
+   "wikidata": "Q213769"
+  },
+  "1159113405": {
+   "name": "Lac Moeru",
+   "en": "Lake Mweru",
+   "fi": "Mwerujärvi",
+   "wikidata": "Q504433"
+  },
+  "1159113423": {
+   "name": "Lake Khanka",
+   "en": "Khanka",
+   "fi": "Hanka",
+   "wikidata": "Q201843"
+  },
+  "1159113439": {
+   "name": "Tonlé Sap",
+   "en": "Tonle Sap",
+   "fi": "Tonle Sap",
+   "wikidata": "Q199938"
+  },
+  "1159113451": {
+   "name": "Lake Pskov",
+   "en": "Lake Pihkva",
+   "fi": "Pihkovanjärvi",
+   "wikidata": "Q1144905"
+  },
+  "1159113467": {
+   "name": "Ozero Yarroto Vtoroye",
+   "en": "Yarroto Vtoroe",
+   "fi": "Yarroto Vtoroe",
+   "wikidata": "Q4539001"
+  },
+  "1159113481": {
+   "name": "Lake Srednye Kuyto",
+   "en": "Lake Srednye Kuyto",
+   "fi": "Lake Srednye Kuyto",
+   "wikidata": ""
+  },
+  "1159113497": {
+   "name": "Lake Chany",
+   "en": "Lake Chany",
+   "fi": "Lake Chany",
+   "wikidata": "Q1520895"
+  },
+  "1159113513": {
+   "name": "Hulun Nuur",
+   "en": "Hulun Lake",
+   "fi": "Hulun Lake",
+   "wikidata": "Q537374"
+  },
+  "1159113531": {
+   "name": "Lake Bangweulu",
+   "en": "Lake Bangweulu",
+   "fi": "Bangweulujärvi",
+   "wikidata": "Q673169"
+  },
+  "1159113545": {
+   "name": "Inarijrvi",
+   "en": "Lake Inari",
+   "fi": "Inarijärvi",
+   "wikidata": "Q203137"
+  },
+  "1159113563": {
+   "name": "Lake Peipus",
+   "en": "Lake Peipus",
+   "fi": "Peipsijärvi",
+   "wikidata": "Q19253"
+  },
+  "1159113577": {
+   "name": "Lake Kivu",
+   "en": "Lake Kivu",
+   "fi": "Kivujärvi",
+   "wikidata": "Q125912"
+  },
+  "1159113595": {
+   "name": "Lake Edward",
+   "en": "Lake Edward",
+   "fi": "Edwardjärvi",
+   "wikidata": "Q125211"
+  },
+  "1159113611": {
+   "name": "Tai Hu",
+   "en": "Lake Tai",
+   "fi": "Taijärvi",
+   "wikidata": "Q140712"
+  },
+  "1159113621": {
+   "name": "Lago Argentino",
+   "en": "Argentino Lake",
+   "fi": "Argentinojärvi",
+   "wikidata": "Q753898"
+  },
+  "1159113637": {
+   "name": "Nam Co",
+   "en": "Namtso",
+   "fi": "Namtso",
+   "wikidata": "Q651294"
+  },
+  "1159113653": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113669": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113685": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113701": {
+   "name": "Ozero Nerpich'ye",
+   "en": "Nerpichye",
+   "fi": "Nerpichye",
+   "wikidata": "Q1774501"
+  },
+  "1159113715": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113731": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113749": {
+   "name": "Ozero Yarroto Pervoye",
+   "en": "Yarroto Pervoe",
+   "fi": "Yarroto Pervoe",
+   "wikidata": "Q4538999"
+  },
+  "1159113765": {
+   "name": "Ozero Neyto",
+   "en": "Ozero Neyto",
+   "fi": "Ozero Neyto",
+   "wikidata": ""
+  },
+  "1159113781": {
+   "name": "Ozero Yambuto",
+   "en": "Ozero Yambuto",
+   "fi": "Ozero Yambuto",
+   "wikidata": ""
+  },
+  "1159113799": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113813": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113819": {
+   "name": "Lake Vygozero",
+   "en": "Vygozero",
+   "fi": "Uikujärvi",
+   "wikidata": "Q1315765"
+  },
+  "1159113837": {
+   "name": "Lake Vygozero",
+   "en": "Vygozero",
+   "fi": "Uikujärvi",
+   "wikidata": "Q1315765"
+  },
+  "1159113851": {
+   "name": "Lake Segozerskoye",
+   "en": "Segozero",
+   "fi": "Seesjärvi",
+   "wikidata": "Q1416209"
+  },
+  "1159113873": {
+   "name": "Pielinen",
+   "en": "Pielinen",
+   "fi": "Pielinen",
+   "wikidata": "Q845891"
+  },
+  "1159113889": {
+   "name": "Lake Topozero",
+   "en": "Topozero",
+   "fi": "Tuoppajärvi",
+   "wikidata": "Q709323"
+  },
+  "1159113907": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113927": {
+   "name": "Bosten Hu",
+   "en": "Bosten Lake",
+   "fi": "Bosten",
+   "wikidata": "Q611206"
+  },
+  "1159113939": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113957": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113979": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159113999": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114015": {
+   "name": "Poyang Hu",
+   "en": "Poyang Lake",
+   "fi": "Poyangjärvi",
+   "wikidata": "Q207690"
+  },
+  "1159114031": {
+   "name": "Daguan Hu",
+   "en": "Daguan Hu",
+   "fi": "Daguan Hu",
+   "wikidata": ""
+  },
+  "1159114049": {
+   "name": "Long Hu",
+   "en": "Longgan Lake",
+   "fi": "Longgan Lake",
+   "wikidata": "Q6673852"
+  },
+  "1159114069": {
+   "name": "Liangzi Hu",
+   "en": "Liangzi Lake",
+   "fi": "Liangzi Lake",
+   "wikidata": "Q7374197"
+  },
+  "1159114083": {
+   "name": "Siling Co",
+   "en": "Siling Lake",
+   "fi": "Siling Lake",
+   "wikidata": "Q1404973"
+  },
+  "1159114107": {
+   "name": "Har Us Nuur",
+   "en": "Khar-Us Lake",
+   "fi": "Khar-Us Lake",
+   "wikidata": "Q1323267"
+  },
+  "1159114143": {
+   "name": "Lake Geneva",
+   "en": "Lake Geneva",
+   "fi": "Genevejärvi",
+   "wikidata": "Q6403"
+  },
+  "1159114155": {
+   "name": "Lough Neagh",
+   "en": "Lough Neagh",
+   "fi": "Lough Neagh",
+   "wikidata": "Q206942"
+  },
+  "1159114173": {
+   "name": "Vättern",
+   "en": "Vättern",
+   "fi": "Vättern",
+   "wikidata": "Q188195"
+  },
+  "1159114189": {
+   "name": "Lake Taymyr",
+   "en": "Taymyr",
+   "fi": "Taimyrjärvi",
+   "wikidata": "Q845868"
+  },
+  "1159114197": {
+   "name": "Ozero Mogotoyevo",
+   "en": "Mogotoyevo Lake",
+   "fi": "Mogotojevo",
+   "wikidata": "Q2639916"
+  },
+  "1159114215": {
+   "name": "Ayakkum Hu",
+   "en": "Ayakum Lake",
+   "fi": "Ayakum Lake",
+   "wikidata": "Q631714"
+  },
+  "1159114237": {
+   "name": "Storsjön",
+   "en": "Storsjön",
+   "fi": "Storsjön",
+   "wikidata": "Q629354"
+  },
+  "1159114259": {
+   "name": "Bodensee",
+   "en": "Lake Constance",
+   "fi": "Bodenjärvi",
+   "wikidata": "Q4127"
+  },
+  "1159114279": {
+   "name": "Lake Kyoga",
+   "en": "Lake Kyoga",
+   "fi": "Kyogajärvi",
+   "wikidata": "Q124978"
+  },
+  "1159114299": {
+   "name": "Lake Rukwa",
+   "en": "Rukwa Lake",
+   "fi": "Rukwajärvi",
+   "wikidata": "Q1143935"
+  },
+  "1159114305": {
+   "name": "Ngoring Hu",
+   "en": "Ngoring Lake",
+   "fi": "Ngoring Lake",
+   "wikidata": "Q847864"
+  },
+  "1159114321": {
+   "name": "Gaoyou Hu",
+   "en": "Gaoyou Lake",
+   "fi": "Gaoyou Lake",
+   "wikidata": "Q630331"
+  },
+  "1159114343": {
+   "name": "Ozero Pyasino",
+   "en": "Pyasino",
+   "fi": "Pyasino",
+   "wikidata": "Q1535541"
+  },
+  "1159114361": {
+   "name": "Danau Toba",
+   "en": "Lake Toba",
+   "fi": "Toba",
+   "wikidata": "Q183360"
+  },
+  "1159114377": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114391": {
+   "name": "Hjälmaren",
+   "en": "Hjälmaren",
+   "fi": "Hjälmaren",
+   "wikidata": "Q211425"
+  },
+  "1159114413": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114429": {
+   "name": "Pyhäjärvi",
+   "en": "Pyhäjärvi",
+   "fi": "Pyhäjärvi",
+   "wikidata": "Q545559"
+  },
+  "1159114461": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114475": {
+   "name": "Gyaring Hu",
+   "en": "Gyaring Lake",
+   "fi": "Gyaring Lake",
+   "wikidata": "Q4128895"
+  },
+  "1159114495": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114511": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114537": {
+   "name": "Langa Co",
+   "en": "Lake Rakshastal",
+   "fi": "Lake Rakshastal",
+   "wikidata": "Q628327"
+  },
+  "1159114553": {
+   "name": "Mapam Yumco",
+   "en": "Lake Manasarovar",
+   "fi": "Lake Manasarovar",
+   "wikidata": "Q233627"
+  },
+  "1159114573": {
+   "name": "Lake Beloye",
+   "en": "Beloye Lake",
+   "fi": "Valkeajärvi",
+   "wikidata": "Q953140"
+  },
+  "1159114585": {
+   "name": "Lake Manyara",
+   "en": "Lake Manyara",
+   "fi": "Lake Manyara",
+   "wikidata": "Q577148"
+  },
+  "1159114609": {
+   "name": "Lake Balaton",
+   "en": "Lake Balaton",
+   "fi": "Balaton",
+   "wikidata": "Q6383"
+  },
+  "1159114631": {
+   "name": "Lago Ranco",
+   "en": "Ranco Lake",
+   "fi": "Ranco Lake",
+   "wikidata": "Q1800398"
+  },
+  "1159114641": {
+   "name": "Lago Viedma",
+   "en": "Viedma Lake",
+   "fi": "Viedma Lake",
+   "wikidata": "Q918713"
+  },
+  "1159114657": {
+   "name": "Lac Tumba",
+   "en": "Lake Tumba",
+   "fi": "Lake Tumba",
+   "wikidata": "Q1324212"
+  },
+  "1159114683": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114699": {
+   "name": "Po Hu",
+   "en": "Po Hu",
+   "fi": "Po Hu",
+   "wikidata": ""
+  },
+  "1159114715": {
+   "name": "Buyr Nuur",
+   "en": "Buir Lake",
+   "fi": "Buirjärvi",
+   "wikidata": "Q715788"
+  },
+  "1159114735": {
+   "name": "Ngangla Ringeo",
+   "en": "Ang Laren Lake",
+   "fi": "Ang Laren Lake",
+   "wikidata": "Q4761833"
+  },
+  "1159114759": {
+   "name": "Tangra Yumco",
+   "en": "Tangra Yumco",
+   "fi": "Tangra Yumco",
+   "wikidata": "Q659377"
+  },
+  "1159114777": {
+   "name": "Ozero Kulundinskoye",
+   "en": "Lake Kulunda",
+   "fi": "Lake Kulunda",
+   "wikidata": "Q731761"
+  },
+  "1159114787": {
+   "name": "Siletitengiz Kli",
+   "en": "Siletiteniz",
+   "fi": "Sıletıteñız",
+   "wikidata": "Q4244492"
+  },
+  "1159114805": {
+   "name": "Ubinskoye Lake",
+   "en": "Ubinskoye",
+   "fi": "Ubinskoye",
+   "wikidata": "Q1115650"
+  },
+  "1159114823": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114841": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114859": {
+   "name": "Ozero Bustakh",
+   "en": "Bustakh",
+   "fi": "Bustakh",
+   "wikidata": "Q2996806"
+  },
+  "1159114879": {
+   "name": "Sea of Galilee",
+   "en": "Sea of Galilee",
+   "fi": "Gennesaretinjärvi",
+   "wikidata": "Q126982"
+  },
+  "1159114885": {
+   "name": "Yamzho Yumco",
+   "en": "Yamdrok Lake",
+   "fi": "Yamdrokjärvi",
+   "wikidata": "Q939604"
+  },
+  "1159114903": {
+   "name": "Ozero Tenis",
+   "en": "Ozero Tenis",
+   "fi": "Ozero Tenis",
+   "wikidata": ""
+  },
+  "1159114929": {
+   "name": "Ozero Chërnoye",
+   "en": "Ozero Chërnoye",
+   "fi": "Ozero Chërnoye",
+   "wikidata": ""
+  },
+  "1159114951": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159114973": {
+   "name": "Ozero Bol'šoe Morskoe",
+   "en": "Lake Bolshoye Morskoye",
+   "fi": "Lake Bolshoye Morskoye",
+   "wikidata": "Q1774474"
+  },
+  "1159114993": {
+   "name": "Ozero Chukochye",
+   "en": "Chukochye Lake",
+   "fi": "Chukochye Lake",
+   "wikidata": "Q1108335"
+  },
+  "1159115009": {
+   "name": "Shijiu Hu",
+   "en": "Shijiu Lake",
+   "fi": "Shijiu Lake",
+   "wikidata": "Q7374652"
+  },
+  "1159115027": {
+   "name": "Hong Hu",
+   "en": "Hong Lake",
+   "fi": "Hong Lake",
+   "wikidata": "Q5895614"
+  },
+  "1159115043": {
+   "name": "Võrtsjärv",
+   "en": "Võrtsjärv",
+   "fi": "Võrtsjärvi",
+   "wikidata": "Q211516"
+  },
+  "1159115069": {
+   "name": "Chao Hu",
+   "en": "Chao Lake",
+   "fi": "Chao Lake",
+   "wikidata": "Q1062495"
+  },
+  "1159115089": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115109": {
+   "name": "Lake Sevan",
+   "en": "Lake Sevan",
+   "fi": "Sevan",
+   "wikidata": "Q181932"
+  },
+  "1159115135": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115153": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115165": {
+   "name": "Weishan Hu",
+   "en": "Nansi Lake",
+   "fi": "Nansi Lake",
+   "wikidata": "Q839287"
+  },
+  "1159115185": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115205": {
+   "name": "Huangtang Hu",
+   "en": "Huangtang Hu",
+   "fi": "Huangtang Hu",
+   "wikidata": ""
+  },
+  "1159115225": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115243": {
+   "name": "Hoh Xil Hu",
+   "en": "Hoh Xil Hu",
+   "fi": "Hoh Xil Hu",
+   "wikidata": ""
+  },
+  "1159115267": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115275": {
+   "name": "Ozero Khantayskoye",
+   "en": "Khantayskoye Lake",
+   "fi": "Khantayskoye Lake",
+   "wikidata": "Q233071"
+  },
+  "1159115303": {
+   "name": "Ozero Keta",
+   "en": "Lake Keta",
+   "fi": "Lake Keta",
+   "wikidata": "Q1739872"
+  },
+  "1159115317": {
+   "name": "Ozero Lama",
+   "en": "Lama",
+   "fi": "Lama",
+   "wikidata": "Q1460034"
+  },
+  "1159115335": {
+   "name": "Storavan",
+   "en": "Storavan",
+   "fi": "Storavan",
+   "wikidata": "Q204987"
+  },
+  "1159115361": {
+   "name": "Uddjaure",
+   "en": "Uddjaure",
+   "fi": "Uddjaure",
+   "wikidata": "Q953206"
+  },
+  "1159115381": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115407": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115429": {
+   "name": "Lake Skadar",
+   "en": "Lake Skadar",
+   "fi": "Skutarijärvi",
+   "wikidata": "Q203811"
+  },
+  "1159115447": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115469": {
+   "name": "Lago Colhué Huapí",
+   "en": "Lake Colhué Huapi",
+   "fi": "Lake Colhué Huapi",
+   "wikidata": "Q21842912"
+  },
+  "1159115487": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115515": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115537": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115563": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115575": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115599": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115617": {
+   "name": "Ozero Krasnoye",
+   "en": "Krasnoye Lake",
+   "fi": "Krasnoye Lake",
+   "wikidata": "Q1786723"
+  },
+  "1159115641": {
+   "name": "Biwa Ko",
+   "en": "Lake Biwa",
+   "fi": "Biwajärvi",
+   "wikidata": "Q200239"
+  },
+  "1159115657": {
+   "name": "Reg Nuur",
+   "en": "Üüreg Lake",
+   "fi": "Üüreg Lake",
+   "wikidata": "Q978800"
+  },
+  "1159115681": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115701": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115721": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115741": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115757": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115773": {
+   "name": "Banggong Co",
+   "en": "Pangong Tso",
+   "fi": "Pangongjärvi",
+   "wikidata": "Q1032254"
+  },
+  "1159115801": {
+   "name": "Femunden",
+   "en": "Femund",
+   "fi": "Femund",
+   "wikidata": "Q1324437"
+  },
+  "1159115821": {
+   "name": "Femunden",
+   "en": "Femund",
+   "fi": "Femund",
+   "wikidata": "Q1324437"
+  },
+  "1159115833": {
+   "name": "Loch Ness",
+   "en": "Loch Ness",
+   "fi": "Loch Ness",
+   "wikidata": "Q49650"
+  },
+  "1159115863": {
+   "name": "Dood-Tsagaan Nuur",
+   "en": "Dood Tsagaan Lake",
+   "fi": "Dood Tsagaan Lake",
+   "wikidata": "Q2721959"
+  },
+  "1159115883": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115903": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115919": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115939": {
+   "name": "Lake Débo",
+   "en": "Lake Débo",
+   "fi": "Débo",
+   "wikidata": "Q1270436"
+  },
+  "1159115957": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115973": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159115993": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116019": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116041": {
+   "name": "Aursund",
+   "en": "Aursund",
+   "fi": "Aursund",
+   "wikidata": "Q777416"
+  },
+  "1159116061": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116083": {
+   "name": "Øyeren",
+   "en": "Øyeren",
+   "fi": "Øyeren",
+   "wikidata": "Q317277"
+  },
+  "1159116097": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116117": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116135": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116153": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116173": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116193": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116213": {
+   "name": "Lake Lembeni",
+   "en": "Lake Lembeni",
+   "fi": "Lake Lembeni",
+   "wikidata": ""
+  },
+  "1159116233": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116249": {
+   "name": "Siljan",
+   "en": "Siljan",
+   "fi": "Siljan",
+   "wikidata": "Q217430"
+  },
+  "1159116271": {
+   "name": "Torneträsk",
+   "en": "Torneträsk",
+   "fi": "Torniojärvi",
+   "wikidata": "Q215818"
+  },
+  "1159116293": {
+   "name": "Lago de  Erepecu",
+   "en": "Lagoa do Erepecur",
+   "fi": "Lagoa do Erepecur",
+   "wikidata": "Q22024948"
+  },
+  "1159116317": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116335": {
+   "name": "Ulansuhai Nur",
+   "en": "Ulansuhai Nur",
+   "fi": "Ulansuhai Nur",
+   "wikidata": "Q7374641"
+  },
+  "1159116351": {
+   "name": "Dongting Hu",
+   "en": "Dongting Lake",
+   "fi": "Dongtingjärvi",
+   "wikidata": "Q216083"
+  },
+  "1159116371": {
+   "name": "Virihaure",
+   "en": "Virihaure",
+   "fi": "Virihaure",
+   "wikidata": "Q1969324"
+  },
+  "1159116393": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116411": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116429": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116449": {
+   "name": "Ozero Teletskoye",
+   "en": "Teletskoye",
+   "fi": "Altyn-Köl",
+   "wikidata": "Q217109"
+  },
+  "1159116473": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116495": {
+   "name": "Ge Hu",
+   "en": "Ge Lake",
+   "fi": "Ge Lake",
+   "wikidata": "Q5529425"
+  },
+  "1159116521": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116539": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116559": {
+   "name": "Lake Sasykkol",
+   "en": "Lake Sasykkol",
+   "fi": "Sasyqköl",
+   "wikidata": "Q2039551"
+  },
+  "1159116577": {
+   "name": "Lake Sasykkol",
+   "en": "Lake Sasykkol",
+   "fi": "Sasyqköl",
+   "wikidata": "Q2039551"
+  },
+  "1159116611": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116627": {
+   "name": "Lago San Martín",
+   "en": "O'Higgins/San Martín Lake",
+   "fi": "O'Higgins/San Martín Lake",
+   "wikidata": "Q2005708"
+  },
+  "1159116645": {
+   "name": "Lake Kwania",
+   "en": "Lake Kwania",
+   "fi": "Lake Kwania",
+   "wikidata": "Q487953"
+  },
+  "1159116675": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116693": {
+   "name": "Lago di Como",
+   "en": "Lake Como",
+   "fi": "Comojärvi",
+   "wikidata": "Q15523"
+  },
+  "1159116699": {
+   "name": "Lago di Garda",
+   "en": "Lake Garda",
+   "fi": "Gardajärvi",
+   "wikidata": "Q6414"
+  },
+  "1159116717": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116737": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116763": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116775": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116791": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116809": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116829": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116845": {
+   "name": "Hornavan",
+   "en": "Hornavan",
+   "fi": "Hornavan",
+   "wikidata": "Q845880"
+  },
+  "1159116859": {
+   "name": "Lago Nahuel Huapí",
+   "en": "Nahuel Huapi Lake",
+   "fi": "Nahuel Huapi Lake",
+   "wikidata": "Q498371"
+  },
+  "1159116879": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116893": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159116917": {
+   "name": "Lago Grande",
+   "en": "Lago Grande",
+   "fi": "Lago Grande",
+   "wikidata": "Q22029420"
+  },
+  "1159116923": {
+   "name": "Lake Xau",
+   "en": "Xau",
+   "fi": "Xau",
+   "wikidata": "Q9383203"
+  },
+  "1159116941": {
+   "name": "Lake Adobed",
+   "en": "Lake Adobed",
+   "fi": "Lake Adobed",
+   "wikidata": ""
+  },
+  "1159116959": {
+   "name": "Koka Reservoir",
+   "en": "Koka Reservoir",
+   "fi": "Koka Reservoir",
+   "wikidata": "Q1066779"
+  },
+  "1159116985": {
+   "name": "Lake Gemeri",
+   "en": "Lake Gummare",
+   "fi": "Lake Gummare",
+   "wikidata": "Q3502754"
+  },
+  "1159116997": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117015": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117033": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117051": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117069": {
+   "name": "Laguna de Bay",
+   "en": "Laguna de Bay",
+   "fi": "Laguna de Baý",
+   "wikidata": "Q47136"
+  },
+  "1159117079": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117099": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117117": {
+   "name": "Lago La Plata",
+   "en": "Lago La Plata",
+   "fi": "Lago La Plata",
+   "wikidata": "Q3215749"
+  },
+  "1159117129": {
+   "name": "Lago Fontana",
+   "en": "Lac Fontana",
+   "fi": "Lac Fontana",
+   "wikidata": "Q3214886"
+  },
+  "1159117157": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117165": {
+   "name": "Ozero Dyupkun",
+   "en": "Dyupkun",
+   "fi": "Dyupkun",
+   "wikidata": "Q1109799"
+  },
+  "1159117181": {
+   "name": "Lake Murray",
+   "en": "Lake Murray",
+   "fi": "Lake Murray",
+   "wikidata": "Q1635229"
+  },
+  "1159117201": {
+   "name": "Elsen Nur",
+   "en": "Elsen Nur",
+   "fi": "Elsen Nur",
+   "wikidata": "Q31845278"
+  },
+  "1159117219": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117237": {
+   "name": "Lac Onangué",
+   "en": "Lac Onangué",
+   "fi": "Lac Onangué",
+   "wikidata": "Q24611627"
+  },
+  "1159117255": {
+   "name": "Lac Mai-Ndombe",
+   "en": "Lake Mai-Ndombe",
+   "fi": "Mai-Ndombe-järvi",
+   "wikidata": "Q683100"
+  },
+  "1159117273": {
+   "name": "Lake Rentenue",
+   "en": "Lake Rentenue",
+   "fi": "Lake Rentenue",
+   "wikidata": ""
+  },
+  "1159117291": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117309": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117327": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117343": {
+   "name": "Lough Derg",
+   "en": "Lough Derg",
+   "fi": "Lough Derg",
+   "wikidata": "Q918349"
+  },
+  "1159117359": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117387": {
+   "name": "Lough Ree",
+   "en": "Lough Ree",
+   "fi": "Lough Ree",
+   "wikidata": "Q608133"
+  },
+  "1159117405": {
+   "name": "Lough Allen",
+   "en": "Lough Allen",
+   "fi": "Lough Allen",
+   "wikidata": "Q1366974"
+  },
+  "1159117421": {
+   "name": "Loch Lochy",
+   "en": "Loch Lochy",
+   "fi": "Loch Lochy",
+   "wikidata": ""
+  },
+  "1159117431": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117449": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117467": {
+   "name": "Lago Concepción",
+   "en": "Concepción Lake",
+   "fi": "Concepción Lake",
+   "wikidata": "Q868663"
+  },
+  "1159117485": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117503": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117521": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117535": {
+   "name": "Masinga Res.",
+   "en": "Masinga Res.",
+   "fi": "Masinga Res.",
+   "wikidata": ""
+  },
+  "1159117553": {
+   "name": "Lake Bunyonyi",
+   "en": "Lake Bunyonyi",
+   "fi": "Lake Bunyonyi",
+   "wikidata": "Q1010056"
+  },
+  "1159117563": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117583": {
+   "name": "Qagan Nur",
+   "en": "Chagan Lake",
+   "fi": "Chagan Lake",
+   "wikidata": "Q835789"
+  },
+  "1159117601": {
+   "name": "Ozero Labaz",
+   "en": "Lake Labaz",
+   "fi": "Lake Labaz",
+   "wikidata": "Q1799381"
+  },
+  "1159117625": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117639": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117663": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117685": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117701": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117719": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117733": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117745": {
+   "name": "Dongping Hu",
+   "en": "Dongping Lake",
+   "fi": "Dongping Lake",
+   "wikidata": "Q5295998"
+  },
+  "1159117761": {
+   "name": "Lake Kolozero",
+   "en": "Kolozero",
+   "fi": "Kolozero",
+   "wikidata": "Q4228232"
+  },
+  "1159117777": {
+   "name": "Bolmen",
+   "en": "Bolmen",
+   "fi": "Bolmen",
+   "wikidata": "Q891521"
+  },
+  "1159117793": {
+   "name": "Åsnen",
+   "en": "Åsnen",
+   "fi": "Åsnen",
+   "wikidata": "Q271286"
+  },
+  "1159117807": {
+   "name": "Foxen",
+   "en": "Foxen",
+   "fi": "Foxen",
+   "wikidata": ""
+  },
+  "1159117823": {
+   "name": "Müritz",
+   "en": "Müritz",
+   "fi": "Müritz",
+   "wikidata": "Q3369"
+  },
+  "1159117837": {
+   "name": "Schweriner See",
+   "en": "Schweriner See",
+   "fi": "Schweriner See",
+   "wikidata": "Q311217"
+  },
+  "1159117847": {
+   "name": "Upper Lough Erne",
+   "en": "Upper Lough Erne",
+   "fi": "Upper Lough Erne",
+   "wikidata": "Q11878874"
+  },
+  "1159117863": {
+   "name": "Lac Alaotra",
+   "en": "Lake Alaotra",
+   "fi": "Alaotrajärvi",
+   "wikidata": "Q575679"
+  },
+  "1159117881": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159117899": {
+   "name": "Lago de Valencia",
+   "en": "Lake  Valencia",
+   "fi": "Lake  Valencia",
+   "wikidata": "Q1469728"
+  },
+  "1159117913": {
+   "name": "Laguna Iberá",
+   "en": "Laguna Iberá",
+   "fi": "Laguna Iberá",
+   "wikidata": "Q21828387"
+  },
+  "1159117923": {
+   "name": "Laguna Iberá",
+   "en": "Laguna Iberá",
+   "fi": "Laguna Iberá",
+   "wikidata": "Q21828387"
+  },
+  "1159117941": {
+   "name": "Laguna Huaitunas",
+   "en": "Laguna Huatunas",
+   "fi": "Laguna Huatunas",
+   "wikidata": "Q21801008"
+  },
+  "1159117959": {
+   "name": "Laguna Ragaguado",
+   "en": "Laguna Ragaguado",
+   "fi": "Laguna Ragaguado",
+   "wikidata": ""
+  },
+  "1159117977": {
+   "name": "Lago Musters",
+   "en": "Lake Musters",
+   "fi": "Lake Musters",
+   "wikidata": "Q3215078"
+  },
+  "1159117995": {
+   "name": "Lago Cardiel",
+   "en": "Cardiel Lake",
+   "fi": "Cardiel Lake",
+   "wikidata": "Q2439795"
+  },
+  "1159118013": {
+   "name": "Lago Rupanco",
+   "en": "Rupanco Lake",
+   "fi": "Rupanco Lake",
+   "wikidata": "Q1800404"
+  },
+  "1159118031": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118083": {
+   "name": "Lake Cheshi",
+   "en": "Lake Mweru Wantipa",
+   "fi": "Lake Mweru Wantipa",
+   "wikidata": "Q651162"
+  },
+  "1159118103": {
+   "name": "Ebinur Hu",
+   "en": "Aibi Lake",
+   "fi": "Ebi",
+   "wikidata": "Q31845317"
+  },
+  "1159118119": {
+   "name": "Lago di Bracciano",
+   "en": "Lake Bracciano",
+   "fi": "Lake Bracciano",
+   "wikidata": "Q896551"
+  },
+  "1159118129": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118147": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118165": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118183": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118201": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118219": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118237": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118255": {
+   "name": "Lac Upemba",
+   "en": "Lake Upemba",
+   "fi": "Lake Upemba",
+   "wikidata": "Q1051621"
+  },
+  "1159118273": {
+   "name": "Lauwerszee",
+   "en": "Lauwersmeer",
+   "fi": "Lauwersmeer",
+   "wikidata": "Q525364"
+  },
+  "1159118291": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118311": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118331": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118349": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118367": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118383": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118401": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118421": {
+   "name": "Jezioro Dąbie",
+   "en": "Dąbie Lake",
+   "fi": "Dąbiejärvi",
+   "wikidata": "Q1158664"
+  },
+  "1159118445": {
+   "name": "Marqakol",
+   "en": "Lake Marqaköl",
+   "fi": "Marqaköl",
+   "wikidata": "Q1299817"
+  },
+  "1159118459": {
+   "name": "Ozero Beloye",
+   "en": "Ozero Beloye",
+   "fi": "Ozero Beloye",
+   "wikidata": ""
+  },
+  "1159118473": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118491": {
+   "name": "Achit Nuur",
+   "en": "Achit Lake",
+   "fi": "Achit Lake",
+   "wikidata": "Q968728"
+  },
+  "1159118507": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118527": {
+   "name": "Ozero Ozhogino",
+   "en": "Ozhogino Lake",
+   "fi": "Ožogino",
+   "wikidata": "Q2476728"
+  },
+  "1159118543": {
+   "name": "Ozero Sagarychye",
+   "en": "Ozero Sagarychye",
+   "fi": "Ozero Sagarychye",
+   "wikidata": ""
+  },
+  "1159118561": {
+   "name": "Ozero Bakul",
+   "en": "Ozero Bakul",
+   "fi": "Ozero Bakul",
+   "wikidata": ""
+  },
+  "1159118579": {
+   "name": "Ozero Soluntakh",
+   "en": "Soluntakh",
+   "fi": "Soluntakh",
+   "wikidata": "Q4428523"
+  },
+  "1159118597": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118609": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118617": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118635": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118645": {
+   "name": "Ozero Bolshoy Olr",
+   "en": "Ozero Bolshoy Olr",
+   "fi": "Ozero Bolshoy Olr",
+   "wikidata": ""
+  },
+  "1159118665": {
+   "name": "Ozero Krugovatoye",
+   "en": "Ozero Krugovatoye",
+   "fi": "Ozero Krugovatoye",
+   "wikidata": ""
+  },
+  "1159118681": {
+   "name": "Ozero Ilirgytgyn",
+   "en": "Ilirgytgkin",
+   "fi": "Ilirgytgkin",
+   "wikidata": "Q1108073"
+  },
+  "1159118699": {
+   "name": "Ozero Elgygytgyn",
+   "en": "Elgygytgyn Lake",
+   "fi": "Elgygytgyn",
+   "wikidata": "Q934857"
+  },
+  "1159118717": {
+   "name": "Ozero Kronotskoye",
+   "en": "Kronotskoye Lake",
+   "fi": "Kronotskoye Lake",
+   "wikidata": "Q1115810"
+  },
+  "1159118741": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118755": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118773": {
+   "name": "Luoma Hu",
+   "en": "Luoma Lake",
+   "fi": "Luoma Lake",
+   "wikidata": "Q6704603"
+  },
+  "1159118791": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118809": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118831": {
+   "name": "Wuchang Hu",
+   "en": "Lake Wuchang",
+   "fi": "Lake Wuchang",
+   "wikidata": "Q11124334"
+  },
+  "1159118849": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118857": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118887": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118893": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118911": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118929": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118947": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118965": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159118983": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119001": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119011": {
+   "name": "Dalai Nur",
+   "en": "Dalai Nur",
+   "fi": "Dalai Nur",
+   "wikidata": "Q675467"
+  },
+  "1159119025": {
+   "name": "Kenohan Jempang",
+   "en": "Kenohan Jempang",
+   "fi": "Kenohan Jempang",
+   "wikidata": ""
+  },
+  "1159119043": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119059": {
+   "name": "Lake Taal",
+   "en": "Taal Lake",
+   "fi": "Taal Lake",
+   "wikidata": "Q537695"
+  },
+  "1159119079": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119093": {
+   "name": "Ozero Kiyeng-Kyuyel",
+   "en": "Kieng-Kyuel",
+   "fi": "Kieng-Kyuel",
+   "wikidata": "Q930182"
+  },
+  "1159119111": {
+   "name": "Ozero Gusinoye",
+   "en": "Gusinoye Lake",
+   "fi": "Gusinoye Lake",
+   "wikidata": "Q671989"
+  },
+  "1159119127": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119137": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119161": {
+   "name": "Ozero Busani",
+   "en": "Busani",
+   "fi": "Busani",
+   "wikidata": "Q3561592"
+  },
+  "1159119183": {
+   "name": "Ozero Baunt",
+   "en": "Baunt",
+   "fi": "Baunt",
+   "wikidata": "Q811672"
+  },
+  "1159119195": {
+   "name": "Ozero Kipylyushi",
+   "en": "Ozero Kipylyushi",
+   "fi": "Ozero Kipylyushi",
+   "wikidata": ""
+  },
+  "1159119217": {
+   "name": "Ozero Kipylyushi",
+   "en": "Ozero Kipylyushi",
+   "fi": "Ozero Kipylyushi",
+   "wikidata": ""
+  },
+  "1159119231": {
+   "name": "Ozero Isinginskoye",
+   "en": "Isinga",
+   "fi": "Isinga",
+   "wikidata": "Q19819696"
+  },
+  "1159119255": {
+   "name": "Ozero Bolshaya Kharga",
+   "en": "Ozero Bolshaya Kharga",
+   "fi": "Ozero Bolshaya Kharga",
+   "wikidata": ""
+  },
+  "1159119273": {
+   "name": "Ozero Bolshoye Yeravnoye",
+   "en": "Bolshoe Eravnoe",
+   "fi": "Bolshoe Eravnoe",
+   "wikidata": "Q4092295"
+  },
+  "1159119295": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119309": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119329": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119347": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119371": {
+   "name": "Ozero Arakhley",
+   "en": "Arakhley",
+   "fi": "Arakhley",
+   "wikidata": "Q1110298"
+  },
+  "1159119381": {
+   "name": "Ozero Irgen",
+   "en": "Ozero Irgen",
+   "fi": "Ozero Irgen",
+   "wikidata": ""
+  },
+  "1159119403": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119419": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119433": {
+   "name": "Telmen Nuur",
+   "en": "Telmen Lake",
+   "fi": "Telmen Lake",
+   "wikidata": "Q2570858"
+  },
+  "1159119451": {
+   "name": "Sangiyn Dalay Nuur",
+   "en": "Sangiin Dalai Lake",
+   "fi": "Sangiin Dalai Lake",
+   "wikidata": "Q2721984"
+  },
+  "1159119481": {
+   "name": "Hh Nuur",
+   "en": "Hh Nuur",
+   "fi": "Hh Nuur",
+   "wikidata": ""
+  },
+  "1159119499": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119519": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119525": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119551": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119569": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119591": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119607": {
+   "name": "Ulgain Gobi",
+   "en": "Ulgain Gobi",
+   "fi": "Ulgain Gobi",
+   "wikidata": ""
+  },
+  "1159119623": {
+   "name": "Ozero Tembenchi",
+   "en": "Ozero Tembenchi",
+   "fi": "Ozero Tembenchi",
+   "wikidata": ""
+  },
+  "1159119645": {
+   "name": "Ozero Vivi",
+   "en": "Lake Vivi",
+   "fi": "Lake Vivi",
+   "wikidata": "Q1786498"
+  },
+  "1159119651": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119667": {
+   "name": "Ozero Agata",
+   "en": "Ozero Agata",
+   "fi": "Ozero Agata",
+   "wikidata": ""
+  },
+  "1159119697": {
+   "name": "Ozero Severnoye",
+   "en": "Ozero Severnoye",
+   "fi": "Ozero Severnoye",
+   "wikidata": ""
+  },
+  "1159119709": {
+   "name": "Ozero Ayan",
+   "en": "Ayan",
+   "fi": "Ayan",
+   "wikidata": "Q412045"
+  },
+  "1159119725": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119741": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119759": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119779": {
+   "name": "Ozero Kokora",
+   "en": "Kokora",
+   "fi": "Kokora",
+   "wikidata": "Q1120394"
+  },
+  "1159119797": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119815": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119835": {
+   "name": "Ozero Portnyagino",
+   "en": "Portnyagino Lake",
+   "fi": "Portnyagino Lake",
+   "wikidata": "Q4373293"
+  },
+  "1159119853": {
+   "name": "Ozero Kungasalakh",
+   "en": "Kungasalakh",
+   "fi": "Kungasalakh",
+   "wikidata": "Q1112333"
+  },
+  "1159119871": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119895": {
+   "name": "Aqqikkol Hu",
+   "en": "Aqqikkol Hu",
+   "fi": "Aqqikkol Hu",
+   "wikidata": "Q16936775"
+  },
+  "1159119911": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119929": {
+   "name": "Gas Hu",
+   "en": "Gas Hure Hu",
+   "fi": "Gas Hure Hu",
+   "wikidata": "Q28794395"
+  },
+  "1159119947": {
+   "name": "Hoh Sai Hu",
+   "en": "Hoh Sai Hu",
+   "fi": "Hoh Sai Hu",
+   "wikidata": ""
+  },
+  "1159119961": {
+   "name": "Huiten Nur",
+   "en": "Huiten Nur",
+   "fi": "Huiten Nur",
+   "wikidata": "Q10906051"
+  },
+  "1159119979": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159119997": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120019": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120043": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120061": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120079": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120097": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120117": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120139": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120155": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120165": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120185": {
+   "name": "Lumajangdong Co",
+   "en": "Lumaqangdong Co",
+   "fi": "Lumaqangdong Co",
+   "wikidata": "Q6703023"
+  },
+  "1159120203": {
+   "name": "Gozha Co",
+   "en": "Guozha Lake",
+   "fi": "Guozha Lake",
+   "wikidata": "Q5619693"
+  },
+  "1159120221": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120239": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120257": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120275": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120293": {
+   "name": "Gyaring Co",
+   "en": "Geren Cuo",
+   "fi": "Geren Cuo",
+   "wikidata": "Q12018576"
+  },
+  "1159120311": {
+   "name": "Ngangzi Co",
+   "en": "Ngangzê Co",
+   "fi": "Ngangzê Co",
+   "wikidata": "Q11087306"
+  },
+  "1159120329": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120347": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120365": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120383": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120393": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120415": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120429": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120447": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120465": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120483": {
+   "name": "Alesayqin Ha",
+   "en": "Aksai Chin Lake",
+   "fi": "Aksai Chin Lake",
+   "wikidata": "Q4701734"
+  },
+  "1159120507": {
+   "name": "Ozero Samotlor",
+   "en": "Samotlor Lake",
+   "fi": "Samotlor Lake",
+   "wikidata": "Q4406902"
+  },
+  "1159120531": {
+   "name": "Ozero Tormemtor",
+   "en": "Ozero Tormemtor",
+   "fi": "Ozero Tormemtor",
+   "wikidata": "Q4461133"
+  },
+  "1159120545": {
+   "name": "Ozero Chrtovo",
+   "en": "Ozero Chrtovo",
+   "fi": "Ozero Chrtovo",
+   "wikidata": ""
+  },
+  "1159120563": {
+   "name": "Ozero Chaselskoye",
+   "en": "Ozero Chaselskoye",
+   "fi": "Ozero Chaselskoye",
+   "wikidata": ""
+  },
+  "1159120585": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120601": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120617": {
+   "name": "Ozero Untor",
+   "en": "Ozero Untor",
+   "fi": "Ozero Untor",
+   "wikidata": ""
+  },
+  "1159120635": {
+   "name": "Munduyskoye Ozero",
+   "en": "Munduyskoye Ozero",
+   "fi": "Munduyskoye Ozero",
+   "wikidata": ""
+  },
+  "1159120653": {
+   "name": "Ozero Sobachye",
+   "en": "Sobach'ye Ozero",
+   "fi": "Sobach'ye Ozero",
+   "wikidata": "Q3215207"
+  },
+  "1159120675": {
+   "name": "Ozero Sobachye",
+   "en": "Sobach'ye Ozero",
+   "fi": "Sobach'ye Ozero",
+   "wikidata": "Q3215207"
+  },
+  "1159120681": {
+   "name": "Ozero Glubokoye",
+   "en": "Glubokoe",
+   "fi": "Glubokoe",
+   "wikidata": "Q518319"
+  },
+  "1159120699": {
+   "name": "Ozero Purinskoye",
+   "en": "Ozero Purinskoye",
+   "fi": "Ozero Purinskoye",
+   "wikidata": ""
+  },
+  "1159120717": {
+   "name": "Ozero Ayaturku",
+   "en": "Ozero Ayaturku",
+   "fi": "Ozero Ayaturku",
+   "wikidata": ""
+  },
+  "1159120733": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159120753": {
+   "name": "Ozero Bol'shoye Topol'noye",
+   "en": "Bolshoye Topolnoye",
+   "fi": "Bolshoye Topolnoye",
+   "wikidata": "Q4092460"
+  },
+  "1159120771": {
+   "name": "Ozero Kuchukskoye",
+   "en": "Lake Kuchuk",
+   "fi": "Lake Kuchuk",
+   "wikidata": "Q2642276"
+  },
+  "1159120789": {
+   "name": "Ozero Kuchukskoye",
+   "en": "Lake Kuchuk",
+   "fi": "Lake Kuchuk",
+   "wikidata": "Q2642276"
+  },
+  "1159120805": {
+   "name": "Ozero Maraldy",
+   "en": "Ozero Maraldy",
+   "fi": "Ozero Maraldy",
+   "wikidata": ""
+  },
+  "1159120829": {
+   "name": "Ozero Gorkoye",
+   "en": "Gorkoye (Chernokurynskoye)",
+   "fi": "Gorkoye (Chernokurynskoye)",
+   "wikidata": "Q3565914"
+  },
+  "1159120841": {
+   "name": "Ozero Tandovo",
+   "en": "Tandovo",
+   "fi": "Tandovo",
+   "wikidata": "Q3565995"
+  },
+  "1159120857": {
+   "name": "Ebeyty Lake",
+   "en": "Ebeyty",
+   "fi": "Ebeyty",
+   "wikidata": "Q4529522"
+  },
+  "1159120873": {
+   "name": "Ozero Ik",
+   "en": "Ik",
+   "fi": "Ik",
+   "wikidata": "Q4198953"
+  },
+  "1159120893": {
+   "name": "Ozero Artevo",
+   "en": "Ozero Artevo",
+   "fi": "Ozero Artevo",
+   "wikidata": ""
+  },
+  "1159120911": {
+   "name": "Ozero Bolshoy Uvat",
+   "en": "Bolshoy Uvat",
+   "fi": "Bolshoy Uvat",
+   "wikidata": "Q4092898"
+  },
+  "1159120921": {
+   "name": "Ozero Bolshoy Shishkarym",
+   "en": "Ozero Bolshoy Shishkarym",
+   "fi": "Ozero Bolshoy Shishkarym",
+   "wikidata": ""
+  },
+  "1159120933": {
+   "name": "Ozero Andreyevskoye",
+   "en": "Ozero Andreyevskoye",
+   "fi": "Ozero Andreyevskoye",
+   "wikidata": ""
+  },
+  "1159120955": {
+   "name": "Ozero Tuman",
+   "en": "Ozero Tuman",
+   "fi": "Ozero Tuman",
+   "wikidata": ""
+  },
+  "1159120973": {
+   "name": "Ozero Yakh-Tur",
+   "en": "Yakhtur",
+   "fi": "Yakhtur",
+   "wikidata": "Q4539674"
+  },
+  "1159120983": {
+   "name": "Ozero Leushinskiy Tuman",
+   "en": "Leushinsky Tuman",
+   "fi": "Leushinsky Tuman",
+   "wikidata": "Q3566268"
+  },
+  "1159121005": {
+   "name": "Ozero Tursuntskiy Tuman",
+   "en": "Ozero Tursuntskiy Tuman",
+   "fi": "Ozero Tursuntskiy Tuman",
+   "wikidata": ""
+  },
+  "1159121015": {
+   "name": "Ozero Syrkovoye",
+   "en": "Ozero Syrkovoye",
+   "fi": "Ozero Syrkovoye",
+   "wikidata": ""
+  },
+  "1159121033": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121045": {
+   "name": "Ozero Enetor",
+   "en": "Ozero Enetor",
+   "fi": "Ozero Enetor",
+   "wikidata": ""
+  },
+  "1159121059": {
+   "name": "Ozero Ergipskiy Sor",
+   "en": "Ozero Ergipskiy Sor",
+   "fi": "Ozero Ergipskiy Sor",
+   "wikidata": ""
+  },
+  "1159121087": {
+   "name": "Ozero Bolshoy Sor",
+   "en": "Ozero Bolshoy Sor",
+   "fi": "Ozero Bolshoy Sor",
+   "wikidata": ""
+  },
+  "1159121101": {
+   "name": "Ozero Vandmtor",
+   "en": "Ozero Vandmtor",
+   "fi": "Ozero Vandmtor",
+   "wikidata": ""
+  },
+  "1159121111": {
+   "name": "Ozero Bolshoy Kazymskiy Sor",
+   "en": "Ozero Bolshoy Kazymskiy Sor",
+   "fi": "Ozero Bolshoy Kazymskiy Sor",
+   "wikidata": ""
+  },
+  "1159121123": {
+   "name": "Ozero Shuryshkarskiy Sor",
+   "en": "Ozero Shuryshkarskiy Sor",
+   "fi": "Ozero Shuryshkarskiy Sor",
+   "wikidata": ""
+  },
+  "1159121139": {
+   "name": "Ozero Yambuto",
+   "en": "Ozero Yambuto",
+   "fi": "Ozero Yambuto",
+   "wikidata": ""
+  },
+  "1159121155": {
+   "name": "Ozero Yasaveyto",
+   "en": "Ozero Yasaveyto",
+   "fi": "Ozero Yasaveyto",
+   "wikidata": ""
+  },
+  "1159121171": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121185": {
+   "name": "Ozero Teke",
+   "en": "Teke",
+   "fi": "Teke",
+   "wikidata": "Q2587598"
+  },
+  "1159121201": {
+   "name": "Qyzylqaq Kli",
+   "en": "Qyzylqaq Kli",
+   "fi": "Qyzylqaq Kli",
+   "wikidata": ""
+  },
+  "1159121215": {
+   "name": "Žalauly Kli",
+   "en": "Zhalauly",
+   "fi": "Zhalauly",
+   "wikidata": "Q10269944"
+  },
+  "1159121231": {
+   "name": "Shreksor Kli",
+   "en": "Shreksor Kli",
+   "fi": "Shreksor Kli",
+   "wikidata": ""
+  },
+  "1159121247": {
+   "name": "Qarasor Kli",
+   "en": "Qarasor Kli",
+   "fi": "Qarasor Kli",
+   "wikidata": ""
+  },
+  "1159121263": {
+   "name": "Ozero Sartlan",
+   "en": "Lake Sartlan",
+   "fi": "Lake Sartlan",
+   "wikidata": "Q2640299"
+  },
+  "1159121279": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121293": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121307": {
+   "name": "Iken Zhbolat Lake",
+   "en": "Iken Zhbolat Lake",
+   "fi": "Iken Zhbolat Lake",
+   "wikidata": ""
+  },
+  "1159121323": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121337": {
+   "name": "Qiyakty Kli",
+   "en": "Qiyakty Kli",
+   "fi": "Qiyakty Kli",
+   "wikidata": ""
+  },
+  "1159121363": {
+   "name": "Kerey Kli",
+   "en": "Kerey",
+   "fi": "Kerey",
+   "wikidata": "Q23014768"
+  },
+  "1159121371": {
+   "name": "Qozhakl",
+   "en": "Qozhakl",
+   "fi": "Qozhakl",
+   "wikidata": ""
+  },
+  "1159121387": {
+   "name": "Yke Lake",
+   "en": "Ayke",
+   "fi": "Ayke",
+   "wikidata": "Q2659831"
+  },
+  "1159121399": {
+   "name": "Saryqopa Kli",
+   "en": "Sarykopa",
+   "fi": "Saryqopa",
+   "wikidata": "Q2982888"
+  },
+  "1159121415": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121431": {
+   "name": "Shaghalalytengiz Kli",
+   "en": "Shaghalalytengiz Kli",
+   "fi": "Shaghalalytengiz Kli",
+   "wikidata": ""
+  },
+  "1159121447": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121463": {
+   "name": "Zharman Kli",
+   "en": "Zharman Kli",
+   "fi": "Zharman Kli",
+   "wikidata": ""
+  },
+  "1159121479": {
+   "name": "Iken Aqsuat Kli",
+   "en": "Iken Aqsuat Kli",
+   "fi": "Iken Aqsuat Kli",
+   "wikidata": ""
+  },
+  "1159121491": {
+   "name": "Koybaghar Kli",
+   "en": "Kajbagar",
+   "fi": "Kajbagar",
+   "wikidata": "Q3309948"
+  },
+  "1159121507": {
+   "name": "Imantau Kli",
+   "en": "Imantau",
+   "fi": "Imantau",
+   "wikidata": "Q12547114"
+  },
+  "1159121523": {
+   "name": "Qalybek Kli",
+   "en": "Qalybek Kli",
+   "fi": "Qalybek Kli",
+   "wikidata": ""
+  },
+  "1159121537": {
+   "name": "Kishi Qaraoy Kli",
+   "en": "Kishi Qaraoy Kli",
+   "fi": "Kishi Qaraoy Kli",
+   "wikidata": ""
+  },
+  "1159121555": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121575": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121585": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121605": {
+   "name": "Pyhäjärvi",
+   "en": "Pyhäjärvi",
+   "fi": "Pyhäjärvi",
+   "wikidata": "Q1635550"
+  },
+  "1159121617": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121635": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121653": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121671": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121683": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121699": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121715": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121731": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121743": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121759": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121775": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121791": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121807": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121819": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121833": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121849": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121865": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121881": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121891": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121901": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121917": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121933": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121949": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121965": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121981": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159121995": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122011": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122027": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122043": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122055": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122075": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122093": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122099": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122117": {
+   "name": "Randijaure",
+   "en": "Randijaure",
+   "fi": "Randijaure",
+   "wikidata": "Q15436784"
+  },
+  "1159122133": {
+   "name": "Storuman",
+   "en": "Storuman Lake",
+   "fi": "Storuman",
+   "wikidata": "Q465037"
+  },
+  "1159122149": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122169": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122187": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122201": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122215": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122235": {
+   "name": "Tyrifjorden",
+   "en": "Tyrifjorden",
+   "fi": "Tyrifjorden",
+   "wikidata": "Q696445"
+  },
+  "1159122253": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122265": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122279": {
+   "name": "Snåsavatnet",
+   "en": "Snåsavatnet",
+   "fi": "Snåsavatnet",
+   "wikidata": "Q1777782"
+  },
+  "1159122287": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122299": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122311": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122329": {
+   "name": "Røssvatnet",
+   "en": "Røssvatnet",
+   "fi": "Røssvatnet",
+   "wikidata": "Q1352298"
+  },
+  "1159122349": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122363": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122373": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122389": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122403": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122419": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122435": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122453": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122467": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122477": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122489": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122499": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122511": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122527": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122543": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122559": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122575": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122589": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122605": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122621": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122637": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122653": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122669": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122673": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122691": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122711": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122725": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122741": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122763": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122773": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122787": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122801": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122817": {
+   "name": "Songhua Hu",
+   "en": "Songhua Lake",
+   "fi": "Songhua Lake",
+   "wikidata": "Q837876"
+  },
+  "1159122829": {
+   "name": "Yueliang Pao",
+   "en": "Yueliang Pao",
+   "fi": "Yueliang Pao",
+   "wikidata": ""
+  },
+  "1159122863": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122887": {
+   "name": "Puma Yumco",
+   "en": "Lake Puma Yumco",
+   "fi": "Lake Puma Yumco",
+   "wikidata": "Q6477446"
+  },
+  "1159122891": {
+   "name": "Mälaren",
+   "en": "Mälaren",
+   "fi": "Mälaren",
+   "wikidata": "Q184492"
+  },
+  "1159122907": {
+   "name": "Rye Patch Reservoir",
+   "en": "Rye Patch Reservoir",
+   "fi": "Rye Patch Reservoir",
+   "wikidata": "Q7384983"
+  },
+  "1159122923": {
+   "name": "Khashm el Girba Dam",
+   "en": "Khashm el Girba Dam",
+   "fi": "Khashm el Girba Dam",
+   "wikidata": ""
+  },
+  "1159122939": {
+   "name": "Mingevir Reservoir",
+   "en": "Mingachevir reservoir",
+   "fi": "Mingəçevirin tekojärvi",
+   "wikidata": "Q1859076"
+  },
+  "1159122989": {
+   "name": "Ubolratna Reservoir",
+   "en": "Ubol Ratana Reservoir",
+   "fi": "Ubol Ratana Reservoir",
+   "wikidata": "Q41566866"
+  },
+  "1159123003": {
+   "name": "Xinfengjiang Shuiku",
+   "en": "Xinfengjiang Reservoir",
+   "fi": "Xinfengjiang Reservoir",
+   "wikidata": "Q1477854"
+  },
+  "1159123019": {
+   "name": "Krishna Raja Sagar",
+   "en": "Krishna Raja Sagara",
+   "fi": "Krishna Raja Sagara",
+   "wikidata": "Q3536528"
+  },
+  "1159123029": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159123047": {
+   "name": "Bhadra Reservoir",
+   "en": "Bhadra Reservoir",
+   "fi": "Bhadra Reservoir",
+   "wikidata": ""
+  },
+  "1159123057": {
+   "name": "Tungabhadra",
+   "en": "Tungabhadra",
+   "fi": "Tungabhadra",
+   "wikidata": ""
+  },
+  "1159123075": {
+   "name": "Novosibirsk Reservoir",
+   "en": "Novosibirsk Reservoir",
+   "fi": "Novosibirsk Reservoir",
+   "wikidata": "Q1542594"
+  },
+  "1159123091": {
+   "name": "Lake Zaysan",
+   "en": "Lake Zaysan",
+   "fi": "Zaisan",
+   "wikidata": "Q216621"
+  },
+  "1159123107": {
+   "name": "Lake Habbaniyah",
+   "en": "Lake Habbaniyah",
+   "fi": "Lake Habbaniyah",
+   "wikidata": "Q2539972"
+  },
+  "1159123125": {
+   "name": "Buhayrat ath Tharthar",
+   "en": "Lake Tharthar",
+   "fi": "Lake Tharthar",
+   "wikidata": "Q1640519"
+  },
+  "1159123145": {
+   "name": "Saksak Dagi",
+   "en": "Saksak Dagi",
+   "fi": "Saksak Dagi",
+   "wikidata": ""
+  },
+  "1159123163": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159123175": {
+   "name": "Kiev Reservoir",
+   "en": "Kyiv Reservoir",
+   "fi": "Kiovan tekojärvi",
+   "wikidata": "Q1425651"
+  },
+  "1159123191": {
+   "name": "Lake Kovdozero",
+   "en": "Kovdozero",
+   "fi": "Koutajärvi",
+   "wikidata": "Q240398"
+  },
+  "1159123217": {
+   "name": "Lake Imandra",
+   "en": "Imandra",
+   "fi": "Imandrajärvi",
+   "wikidata": "Q265997"
+  },
+  "1159123229": {
+   "name": "Ondozero",
+   "en": "Ondozero",
+   "fi": "Ontajärvi",
+   "wikidata": "Q1634873"
+  },
+  "1159123247": {
+   "name": "Koitere",
+   "en": "Koitere",
+   "fi": "Koitere",
+   "wikidata": "Q1345130"
+  },
+  "1159123265": {
+   "name": "Rikkavesi",
+   "en": "Rikkavesi",
+   "fi": "Rikkavesi",
+   "wikidata": "Q7334058"
+  },
+  "1159123281": {
+   "name": "Lake Il'Men'",
+   "en": "Ilmen",
+   "fi": "Ilmajärvi",
+   "wikidata": "Q203462"
+  },
+  "1159123291": {
+   "name": "Cheboksary Reservoir",
+   "en": "Cheboksary Reservoir",
+   "fi": "Tšeboksaryn tekojärvi",
+   "wikidata": "Q571123"
+  },
+  "1159123301": {
+   "name": "Oulujärvi",
+   "en": "Oulujärvi",
+   "fi": "Oulujärvi",
+   "wikidata": "Q580019"
+  },
+  "1159123319": {
+   "name": "Kemijärvi",
+   "en": "Kemijärvi",
+   "fi": "Kemijärvi",
+   "wikidata": "Q1738491"
+  },
+  "1159123333": {
+   "name": "Umbozero Lake",
+   "en": "Umbozero",
+   "fi": "Umbajärvi",
+   "wikidata": "Q1460079"
+  },
+  "1159123351": {
+   "name": "Paduskoye More",
+   "en": "Paduskoye More",
+   "fi": "Paduskoye More",
+   "wikidata": ""
+  },
+  "1159123363": {
+   "name": "Porttipahta Reservoir",
+   "en": "Porttipahta Reservoir",
+   "fi": "Porttipahdan tekojärvi",
+   "wikidata": "Q2105296"
+  },
+  "1159123381": {
+   "name": "Lokan Tekojarvi",
+   "en": "Lokka Reservoir",
+   "fi": "Lokan tekojärvi",
+   "wikidata": "Q1868580"
+  },
+  "1159123397": {
+   "name": "Akkajaure",
+   "en": "Akkajaure",
+   "fi": "Akkajaure",
+   "wikidata": "Q419614"
+  },
+  "1159123415": {
+   "name": "Stora Lulevatten",
+   "en": "Stora Lulevatten",
+   "fi": "Stora Lulevatten",
+   "wikidata": "Q1760356"
+  },
+  "1159123435": {
+   "name": "Mjøsa",
+   "en": "Mjøsa",
+   "fi": "Mjøsa",
+   "wikidata": "Q212209"
+  },
+  "1159123453": {
+   "name": "M'Bakaou Reservoir",
+   "en": "Mbakaou Reservoir",
+   "fi": "Mbakaou Reservoir",
+   "wikidata": "Q19972176"
+  },
+  "1159123465": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159123481": {
+   "name": "Tiete",
+   "en": "Tiete",
+   "fi": "Tiete",
+   "wikidata": ""
+  },
+  "1159123497": {
+   "name": "Barra Bonita",
+   "en": "Barra Bonita Reservoir",
+   "fi": "Barra Bonita Reservoir",
+   "wikidata": "Q22072127"
+  },
+  "1159123517": {
+   "name": "Bariri",
+   "en": "Bariri Reservoir",
+   "fi": "Bariri Reservoir",
+   "wikidata": "Q22072128"
+  },
+  "1159123531": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159123547": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159123567": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159123611": {
+   "name": "Lake Novillo",
+   "en": "Lake Novillo",
+   "fi": "Lake Novillo",
+   "wikidata": "Q6477152"
+  },
+  "1159123625": {
+   "name": "Lake Mohave",
+   "en": "Lake Mohave",
+   "fi": "Lake Mohave",
+   "wikidata": "Q1801012"
+  },
+  "1159123639": {
+   "name": "Lac Low",
+   "en": "Lac Low",
+   "fi": "Lac Low",
+   "wikidata": "Q6692903"
+  },
+  "1159123651": {
+   "name": "Southern Indian Lake",
+   "en": "Southern Indian Lake",
+   "fi": "Southern Indian Lake",
+   "wikidata": "Q1888211"
+  },
+  "1159123665": {
+   "name": "Tobin Lake",
+   "en": "Tobin Lake",
+   "fi": "Tobin Lake",
+   "wikidata": "Q7359179"
+  },
+  "1159123681": {
+   "name": "Cedar Lake",
+   "en": "Cedar Lake",
+   "fi": "Cedarjärvi",
+   "wikidata": "Q1052532"
+  },
+  "1159123697": {
+   "name": "Sipiwesk Lac",
+   "en": "Sipiwesk Lake",
+   "fi": "Sipiwesk Lake",
+   "wikidata": "Q10315644"
+  },
+  "1159123719": {
+   "name": "Ogoki Reservoir",
+   "en": "Ogoki Reservoir",
+   "fi": "Ogoki Reservoir",
+   "wikidata": "Q14638138"
+  },
+  "1159123733": {
+   "name": "Umfreville Lake",
+   "en": "Umfreville Lake",
+   "fi": "Umfreville Lake",
+   "wikidata": "Q7359539"
+  },
+  "1159123751": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159123765": {
+   "name": "Lac Seul",
+   "en": "Lac Seul",
+   "fi": "Lac Seul",
+   "wikidata": "Q958928"
+  },
+  "1159123781": {
+   "name": "Cabonga Reservoir",
+   "en": "Cabonga Reservoir",
+   "fi": "Cabongan tekojärvi",
+   "wikidata": "Q1328792"
+  },
+  "1159123795": {
+   "name": "Lake Abitibi",
+   "en": "Lake Abitibi",
+   "fi": "Lake Abitibi",
+   "wikidata": "Q321534"
+  },
+  "1159123805": {
+   "name": "Dozois Reservoir",
+   "en": "Dozois Reservoir",
+   "fi": "Dozois Reservoir",
+   "wikidata": "Q1330203"
+  },
+  "1159123829": {
+   "name": "Dozois Reservoir",
+   "en": "Dozois Reservoir",
+   "fi": "Dozois Reservoir",
+   "wikidata": "Q1330203"
+  },
+  "1159123839": {
+   "name": "Lac Saint-Jean",
+   "en": "Lake St. John",
+   "fi": "Lake St. John",
+   "wikidata": "Q979922"
+  },
+  "1159123857": {
+   "name": "Lake Péribonca",
+   "en": "Lac Péribonka",
+   "fi": "Lac Péribonka",
+   "wikidata": "Q6477455"
+  },
+  "1159123871": {
+   "name": "Réservoir de La Grande 2",
+   "en": "Lac Awapakamich",
+   "fi": "Lac Awapakamich",
+   "wikidata": "Q22617464"
+  },
+  "1159123883": {
+   "name": "Saratov Reservoir",
+   "en": "Saratov Reservoir",
+   "fi": "Saratovin tekojärvi",
+   "wikidata": "Q1431535"
+  },
+  "1159123899": {
+   "name": "Nizhnekamsk Reservoir",
+   "en": "Nizhnekamsk Reservoir",
+   "fi": "Ala-Kaman tekojärvi",
+   "wikidata": "Q1425346"
+  },
+  "1159123919": {
+   "name": "Serebryanskoe Reservoir",
+   "en": "Serebryansk Reservoir",
+   "fi": "Serebryansk Reservoir",
+   "wikidata": "Q3511603"
+  },
+  "1159123929": {
+   "name": "Ataturk Barajt",
+   "en": "Ataturk Barajt",
+   "fi": "Ataturk Barajt",
+   "wikidata": ""
+  },
+  "1159123939": {
+   "name": "Réservoir Manicouagan",
+   "en": "Manicouagan Reservoir",
+   "fi": "Manicouagan Reservoir",
+   "wikidata": "Q756106"
+  },
+  "1159123951": {
+   "name": "Réservoir de La Grande 3",
+   "en": "Réservoir La Grande 3",
+   "fi": "Réservoir La Grande 3",
+   "wikidata": "Q2179011"
+  },
+  "1159123963": {
+   "name": "Lake Mead",
+   "en": "Lake Mead",
+   "fi": "Lake Mead",
+   "wikidata": "Q654515"
+  },
+  "1159123979": {
+   "name": "Lake Powell",
+   "en": "Lake Powell",
+   "fi": "Powellinjärvi",
+   "wikidata": "Q667507"
+  },
+  "1159124009": {
+   "name": "Williston Lake",
+   "en": "Williston Lake",
+   "fi": "Williston Lake",
+   "wikidata": "Q967775"
+  },
+  "1159124029": {
+   "name": "Fort Peck Lake",
+   "en": "Fort Peck Lake",
+   "fi": "Fort Peck Lake",
+   "wikidata": "Q4492006"
+  },
+  "1159124039": {
+   "name": "Lake Sakakawea",
+   "en": "Lake Sakakawea",
+   "fi": "Lake Sakakawea",
+   "wikidata": "Q1801077"
+  },
+  "1159124053": {
+   "name": "Lake Oahe",
+   "en": "Lake Oahe",
+   "fi": "Lake Oahe",
+   "wikidata": "Q474408"
+  },
+  "1159124077": {
+   "name": "Réservoir Gouin",
+   "en": "Gouin Reservoir",
+   "fi": "Gouin Reservoir",
+   "wikidata": "Q1540136"
+  },
+  "1159124087": {
+   "name": "Lower Arrow Lake",
+   "en": "Arrow Lakes",
+   "fi": "Arrow Lakes",
+   "wikidata": "Q280135"
+  },
+  "1159124109": {
+   "name": "Amistad Reservoir",
+   "en": "Amistad Reservoir",
+   "fi": "Amistad Reservoir",
+   "wikidata": "Q1634424"
+  },
+  "1159124119": {
+   "name": "Réservoir Baskatong",
+   "en": "Baskatong Reservoir",
+   "fi": "Baskatong Reservoir",
+   "wikidata": "Q1329423"
+  },
+  "1159124141": {
+   "name": "Lake Chelan",
+   "en": "Lake Chelan",
+   "fi": "Lake Chelan",
+   "wikidata": "Q1115201"
+  },
+  "1159124147": {
+   "name": "Millerton Lake",
+   "en": "Millerton Lake",
+   "fi": "Millerton Lake",
+   "wikidata": "Q6859416"
+  },
+  "1159124167": {
+   "name": "Réservoir Pipmuacan",
+   "en": "Réservoir Pipmuacan",
+   "fi": "Réservoir Pipmuacan",
+   "wikidata": "Q1471254"
+  },
+  "1159124183": {
+   "name": "Lake Francis Case",
+   "en": "Lake Francis Case",
+   "fi": "Lake Francis Case",
+   "wikidata": "Q6475894"
+  },
+  "1159124201": {
+   "name": "Falcon Lake",
+   "en": "Falcon International Reservoir",
+   "fi": "Falcon International Reservoir",
+   "wikidata": "Q4967120"
+  },
+  "1159124219": {
+   "name": "Réservoir de Caniapiscau",
+   "en": "Caniapiscau Reservoir",
+   "fi": "Caniapiscau Reservoir",
+   "wikidata": "Q1033302"
+  },
+  "1159124231": {
+   "name": "Lac Bermen",
+   "en": "Lac Bermen",
+   "fi": "Lac Bermen",
+   "wikidata": "Q6474964"
+  },
+  "1159124249": {
+   "name": "Réservoir de Caniapiscau",
+   "en": "Caniapiscau Reservoir",
+   "fi": "Caniapiscau Reservoir",
+   "wikidata": "Q1033302"
+  },
+  "1159124267": {
+   "name": "Kentucky Lake",
+   "en": "Kentucky Lake",
+   "fi": "Kentucky Lake",
+   "wikidata": "Q2781219"
+  },
+  "1159124279": {
+   "name": "J. Strom Thurmond Lake",
+   "en": "Lake Strom Thurmond",
+   "fi": "Lake Strom Thurmond",
+   "wikidata": "Q6477865"
+  },
+  "1159124293": {
+   "name": "Kinbasket Lake",
+   "en": "Kinbasket Lake",
+   "fi": "Kinbasket Lake",
+   "wikidata": "Q317407"
+  },
+  "1159124305": {
+   "name": "Shasta Lake",
+   "en": "Shasta Lake",
+   "fi": "Shasta Lake",
+   "wikidata": "Q14683954"
+  },
+  "1159124317": {
+   "name": "Wheeler Lake",
+   "en": "Wheeler Lake",
+   "fi": "Wheeler Lake",
+   "wikidata": "Q3561541"
+  },
+  "1159124331": {
+   "name": "Franklin D. Roosevelt Lake",
+   "en": "Franklin D. Roosevelt Lake",
+   "fi": "Franklin D. Roosevelt Lake",
+   "wikidata": "Q3042661"
+  },
+  "1159124345": {
+   "name": "Upper Arrow Lake",
+   "en": "Arrow Lakes",
+   "fi": "Arrow Lakes",
+   "wikidata": "Q280135"
+  },
+  "1159124359": {
+   "name": "Kinbasket Lake",
+   "en": "Kinbasket Lake",
+   "fi": "Kinbasket Lake",
+   "wikidata": "Q317407"
+  },
+  "1159124371": {
+   "name": "Caballo Reservoir",
+   "en": "Caballo Lake",
+   "fi": "Caballo Lake",
+   "wikidata": "Q5015210"
+  },
+  "1159124385": {
+   "name": "Elephant Butte Reservoir",
+   "en": "Elephant Butte Reservoir",
+   "fi": "Elephant Butte Reservoir",
+   "wikidata": "Q5359306"
+  },
+  "1159124399": {
+   "name": "Lake Diefenbaker",
+   "en": "Lake Diefenbaker",
+   "fi": "Lake Diefenbaker",
+   "wikidata": "Q399604"
+  },
+  "1159124413": {
+   "name": "Ossokmanuan Lake",
+   "en": "Ossokmanuan Reservoir",
+   "fi": "Ossokmanuan Reservoir",
+   "wikidata": "Q7107531"
+  },
+  "1159124425": {
+   "name": "Red Bluff Lake",
+   "en": "Red Bluff Reservoir",
+   "fi": "Red Bluff Reservoir",
+   "wikidata": "Q7303773"
+  },
+  "1159124439": {
+   "name": "Brantley Lake",
+   "en": "Brantley Lake",
+   "fi": "Brantley Lake",
+   "wikidata": "Q4957685"
+  },
+  "1159124453": {
+   "name": "Lake C.W. McConaughy",
+   "en": "Lake McConaughy",
+   "fi": "Lake McConaughy",
+   "wikidata": "Q6476851"
+  },
+  "1159124467": {
+   "name": "Seminoe Reservoir",
+   "en": "Seminoe Reservoir",
+   "fi": "Seminoe Reservoir",
+   "wikidata": ""
+  },
+  "1159124479": {
+   "name": "Trinity Lake",
+   "en": "Trinity Lake",
+   "fi": "Trinity Lake",
+   "wikidata": "Q2453582"
+  },
+  "1159124493": {
+   "name": "John H. Kerr Reservoir",
+   "en": "Kerr Lake",
+   "fi": "Kerr Lake",
+   "wikidata": "Q1700320"
+  },
+  "1159124507": {
+   "name": "Lake Texoma",
+   "en": "Lake Texoma",
+   "fi": "Lake Texoma",
+   "wikidata": "Q3215230"
+  },
+  "1159124521": {
+   "name": "Flaming Gorge Reservoir",
+   "en": "Flaming Gorge Reservoir",
+   "fi": "Flaming Gorge Reservoir",
+   "wikidata": "Q176598"
+  },
+  "1159124537": {
+   "name": "American Falls Reservoir",
+   "en": "American Falls Reservoir",
+   "fi": "American Falls Reservoir",
+   "wikidata": ""
+  },
+  "1159124547": {
+   "name": "Presa de la Boquilla",
+   "en": "Presa de la Boquilla",
+   "fi": "Presa de la Boquilla",
+   "wikidata": ""
+  },
+  "1159124567": {
+   "name": "Presa del Infiernillo",
+   "en": "Presa del Infiernillo",
+   "fi": "Presa del Infiernillo",
+   "wikidata": ""
+  },
+  "1159124581": {
+   "name": "Presa de la Angostura",
+   "en": "Presa de la Angostura",
+   "fi": "Presa de la Angostura",
+   "wikidata": ""
+  },
+  "1159124599": {
+   "name": "Petenwell Lake",
+   "en": "Petenwell Lake",
+   "fi": "Petenwell Lake",
+   "wikidata": "Q180509"
+  },
+  "1159124611": {
+   "name": "Lake Seminole",
+   "en": "Lake Seminole",
+   "fi": "Lake Seminole",
+   "wikidata": "Q3215219"
+  },
+  "1159124623": {
+   "name": "Lake Barkley",
+   "en": "Lake Barkley",
+   "fi": "Lake Barkley",
+   "wikidata": "Q6474916"
+  },
+  "1159124635": {
+   "name": "Presa Marte R. Gomez",
+   "en": "Presa Marte R. Gomez",
+   "fi": "Presa Marte R. Gomez",
+   "wikidata": ""
+  },
+  "1159124649": {
+   "name": "Lake Moultrie",
+   "en": "Lake Moultrie",
+   "fi": "Lake Moultrie",
+   "wikidata": "Q6476999"
+  },
+  "1159124659": {
+   "name": "Lake Marion",
+   "en": "Lake Marion",
+   "fi": "Lake Marion",
+   "wikidata": "Q4309904"
+  },
+  "1159124673": {
+   "name": "Lake Meredith",
+   "en": "Lake Meredith",
+   "fi": "Lake Meredith",
+   "wikidata": "Q1801005"
+  },
+  "1159124687": {
+   "name": "Ute Reservoir",
+   "en": "Ute Reservoir",
+   "fi": "Ute Reservoir",
+   "wikidata": ""
+  },
+  "1159124701": {
+   "name": "Conchas Lake",
+   "en": "Conchas Lake",
+   "fi": "Conchas Lake",
+   "wikidata": "Q5158618"
+  },
+  "1159124713": {
+   "name": "Toledo Bend Reservoir",
+   "en": "Toledo Bend Reservoir",
+   "fi": "Toledo Bend Reservoir",
+   "wikidata": "Q7330278"
+  },
+  "1159124727": {
+   "name": "Palisades Reservoir",
+   "en": "Palisades Reservoir",
+   "fi": "Palisades Reservoir",
+   "wikidata": ""
+  },
+  "1159124741": {
+   "name": "Glendo Reservoir",
+   "en": "Glendo Reservoir",
+   "fi": "Glendo Reservoir",
+   "wikidata": ""
+  },
+  "1159124745": {
+   "name": "Pathfinder Reservoir",
+   "en": "Pathfinder Reservoir",
+   "fi": "Pathfinder Reservoir",
+   "wikidata": "Q7144767"
+  },
+  "1159124757": {
+   "name": "Presa Nezahualcyotl",
+   "en": "Presa Nezahualcyotl",
+   "fi": "Presa Nezahualcyotl",
+   "wikidata": ""
+  },
+  "1159124773": {
+   "name": "Presa Manuel vila Camacho",
+   "en": "Presa Manuel vila Camacho",
+   "fi": "Presa Manuel vila Camacho",
+   "wikidata": ""
+  },
+  "1159124783": {
+   "name": "Presa Vicente Guerrero",
+   "en": "Presa Vicente Guerrero",
+   "fi": "Presa Vicente Guerrero",
+   "wikidata": ""
+  },
+  "1159124797": {
+   "name": "Presa Alvaro Obregon",
+   "en": "Presa Alvaro Obregon",
+   "fi": "Presa Alvaro Obregon",
+   "wikidata": ""
+  },
+  "1159124813": {
+   "name": "Lake Oroville",
+   "en": "Lake Oroville",
+   "fi": "Lake Oroville",
+   "wikidata": "Q6477226"
+  },
+  "1159124821": {
+   "name": "Boysen Reservoir",
+   "en": "Boysen Reservoir",
+   "fi": "Boysen Reservoir",
+   "wikidata": "Q896063"
+  },
+  "1159124837": {
+   "name": "Hartwell Lake",
+   "en": "Lake Hartwell",
+   "fi": "Lake Hartwell",
+   "wikidata": "Q1800945"
+  },
+  "1159124851": {
+   "name": "Lake Sidney Lanier",
+   "en": "Lake Lanier",
+   "fi": "Lake Lanier",
+   "wikidata": "Q3295796"
+  },
+  "1159124863": {
+   "name": "Lake Gaston",
+   "en": "Lake Gaston",
+   "fi": "Lake Gaston",
+   "wikidata": "Q732199"
+  },
+  "1159124883": {
+   "name": "Smith Mountain Lake",
+   "en": "Smith Mountain Lake",
+   "fi": "Smith Mountain Lake",
+   "wikidata": "Q7332083"
+  },
+  "1159124897": {
+   "name": "Walter F. George Reservoir",
+   "en": "Walter F. George Lake",
+   "fi": "Walter F. George Lake",
+   "wikidata": "Q7333077"
+  },
+  "1159124911": {
+   "name": "Réservoir Outardes Quatre",
+   "en": "Réservoir Outardes Quatre",
+   "fi": "Réservoir Outardes Quatre",
+   "wikidata": ""
+  },
+  "1159124925": {
+   "name": "Logan Martin Lake",
+   "en": "Logan Martin Lake",
+   "fi": "Logan Martin Lake",
+   "wikidata": "Q6667090"
+  },
+  "1159124935": {
+   "name": "Mitchell Lake",
+   "en": "Mitchell Lake",
+   "fi": "Mitchell Lake",
+   "wikidata": ""
+  },
+  "1159124947": {
+   "name": "Lake Murray",
+   "en": "Lake Murray",
+   "fi": "Lake Murray",
+   "wikidata": "Q6477034"
+  },
+  "1159124965": {
+   "name": "Rybinsk Reservoir",
+   "en": "Rybinsk Reservoir",
+   "fi": "Rybinskin tekojärvi",
+   "wikidata": "Q375029"
+  },
+  "1159124975": {
+   "name": "Kainji Reservoir",
+   "en": "Kainji Lake",
+   "fi": "Kainji Lake",
+   "wikidata": "Q770141"
+  },
+  "1159124989": {
+   "name": "Kakhovka Reservoir",
+   "en": "Kakhovka Reservoir",
+   "fi": "Kah’ovkan tekojärvi",
+   "wikidata": "Q1540436"
+  },
+  "1159125001": {
+   "name": "Kremenchuk Reservoir",
+   "en": "Kremenchuk Reservoir",
+   "fi": "Krementšukin tekojärvi",
+   "wikidata": "Q1431500"
+  },
+  "1159125013": {
+   "name": "Samara Reservoir",
+   "en": "Kuybyshev Reservoir",
+   "fi": "Kuibyševin tekojärvi",
+   "wikidata": "Q745937"
+  },
+  "1159125027": {
+   "name": "Represa de Sobradinho",
+   "en": "Sobradinho Reservoir",
+   "fi": "Sobradinho Reservoir",
+   "wikidata": "Q3234165"
+  },
+  "1159125041": {
+   "name": "Ozero Kubenskoye",
+   "en": "Kubenskoe",
+   "fi": "Kubenskoje",
+   "wikidata": "Q1463552"
+  },
+  "1159125055": {
+   "name": "Lake Kariba",
+   "en": "Lake Kariba",
+   "fi": "Karibajärvi",
+   "wikidata": "Q1047206"
+  },
+  "1159125069": {
+   "name": "Nam Ngum Reservoir",
+   "en": "Nam Ngum Dam",
+   "fi": "Nam Ngum Dam",
+   "wikidata": "Q6132621"
+  },
+  "1159125081": {
+   "name": "Lake Argyle",
+   "en": "Lake Argyle",
+   "fi": "Lake Argyle",
+   "wikidata": "Q1757739"
+  },
+  "1159125095": {
+   "name": "Lake Nasser",
+   "en": "Lake Nasser",
+   "fi": "Nasserjärvi",
+   "wikidata": "Q182796"
+  },
+  "1159125107": {
+   "name": "Toktogul Suu Saktagychy",
+   "en": "Toktogul Reservoir",
+   "fi": "Toktogulin tekojärvi",
+   "wikidata": "Q16508570"
+  },
+  "1159125121": {
+   "name": "Professor Doctor Ingenieur W. J. Van Blommestein Meer",
+   "en": "Brokopondo Reservoir",
+   "fi": "Brokopondon tekojärvi",
+   "wikidata": "Q926100"
+  },
+  "1159125135": {
+   "name": "Represa Itaipu",
+   "en": "Itaipu Reservoir",
+   "fi": "Itaipu Reservoir",
+   "wikidata": "Q10315670"
+  },
+  "1159125149": {
+   "name": "Lake Volta",
+   "en": "Lake Volta",
+   "fi": "Volta",
+   "wikidata": "Q201679"
+  },
+  "1159125163": {
+   "name": "Bratsk Reservoir",
+   "en": "Bratsk Reservoir",
+   "fi": "Bratskin tekojärvi",
+   "wikidata": "Q899803"
+  },
+  "1159125177": {
+   "name": "Represa de Tucuruí",
+   "en": "Lago Tucuruí",
+   "fi": "Lago Tucuruí",
+   "wikidata": "Q3215567"
+  },
+  "1159125193": {
+   "name": "Represa Três Marias",
+   "en": "Três Marias Dam",
+   "fi": "Três Marias Dam",
+   "wikidata": "Q1457581"
+  },
+  "1159125243": {
+   "name": "Repressa de Jupia",
+   "en": "Repressa de Jupia",
+   "fi": "Repressa de Jupia",
+   "wikidata": ""
+  },
+  "1159125247": {
+   "name": "Shardara Bgeni",
+   "en": "Shardara Bgeni",
+   "fi": "Shardara Bgeni",
+   "wikidata": ""
+  },
+  "1159125251": {
+   "name": "Vilyuy Reservoir",
+   "en": "Vilyuy Reservoir",
+   "fi": "Vilyuy Reservoir",
+   "wikidata": "Q2065167"
+  },
+  "1159125261": {
+   "name": "Krasnoyarsk Reservoir",
+   "en": "Krasnoyarsk Reservoir",
+   "fi": "Krasnoyarsk Reservoir",
+   "wikidata": "Q1786720"
+  },
+  "1159125269": {
+   "name": "Kostroma Reservoir",
+   "en": "Kostroma Reservoir",
+   "fi": "Kostroma Reservoir",
+   "wikidata": "Q4235571"
+  },
+  "1159125283": {
+   "name": "Uglich Reservoir",
+   "en": "Uglich Reservoir",
+   "fi": "Uglitšin tekojärvi",
+   "wikidata": "Q1479284"
+  },
+  "1159125297": {
+   "name": "Ivankovo Reservoir",
+   "en": "Ivankovo Reservoir",
+   "fi": "Ivankovon tekojärvi",
+   "wikidata": "Q1676050"
+  },
+  "1159125311": {
+   "name": "Tarbela Dam",
+   "en": "Tarbela Dam",
+   "fi": "Tarbela Dam",
+   "wikidata": ""
+  },
+  "1159125323": {
+   "name": "Lago de Cahora Bassa",
+   "en": "Cahora Bassa Reservoir",
+   "fi": "Cahora Bassa",
+   "wikidata": "Q755015"
+  },
+  "1159125337": {
+   "name": "Roseires Reservoir",
+   "en": "Roseires Reservoir",
+   "fi": "Roseires Reservoir",
+   "wikidata": ""
+  },
+  "1159125351": {
+   "name": "Votkinsk Reservoir",
+   "en": "Votkinsk Reservoir",
+   "fi": "Votkinskin tekojärvi",
+   "wikidata": "Q779468"
+  },
+  "1159125365": {
+   "name": "Kama Reservoir",
+   "en": "Kama Reservoir",
+   "fi": "Kaman tekojärvi",
+   "wikidata": "Q631189"
+  },
+  "1159125377": {
+   "name": "Buhayrat al-Assad",
+   "en": "Euphrates Lake",
+   "fi": "Euphrates Lake",
+   "wikidata": "Q979315"
+  },
+  "1159125393": {
+   "name": "Keban Baraji",
+   "en": "Keban Baraji",
+   "fi": "Keban Baraji",
+   "wikidata": ""
+  },
+  "1159125405": {
+   "name": "Volgograd Reservoir",
+   "en": "Volgograd Reservoir",
+   "fi": "Volgogradin tekojärvi",
+   "wikidata": "Q1500709"
+  },
+  "1159125415": {
+   "name": "Gorky Reservoir",
+   "en": "Gorky Reservoir",
+   "fi": "Gorkin tekojärvi",
+   "wikidata": "Q952975"
+  },
+  "1159125431": {
+   "name": "Ust-Ilimsk Reservoir",
+   "en": "Ust-Ilimsk Reservoir",
+   "fi": "Ust-Ilimsk Reservoir",
+   "wikidata": "Q1973182"
+  },
+  "1159125443": {
+   "name": "Obanbori Qayroqum",
+   "en": "Kayrakkum Reservoir",
+   "fi": "Qairoqqumin tekojärvi",
+   "wikidata": "Q668883"
+  },
+  "1159125457": {
+   "name": "Embalse de Entrepeas",
+   "en": "Embalse de Entrepeas",
+   "fi": "Embalse de Entrepeas",
+   "wikidata": ""
+  },
+  "1159125469": {
+   "name": "Gobind Sagar Reservoir",
+   "en": "Gobind Sagar",
+   "fi": "Gobind Sagar",
+   "wikidata": "Q5575508"
+  },
+  "1159125483": {
+   "name": "Hinakud Dam",
+   "en": "Hinakud Dam",
+   "fi": "Hinakud Dam",
+   "wikidata": ""
+  },
+  "1159125497": {
+   "name": "Nagarjuna Sagar Dam",
+   "en": "Nagarjuna Sagar Dam",
+   "fi": "Nagarjuna Sagar Dam",
+   "wikidata": ""
+  },
+  "1159125505": {
+   "name": "Danjiangkou Shuiku",
+   "en": "Danjiangkou Reservoir",
+   "fi": "Danjiangkou Reservoir",
+   "wikidata": "Q28798322"
+  },
+  "1159125523": {
+   "name": "Kapchagay Reservoir",
+   "en": "Kapchagay Reservoir",
+   "fi": "Qapşağain tekojärvi",
+   "wikidata": "Q1112158"
+  },
+  "1159125533": {
+   "name": "Bloemhof Dam",
+   "en": "Bloemhof Dam",
+   "fi": "Bloemhof Dam",
+   "wikidata": ""
+  },
+  "1159125549": {
+   "name": "Vaal Dam",
+   "en": "Vaal Dam",
+   "fi": "Vaal Dam",
+   "wikidata": ""
+  },
+  "1159125559": {
+   "name": "Wyangala Reservoir",
+   "en": "Wyangala Reservoir",
+   "fi": "Wyangala Reservoir",
+   "wikidata": ""
+  },
+  "1159125571": {
+   "name": "Lac de Kossou",
+   "en": "Lake Kossou",
+   "fi": "Lake Kossou",
+   "wikidata": "Q267679"
+  },
+  "1159125585": {
+   "name": "Zeya Reservoir",
+   "en": "Zeya Reservoir",
+   "fi": "Zeya Reservoir",
+   "wikidata": "Q2576979"
+  },
+  "1159125599": {
+   "name": "Embalse de García de Sola",
+   "en": "García Sola Reservoir",
+   "fi": "García Sola Reservoir",
+   "wikidata": "Q8775340"
+  },
+  "1159125611": {
+   "name": "Embalse de Orellana",
+   "en": "embalse de Orellana",
+   "fi": "embalse de Orellana",
+   "wikidata": "Q11681443"
+  },
+  "1159125625": {
+   "name": "Chao Nen Dam",
+   "en": "Chao Nen Dam",
+   "fi": "Chao Nen Dam",
+   "wikidata": ""
+  },
+  "1159125639": {
+   "name": "Xinanjiang Shuiku",
+   "en": "Xinanjiang Shuiku",
+   "fi": "Xinanjiang Shuiku",
+   "wikidata": ""
+  },
+  "1159125653": {
+   "name": "Guanting Shuiku",
+   "en": "Guanting Shuiku",
+   "fi": "Guanting Shuiku",
+   "wikidata": "Q4151226"
+  },
+  "1159125665": {
+   "name": "Embalse de Cala",
+   "en": "Embalse de Cala",
+   "fi": "Embalse de Cala",
+   "wikidata": "Q5830417"
+  },
+  "1159125673": {
+   "name": "Represa Porto Primavera",
+   "en": "Represa Porto Primavera",
+   "fi": "Represa Porto Primavera",
+   "wikidata": ""
+  },
+  "1159125685": {
+   "name": "Lake Mulwala",
+   "en": "Lake Mulwala",
+   "fi": "Lake Mulwala",
+   "wikidata": "Q3215071"
+  },
+  "1159125699": {
+   "name": "Lake Hume",
+   "en": "Lake Hume",
+   "fi": "Lake Hume",
+   "wikidata": "Q21960566"
+  },
+  "1159125711": {
+   "name": "Kaptai Lake",
+   "en": "Kaptai Lake",
+   "fi": "Kaptai Lake",
+   "wikidata": "Q10995968"
+  },
+  "1159125721": {
+   "name": "Lac de Buyo",
+   "en": "Lake Buyo",
+   "fi": "Lake Buyo",
+   "wikidata": "Q4809051"
+  },
+  "1159125735": {
+   "name": "Embalse de Guri",
+   "en": "Guri Reservoir",
+   "fi": "Guri Reservoir",
+   "wikidata": "Q5830486"
+  },
+  "1159125767": {
+   "name": "Lago Rincón del Bonete",
+   "en": "Rincón del Bonete Lake",
+   "fi": "Rincón del Bonete Lake",
+   "wikidata": "Q3276492"
+  },
+  "1159125781": {
+   "name": "Embalse Ezequiel Ramos Mexia",
+   "en": "Embalse Ezequiel Ramos Mexía",
+   "fi": "Embalse Ezequiel Ramos Mexía",
+   "wikidata": "Q21842470"
+  },
+  "1159125793": {
+   "name": "Tsimlyansk Reservoir",
+   "en": "Tsimlyansk Reservoir",
+   "fi": "Tsimljanskin tekojärvi",
+   "wikidata": "Q203536"
+  },
+  "1159125807": {
+   "name": "Represa de São Simão",
+   "en": "Represa de São Simão",
+   "fi": "Represa de São Simão",
+   "wikidata": ""
+  },
+  "1159125821": {
+   "name": "Camatague",
+   "en": "Camatague",
+   "fi": "Camatague",
+   "wikidata": ""
+  },
+  "1159125835": {
+   "name": "Embalse de Guárico",
+   "en": "Ing. Generoso Campilongo Reservoir",
+   "fi": "Ing. Generoso Campilongo Reservoir",
+   "wikidata": "Q5623127"
+  },
+  "1159125855": {
+   "name": "Barragem Itumbiara",
+   "en": "Barragem Itumbiara",
+   "fi": "Barragem Itumbiara",
+   "wikidata": ""
+  },
+  "1159125863": {
+   "name": "Burrendong Reservoir",
+   "en": "Lake Burrendong",
+   "fi": "Lake Burrendong",
+   "wikidata": "Q6475111"
+  },
+  "1159125877": {
+   "name": "Vanderkloof Dam",
+   "en": "Vanderkloof Dam",
+   "fi": "Vanderkloof Dam",
+   "wikidata": ""
+  },
+  "1159125893": {
+   "name": "Gariep Dam",
+   "en": "Gariep Dam",
+   "fi": "Gariep Dam",
+   "wikidata": ""
+  },
+  "1159125909": {
+   "name": "Stanley Reservoir",
+   "en": "Stanley Reservoir",
+   "fi": "Stanley Reservoir",
+   "wikidata": "Q7332268"
+  },
+  "1159125923": {
+   "name": "Gandhi Sagar Dam",
+   "en": "Gandhi Sagar Dam",
+   "fi": "Gandhi Sagar Dam",
+   "wikidata": ""
+  },
+  "1159125929": {
+   "name": "Bhumphol K. K. Nam",
+   "en": "Bhumphol K. K. Nam",
+   "fi": "Bhumphol K. K. Nam",
+   "wikidata": ""
+  },
+  "1159125943": {
+   "name": "Siri Kit Dam",
+   "en": "Siri Kit Dam",
+   "fi": "Siri Kit Dam",
+   "wikidata": ""
+  },
+  "1159125955": {
+   "name": "Represa Agua Vermetha",
+   "en": "Água Vermelha Reservoir",
+   "fi": "Água Vermelha Reservoir",
+   "wikidata": "Q22072124"
+  },
+  "1159125969": {
+   "name": "Represa Furnas",
+   "en": "Lagoa dos Bois",
+   "fi": "Lagoa dos Bois",
+   "wikidata": "Q22048562"
+  },
+  "1159125983": {
+   "name": "Represa Itarare",
+   "en": "Represa Itarare",
+   "fi": "Represa Itarare",
+   "wikidata": ""
+  },
+  "1159125997": {
+   "name": "Represa Iepe",
+   "en": "Represa Iepe",
+   "fi": "Represa Iepe",
+   "wikidata": ""
+  },
+  "1159126009": {
+   "name": "Senanayake Samudra",
+   "en": "Senanayake Samudra",
+   "fi": "Senanayake Samudra",
+   "wikidata": ""
+  },
+  "1159126023": {
+   "name": "Embalse de Buendía",
+   "en": "Buendía Reservoir",
+   "fi": "Buendía Reservoir",
+   "wikidata": "Q8775297"
+  },
+  "1159126037": {
+   "name": "Baidagang Shuiku",
+   "en": "Beidagang Reservoir",
+   "fi": "Beidagang Reservoir",
+   "wikidata": "Q10902731"
+  },
+  "1159126045": {
+   "name": "Khantayskoye Reservoir",
+   "en": "Khantayskoye Lake",
+   "fi": "Khantayskoye Lake",
+   "wikidata": "Q233071"
+  },
+  "1159126063": {
+   "name": "Kauno marios",
+   "en": "Kaunas Reservoir",
+   "fi": "Kaunas Reservoir",
+   "wikidata": "Q1737137"
+  },
+  "1159126073": {
+   "name": "Supung Reservoir",
+   "en": "Supung Reservoir",
+   "fi": "Supung Reservoir",
+   "wikidata": ""
+  },
+  "1159126091": {
+   "name": "Lake Eyre North",
+   "en": "Lake Eyre North",
+   "fi": "Pohjois-Eyre",
+   "wikidata": "Q21890573"
+  },
+  "1159126103": {
+   "name": "Lake Disappointment",
+   "en": "Kumpupintil Lake",
+   "fi": "Kumpupintil Lake",
+   "wikidata": "Q1638191"
+  },
+  "1159126115": {
+   "name": "Lake Mackay",
+   "en": "Lake Mackay",
+   "fi": "Mackayjärvi",
+   "wikidata": "Q1074063"
+  },
+  "1159126129": {
+   "name": "Lake Gairdner",
+   "en": "Lake Gairdner",
+   "fi": "Lake Gairdner",
+   "wikidata": "Q965973"
+  },
+  "1159126147": {
+   "name": "Lake Torrens",
+   "en": "Lake Torrens",
+   "fi": "Torrensjärvi",
+   "wikidata": "Q163855"
+  },
+  "1159126159": {
+   "name": "Lake Frome",
+   "en": "Lake Frome",
+   "fi": "Lake Frome",
+   "wikidata": "Q626907"
+  },
+  "1159126175": {
+   "name": "Lake Barlee",
+   "en": "Lake Barlee",
+   "fi": "Lake Barlee",
+   "wikidata": "Q1465138"
+  },
+  "1159126189": {
+   "name": "Lake Eyre South",
+   "en": "Lake Eyre South",
+   "fi": "Etelä-Eyre",
+   "wikidata": "Q21890578"
+  },
+  "1159126203": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159126217": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159126231": {
+   "name": "Lake Amadeus",
+   "en": "Lake Amadeus",
+   "fi": "Amadeuksenjärvi",
+   "wikidata": "Q584201"
+  },
+  "1159126243": {
+   "name": "Lake Carnegie",
+   "en": "Lake Carnegie",
+   "fi": "Lake Carnegie",
+   "wikidata": "Q3214793"
+  },
+  "1159126255": {
+   "name": "Lake Moore",
+   "en": "Lake Moore",
+   "fi": "Lake Moore",
+   "wikidata": "Q21886613"
+  },
+  "1159126269": {
+   "name": "Lake Carey",
+   "en": "Lake Carey",
+   "fi": "Lake Carey",
+   "wikidata": "Q6475174"
+  },
+  "1159126283": {
+   "name": "Lake Everard",
+   "en": "Lake Everard",
+   "fi": "Lake Everard",
+   "wikidata": "Q21890550"
+  },
+  "1159126295": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159126309": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159126323": {
+   "name": "Lake Neale",
+   "en": "Lake Neale",
+   "fi": "Lake Neale",
+   "wikidata": "Q8878462"
+  },
+  "1159126347": {
+   "name": "Lake Wells",
+   "en": "Lake Wells",
+   "fi": "Lake Wells",
+   "wikidata": "Q21882542"
+  },
+  "1159126349": {
+   "name": "Lake Ballard",
+   "en": "Lake Ballard",
+   "fi": "Lake Ballard",
+   "wikidata": "Q7358147"
+  },
+  "1159126363": {
+   "name": "Lake Goongarrie",
+   "en": "Lake Goongarrie",
+   "fi": "Lake Goongarrie",
+   "wikidata": "Q21891300"
+  },
+  "1159126377": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159126391": {
+   "name": "Lake Cowan",
+   "en": "Lake Cowan",
+   "fi": "Lake Cowan",
+   "wikidata": "Q17347103"
+  },
+  "1159126403": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159126421": {
+   "name": "Great Salt Lake",
+   "en": "Great Salt Lake",
+   "fi": "Iso Suolajärvi",
+   "wikidata": "Q178741"
+  },
+  "1159126435": {
+   "name": "Laguna Madre",
+   "en": "Laguna Madre",
+   "fi": "Laguna Madre",
+   "wikidata": ""
+  },
+  "1159126453": {
+   "name": "Salton Sea",
+   "en": "Salton Sea",
+   "fi": "Salton Sea",
+   "wikidata": "Q503301"
+  },
+  "1159126465": {
+   "name": "Lago Enriquillo",
+   "en": "Lake Enriquillo",
+   "fi": "Lago Enriquillo",
+   "wikidata": "Q1464758"
+  },
+  "1159126483": {
+   "name": "Goose Lake",
+   "en": "Goose Lake",
+   "fi": "Goose Lake",
+   "wikidata": "Q1309664"
+  },
+  "1159126491": {
+   "name": "Pyramid Lake",
+   "en": "Pyramid Lake",
+   "fi": "Pyramid Lake",
+   "wikidata": "Q761535"
+  },
+  "1159126509": {
+   "name": "Malheur Lake",
+   "en": "Malheur Lake",
+   "fi": "Malheur Lake",
+   "wikidata": "Q3215037"
+  },
+  "1159126529": {
+   "name": "Harney Lake",
+   "en": "Harney Lake",
+   "fi": "Harney Lake",
+   "wikidata": "Q5659764"
+  },
+  "1159126541": {
+   "name": "Etang Saumâtre",
+   "en": "Étang Saumâtre",
+   "fi": "Étang Saumâtre",
+   "wikidata": "Q2722327"
+  },
+  "1159126619": {
+   "name": "Lagoa Mirim",
+   "en": "Lagoa Mirim",
+   "fi": "Lagoa Mirim",
+   "wikidata": "Q876280"
+  },
+  "1159126631": {
+   "name": "IJsselmeer",
+   "en": "IJsselmeer",
+   "fi": "IJsselmeer",
+   "wikidata": "Q4121"
+  },
+  "1159126643": {
+   "name": "Syvash",
+   "en": "Syvash",
+   "fi": "Syvash",
+   "wikidata": ""
+  },
+  "1159126655": {
+   "name": "Issyk-Kul",
+   "en": "Issyk-Kul",
+   "fi": "Issyk Kul",
+   "wikidata": "Q42191"
+  },
+  "1159126669": {
+   "name": "Lake Turkana",
+   "en": "Lake Turkana",
+   "fi": "Turkanajärvi",
+   "wikidata": "Q182719"
+  },
+  "1159126681": {
+   "name": "Kaliningradskiy Zaliv",
+   "en": "Kaliningradskiy Zaliv",
+   "fi": "Kaliningradskiy Zaliv",
+   "wikidata": ""
+  },
+  "1159126693": {
+   "name": "Zalew Wislany",
+   "en": "Vistula Lagoon",
+   "fi": "Veikselinhaffi",
+   "wikidata": "Q5605"
+  },
+  "1159126709": {
+   "name": "Uvs Nuur",
+   "en": "Uvs Lake",
+   "fi": "Uvs Nuur",
+   "wikidata": "Q81150"
+  },
+  "1159126725": {
+   "name": "Qinghai Hu",
+   "en": "Qinghai Lake",
+   "fi": "Qinghaijärvi",
+   "wikidata": "Q201294"
+  },
+  "1159126735": {
+   "name": "Lake Razazah",
+   "en": "Lake Milh",
+   "fi": "Lake Milh",
+   "wikidata": "Q2007652"
+  },
+  "1159126747": {
+   "name": "Dead Sea",
+   "en": "Dead Sea",
+   "fi": "Kuollutmeri",
+   "wikidata": "Q23883"
+  },
+  "1159126761": {
+   "name": "Lake Urmia",
+   "en": "Urmia Lake",
+   "fi": "Urmia",
+   "wikidata": "Q199551"
+  },
+  "1159126775": {
+   "name": "Sarygamysh Köli",
+   "en": "Sarygamysh Lake",
+   "fi": "Sarygamyş",
+   "wikidata": "Q257416"
+  },
+  "1159126789": {
+   "name": "Alakol",
+   "en": "Lake Alakol",
+   "fi": "Alakol",
+   "wikidata": "Q310547"
+  },
+  "1159126805": {
+   "name": "Mar Chiquita",
+   "en": "Mar Chiquita",
+   "fi": "Mar Chiquita",
+   "wikidata": "Q21837060"
+  },
+  "1159126815": {
+   "name": "Lake Tuz",
+   "en": "Lake Tuz",
+   "fi": "Tuzinjärvi",
+   "wikidata": "Q211823"
+  },
+  "1159126829": {
+   "name": "Lake Van",
+   "en": "Lake Van",
+   "fi": "Vanjärvi",
+   "wikidata": "Q126307"
+  },
+  "1159126845": {
+   "name": "Lake Abaya",
+   "en": "Lake Abaya",
+   "fi": "Lake Abaya",
+   "wikidata": "Q304933"
+  },
+  "1159126865": {
+   "name": "Dead Sea",
+   "en": "Dead Sea",
+   "fi": "Kuollutmeri",
+   "wikidata": "Q23883"
+  },
+  "1159126873": {
+   "name": "Lake Hammar",
+   "en": "Lake Hammar",
+   "fi": "Lake Hammar",
+   "wikidata": "Q2668029"
+  },
+  "1159126887": {
+   "name": "Khyargas Nuur",
+   "en": "Khyargas Nuur",
+   "fi": "Khyargas Nuur",
+   "wikidata": "Q1125601"
+  },
+  "1159126901": {
+   "name": "Lake Assal",
+   "en": "Lake Assal",
+   "fi": "Assaljärvi",
+   "wikidata": "Q81239"
+  },
+  "1159126917": {
+   "name": "Tengiz Köli",
+   "en": "Lake Tengiz",
+   "fi": "Tengizjärvi",
+   "wikidata": "Q931708"
+  },
+  "1159126933": {
+   "name": "Qusmuryn Köli",
+   "en": "Kushmurun",
+   "fi": "Kushmurun",
+   "wikidata": "Q2454806"
+  },
+  "1159126941": {
+   "name": "Har Nuur",
+   "en": "Khar Lake",
+   "fi": "Khar Lake",
+   "wikidata": "Q1445991"
+  },
+  "1159126951": {
+   "name": "Lago Poopó",
+   "en": "Poopó Lake",
+   "fi": "Poopó Lake",
+   "wikidata": "Q464945"
+  },
+  "1159126967": {
+   "name": "Chew Bahir",
+   "en": "Lake Chew Bahir",
+   "fi": "Chew Bahir -järvi",
+   "wikidata": "Q662811"
+  },
+  "1159126977": {
+   "name": "Lake Chamo",
+   "en": "Lake Chamo",
+   "fi": "Chamojärvi",
+   "wikidata": "Q1060962"
+  },
+  "1159126991": {
+   "name": "Lake Abbe",
+   "en": "Lake Abbe",
+   "fi": "Abhejärvi",
+   "wikidata": "Q306194"
+  },
+  "1159127005": {
+   "name": "Lake Eyasi",
+   "en": "Lake Eyasi",
+   "fi": "Lake Eyasi",
+   "wikidata": "Q1291135"
+  },
+  "1159127021": {
+   "name": "Lake Natron",
+   "en": "Lake Natron",
+   "fi": "Natronjärvi",
+   "wikidata": "Q838080"
+  },
+  "1159127033": {
+   "name": "Aydar Ko‘l",
+   "en": "Aydar Lake",
+   "fi": "Aydar ko‘li",
+   "wikidata": "Q280771"
+  },
+  "1159127045": {
+   "name": "Great Bitter Lake",
+   "en": "Great Bitter Lake",
+   "fi": "Iso Katkerojärvi",
+   "wikidata": "Q526440"
+  },
+  "1159127061": {
+   "name": "Airag Lake",
+   "en": "Airag Lake",
+   "fi": "Airag Lake",
+   "wikidata": "Q2426550"
+  },
+  "1159127071": {
+   "name": "Qypshaq Kli",
+   "en": "Qypshaq Kli",
+   "fi": "Qypshaq Kli",
+   "wikidata": ""
+  },
+  "1159127087": {
+   "name": "Ozero Shalkar",
+   "en": "Ozero Shalkar",
+   "fi": "Ozero Shalkar",
+   "wikidata": ""
+  },
+  "1159127099": {
+   "name": "Lake Taupo",
+   "en": "Lake Taupō",
+   "fi": "Taupōjärvi",
+   "wikidata": "Q199903"
+  },
+  "1159127119": {
+   "name": "Lake Tekapo",
+   "en": "Lake Tekapo",
+   "fi": "Lake Tekapo",
+   "wikidata": "Q1194022"
+  },
+  "1159127131": {
+   "name": "Lake Ohau",
+   "en": "Lake Ōhau",
+   "fi": "Ohau",
+   "wikidata": "Q1349516"
+  },
+  "1159127143": {
+   "name": "Lake Te Anau",
+   "en": "Lake Te Anau",
+   "fi": "Te Anau",
+   "wikidata": "Q1140471"
+  },
+  "1159127155": {
+   "name": "Lake Wakatipu",
+   "en": "Lake Wakatipu",
+   "fi": "Lake Wakatipu",
+   "wikidata": "Q127469"
+  },
+  "1159127169": {
+   "name": "Lake Pukaki",
+   "en": "Lake Pukaki",
+   "fi": "Lake Pukaki",
+   "wikidata": "Q1347588"
+  },
+  "1159127183": {
+   "name": "Lake Manapouri",
+   "en": "Lake Manapouri",
+   "fi": "Lake Manapouri",
+   "wikidata": "Q1192384"
+  },
+  "1159127195": {
+   "name": "Lake Te Anau",
+   "en": "Lake Te Anau",
+   "fi": "Te Anau",
+   "wikidata": "Q1140471"
+  },
+  "1159127213": {
+   "name": "Lake Wanaka",
+   "en": "Lake Wānaka",
+   "fi": "Lake Wanaka",
+   "wikidata": "Q1192728"
+  },
+  "1159127227": {
+   "name": "Lake Hawea",
+   "en": "Lake Hāwea",
+   "fi": "Lake Hāwea",
+   "wikidata": "Q1440634"
+  },
+  "1159127233": {
+   "name": "Lake Rotorua",
+   "en": "Lake Rotorua / Te Rotorua nui ā Kahumatamomoe",
+   "fi": "Lake Rotorua / Te Rotorua nui ā Kahumatamomoe",
+   "wikidata": "Q1192621"
+  },
+  "1159127249": {
+   "name": "Lake Wairarapa",
+   "en": "Lake Wairarapa",
+   "fi": "Lake Wairarapa",
+   "wikidata": "Q590903"
+  },
+  "1159127261": {
+   "name": "Lake Benmore",
+   "en": "Lake Benmore",
+   "fi": "Lake Benmore",
+   "wikidata": "Q917385"
+  },
+  "1159127275": {
+   "name": "Lake Coleridge",
+   "en": "Lake Coleridge",
+   "fi": "Lake Coleridge",
+   "wikidata": "Q4634"
+  },
+  "1159127287": {
+   "name": "Lake Waikaremoana",
+   "en": "Lake Waikaremoana",
+   "fi": "Lake Waikaremoana",
+   "wikidata": "Q4272"
+  },
+  "1159127301": {
+   "name": "Lake Hauroko",
+   "en": "Lake Hauroko",
+   "fi": "Lake Hauroko",
+   "wikidata": "Q1800949"
+  },
+  "1159127315": {
+   "name": "Lake Poteriteri",
+   "en": "Lake Poteriteri",
+   "fi": "Lake Poteriteri",
+   "wikidata": "Q4269"
+  },
+  "1159127329": {
+   "name": "Lake Monowai",
+   "en": "Lake Monowai",
+   "fi": "Lake Monowai",
+   "wikidata": "Q1271947"
+  },
+  "1159127335": {
+   "name": "Lake Rotoroa",
+   "en": "Lake Rotoroa",
+   "fi": "Lake Rotoroa",
+   "wikidata": ""
+  },
+  "1159127353": {
+   "name": "Lake Rotoiti",
+   "en": "Lake Rotoiti",
+   "fi": "Lake Rotoiti",
+   "wikidata": "Q1801067"
+  },
+  "1159127371": {
+   "name": "Lake Dunstan",
+   "en": "Lake Dunstan",
+   "fi": "Lake Dunstan",
+   "wikidata": "Q1303872"
+  },
+  "1159127385": {
+   "name": "St. Marys River",
+   "en": "St. Marys River",
+   "fi": "St. Mary",
+   "wikidata": "Q940488"
+  },
+  "1729949125": {
+   "name": "Whitefish Lake",
+   "en": "Whitefish Lake",
+   "fi": "Whitefish Lake",
+   "wikidata": "Q22610852"
+  },
+  "1159126555": {
+   "name": "South Aral Sea",
+   "en": "South Aral Sea",
+   "fi": "South Aral Sea",
+   "wikidata": "Q276776"
+  },
+  "1729983019": {
+   "name": "Barsakelmes Lake",
+   "en": "Barsakelmes Lake",
+   "fi": "Barsakelmes Lake",
+   "wikidata": "Q28750379"
+  },
+  "1729982865": {
+   "name": "North Aral Sea",
+   "en": "North Aral Sea",
+   "fi": "North Aral Sea",
+   "wikidata": "Q3358037"
+  },
+  "1729983021": {
+   "name": "",
+   "en": "",
+   "fi": "",
+   "wikidata": ""
+  },
+  "1159122955": {
+   "name": "Lake Pedder",
+   "en": "Lake Pedder",
+   "fi": "Lake Pedder",
+   "wikidata": "Q653152"
+  },
+  "1159122971": {
+   "name": "Lake Gordon",
+   "en": "Lake Gordon",
+   "fi": "Lake Gordon",
+   "wikidata": "Q366813"
+  },
+  "1159123999": {
+   "name": "Smallwood Reservoir",
+   "en": "Smallwood Reservoir",
+   "fi": "Smallwood Reservoir",
+   "wikidata": "Q1539726"
+  },
+  "1159123597": {
+   "name": "Presa Miguel Alemán",
+   "en": "Miguel Alemán Lake",
+   "fi": "Miguel Alemán Lake",
+   "wikidata": "Q6844402"
+  },
+  "1159123579": {
+   "name": "Lago Gatun",
+   "en": "Gatun Lake",
+   "fi": "Gatúninjärvi",
+   "wikidata": "Q313637"
+  }
+ }
+}

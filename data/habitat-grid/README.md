@@ -41,10 +41,16 @@ mask; `coast` is land against water, sea or lake.
   [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes).
   Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
   Attribution: "HydroLAKES v1.0 (Messager et al. 2016), CC BY 4.0".
+- **Wikidata** lake labels (CC0,
+  [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)):
+  `lakes.json` joins the 1:10m lakes by `ne_id` with English and
+  Finnish labels from each feature's `wikidataid`, else the
+  Natural Earth name. Fetched once for #204, not per tile.
 
 Kai confirms each source and licence before any tile is published
 (T57). Status: RESOLVE, Natural Earth and ETOPO 2022 all confirmed
-by Kai on Oct 28, 2026; HydroLAKES ordered for #202 on Nov 1, 2026.
+by Kai on Oct 28, 2026; HydroLAKES ordered for #202 on Nov 1, 2026;
+Wikidata labels (CC0) ordered for #204 on Nov 1, 2026.
 
 ## How it is baked
 

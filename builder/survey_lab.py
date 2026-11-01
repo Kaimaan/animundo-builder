@@ -27,7 +27,7 @@ from .species import (
     list_library,
     survey_round,
 )
-from .tiles import available_biomes, home_for_cell, tile_facts
+from .tiles import available_biomes, coast_habitat, home_for_cell, tile_facts
 
 #: The six tiles we have: five border tiles and a Saimaa-side one.
 TILES = (
@@ -61,7 +61,8 @@ def run_lab(
         habitat = habitat_grid.habitat(col, row)
         eco1 = habitat_grid.cell_data(col, row)[0]
         land = habitat_grid.cell_data(col, row)[5]
-        home = home_for_cell(eco1, habitat, homes, coast=0.0 < land < 1.0)
+        habitat = coast_habitat(eco1, habitat, land, homes)
+        home = home_for_cell(eco1, habitat, homes)
         if home is None:
             home = nearest_home(tile, habitat_grid, homes, habitat)
             adapt = True

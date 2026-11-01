@@ -252,7 +252,7 @@ def run_round(
         resolve_outside,
         write_cache,
     )
-    from .tiles import available_biomes, home_for_cell, tile_facts
+    from .tiles import available_biomes, coast_habitat, home_for_cell, tile_facts
 
     animals = list_animals(world)
     by_id = {a["id"]: a for a in animals}
@@ -269,13 +269,10 @@ def run_round(
         habitat = habitat_grid.habitat(col, row)
         eco1 = habitat_grid.cell_data(col, row)[0]
         land = habitat_grid.cell_data(col, row)[5]
-        home = home_for_cell(
-            eco1,
-            habitat,
-            biomes,
-            habitat_grid.cell_data(col, row)[4],
-            coast=0.0 < land < 1.0,
+        habitat = coast_habitat(
+            eco1, habitat, land, biomes, habitat_grid.cell_data(col, row)[4]
         )
+        home = home_for_cell(eco1, habitat, biomes, habitat_grid.cell_data(col, row)[4])
         if home is None:
             results.append({"tile": tile, "merged": [], "reason": "no home"})
             continue

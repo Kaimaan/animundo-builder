@@ -38,6 +38,7 @@ from .species import (
 from .tiles import (
     available_biomes,
     available_homes,
+    coast_habitat,
     default_bundle,
     excluded_tiles,
     home_for_cell,
@@ -469,7 +470,8 @@ def plan_tile(
     homes = available_homes(world)
     biomes = available_biomes(world)
     land = habitat_grid.cell_data(col, row)[5]
-    home = home_for_cell(eco1, habitat, biomes, biome_number, coast=0.0 < land < 1.0)
+    habitat = coast_habitat(eco1, habitat, land, biomes, biome_number)
+    home = home_for_cell(eco1, habitat, biomes, biome_number)
     entries = library_animals(world)
     unfiled = _unfiled(world, habitat, entries)
     if unfiled_presence is None:

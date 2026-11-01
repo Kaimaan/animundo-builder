@@ -343,15 +343,22 @@ def test_home_for_cell_refuses_the_generic_sea_in_the_tropics(
     assert home_for_cell(999, "sea", homes, 4) == "sea"
 
 
-def test_home_for_cell_falls_back_to_the_reef_on_coast() -> None:
-    """#198.2: a marine-ecoregion coast builds from its sea home."""
+def test_coast_habitat_flips_to_the_sea_side() -> None:
+    """#198.2: an unbuildable land coast builds as sea; else unchanged."""
+    from builder.tiles import coast_habitat
+
     homes = {
         "rainforest": {"habitat": "rainforest", "ecoregions": [483]},
         "coral_reef": {"habitat": "sea", "ecoregions": [150]},
+        "sea": {"habitat": "sea", "ecoregions": [717]},
     }
-    assert home_for_cell(150, "rainforest", homes, 1) is None
-    assert home_for_cell(150, "rainforest", homes, 1, coast=True) == "coral_reef"
-    assert home_for_cell(999, "rainforest", homes, 1, coast=True) is None
+    assert coast_habitat(150, "rainforest", 0.6, homes, 1) == "sea"
+    assert coast_habitat(150, "rainforest", 1.0, homes, 1) == "rainforest"
+    assert coast_habitat(150, "sea", 0.6, homes, 1) == "sea"
+    assert coast_habitat(999, "rainforest", 0.6, homes, 1) == "rainforest"
+    assert coast_habitat(679, "forest", 0.76, homes, 4) == "forest"
+    lush = {**homes, "coast_forest": {"habitat": "rainforest", "ecoregions": [150]}}
+    assert coast_habitat(150, "rainforest", 0.6, lush, 1) == "rainforest"
 
 
 def test_default_bundle_keeps_a_listed_ecoregion(tmp_path: Path) -> None:
@@ -396,7 +403,7 @@ def test_default_bundle_keeps_a_listed_ecoregion(tmp_path: Path) -> None:
 def test_make_tile_builds_a_marine_coast_from_its_sea_home(
     tmp_path: Path,
 ) -> None:
-    """#198.2: z10_0927_0563's shape builds from coral_reef, not rainforest."""
+    """#198.2: z10_0927_0563's shape builds as sea from coral_reef."""
     world = _world(tmp_path)
     (world / "homes" / "rainforest.json").write_text(
         json.dumps(
@@ -440,6 +447,7 @@ def test_make_tile_builds_a_marine_coast_from_its_sea_home(
     assert blocked is None
     assert made is not None
     assert made["home"] == "coral_reef"
+    assert made["habitat"] == "sea"
 
 
 def test_cell_level() -> None:

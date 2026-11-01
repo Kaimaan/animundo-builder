@@ -1666,7 +1666,12 @@ class Worker:
         import json
 
         from .grid import parse_tile
-        from .tiles import available_homes, home_for_cell, place_cells
+        from .tiles import (
+            available_homes,
+            coast_habitat,
+            home_for_cell,
+            place_cells,
+        )
 
         assert self.world is not None
         for item in plan.get("items", []):
@@ -1684,12 +1689,18 @@ class Worker:
         cells = self._habitat_grid()
         homes = available_homes(self.world)
         land = cells.cell_data(col, row)[5]
-        found = home_for_cell(
+        habitat = coast_habitat(
             cells.cell_data(col, row)[0],
             cells.habitat(col, row),
+            land,
             homes,
             cells.cell_data(col, row)[4],
-            coast=0.0 < land < 1.0,
+        )
+        found = home_for_cell(
+            cells.cell_data(col, row)[0],
+            habitat,
+            homes,
+            cells.cell_data(col, row)[4],
         )
         if found is None:
             raise _NoHome(f"tile {tile} has no home in this checkout")

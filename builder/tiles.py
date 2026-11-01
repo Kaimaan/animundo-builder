@@ -326,7 +326,6 @@ def home_for_cell(
     habitat: str,
     homes: dict[str, dict[str, Any]],
     biome: int | None = None,
-    coast: bool = False,
 ) -> str | None:
     """The home covering this ecoregion and habitat, or None.
 
@@ -337,9 +336,7 @@ def home_for_cell(
     `open_sea` home when the checkout has it (#177.1). Boreal
     water picks the lake home through the tile's habitat: a
     boreal_lake cell builds from boreal_lake, a boreal_forest
-    cell from boreal_forest. A coast cell with no home for its
-    land habitat falls back to the ecoregion's sea home, never
-    to a home that doesn't list its ecoregion (#198.2).
+    cell from boreal_forest.
     """
     if habitat == "open_ocean" and "open_sea" in homes:
         return "open_sea"
@@ -360,15 +357,38 @@ def home_for_cell(
         data = homes[home_id]
         if eco in (data.get("ecoregions") or []) and data.get("habitat") == habitat:
             return home_id
-    if coast:
-        listed = sorted(
-            home_id
-            for home_id, data in homes.items()
-            if data.get("habitat") == "sea" and eco in (data.get("ecoregions") or [])
-        )
-        if listed:
-            return listed[0]
     return None
+
+
+def coast_habitat(
+    eco: int | None,
+    habitat: str,
+    land: float,
+    homes: dict[str, dict[str, Any]],
+    biome: int | None = None,
+) -> str:
+    """The habitat a coast cell builds with: sea when its land side can't.
+
+    A coast cell whose land habitat has no home for its
+    ecoregion builds from the sea side when a listed sea home
+    covers the ecoregion (a Queensland coast cell with marine
+    eco 150 builds from coral_reef); the world's check wants
+    the home to list the ecoregion AND match the habitat, so
+    the tile must flip sides, not just homes (#198.2). The
+    generic sea doesn't count: new land waits for its own
+    home. Anything else keeps its grid habitat.
+    """
+    if habitat in ("sea", "open_ocean") or not (0.0 < land < 1.0):
+        return habitat
+    if home_for_cell(eco, habitat, homes, biome) is not None:
+        return habitat
+    listed_sea = any(
+        data.get("habitat") == "sea" and eco in (data.get("ecoregions") or [])
+        for data in homes.values()
+    )
+    if not listed_sea:
+        return habitat
+    return "sea"
 
 
 def tile_seed(tile: str) -> int:
@@ -1321,8 +1341,8 @@ def make_tile(
         )
     homes = available_homes(world)
     biomes = available_biomes(world)
-    coast = 0.0 < land < 1.0
-    home = home_for_cell(eco1, habitat, biomes, biome, coast=coast)
+    habitat = coast_habitat(eco1, habitat, land, biomes, biome)
+    home = home_for_cell(eco1, habitat, biomes, biome)
     if home is None:
         if eco1 is None or not (world / "lands" / "index.json").is_file():
             return None, {"reason": "no_home", "habitat": habitat}

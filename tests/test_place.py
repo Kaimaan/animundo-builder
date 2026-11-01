@@ -1127,6 +1127,29 @@ def test_improve_habitats_from_region_and_tile() -> None:
     assert improve_habitats(animals, world, "xx_nowhere", _grids()) == set()
 
 
+def test_region_residents_read_a_biome_place(tmp_path: Path) -> None:
+    """A biome place carries its species and its biome's fish."""
+    from builder.place import region_residents
+
+    world = tmp_path / "world"
+    (world / "regions").mkdir(parents=True)
+    (world / "regions" / "xx_place.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_place",
+                "biome": "xx_biome",
+                "species": {"playable": ["fox"], "prey": [], "predators": []},
+            }
+        )
+    )
+    (world / "biomes").mkdir(parents=True)
+    (world / "biomes" / "xx_biome.json").write_text(
+        json.dumps({"id": "xx_biome", "fish": [{"kind": "perch", "count": 6}]})
+    )
+    assert region_residents(world, "xx_place") == {"fox", "perch"}
+    assert region_residents(world, "xx_nowhere") == set()
+
+
 def test_recorded_gbif_counts_keep_replay_offline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

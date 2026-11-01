@@ -1076,7 +1076,13 @@ def place_of(region_id: str, survey: dict[str, Any]) -> dict[str, str]:
 
 
 def region_residents(world: Path, region_id: str) -> set[str]:
-    """Animal ids an existing region already carries (#167.4)."""
+    """Animal ids an existing region already carries (#167.4).
+
+    A place on a `biome` names its cast in `species`, as a tile
+    does (game 0043), and swims its biome's fish when it writes
+    none of its own: those count too, as the resolved place
+    carries them.
+    """
     try:
         region = json.loads(
             (world / "regions" / f"{region_id}.json").read_text(encoding="utf-8")
@@ -1084,7 +1090,8 @@ def region_residents(world: Path, region_id: str) -> set[str]:
     except (OSError, ValueError):
         return set()
     residents: set[str] = set()
-    animals = region.get("animals") or {}
+    key = "species" if region.get("biome") else "animals"
+    animals = region.get(key) or {}
     groups = animals.values() if isinstance(animals, dict) else [animals]
     for group in groups:
         for entry in group or []:
@@ -1092,10 +1099,27 @@ def region_residents(world: Path, region_id: str) -> set[str]:
                 residents.add(entry)
             elif isinstance(entry, dict) and entry.get("id"):
                 residents.add(str(entry["id"]))
-    for entry in region.get("fish", []) or []:
+    fish = region.get("fish", [])
+    if not isinstance(fish, list) or (not fish and region.get("biome")):
+        fish = _biome_fish(world, region.get("biome"))
+    for entry in fish or []:
         if isinstance(entry, dict) and entry.get("kind"):
             residents.add(str(entry["kind"]))
     return residents
+
+
+def _biome_fish(world: Path, biome_id: Any) -> list[Any]:
+    """The biome's fish list, or nothing without one."""
+    if not isinstance(biome_id, str):
+        return []
+    try:
+        biome = json.loads(
+            (world / "biomes" / f"{biome_id}.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return []
+    fish = biome.get("fish", [])
+    return list(fish) if isinstance(fish, list) else []
 
 
 def improve_habitats(

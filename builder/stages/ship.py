@@ -36,7 +36,6 @@ from ..packs import (
     next_pack_version,
     publish_pack,
 )
-from ..tiles import place_cells
 from ..world import check_draft
 from .animals import _hunt_tags
 from .models import build_in_sandbox
@@ -480,20 +479,18 @@ def _place_plant_ids(job_dir: Path) -> set[str]:
 def _laid_regions(
     job_dir: Path, world: Path, brief: dict[str, Any]
 ) -> list[tuple[str, dict[str, Any]]]:
-    """The hand-made places among the job's tiles, as laid (#176.1)."""
-    tiles = (brief.get("enrich") or {}).get("tiles") or []
-    cells = place_cells(world)
-    region_ids = []
-    for tile in tiles:
-        hit = cells.get(tile)
-        if hit is not None and hit[0] not in region_ids:
-            region_ids.append(hit[0])
+    """The job's laid region files, except converted tiles (#176.1).
+
+    Interim for the pack conversion: without place cells the
+    brief no longer maps tiles to regions, so whatever the
+    intake laid counts. The conversion rewrites ship around
+    filed species and tile remakes.
+    """
     regions = []
-    for region_id in region_ids:
-        path = job_dir / "regions" / f"{region_id}.json"
-        if not path.is_file():
-            raise _Stopped(f"{region_id}: no laid place to add to")
-        regions.append((region_id, json.loads(path.read_text(encoding="utf-8"))))
+    for path in sorted((job_dir / "regions").glob("*.json")):
+        if path.stem.startswith("tl_"):
+            continue
+        regions.append((path.stem, json.loads(path.read_text(encoding="utf-8"))))
     return regions
 
 

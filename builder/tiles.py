@@ -197,31 +197,27 @@ def _nearest_land(
     return None, None
 
 
-def near_made_place_or_noted(
+def near_made_or_noted(
     tile: str,
-    world: Path,
     made: set[str] | None = None,
     noted: set[str] | None = None,
 ) -> bool:
     """Whether building reaches within 3 cells of this tile (#177.6).
 
     Chebyshev distance, wrapping at the date line: a made
-    tile, a hand-made place, or a tile with border notes.
-    `made` carries the published ids the caller knows (the
-    worker reads the groups); `noted` the tiles with notes.
-    Around a noted tile counts the same 3 cells: players
-    waiting there want the sea made.
+    tile or a tile with border notes. `made` carries the
+    published ids the caller knows (the worker reads the
+    groups); `noted` the tiles with notes. Around a noted
+    tile counts the same 3 cells: players waiting there want
+    the sea made.
     """
     col, row = parse_tile(tile)
-    cells = place_cells(world)
     for dcol in range(-3, 4):
         for drow in range(-3, 4):
             ncol, nrow = (col + dcol) % N, row + drow
             if not 0 <= nrow < N:
                 continue
             cell = tile_id(ncol, nrow)
-            if cell in cells:
-                return True
             if made is not None and cell in made:
                 return True
             if noted is not None and cell in noted:
@@ -1213,115 +1209,6 @@ def tile_facts(
     )
 
 
-def place_cells(world: Path) -> dict[str, tuple[str, list[int]]]:
-    """Place cells by tile id: the region and its `[i, j]` part (#147.1).
-
-    From each region file's `grid` section (`z10` cells); the
-    part counts from the region's smallest col and row.
-    Nothing else in the region is read: layered files keep
-    colours, plants and food elsewhere now. An unreadable
-    file is skipped; a malformed grid section, a section on
-    another grid, or two regions on one cell, fail loudly,
-    so a code tile is never made in a place cell.
-    """
-    cells: dict[str, tuple[str, list[int]]] = {}
-    folder = world / "regions"
-    if not folder.is_dir():
-        return cells
-    for path in sorted(folder.glob("*.json")):
-        try:
-            region = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        grid = region.get("grid") if isinstance(region, dict) else None
-        if grid is None:
-            continue
-        name = grid.get("grid") if isinstance(grid, dict) else None
-        listed = grid.get("tiles") if isinstance(grid, dict) else None
-        if (
-            name != "z10"
-            or not isinstance(listed, list)
-            or not listed
-            or any(
-                not isinstance(cell, list)
-                or len(cell) != 2
-                or any(not isinstance(v, int) or isinstance(v, bool) for v in cell)
-                for cell in listed
-            )
-        ):
-            raise ValueError(f"{path.name} has a malformed grid section")
-        region_id = region.get("id", path.stem)
-        min_col = min(cell[0] for cell in listed)
-        min_row = min(cell[1] for cell in listed)
-        for col, row in listed:
-            made = tile_id(col, row)
-            if made in cells:
-                raise ValueError(f"{made} is in two place regions")
-            cells[made] = (region_id, [col - min_col, row - min_row])
-    return cells
-
-
-def make_place_tile(
-    tile: str,
-    habitat_grid: HabitatGrid,
-    world: Path,
-    region_id: str,
-    part: list[int],
-    builder_root: Path | None = None,
-) -> dict[str, Any]:
-    """The place entry for a cell of a hand-made place (#147.1).
-
-    `place` and `part` instead of the code tile's home and
-    species; center, level, height and edges by the same fixed
-    rules as the code tiles round it, so the place's open
-    sides meet them. `requires` lists nothing: the game reads
-    the place from its region file. The world's food check is
-    the region file's, not the entry's (layered regions carry
-    no written food), so only the other checks can fail it.
-    """
-    from .schemas import ROOT as BUILDER_ROOT
-
-    col, row = parse_tile(tile)
-    habitat = habitat_grid.habitat(col, row)
-    elev = habitat_grid.cell_data(col, row)[7]
-    lat, lon = center(tile)
-    level = cell_level(habitat, elev)
-    edges = tile_edges(tile, habitat_grid)
-    maker, commit = _versions(builder_root or BUILDER_ROOT, world)
-    entry: dict[str, Any] = {
-        "format": 1,
-        "id": tile,
-        "kind": "place",
-        "version": 1,
-        "center": {"lat": round(lat, 2), "lon": round(lon, 2)},
-        "level": level,
-        "height": tile_height(level, edges),
-        "place": region_id,
-        "part": part,
-        "edges": edges,
-        "requires": {"homes": [], "animals": []},
-        "made": {
-            "by": "tile_maker",
-            "maker": maker,
-            "world": commit,
-            "at": datetime.now(UTC).isoformat(),
-        },
-    }
-    validate("tile", entry)
-    failures = [
-        (check, problems)
-        for check, problems in check_with_world(entry, world)
-        if check != "food"
-    ]
-    if failures:
-        detail = "; ".join(
-            f"{check}: {', '.join(problems) or 'failed'}"
-            for check, problems in failures
-        )
-        raise RuntimeError(f"place tile {tile} failed the world's check: {detail}")
-    return entry
-
-
 def make_tile(
     tile: str,
     habitat_grid: HabitatGrid,
@@ -1347,13 +1234,6 @@ def make_tile(
     habitat = habitat_grid.habitat(col, row)
     if tile in excluded_tiles(builder_root):
         return None, {"reason": "excluded", "habitat": habitat}
-    placed = place_cells(world).get(tile)
-    if placed is not None:
-        region_id, part = placed
-        return (
-            make_place_tile(tile, habitat_grid, world, region_id, part, builder_root),
-            None,
-        )
     homes = available_homes(world)
     biomes = available_biomes(world)
     habitat = coast_habitat(eco1, habitat, land, biomes, biome)

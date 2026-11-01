@@ -459,9 +459,9 @@ class Worker:
 
         Like an enrich job's ship step without the build: no
         research, no model, no model calls. Each listed grid
-        tile remakes by code with the species; place cells
-        spread in packs. A tile where the species doesn't fit
-        is skipped with the reason, not failed.
+        tile remakes by code with the species. A tile where
+        the species doesn't fit is skipped with the reason,
+        not failed.
         """
         from . import build as build_mod
 
@@ -629,19 +629,15 @@ class Worker:
 
         from . import build as build_mod
         from .grid import group_path
-        from .tiles import make_tile, place_cells
+        from .tiles import make_tile
 
         assert self.world is not None
-        placed = place_cells(self.world)
         source = dataclasses.replace(self._species_source(), client=None)
         groups: dict[str, dict[str, Any]] = {}
         decisions: dict[str, build_mod.Remake] = {}
         skipped: dict[str, str] = {}
         no_food: list[str] = []
         for tile in job.get("tiles", []):
-            if tile in placed:
-                skipped[tile] = "place cell"
-                continue
             try:
                 blob_path = group_path(tile)
             except ValueError:
@@ -1222,23 +1218,18 @@ class Worker:
         failed: dict[str, list[str]],
         missing: list[str],
     ) -> None:
-        """Left-out tiles' history rows: place cells and refusals (#165.1).
+        """Left-out tiles' history rows: refusals (#165.1).
 
-        Nothing was written for them; the reason says whose
-        region or which place checks refused.
+        Nothing was written for them; the reason says which
+        place checks refused.
         """
         from . import history as history_mod
-        from .tiles import place_cells
 
         assert self.world is not None
         context = self._history_context(job_id, "enrich")
-        placed = place_cells(self.world)
         for tile in job.get("tiles", []):
-            hit = placed.get(tile)
-            if hit is not None:
-                reason: str | None = f"place:{hit[0]}"
-            elif ship is not None and tile not in ship and tile in failed:
-                reason = "; ".join(failed[tile])
+            if ship is not None and tile not in ship and tile in failed:
+                reason: str | None = "; ".join(failed[tile])
             elif tile in missing:
                 reason = "the intake converted no place for this tile"
             else:
@@ -1270,8 +1261,6 @@ class Worker:
         """
         import json
 
-        from .tiles import place_cells
-
         assert self.world is not None
         path = self.jobs_dir / job_id / item["id"] / "checks" / "places.json"
         if not path.is_file():
@@ -1296,11 +1285,10 @@ class Worker:
                     failed[tile] = list(entry.get("problems", [])) or [
                         str(entry.get("reason", "its place checks failed"))
                     ]
-        placed = place_cells(self.world)
         missing = [
             tile
             for tile in job.get("tiles", [])
-            if tile not in ship and tile not in failed and tile not in placed
+            if tile not in ship and tile not in failed
         ]
         return ship, failed, general, missing
 
@@ -1346,19 +1334,15 @@ class Worker:
 
         from . import build as build_mod
         from .grid import group_path
-        from .tiles import make_tile, place_cells
+        from .tiles import make_tile
 
         assert self.world is not None
-        placed = place_cells(self.world)
         source = dataclasses.replace(self._species_source(), client=None)
         groups: dict[str, dict[str, Any]] = {}
         decisions: dict[str, build_mod.Remake] = {}
         no_food: list[str] = []
         what = str(item["what"])
         for tile in job.get("tiles", []):
-            if tile in placed:
-                print(f"{tile} is a place cell; left to its region")
-                continue
             if ship is not None and tile not in ship:
                 print(f"{tile} missed its place checks; left out")
                 continue
@@ -1539,38 +1523,16 @@ class Worker:
         """An enrich item's report labels: its tile and kind (#150.2).
 
         The tile's compass name points from the nearest place, the
-        way a plan would name it; no survey answer is spent. A
-        tile inside a hand-made region takes the region's name
-        instead (#168.3).
+        way a plan would name it; no survey answer is spent.
         """
         from . import build as build_mod
         from .grid import center, parse_tile
         from .plan import plan_name
-        from .tiles import place_cells
 
-        name = ""
-        if self.world is not None:
-            hit = place_cells(self.world).get(tile)
-            if hit is not None:
-                import json
-
-                try:
-                    raw = json.loads(
-                        (self.world / "regions" / f"{hit[0]}.json").read_text(
-                            encoding="utf-8"
-                        )
-                    ).get("name")
-                except (OSError, ValueError):
-                    raw = None
-                if isinstance(raw, dict):
-                    name = str(raw.get("en") or "")
-                elif isinstance(raw, str):
-                    name = raw
-        if not name:
-            col, row = parse_tile(tile)
-            habitat = self._habitat_grid().habitat(col, row)
-            lat, lon = center(tile)
-            name = plan_name(habitat, lat, lon, self.world)["en"]
+        col, row = parse_tile(tile)
+        habitat = self._habitat_grid().habitat(col, row)
+        lat, lon = center(tile)
+        name = plan_name(habitat, lat, lon, self.world)["en"]
         build_mod.write_state_params(
             item_dir, {"area": f"{tile} ({name})", "kind": "enrich"}
         )
@@ -1588,45 +1550,19 @@ class Worker:
         the new animal or plant is seated and the food reworked,
         so the item's checks run against real tiles. A tile with
         no published doc and no code remake is left out loudly.
-        A tile inside a hand-made region checks in that region
-        file instead, once per region, since the region has no
-        tile home to convert from (#168.1). The region only
-        seats the new thing; its food stays as it is (#173.1).
         The written stems go in `checks/enrich_places.json`, so
         the stages read only these files as places, never a
         build scaffold.
         """
         import json
 
-        from .enrich import MANIFEST, ConvertError, region_place, tile_place
-        from .tiles import place_cells
+        from .enrich import MANIFEST, ConvertError, tile_place
 
         assert self.world is not None
         regions = item_dir / "regions"
         regions.mkdir(parents=True, exist_ok=True)
-        placed = place_cells(self.world)
         done: set[str] = set()
         for target in tiles:
-            hit = placed.get(target)
-            if hit is not None:
-                region_id = hit[0]
-                if region_id in done:
-                    continue
-                try:
-                    place = region_place(
-                        region_id, self.world, str(item["what"]), str(item["kind"])
-                    )
-                except ConvertError as error:
-                    print(
-                        f"build job {job_id}: no place for {target}: {error}",
-                        file=sys.stderr,
-                    )
-                    continue
-                (regions / f"{region_id}.json").write_text(
-                    json.dumps(place, indent=2), encoding="utf-8"
-                )
-                done.add(region_id)
-                continue
             try:
                 doc = self._tile_doc(target)
             except Exception as error:  # noqa: BLE001 - left out loudly
@@ -1656,17 +1592,17 @@ class Worker:
         )
 
     def _near_made_tile(self, tile: str) -> bool:
-        """A made tile, place or noted tile within 3 cells (#177.6).
+        """A made or noted tile within 3 cells (#177.6).
 
         Made ids come from the group blobs covering the window,
-        places from the world's regions, noted tiles from the
-        border requests with notes. Open sea grows from the
-        shore outward, or where players wait, never alone.
+        noted tiles from the border requests with notes. Open
+        sea grows from the shore outward, or where players
+        wait, never alone.
         """
         import json
 
         from .grid import N, group_path, parse_tile, tile_id
-        from .tiles import near_made_place_or_noted
+        from .tiles import near_made_or_noted
 
         assert self.world is not None
         col, row = parse_tile(tile)
@@ -1697,7 +1633,7 @@ class Worker:
                 continue
             if count > 0:
                 noted.add(noted_tile)
-        return near_made_place_or_noted(tile, self.world, made, noted)
+        return near_made_or_noted(tile, made, noted)
 
     def _tile_refused(self, tile: str, job_id: str, stage: str) -> bool:
         """An open-sea tile far from everything fails before making (#177.6)."""
@@ -1901,12 +1837,7 @@ class Worker:
     def _tile_home(
         self, tile: str, plan: dict[str, Any], job_id: str
     ) -> dict[str, Any]:
-        """The tile's home: the job's made one, else the world's.
-
-        A tile inside a hand-made region takes that region file:
-        it has the food names and shape the intake reads, and no
-        tile home exists (#168.1). Build jobs never plan there.
-        """
+        """The tile's home: the job's made one, else the world's."""
         import json
 
         from .grid import parse_tile
@@ -1914,7 +1845,6 @@ class Worker:
             available_homes,
             coast_habitat,
             home_for_cell,
-            place_cells,
         )
 
         assert self.world is not None
@@ -1925,10 +1855,6 @@ class Worker:
             made = sorted(homes.glob("*.json"))
             if made:
                 return json.loads(made[0].read_text(encoding="utf-8"))
-        hit = place_cells(self.world).get(tile)
-        if hit is not None:
-            path = self.world / "regions" / f"{hit[0]}.json"
-            return json.loads(path.read_text(encoding="utf-8"))
         col, row = parse_tile(tile)
         cells = self._habitat_grid()
         homes = available_homes(self.world)

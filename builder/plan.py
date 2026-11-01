@@ -46,7 +46,6 @@ from .tiles import (
     make_tile,
     open_sea_entries,
     pick_species,
-    place_cells,
     ring_cells,
     tile_facts,
 )
@@ -450,24 +449,6 @@ def plan_tile(
             lat,
             lon,
             world_commit,
-            world=world,
-        )
-    placed = place_cells(world).get(tile)
-    if placed is not None:
-        # A place cell is the region's, never a code tile's (#147.1).
-        return _finish(
-            tile,
-            False,
-            [],
-            [],
-            {},
-            request,
-            habitat,
-            lat,
-            lon,
-            world_commit,
-            None,
-            f"place:{placed[0]}",
             world=world,
         )
     homes = available_homes(world)

@@ -1445,12 +1445,13 @@ def test_tile_doc_remakes_an_unpublished_tile(tmp_path: Path, monkeypatch: Any) 
         worker._tile_doc(T)
 
 
-def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> None:
-    """#147.1: a remake never touches a place cell."""
+def test_enrich_review_remakes_a_region_tile(tmp_path: Path, monkeypatch: Any) -> None:
+    """#202.3: a region grid no longer shields a tile from its remake."""
     import json
 
     from builder.grid import group_path
     from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
 
     P = "z10_0581_0294"
     store = FakeStore()
@@ -1462,6 +1463,20 @@ def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> No
         json.dumps({"id": "fi_test", "grid": {"grid": "z10", "tiles": [[581, 294]]}})
     )
     _named_list(worker.world)
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        P,
+        worker._habitat_grid(),
+        worker.world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(
+            client=_AnswerClient(
+                _forest_survey("fox", "mountain_hare", "vole", "lion")
+            ),
+            cache_dir=cache,
+        ),
+    )
+    assert blocked is None and made is not None
     _file_lion(worker.world, ["grass"])
     blob = group_path(P)
     store.blobs[blob] = json.dumps(
@@ -1470,11 +1485,10 @@ def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> No
             "grid": "z10",
             "group": [72, 36],
             "version": 1,
-            "tiles": {P: {"id": P, "kind": "code", "version": 1}},
+            "tiles": {P: made},
             "blocked": {},
         }
     ).encode("utf-8")
-    before = store.blobs[blob]
     store.blobs["tiles/v2/index.json"] = json.dumps(
         {
             "format": 1,
@@ -1500,19 +1514,15 @@ def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> No
     monkeypatch.setattr(
         worker,
         "_species_source",
-        lambda: SpeciesSource(client=_SilentClient(), cache_dir=tmp_path / "cache"),
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
     )
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {}
-    assert store.blobs[blob] == before
-    (entry,) = store.tile_history
-    assert entry["tile"] == P
-    assert entry["event"] == "left_out"
-    assert entry["reason"] == "place:fi_test"
-    assert entry["kind"] == "enrich"
-    assert entry["version"] is None
+    assert job["versions"] == {P: 2}
+    remade = json.loads(store.blobs[blob].decode("utf-8"))
+    assert remade["tiles"][P]["kind"] == "code"
+    assert "lion" in remade["tiles"][P]["species"]["playable"]
 
 
 def _region_world(world: Path) -> None:
@@ -1537,11 +1547,13 @@ def _region_world(world: Path) -> None:
     )
 
 
-def test_enrich_intake_checks_a_region_tile_in_its_region(
+def test_enrich_intake_checks_a_region_tile_as_a_tile(
     tmp_path: Path,
 ) -> None:
-    """#168.1: a hand-made region's tile checks in the region file."""
+    """#202.3: a region grid no longer diverts the intake; tile converts."""
     import fake_world
+
+    from builder.grid import group_path
 
     P = "z10_0581_0294"
     store = FakeStore()
@@ -1549,6 +1561,28 @@ def test_enrich_intake_checks_a_region_tile_in_its_region(
     assert worker.world is not None
     fake_world.write_converter_tools(worker.world)
     _region_world(worker.world)
+    store.blobs[group_path(P)] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": 1,
+            "tiles": {
+                P: {
+                    "id": P,
+                    "kind": "code",
+                    "version": 1,
+                    "home": "boreal_forest",
+                    "species": {
+                        "playable": ["mountain_hare", "vole"],
+                        "prey": ["vole"],
+                        "predators": [],
+                    },
+                }
+            },
+            "blocked": {},
+        }
+    ).encode("utf-8")
     item = {
         "id": "enrich_lion",
         "kind": "animal",
@@ -1558,15 +1592,15 @@ def test_enrich_intake_checks_a_region_tile_in_its_region(
     }
     item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
     worker._write_enrich_places("j1", item_dir, [P], item)
-    region = json.loads((item_dir / "regions" / "xx_test_reef.json").read_text())
+    region = json.loads((item_dir / "regions" / f"tl_{P}.json").read_text())
     assert region["animals"]["playable"] == ["mountain_hare", "vole", "lion"]
-    assert not (item_dir / "regions" / f"tl_{P}.json").exists()
+    assert not (item_dir / "regions" / "xx_test_reef.json").exists()
     manifest = json.loads((item_dir / "checks" / "enrich_places.json").read_text())
-    assert manifest == {"places": ["xx_test_reef"]}
+    assert manifest == {"places": [f"tl_{P}"]}
 
 
-def test_tile_home_falls_back_to_the_region(tmp_path: Path) -> None:
-    """#168.1: a place cell's home is its region file, for the intake."""
+def test_tile_home_ignores_the_region(tmp_path: Path) -> None:
+    """#202.3: a region grid no longer lends its file as the home."""
     import fake_world
 
     store = FakeStore()
@@ -1575,15 +1609,14 @@ def test_tile_home_falls_back_to_the_region(tmp_path: Path) -> None:
     fake_world.write_converter_tools(worker.world)
     _region_world(worker.world)
     plan = {"format": 1, "items": []}
-    home = worker._tile_home("z10_0581_0294", plan, "j1")
-    assert home["id"] == "xx_test_reef"
+    assert worker._tile_home("z10_0581_0294", plan, "j1")["habitat"] == "boreal_forest"
     assert worker._tile_home("z10_0580_0295", plan, "j1")["habitat"] == "boreal_forest"
 
 
 def test_enrich_job_on_a_region_tile_reaches_checking(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#168.1: hammerhead-on-the-reef reaches checking with no model call."""
+    """#202.3: a region grid no longer diverts the intake; tile left out."""
     import fake_world
 
     import builder.build as build_mod
@@ -1612,9 +1645,9 @@ def test_enrich_job_on_a_region_tile_reaches_checking(
     assert [(e["id"], e["status"]) for e in job["progress"]] == [
         ("enrich_lion", "checking")
     ]
-    assert (
+    assert not (
         tmp_path / "jobs" / "j1" / "enrich_lion" / "regions" / "xx_test_reef.json"
-    ).is_file()
+    ).exists()
     assert "review/j1/enrich_lion/report.html" in store.blobs
 
 
@@ -1670,7 +1703,7 @@ def test_checking_item_with_failing_checks_says_so(
     assert "Checks failing: places." in text
 
 
-def test_enrich_failure_names_its_stage_and_the_region(
+def test_enrich_failure_names_its_stage_and_the_tile(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     """#168.3: a failed item's progress and report say the stage and why."""
@@ -1709,7 +1742,7 @@ def test_enrich_failure_names_its_stage_and_the_region(
     assert "intake: tile z10_0581_0294 has no home in this checkout" in text
     assert "finished every built stage" not in text
     state = json.loads((item_dir / "state.json").read_text(encoding="utf-8"))
-    assert state["params"]["area"] == "z10_0581_0294 (Test Reef)"
+    assert state["params"]["area"] == "z10_0581_0294 (Boreal forest north of Nuuksio)"
 
 
 def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) -> None:

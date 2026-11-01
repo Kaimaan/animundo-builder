@@ -120,8 +120,8 @@ def _boreal(cell: list[Any] | None = None) -> dict[str, list[Any]]:
     return {f"{c},{r}": list(base) for r in (293, 294, 295) for c in (580, 581, 582)}
 
 
-def test_plan_skips_place_cells(tmp_path: Path) -> None:
-    """#147.1: a place cell plans nothing, and says whose it is."""
+def test_plan_ignores_region_grids(tmp_path: Path) -> None:
+    """#202.3: a region grid no longer blocks planning; ordinary tile."""
     world = _world(tmp_path)
     (world / "regions").mkdir()
     (world / "regions" / "fi_test.json").write_text(
@@ -134,14 +134,12 @@ def test_plan_skips_place_cells(tmp_path: Path) -> None:
         habitat_grid,
         world,
         "abc123",
-        presence={},
+        presence={"fox": 5.0, "vole": 20.0},
         unfiled_presence={},
     )
     validate("plan", plan)
-    assert plan["items"] == []
-    assert plan["improve"] == []
-    assert plan["coming"] == []
-    assert plan["blocked"] == "place:fi_test"
+    assert plan["code_only"] is True
+    assert plan.get("blocked") is None
 
 
 def test_plan_is_code_only_when_tile_makes(tmp_path: Path) -> None:

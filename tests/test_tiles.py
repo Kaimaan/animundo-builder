@@ -16,10 +16,9 @@ from builder.tiles import (
     cell_level,
     home_for_cell,
     make_tile,
-    near_made_place_or_noted,
+    near_made_or_noted,
     open_sea_entries,
     pick_species,
-    place_cells,
     tile_edges,
     tile_facts,
     tile_food_kinds,
@@ -941,37 +940,24 @@ def _region(world: Path, region_id: str, cells: list[list[int]]) -> None:
     )
 
 
-def test_place_cells_read_region_grids(tmp_path: Path) -> None:
-    """#147.1: place cells map to their region and part."""
+def test_make_tile_ignores_region_grids(tmp_path: Path) -> None:
+    """#202.3: a region grid no longer makes a place stub; ordinary code."""
     world = _world(tmp_path)
-    assert place_cells(world) == {}
     _region(world, "fi_test", [[581, 294], [582, 294], [581, 295], [582, 295]])
-    _region(world, "fi_pool", [[592, 284]])
-    assert place_cells(world) == {
-        "z10_0581_0294": ("fi_test", [0, 0]),
-        "z10_0582_0294": ("fi_test", [1, 0]),
-        "z10_0581_0295": ("fi_test", [0, 1]),
-        "z10_0582_0295": ("fi_test", [1, 1]),
-        "z10_0592_0284": ("fi_pool", [0, 0]),
-    }
-
-
-def test_place_cells_refuse_bad_grids(tmp_path: Path) -> None:
-    """#147.1: a malformed or overlapping grid fails loudly."""
-    world = _world(tmp_path)
-    folder = world / "regions"
-    folder.mkdir()
-    (folder / "fi_bad.json").write_text(
-        json.dumps({"id": "fi_bad", "grid": {"grid": "z10", "tiles": "x"}})
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        presence={"fox": 5.0, "mountain_hare": 9.0, "vole": 20.0},
+        builder_root=tmp_path,
     )
-    with pytest.raises(ValueError, match="malformed grid section"):
-        place_cells(world)
-    (folder / "fi_bad.json").write_text(
-        json.dumps({"id": "fi_bad", "grid": {"grid": "z10", "tiles": [[581, 294]]}})
-    )
-    _region(world, "fi_test", [[581, 294]])
-    with pytest.raises(ValueError, match="two place regions"):
-        place_cells(world)
+    assert blocked is None
+    assert made is not None
+    validate("tile", made)
+    assert made["kind"] == "code"
+    assert made["home"] == "boreal_forest"
+    assert "place" not in made
 
 
 def _baked_grid() -> HabitatGrid:
@@ -983,8 +969,8 @@ def _baked_grid() -> HabitatGrid:
     return HabitatGrid.load(path)
 
 
-def test_make_tile_returns_a_place_entry(tmp_path: Path) -> None:
-    """#147.1: z10_0581_0295 is fi_nuuksio part [1, 1], edges agreeing east."""
+def test_make_tile_returns_a_code_entry_in_a_region_cell(tmp_path: Path) -> None:
+    """#202.3: z10_0581_0295 is ordinary code, edges agreeing east."""
     world = _world(tmp_path)
     _region(world, "fi_nuuksio", [[580, 294], [581, 294], [580, 295], [581, 295]])
     habitat_grid = _baked_grid()
@@ -992,47 +978,19 @@ def test_make_tile_returns_a_place_entry(tmp_path: Path) -> None:
         "z10_0581_0295",
         habitat_grid,
         world,
+        presence={"fox": 5.0, "mountain_hare": 9.0, "vole": 20.0},
         builder_root=tmp_path,
     )
     assert blocked is None
     assert made is not None
     validate("tile", made)
-    assert made["kind"] == "place"
-    assert made["place"] == "fi_nuuksio"
-    assert made["part"] == [1, 1]
-    for key in ("habitat", "home", "biome", "seed", "water", "species"):
-        assert key not in made
-    assert made["requires"] == {"homes": [], "animals": []}
+    assert made["kind"] == "code"
+    assert made["home"] == "boreal_forest"
     east = tile_edges(
         "z10_0582_0295",
         habitat_grid,
     )["w"]
     assert made["edges"]["e"] == east
-
-
-def test_place_entry_replaces_a_published_code_tile(tmp_path: Path) -> None:
-    """#147.1: the place entry wins over a stale code tile."""
-    world = _world(tmp_path)
-    _region(world, "fi_test", [[581, 294]])
-    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
-    out = tmp_path / "out"
-    write_group(
-        out,
-        "z10_0581_0294",
-        {"id": "z10_0581_0294", "kind": "code", "version": 1},
-        None,
-    )
-    made, blocked = make_tile(
-        "z10_0581_0294",
-        habitat_grid,
-        world,
-        builder_root=tmp_path,
-    )
-    assert blocked is None and made is not None
-    path = write_group(out, "z10_0581_0294", made, None)
-    data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["tiles"]["z10_0581_0294"]["kind"] == "place"
-    assert data["tiles"]["z10_0581_0294"]["place"] == "fi_test"
 
 
 def test_make_tile_validates(tmp_path: Path) -> None:
@@ -2268,25 +2226,13 @@ def test_open_sea_tile_without_coast_style_has_no_land(tmp_path: Path) -> None:
     assert blocked["reason"] == "no_land"
 
 
-def test_near_made_place_or_noted_reaches_three_cells(tmp_path: Path) -> None:
-    """#177.6: a place, made or noted tile within 3 cells counts, else not."""
-    world = _world(tmp_path)
-    assert near_made_place_or_noted("z10_0581_0294", world, set()) is False
-    _region(world, "fi_test", [[583, 295]])
-    assert near_made_place_or_noted("z10_0581_0294", world, set()) is True
-    assert near_made_place_or_noted("z10_0581_0294", world, {"z10_0579_0297"}) is True
-    assert (
-        near_made_place_or_noted("z10_0581_0294", world, set(), {"z10_0583_0292"})
-        is True
-    )
-    world = _world(tmp_path / "far")
-    _region(world, "fi_test", [[590, 294]])
-    assert near_made_place_or_noted("z10_0581_0294", world, set()) is False
-    assert near_made_place_or_noted("z10_0581_0294", world, {"z10_0585_0296"}) is False
-    assert (
-        near_made_place_or_noted("z10_0581_0294", world, set(), {"z10_0585_0296"})
-        is False
-    )
+def test_near_made_or_noted_reaches_three_cells() -> None:
+    """#177.6: a made or noted tile within 3 cells counts, else not."""
+    assert near_made_or_noted("z10_0581_0294", set()) is False
+    assert near_made_or_noted("z10_0581_0294", {"z10_0579_0297"}) is True
+    assert near_made_or_noted("z10_0581_0294", set(), {"z10_0583_0292"}) is True
+    assert near_made_or_noted("z10_0581_0294", {"z10_0585_0296"}) is False
+    assert near_made_or_noted("z10_0581_0294", set(), {"z10_0585_0296"}) is False
 
 
 def test_retired_biomes_are_never_picked() -> None:

@@ -13,12 +13,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .grid import N, parse_tile, tile_at
+from .grid import N, parse_tile, tile_at, tile_id
 from .habitats import HabitatGrid
 from .plan import closest_plant, home_plant_entries, plant_slug
 from .presence import fetch_raw, match_kingdom
 from .prompts import load_prompt
-from .tiles import place_cells
 
 #: Headroom past the round, as research: the model doesn't keep
 #: to the count, so the API caps the runaway (#51.2).
@@ -678,8 +677,13 @@ def region_tiles(world: Path, region_id: str, survey_tile: str) -> list[str]:
     grid = region.get("grid") if isinstance(region, dict) else None
     listed = grid.get("tiles") if isinstance(grid, dict) else None
     if isinstance(listed, list) and listed:
-        cells = place_cells(world)
-        found = sorted(t for t, (rid, _part) in cells.items() if rid == region_id)
+        found = sorted(
+            tile_id(cell[0], cell[1])
+            for cell in listed
+            if isinstance(cell, list)
+            and len(cell) == 2
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in cell)
+        )
         return found or [survey_tile]
     center = region.get("center") if isinstance(region, dict) else None
     lat = center.get("lat") if isinstance(center, dict) else None

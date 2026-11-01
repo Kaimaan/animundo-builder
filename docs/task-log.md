@@ -3,6 +3,50 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #186
+  pre-report, waiting on
+  $0.60 (builder 048cce1)
+
+- All 16 tiles round the
+  three places plan on
+  z10 (builder `048cce1`,
+  world `ec0d9d0`): Nuuksio
+  8 (5 forest, 2 sea, 1 open
+  ocean), Saimaa
+  4 (lake), the reef's 4
+  neighbours (2 sea, 2 open
+  ocean).
+- 14 tiles are code-only
+  at $0: no items, only
+  `improve` suggestions the
+  remake does not build.
+- 2 reef tiles cost money:
+  `z10_0928_0560` and
+  `z10_0927_0559` each want
+  animal `common_tern`
+  ($0.15) and plant
+  `blue_mussel` ($0.15).
+- Total: $0.60. The tern is
+  an item on both tiles; if
+  the first build files it,
+  the second tile replans
+  without it and the real
+  spend is $0.45.
+- Waiting for word before
+  any tile that costs money.
+  Nothing built, nothing
+  published yet.
+- Evidence: `048cce1` thins
+  plant densities to fit the
+  world ground budget (three
+  halving retries, then loud
+  as before), which unblocks
+  `z10_0926_0560`'s probe
+  (0.68 + 0.24 grasses over
+  1.0). Every plan's probe
+  makes its tile, so all 16
+  make cleanly.
+
 ## 2026-11-01: inbox #185 (builder d8e1f65)
 
 - The worker image mounts

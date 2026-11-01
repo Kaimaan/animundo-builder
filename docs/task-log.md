@@ -3,6 +3,46 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #197
+  (gates 1-4; .5 waits
+  on Kai's go)
+
+- .1 (2428e6a): length
+  passes 0.8 x typical
+  to largest, 2 x
+  typical under 20 cm;
+  research names both
+  (strict + schema +
+  prompt). Six reviewed
+  pass; 4.97 m fails.
+- .2 (44a77a0): a lone
+  Finnish map_name is
+  allowed, and the ship
+  writes it from the
+  file's name.
+- .3 (2087924): the
+  fish count and seat
+  read tags; the camera
+  reads region depth,
+  else the biome's.
+- .4 (559562c): the
+  ship looks at the
+  final preview itself
+  (shared review_marks);
+  the gate fails a
+  final miss, and any
+  disagreement with
+  both verdicts.
+- .5 NOT run: the $0.50
+  six-animal ship run
+  needs Kai's go.
+- Note: the lab's
+  calibrate_gates.py
+  builds research with
+  typical only; it
+  needs largest_cm per
+  animal to pass .1.
+
 ## 2026-11-01: inbox #196.1
   (wanted measure, $0;
   builder 2fb44cd)

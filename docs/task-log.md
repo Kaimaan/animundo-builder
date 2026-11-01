@@ -3,6 +3,46 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #193
+  (builder 19b209e)
+
+- .1: the ship builds the
+  place's missing plant
+  models in its world
+  before the world checks
+  (a spec with no `.glb`
+  gets one); built models
+  stay cached in the
+  checkout, so each worker
+  builds once. A failing
+  build stops loudly.
+- .2: research writes marks
+  at child level (shapes,
+  never fine detail), and
+  the marks review judges
+  each in the views that
+  show it (a head's outline
+  in TOP).
+- .3: the maker picks
+  `hunts` from the reviewed
+  prey tags only — the same
+  list the gate checks —
+  at both render sites;
+  empty list means `[]`.
+- Evidence: a ship replay
+  whose region check fails
+  until the fake builder
+  lays the `.glb`s, then
+  publishes; prompt phrase
+  tests; the render test
+  carrying a reviewed tag.
+  Research replays
+  re-recorded (prompt only;
+  responses untouched).
+  Suite: 1064 passed, only
+  the known stale-checkout
+  failure.
+
 ## 2026-11-01: inbox #192
   (builder c29a34f)
 

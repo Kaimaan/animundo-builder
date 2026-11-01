@@ -5,9 +5,8 @@ the stage writes its Finnish, runs the child-safety review, gates
 every check the reef review taught, and publishes the pack to
 Storage. A failed check stops the item with the check and its
 message, in the report and the progress entry, like any stage.
-A plant item instead stages what a reviewer would commit: the
-game reads no plant packs yet, so the gates pass and a person
-files the set (#184.4).
+A plant item ships its own pack, like an animal: the game reads
+plants in packs now (#188.3).
 """
 
 from __future__ import annotations
@@ -56,11 +55,9 @@ class ShipStage:
         self,
         store: Any | None = None,
         flatten: Callable[[Path], str] | None = None,
-        catalogue: Callable[[Path], str] | None = None,
     ) -> None:
         self._store = store
         self._flatten = flatten or run_flatten
-        self._catalogue = catalogue or run_catalogue
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
@@ -127,13 +124,13 @@ class ShipStage:
     def _run_plant(
         self, ctx: Any, world: Path, brief: dict[str, Any]
     ) -> dict[str, Any]:
-        """A plant item's gates and its reviewer set, staged (#184.4).
+        """A plant item's gates and its pack, like an animal (#188.3).
 
-        Finnish, safety, the world's checks on the filed state,
-        the render review, the Finnish texts, and the region rule;
-        then the set a reviewer would commit, under `ship/`. No
-        pack: the game reads no plant packs yet, so a person files
-        the set and the item ships the old way.
+        Finnish, safety, the spec, the render review, the Finnish
+        texts, the region rule, and the world's checks on a world
+        with the pack laid over it; then the pack uploads. Nothing
+        commits to the world from the cloud: the world's copy job
+        files the pack's content from the public files (0049 §7).
         """
         plant_id = str(brief["plant"])
         spec_path = ctx.job_dir / "models" / "plants" / f"{plant_id}.json"
@@ -142,16 +139,16 @@ class ShipStage:
         spec = json.loads(spec_path.read_text(encoding="utf-8"))
         WordsStage()._plant_texts(ctx, world, ["fi"])
         SafetyStage().run(ctx)
-        overlay = self._gate_checks_plant(ctx, world, plant_id, spec)
-        staged = self._stage_plant(ctx, world, plant_id, spec, overlay)
-        return {"staged": staged, "files": staged}
+        self._gate_checks_plant(ctx, world, plant_id, spec)
+        return self._pack_plant(ctx, world, brief, plant_id, spec)
 
     def _gate_checks_plant(
         self, ctx: Any, world: Path, plant_id: str, spec: dict[str, Any]
-    ) -> Path:
-        """Every plant gate's pass, and the filed-state overlay (#184.4)."""
+    ) -> None:
+        """Every plant gate's pass, or the ship stops (#184.4, #188.3)."""
         job_dir = ctx.job_dir
         problems = []
+        problems.extend(_gate_spec_plant(plant_id, spec))
         problems.extend(_gate_render_plant(job_dir, plant_id))
         problems.extend(_gate_finnish_plant(job_dir, plant_id))
         problems.extend(_gate_region_plant(job_dir, world, plant_id, spec))
@@ -180,13 +177,18 @@ class ShipStage:
             encoding="utf-8",
         )
         if problems or overlay is None:
-            raise _Stopped("; ".join(problems) if problems else "no filed state")
-        return overlay
+            raise _Stopped("; ".join(problems) if problems else "no laid-over world")
 
     def _overlay_world(
         self, ctx: Any, world: Path, plant_id: str, spec: dict[str, Any]
     ) -> Path:
-        """The checkout as filed: new files, biome edit, homes (#184.4)."""
+        """The checkout with the pack laid over it, for the checks (#188.3).
+
+        New files, the biome merged as the game merges the
+        additions at runtime, homes flattened: check-only
+        scaffolding, never shipped. The pack itself carries no
+        biome or region: only the additions.
+        """
         overlay = ctx.job_dir / "ship-world"
         if overlay.exists():
             shutil.rmtree(overlay)
@@ -234,82 +236,70 @@ class ShipStage:
             self._flatten(overlay)
         return overlay
 
-    def _stage_plant(
+    def _pack_plant(
         self,
         ctx: Any,
         world: Path,
+        brief: dict[str, Any],
         plant_id: str,
         spec: dict[str, Any],
-        overlay: Path,
-    ) -> list[str]:
-        """What a reviewer would commit, at world-relative paths (#184.4)."""
-        job_dir = ctx.job_dir
-        ship = job_dir / "ship"
-        if ship.exists():
-            shutil.rmtree(ship)
-        staged: list[str] = []
+    ) -> dict[str, Any]:
+        """The plant pack, game-checked before it uploads (#188.3).
 
-        def keep(src: Path, rel: str) -> None:
-            dest = ship / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(src, dest)
-            staged.append(rel)
-
-        keep(
-            job_dir / "models" / "plants" / f"{plant_id}.json",
-            f"models/plants/{plant_id}.json",
-        )
-        keep(
-            job_dir / "models" / "plants" / f"{plant_id}.png",
-            f"models/previews/plants/{plant_id}.png",
-        )
-        for laid_path in sorted((job_dir / "regions").glob("*.json")):
-            if laid_path.stem.startswith("tl_"):
-                continue
-            target = world / "regions" / f"{laid_path.stem}.json"
-            if not target.is_file():
-                continue
-            before = json.loads(target.read_text(encoding="utf-8"))
-            if before.get("biome"):
-                bid = before["biome"]
-                keep(overlay / "biomes" / f"{bid}.json", f"biomes/{bid}.json")
-                keep(overlay / "homes" / f"{bid}.json", f"homes/{bid}.json")
-            else:
-                keep(laid_path, f"regions/{laid_path.name}")
+        The spec, its built model and preview, its own locale
+        keys, and one additions file per hand-made place: only
+        this plant on its grown side. Same shape as an animal
+        pack's result, so the worker publishes the job alike.
+        """
+        # The pack id is the item's kind and id (spec 02 §8b), not
+        # the enrich item id: `plant_table_coral`, never
+        # `enrich_table_coral` (#188.3).
+        item_id = f"plant_{plant_id}"
+        greens = ctx.job_dir / "models" / "plants"
+        files: dict[str, bytes] = {}
+        files[f"models/plants/{plant_id}.json"] = (
+            greens / f"{plant_id}.json"
+        ).read_bytes()
+        model = greens / f"{plant_id}.glb"
+        preview = greens / f"{plant_id}.png"
+        if not model.is_file():
+            raise _Stopped(f"{plant_id}: no built model to pack")
+        if not preview.is_file():
+            raise _Stopped(f"{plant_id}: no model preview to pack")
+        files[f"models/plants/{plant_id}.glb"] = model.read_bytes()
+        files[f"models/previews/plants/{plant_id}.png"] = preview.read_bytes()
         for language in ("en", "fi"):
-            merged = self._merged_locale(world, job_dir, language)
-            dest = ship / "locale" / language / "plants.json"
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(
-                json.dumps(merged, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
-            staged.append(f"locale/{language}/plants.json")
-        try:
-            self._catalogue(overlay)
-        except ConvertError as error:
-            raise _Stopped(str(error))
-        catalogue = overlay / "docs" / "catalogue.md"
-        if not catalogue.is_file():
-            raise _Stopped("catalogue.py wrote no docs/catalogue.md")
-        keep(catalogue, "docs/catalogue.md")
-        return sorted(staged)
-
-    @staticmethod
-    def _merged_locale(world: Path, job_dir: Path, language: str) -> dict[str, str]:
-        """The world's plant names with the job's new keys (#184.4)."""
-        merged: dict[str, str] = {}
-        path = world / "locale" / language / "plants.json"
-        if path.is_file():
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                merged.update({k: v for k, v in loaded.items() if isinstance(v, str)})
-        path = job_dir / "locale" / language / "plants.json"
-        if path.is_file():
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                merged.update({k: v for k, v in loaded.items() if isinstance(v, str)})
-        return merged
+            path = ctx.job_dir / "locale" / language / "plants.json"
+            files[f"locale/{language}/plants.json"] = path.read_bytes()
+        regions = _laid_regions(ctx.job_dir, world, brief)
+        if not regions:
+            raise _Stopped("no hand-made place among the job's tiles")
+        for region_id, _region in regions:
+            additions = _plant_additions(plant_id, spec)
+            refused = check_additions(additions)
+            if refused:
+                raise _Stopped(f"additions/{region_id}.json: {refused[0]}")
+            files[f"additions/{region_id}.json"] = json.dumps(
+                additions, indent=2
+            ).encode("utf-8")
+        version = (
+            next_pack_version(self._store, item_id) if self._store is not None else 1
+        )
+        pack = assemble_enrich_pack(item_id, version, files)
+        problems = check_pack(pack)
+        if problems:
+            raise _Stopped(f"pack: {problems[0]}")
+        dest = ctx.job_dir / "pack"
+        if dest.exists():
+            shutil.rmtree(dest)
+        for rel, data in pack.items():
+            path = dest / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        prefix: str | None = None
+        if self._store is not None:
+            prefix = publish_pack(self._store, item_id, version, pack)
+        return {"pack": prefix, "version": version, "files": sorted(pack)}
 
     def _pack(
         self,
@@ -320,7 +310,10 @@ class ShipStage:
         animal: dict[str, Any],
     ) -> dict[str, Any]:
         """The pack, game-checked before it uploads (#176.1, #176.3)."""
-        item_id = str(ctx.job_id).split("/")[-1]
+        # The pack id is the item's kind and id (spec 02 §8b), not
+        # the enrich item id: `animal_hammerhead`, never
+        # `enrich_hammerhead` (#188.3).
+        item_id = f"animal_{animal_id}"
         files: dict[str, bytes] = {}
         files[f"animals/{animal_id}.json"] = (
             ctx.job_dir / "animals" / f"{animal_id}.json"
@@ -387,6 +380,36 @@ def _laid_regions(
             raise _Stopped(f"{region_id}: no laid place to add to")
         regions.append((region_id, json.loads(path.read_text(encoding="utf-8"))))
     return regions
+
+
+def _plant_additions(plant_id: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """The place's additions file: only this plant, on its side (#188.2).
+
+    A coral on the rock rides `water` at 0.2; a land plant rides
+    `cover`. Exactly `id` and `density`, so the pack's check has
+    nothing else to refuse.
+    """
+    grows = spec.get("grows", {}) if isinstance(spec, dict) else {}
+    if not isinstance(grows, dict):
+        grows = {}
+    on = grows.get("on") or []
+    side = "water" if "seabed" in on or "reef" in on else "cover"
+    return {
+        "format": 1,
+        "plants": {side: [{"id": plant_id, "density": plant_entry_density(grows)}]},
+    }
+
+
+def _gate_spec_plant(plant_id: str, spec: dict[str, Any]) -> list[str]:
+    """The spec ships what the game packs: parts and colors (#188.3)."""
+    if not isinstance(spec, dict):
+        return [f"spec: {plant_id} is no object"]
+    problems = []
+    if not isinstance(spec.get("parts"), list) or not spec["parts"]:
+        problems.append(f"spec: {plant_id} has no parts to build")
+    if not isinstance(spec.get("colors"), dict) or not spec["colors"]:
+        problems.append(f"spec: {plant_id} has no colors to paint")
+    return problems
 
 
 def _additions(
@@ -498,7 +521,14 @@ def _gate_finnish_plant(job_dir: Path, plant_id: str) -> list[str]:
 def _gate_region_plant(
     job_dir: Path, world: Path, plant_id: str, spec: dict[str, Any]
 ) -> list[str]:
-    """The region rule: the one plant on its grown side (#184.4)."""
+    """The region rule: the laid place is before plus the one plant.
+
+    On a region of its own the laid file only appends the plant
+    (#184.4); on a biome-place the laid side is the biome's side
+    with the plant seated, and every other key untouched (#188.2).
+    Nothing is edited: the biome's merged copy only says what the
+    additions must add.
+    """
     problems = []
     grows = spec.get("grows", {}) if isinstance(spec, dict) else {}
     if not isinstance(grows, dict):
@@ -514,19 +544,63 @@ def _gate_region_plant(
             problems.append(f"region: {laid_path.stem} is no region in this checkout")
             continue
         before = json.loads(target.read_text(encoding="utf-8"))
-        if before.get("biome"):
-            path = world / "biomes" / f"{before['biome']}.json"
-            if not path.is_file():
-                problems.append(
-                    f"region: the checkout has no biomes/{before['biome']}.json"
-                )
-                continue
-            biome = json.loads(path.read_text(encoding="utf-8"))
-            staged = biome_add_plant(biome, plant_id, side, density)
-            problems.extend(biome_additions_only(biome, staged, plant_id))
-        else:
-            laid = json.loads(laid_path.read_text(encoding="utf-8"))
+        laid = json.loads(laid_path.read_text(encoding="utf-8"))
+        if not before.get("biome"):
             problems.extend(plant_region_additions_only(before, laid, plant_id))
+            continue
+        path = world / "biomes" / f"{before['biome']}.json"
+        if not path.is_file():
+            problems.append(
+                f"region: the checkout has no biomes/{before['biome']}.json"
+            )
+            continue
+        biome = json.loads(path.read_text(encoding="utf-8"))
+        merged = biome_add_plant(biome, plant_id, side, density)
+        problems.extend(biome_additions_only(biome, merged, plant_id))
+        problems.extend(
+            _laid_matches_merge(before, laid, merged, plant_id, side, density)
+        )
+    return problems
+
+
+def _laid_matches_merge(
+    before: dict[str, Any],
+    laid: dict[str, Any],
+    merged: dict[str, Any],
+    plant_id: str,
+    side: str,
+    density: float,
+) -> list[str]:
+    """The laid biome-place is before, with the merged side (#188.2).
+
+    The laid file carries the biome's side with the plant seated
+    (or as it is when already listed); every other key, and every
+    other plants side, is the region's own, untouched.
+    """
+    problems = []
+    for key in laid:
+        if key == "plants":
+            continue
+        if key not in before:
+            problems.append(f"{key} was added")
+        elif laid[key] != before.get(key):
+            problems.append(f"{key} changed")
+    for key in before:
+        if key not in laid:
+            problems.append(f"{key} was removed")
+    if problems:
+        return problems
+    grown = (merged.get("plants") or {}).get(side, [])
+    seated = (laid.get("plants") or {}).get(side)
+    if seated != grown:
+        return [f"plants.{side} is not the biome's side plus {plant_id}"]
+    for other in ("cover", "water"):
+        if other == side:
+            continue
+        if (laid.get("plants") or {}).get(other) != (before.get("plants") or {}).get(
+            other
+        ):
+            problems.append(f"plants.{other} changed")
     return problems
 
 
@@ -573,33 +647,6 @@ def _run_validate_region(world: Path, region_id: str) -> list[str]:
     if not lines:
         lines = [((proc.stdout or "") + (proc.stderr or "")).strip()[:300]]
     return [f"the filed {region_id} fails: {line}" for line in lines if line]
-
-
-def run_catalogue(world: Path) -> str:
-    """The world's catalogue in this checkout: data to docs (#184.4).
-
-    Returns its output. A missing tool or a failing run stops
-    loudly: the catalogue is generated, never written by hand.
-    """
-    tool = world / "tools" / "catalogue.py"
-    if not tool.is_file():
-        raise ConvertError(f"no catalogue writer in this checkout: {tool}")
-    try:
-        proc = subprocess.run(
-            [sys.executable, str(tool)],
-            cwd=world,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=300,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise ConvertError(f"catalogue.py did not run: {error}")
-    if proc.returncode != 0:
-        raise ConvertError(
-            f"catalogue.py failed: {(proc.stdout + proc.stderr).strip()[:300]}"
-        )
-    return (proc.stdout or "").strip()
 
 
 def _gate_world(ctx: Any, world: Path) -> list[str]:

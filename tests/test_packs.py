@@ -148,12 +148,11 @@ def test_additions_mirror_the_game() -> None:
         )
         == []
     )
+    long = "an addition may only add fish, playable, predators, prey and plants, "
     assert check_additions({"format": 1, "animals": ["testfish"]}) == [
-        "an addition may only add fish, playable, predators and prey, not animals"
+        long + "not animals"
     ]
-    assert check_additions({"format": 1, "food": []}) == [
-        "an addition may only add fish, playable, predators and prey, not food"
-    ]
+    assert check_additions({"format": 1, "food": []}) == [long + "not food"]
     assert check_additions({"format": 2}) == ["format isn't 1"]
     assert check_additions({"format": 1, "playable": ["Bad Name"]}) == [
         "playable has a bad id"
@@ -167,6 +166,58 @@ def test_additions_mirror_the_game() -> None:
     assert check_additions(
         {"format": 1, "fish": [{"kind": "testfish", "count": 3, "extra": 1}]}
     ) == ["a fish isn't {kind, count} (1 to 50)"]
+
+
+def test_additions_take_plants_on_cover_or_water() -> None:
+    """#188.2: exactly id and density, above 0, at most 1, 20 a side."""
+    assert (
+        check_additions(
+            {
+                "format": 1,
+                "plants": {"water": [{"id": "table_coral", "density": 0.2}]},
+            }
+        )
+        == []
+    )
+    assert (
+        check_additions(
+            {
+                "format": 1,
+                "plants": {
+                    "cover": [{"id": "bilberry", "density": 1}],
+                    "water": [],
+                },
+            }
+        )
+        == []
+    )
+    long = "an addition may only add fish, playable, predators, prey and plants, "
+    assert check_additions({"format": 1, "trees": []}) == [long + "not trees"]
+    assert check_additions({"format": 1, "plants": {"trees": []}}) == [
+        "plants adds no trees side"
+    ]
+    assert check_additions({"format": 1, "plants": []}) == [
+        "plants isn't {cover, water}"
+    ]
+    assert check_additions(
+        {"format": 1, "plants": {"water": [{"id": "table_coral", "density": 0}]}}
+    ) == ["a plant isn't {id, density} (above 0, at most 1)"]
+    assert check_additions(
+        {"format": 1, "plants": {"water": [{"id": "table_coral", "density": 1.5}]}}
+    ) == ["a plant isn't {id, density} (above 0, at most 1)"]
+    assert check_additions(
+        {
+            "format": 1,
+            "plants": {"water": [{"id": "table_coral", "density": 0.2, "extra": 1}]},
+        }
+    ) == ["a plant isn't {id, density} (above 0, at most 1)"]
+    assert check_additions(
+        {"format": 1, "plants": {"water": [{"id": "Table Coral", "density": 0.2}]}}
+    ) == ["a plant isn't {id, density} (above 0, at most 1)"]
+    many = [{"id": f"weed_{n}", "density": 0.01} for n in range(21)]
+    assert check_additions({"format": 1, "plants": {"cover": many}}) == [
+        "plants.cover adds more than 20"
+    ]
 
 
 def test_second_publish_leaves_the_first_untouched() -> None:

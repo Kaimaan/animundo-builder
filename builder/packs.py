@@ -36,9 +36,13 @@ GAME_ID = re.compile(r"^[a-z0-9_]+$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 #: An additions file's only keys (content_packs.gd).
-ADDITION_KEYS = ("format", "fish", "playable", "predators", "prey")
+ADDITION_KEYS = ("format", "fish", "playable", "predators", "prey", "plants")
 ADDITION_LISTS = ("playable", "predators", "prey")
 MAX_ADDED_FISH = 50
+
+#: A plants addition's only sides, and most entries a side takes (#188.2).
+PLANT_SIDES = ("cover", "water")
+MAX_ADDED_PLANTS = 20
 
 
 class PackExists(Exception):
@@ -116,15 +120,16 @@ def check_additions(additions: Any) -> list[str]:
     """Why the game would refuse an additions file, or nothing (#179).
 
     Mirrors `scripts/content_packs.gd` (`addition_error`): only the
-    five keys, lists of game ids, fish exactly `kind` and `count`.
+    six keys, lists of game ids, fish exactly `kind` and `count`,
+    plants exactly `id` and `density` on `cover` or `water` (#188.2).
     """
     if not isinstance(additions, dict):
         return ["not an object"]
     for key in additions:
         if str(key) not in ADDITION_KEYS:
             return [
-                "an addition may only add fish, playable, predators and prey, "
-                f"not {key}"
+                "an addition may only add fish, playable, predators, prey "
+                f"and plants, not {key}"
             ]
     if "format" in additions and not (
         _is_int(additions["format"]) and int(additions["format"]) == 1
@@ -151,6 +156,37 @@ def check_additions(additions: Any) -> list[str]:
                 or not 1 <= int(entry["count"]) <= MAX_ADDED_FISH
             ):
                 return ["a fish isn't {kind, count} (1 to 50)"]
+    if "plants" in additions:
+        return _plants_problems(additions["plants"])
+    return []
+
+
+def _plants_problems(plants: Any) -> list[str]:
+    """Why the game would refuse a plants addition, or nothing (#188.2)."""
+    if not isinstance(plants, dict):
+        return ["plants isn't {cover, water}"]
+    for side in plants:
+        if str(side) not in PLANT_SIDES:
+            return [f"plants adds no {side} side"]
+    for side in PLANT_SIDES:
+        if side not in plants:
+            continue
+        entries = plants[side]
+        if not isinstance(entries, list):
+            return [f"plants.{side} isn't a list"]
+        if len(entries) > MAX_ADDED_PLANTS:
+            return [f"plants.{side} adds more than 20"]
+        for entry in entries:
+            if (
+                not isinstance(entry, dict)
+                or set(entry) != {"id", "density"}
+                or not isinstance(entry.get("id"), str)
+                or not GAME_ID.match(entry["id"])
+                or isinstance(entry.get("density"), bool)
+                or not isinstance(entry.get("density"), (int, float))
+                or not 0 < float(entry["density"]) <= 1
+            ):
+                return ["a plant isn't {id, density} (above 0, at most 1)"]
     return []
 
 

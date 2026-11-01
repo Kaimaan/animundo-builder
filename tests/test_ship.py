@@ -157,7 +157,9 @@ class _Store:
         self.blobs[name] = data
 
 
-def _ctx(job_dir: Path, world: Path, answers: list[str]) -> SimpleNamespace:
+def _ctx(
+    job_dir: Path, world: Path, answers: list[str], job_id: str | None = None
+) -> SimpleNamespace:
     from builder.stages.safety import collect_texts
 
     keys = [item["key"] for item in collect_texts(job_dir, world)]
@@ -167,7 +169,7 @@ def _ctx(job_dir: Path, world: Path, answers: list[str]) -> SimpleNamespace:
         ]
     }
     return SimpleNamespace(
-        job_id="enrich_x/animal_hammerhead",
+        job_id=job_id or "enrich_x/enrich_hammerhead",
         job_dir=job_dir,
         world_path=world,
         check_budget=lambda: None,
@@ -329,7 +331,15 @@ def _plant_item(tmp_path: Path, biome: bool = False) -> Path:
                 "kind": "bush",
                 "grows": {"on": ["reef"], "density": 0.2},
                 "colors": {"main": "#c9a06a"},
-                "parts": [],
+                "parts": [
+                    {
+                        "name": "plate",
+                        "shape": "disc",
+                        "size": [0.9, 0.08, 0.9],
+                        "at": [0, 0.4, 0],
+                        "color": "main",
+                    }
+                ],
             }
         )
     )
@@ -344,7 +354,10 @@ def _plant_item(tmp_path: Path, biome: bool = False) -> Path:
         ],
     }
     if biome:
+        # A biome-place lays only the grown side, as region_place
+        # writes it: the biome's list with the plant seated.
         laid["biome"] = BIOME
+        del laid["plants"]["cover"]
     (job_dir / "regions").mkdir(exist_ok=True)
     (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
     (job_dir / "reviews").mkdir(exist_ok=True)
@@ -381,62 +394,70 @@ def _fake_flatten(world: Path) -> str:
     return f"wrote homes/{BIOME}.json"
 
 
-def _fake_catalogue(world: Path) -> str:
-    (world / "docs").mkdir(exist_ok=True)
-    (world / "docs" / "catalogue.md").write_text("# Catalogue\n")
-    return "wrote docs/catalogue.md"
-
-
-def test_ship_stages_a_passing_plant(tmp_path: Path) -> None:
-    """#184.4: a clean plant item stages what a reviewer would commit."""
+def test_ship_publishes_a_passing_plant_pack(tmp_path: Path) -> None:
+    """#188.3: a clean plant item ships `packs/plant_table_coral/1/`."""
+    store = _Store()
     world = _plant_world(tmp_path)
     job_dir = _plant_item(tmp_path)
-    result = ShipStage(
-        store=_Store(), flatten=_fake_flatten, catalogue=_fake_catalogue
-    ).run(_ctx(job_dir, world, _plant_answers()))
-    assert result["staged"] == [
-        "docs/catalogue.md",
-        "locale/en/plants.json",
-        "locale/fi/plants.json",
-        f"models/plants/{PLANT}.json",
-        f"models/previews/plants/{PLANT}.png",
-        f"regions/{REGION}.json",
-    ]
+    result = ShipStage(store=store, flatten=_fake_flatten).run(
+        _ctx(job_dir, world, _plant_answers(), f"enrich_x/enrich_{PLANT}")
+    )
+    assert result["pack"] == f"packs/plant_{PLANT}/1/"
+    assert result["version"] == 1
     ship = json.loads((job_dir / "checks" / "ship.json").read_text())
     assert ship == {"status": "pass", "problems": []}
-    staged = job_dir / "ship"
-    assert json.loads((staged / f"regions/{REGION}.json").read_text()) == json.loads(
-        (job_dir / "regions" / f"{REGION}.json").read_text()
-    )
-    fi = json.loads((staged / "locale/fi/plants.json").read_text())
-    assert fi["plant.bilberry.title"] == "Mustikka"
-    assert fi[f"plant.{PLANT}.title"] == "Pöytäkoralli"
-
-
-def test_ship_stages_a_biome_plant(tmp_path: Path) -> None:
-    """#184.4: on a biome-place the set holds the biome, not the region."""
-    from builder.enrich import biome_additions_only
-
-    world = _plant_world(tmp_path, biome=True)
-    job_dir = _plant_item(tmp_path, biome=True)
-    result = ShipStage(
-        store=_Store(), flatten=_fake_flatten, catalogue=_fake_catalogue
-    ).run(_ctx(job_dir, world, _plant_answers()))
-    assert result["staged"] == [
-        f"biomes/{BIOME}.json",
-        "docs/catalogue.md",
-        f"homes/{BIOME}.json",
+    pack = {
+        name.removeprefix(f"packs/plant_{PLANT}/1/"): data
+        for name, data in store.blobs.items()
+    }
+    assert check_pack(pack) == []
+    assert set(pack) == {
+        f"models/plants/{PLANT}.json",
+        f"models/plants/{PLANT}.glb",
+        f"models/previews/plants/{PLANT}.png",
         "locale/en/plants.json",
         "locale/fi/plants.json",
-        f"models/plants/{PLANT}.json",
-        f"models/previews/plants/{PLANT}.png",
-    ]
-    staged = job_dir / "ship"
-    assert not (staged / "regions").exists()
-    before = json.loads((world / "biomes" / f"{BIOME}.json").read_text())
-    after = json.loads((staged / f"biomes/{BIOME}.json").read_text())
-    assert biome_additions_only(before, after, PLANT) == []
-    assert after["plants"]["water"][-1] == {"id": PLANT, "density": 0.2}
+        f"additions/{REGION}.json",
+        "manifest.json",
+    }
+    additions = json.loads(pack[f"additions/{REGION}.json"].decode("utf-8"))
+    assert check_additions(additions) == []
+    assert additions == {
+        "format": 1,
+        "plants": {"water": [{"id": PLANT, "density": 0.2}]},
+    }
+    en = json.loads(pack["locale/en/plants.json"].decode("utf-8"))
+    assert set(en) == {
+        f"plant.{PLANT}.title",
+        f"plant.{PLANT}.latin",
+        *(f"plant.{PLANT}.{key}" for key in _ABOUT),
+    }
+    fi = json.loads(pack["locale/fi/plants.json"].decode("utf-8"))
+    assert fi[f"plant.{PLANT}.title"] == "Pöytäkoralli"
+    assert (job_dir / "pack" / "manifest.json").is_file()
+
+
+def test_ship_plant_pack_edits_no_biome(tmp_path: Path) -> None:
+    """#188.2: on a biome-place the biome file stays as it was."""
+    store = _Store()
+    world = _plant_world(tmp_path, biome=True)
+    before = (world / "biomes" / f"{BIOME}.json").read_text()
+    job_dir = _plant_item(tmp_path, biome=True)
+    result = ShipStage(store=store, flatten=_fake_flatten).run(
+        _ctx(job_dir, world, _plant_answers(), f"enrich_x/enrich_{PLANT}")
+    )
+    assert result["pack"] == f"packs/plant_{PLANT}/1/"
+    assert (world / "biomes" / f"{BIOME}.json").read_text() == before
+    pack = {
+        name.removeprefix(f"packs/plant_{PLANT}/1/"): data
+        for name, data in store.blobs.items()
+    }
+    assert check_pack(pack) == []
+    additions = json.loads(pack[f"additions/{REGION}.json"].decode("utf-8"))
+    assert additions == {
+        "format": 1,
+        "plants": {"water": [{"id": PLANT, "density": 0.2}]},
+    }
 
 
 def test_ship_plant_fails_a_blocking_review(tmp_path: Path) -> None:
@@ -531,6 +552,43 @@ def test_ship_plant_region_rule(tmp_path: Path) -> None:
     assert _gate_region_plant(job_dir, world, PLANT, spec) == [
         f"region: {REGION} is no region in this checkout"
     ]
+
+
+def test_ship_plant_region_rule_on_a_biome(tmp_path: Path) -> None:
+    """#188.2: the laid side is the biome's side plus the one plant."""
+    from builder.stages.ship import _gate_region_plant
+
+    world = _plant_world(tmp_path, biome=True)
+    job_dir = _plant_item(tmp_path, biome=True)
+    spec = {"grows": {"on": ["reef"], "density": 0.2}}
+    assert _gate_region_plant(job_dir, world, PLANT, spec) == []
+    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
+    laid["plants"]["water"].append({"id": "sneaky_weed", "density": 0.1})
+    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
+    assert _gate_region_plant(job_dir, world, PLANT, spec) == [
+        f"plants.water is not the biome's side plus {PLANT}"
+    ]
+
+
+def test_ship_plant_spec_gate(tmp_path: Path) -> None:
+    """#188.3: a spec without parts and colors stops the ship."""
+    from builder.stages.ship import _gate_spec_plant
+
+    assert _gate_spec_plant(PLANT, {"parts": [{}], "colors": {"main": "#fff"}}) == []
+    assert _gate_spec_plant(PLANT, {"parts": [], "colors": {}}) == [
+        f"spec: {PLANT} has no parts to build",
+        f"spec: {PLANT} has no colors to paint",
+    ]
+    assert _gate_spec_plant(PLANT, []) == [f"spec: {PLANT} is no object"]
+    world = _plant_world(tmp_path)
+    job_dir = _plant_item(tmp_path)
+    spec = json.loads((job_dir / "models" / "plants" / f"{PLANT}.json").read_text())
+    del spec["parts"]
+    (job_dir / "models" / "plants" / f"{PLANT}.json").write_text(json.dumps(spec))
+    with pytest.raises(_Stopped, match="has no parts to build"):
+        ShipStage(store=_Store(), flatten=_fake_flatten).run(
+            _ctx(job_dir, world, _plant_answers(), f"enrich_x/enrich_{PLANT}")
+        )
 
 
 def _gate_problems(

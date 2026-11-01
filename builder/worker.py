@@ -853,7 +853,8 @@ class Worker:
         The ship stage's gates replace the person's review (#174):
         an item whose ship completed remakes now; `not_accepted`
         still drops it. Items reviewed the old way (a `shipped`
-        verdict, in the checkout) remake as before. Else every
+        verdict, in the checkout) remake as before. A plant item
+        ships its pack like an animal now (#188.3). Else every
         listed tile is remade by code from its cached survey
         (never a new call), the changed groups publish in one go,
         and the job carries `versions` for the tiles that changed
@@ -887,15 +888,6 @@ class Worker:
             return
         if self._ship_completed(job_id, item_id or ""):
             pack = self._ship_pack(job_id, item_id or "")
-            if (
-                pack is None
-                and (item or {}).get("kind") == "plant"
-                and not (verdict == "shipped" and self._world_has(item, plan))
-            ):
-                # Staged, not published: a person files the set,
-                # marks it shipped, and the old way takes it (#184.4).
-                print(f"build job {job_id}: {item_id} waits for a reviewer")
-                return
         elif verdict == "shipped" and self._world_has(item, plan):
             pack = None
         else:

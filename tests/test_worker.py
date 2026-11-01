@@ -3159,10 +3159,10 @@ def test_enrich_review_waits_for_the_ship(tmp_path: Path) -> None:
     assert "pack" not in store.build_jobs["j1"]
 
 
-def test_enrich_review_waits_for_a_reviewer_on_a_staged_plant(
+def test_enrich_review_ships_a_plant_pack_like_an_animal(
     tmp_path: Path,
 ) -> None:
-    """#184.4: a staged plant files by hand; no remake, no publish."""
+    """#188.3: a shipped plant remakes; no reviewer waits in the way."""
     store = FakeStore()
     job = _enrich_job(
         status="checking",
@@ -3171,17 +3171,18 @@ def test_enrich_review_waits_for_a_reviewer_on_a_staged_plant(
     )
     store.build_jobs["j1"] = job
     worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker._claim("j1")
     item_dir = tmp_path / "jobs" / "j1" / "enrich_table_coral"
     item_dir.mkdir(parents=True)
     (item_dir / "state.json").write_text(
         json.dumps(
             {
                 "completed": ["research", "ship"],
-                "results": {"ship": {"staged": ["models/plants/table_coral.json"]}},
+                "results": {"ship": {"pack": "packs/plant_table_coral/1/"}},
             }
         )
     )
     worker.review_enrich_job("j1", job)
-    assert store.build_jobs["j1"]["status"] == "checking"
-    assert "pack" not in store.build_jobs["j1"]
-    assert "versions" not in store.build_jobs["j1"]
+    # No cached survey here, so the remake fails loudly: the point
+    # is the job sails past the ship, instead of waiting for a hand.
+    assert store.build_jobs["j1"]["status"] == "failed"

@@ -1683,11 +1683,13 @@ class Worker:
         col, row = parse_tile(tile)
         cells = self._habitat_grid()
         homes = available_homes(self.world)
+        land = cells.cell_data(col, row)[5]
         found = home_for_cell(
             cells.cell_data(col, row)[0],
             cells.habitat(col, row),
             homes,
             cells.cell_data(col, row)[4],
+            coast=0.0 < land < 1.0,
         )
         if found is None:
             raise _NoHome(f"tile {tile} has no home in this checkout")

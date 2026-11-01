@@ -468,7 +468,8 @@ def plan_tile(
         )
     homes = available_homes(world)
     biomes = available_biomes(world)
-    home = home_for_cell(eco1, habitat, biomes, biome_number)
+    land = habitat_grid.cell_data(col, row)[5]
+    home = home_for_cell(eco1, habitat, biomes, biome_number, coast=0.0 < land < 1.0)
     entries = library_animals(world)
     unfiled = _unfiled(world, habitat, entries)
     if unfiled_presence is None:
@@ -521,7 +522,7 @@ def plan_tile(
                     "no_land",
                     world=world,
                 )
-            bundle = default_bundle(tile, habitat_grid, biomes, habitat, style)
+            bundle = default_bundle(tile, habitat_grid, biomes, habitat, style, eco1)
             if bundle is None:
                 return _finish(
                     tile,

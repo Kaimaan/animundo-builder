@@ -253,28 +253,38 @@ def default_bundle(
     biomes: dict[str, dict[str, Any]],
     habitat: str,
     style: str,
+    eco: int | None = None,
 ) -> str | None:
     """The nearest biome of this habitat with this land style (#148.3).
 
     A cell whose ecoregion no biome lists builds from this default
     bundle, with its real plants from the survey; the neighbours
     come first in expanding rings, then the first anywhere. None
-    when no filed biome pairs this habitat with this style.
+    when no filed biome pairs this habitat with this style. When
+    the ecoregion is listed somewhere, the bundle must list it
+    too: a home that doesn't list the cell's ecoregion fails
+    the world's check (#198.2).
     """
+    listed = eco is not None and any(
+        eco in (data.get("ecoregions") or []) for data in biomes.values()
+    )
     col, row = parse_tile(tile)
     rings = list(ring_cells(habitat_grid, col, row))
-    for eco, neighbour in rings:
-        found = home_for_cell(eco, neighbour, biomes)
+    for neighbour_eco, neighbour in rings:
+        found = home_for_cell(neighbour_eco, neighbour, biomes)
         if (
             found is not None
             and biomes[found].get("habitat") == habitat
             and biomes[found].get("land") == style
+            and (not listed or eco in (biomes[found].get("ecoregions") or []))
         ):
             return found
     same = sorted(
         biome_id
         for biome_id, data in biomes.items()
-        if data.get("habitat") == habitat and data.get("land") == style
+        if data.get("habitat") == habitat
+        and data.get("land") == style
+        and (not listed or eco in (data.get("ecoregions") or []))
     )
     return same[0] if same else None
 
@@ -316,6 +326,7 @@ def home_for_cell(
     habitat: str,
     homes: dict[str, dict[str, Any]],
     biome: int | None = None,
+    coast: bool = False,
 ) -> str | None:
     """The home covering this ecoregion and habitat, or None.
 
@@ -326,7 +337,9 @@ def home_for_cell(
     `open_sea` home when the checkout has it (#177.1). Boreal
     water picks the lake home through the tile's habitat: a
     boreal_lake cell builds from boreal_lake, a boreal_forest
-    cell from boreal_forest.
+    cell from boreal_forest. A coast cell with no home for its
+    land habitat falls back to the ecoregion's sea home, never
+    to a home that doesn't list its ecoregion (#198.2).
     """
     if habitat == "open_ocean" and "open_sea" in homes:
         return "open_sea"
@@ -347,6 +360,14 @@ def home_for_cell(
         data = homes[home_id]
         if eco in (data.get("ecoregions") or []) and data.get("habitat") == habitat:
             return home_id
+    if coast:
+        listed = sorted(
+            home_id
+            for home_id, data in homes.items()
+            if data.get("habitat") == "sea" and eco in (data.get("ecoregions") or [])
+        )
+        if listed:
+            return listed[0]
     return None
 
 
@@ -1300,14 +1321,15 @@ def make_tile(
         )
     homes = available_homes(world)
     biomes = available_biomes(world)
-    home = home_for_cell(eco1, habitat, biomes, biome)
+    coast = 0.0 < land < 1.0
+    home = home_for_cell(eco1, habitat, biomes, biome, coast=coast)
     if home is None:
         if eco1 is None or not (world / "lands" / "index.json").is_file():
             return None, {"reason": "no_home", "habitat": habitat}
         style = land_style_for(world, biome)
         if style is None:
             return None, {"reason": "no_land", "habitat": habitat}
-        home = default_bundle(tile, habitat_grid, biomes, habitat, style)
+        home = default_bundle(tile, habitat_grid, biomes, habitat, style, eco1)
         if home is None:
             return None, {"reason": "no_home", "habitat": habitat}
     house = homes.get(home, biomes[home])

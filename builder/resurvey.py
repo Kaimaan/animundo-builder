@@ -268,7 +268,14 @@ def run_round(
         col, row = parse_tile(tile)
         habitat = habitat_grid.habitat(col, row)
         eco1 = habitat_grid.cell_data(col, row)[0]
-        home = home_for_cell(eco1, habitat, biomes, habitat_grid.cell_data(col, row)[4])
+        land = habitat_grid.cell_data(col, row)[5]
+        home = home_for_cell(
+            eco1,
+            habitat,
+            biomes,
+            habitat_grid.cell_data(col, row)[4],
+            coast=0.0 < land < 1.0,
+        )
         if home is None:
             results.append({"tile": tile, "merged": [], "reason": "no home"})
             continue

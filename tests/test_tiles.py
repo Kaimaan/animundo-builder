@@ -343,6 +343,105 @@ def test_home_for_cell_refuses_the_generic_sea_in_the_tropics(
     assert home_for_cell(999, "sea", homes, 4) == "sea"
 
 
+def test_home_for_cell_falls_back_to_the_reef_on_coast() -> None:
+    """#198.2: a marine-ecoregion coast builds from its sea home."""
+    homes = {
+        "rainforest": {"habitat": "rainforest", "ecoregions": [483]},
+        "coral_reef": {"habitat": "sea", "ecoregions": [150]},
+    }
+    assert home_for_cell(150, "rainforest", homes, 1) is None
+    assert home_for_cell(150, "rainforest", homes, 1, coast=True) == "coral_reef"
+    assert home_for_cell(999, "rainforest", homes, 1, coast=True) is None
+
+
+def test_default_bundle_keeps_a_listed_ecoregion(tmp_path: Path) -> None:
+    """#198.2: a bundle must list a listed ecoregion; new land as before."""
+    from builder.tiles import available_biomes, default_bundle
+
+    world = _world(tmp_path)
+    biomes = world / "biomes"
+    biomes.mkdir()
+    (biomes / "rainforest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "rainforest",
+                "ecoregions": [483],
+                "land": "tropical_moist",
+            }
+        )
+    )
+    (biomes / "coral_reef.json").write_text(
+        json.dumps({"habitat": "sea", "ecoregions": [150], "land": "reef"})
+    )
+    filed = available_biomes(world)
+    grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    assert (
+        default_bundle(
+            "z10_0581_0294", grid, filed, "rainforest", "tropical_moist", 150
+        )
+        is None
+    )
+    assert (
+        default_bundle(
+            "z10_0581_0294", grid, filed, "rainforest", "tropical_moist", 999
+        )
+        == "rainforest"
+    )
+    assert (
+        default_bundle("z10_0581_0294", grid, filed, "rainforest", "tropical_moist")
+        == "rainforest"
+    )
+
+
+def test_make_tile_builds_a_marine_coast_from_its_sea_home(
+    tmp_path: Path,
+) -> None:
+    """#198.2: z10_0927_0563's shape builds from coral_reef, not rainforest."""
+    world = _world(tmp_path)
+    (world / "homes" / "rainforest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "rainforest",
+                "ecoregions": [483],
+                "food": [{"kind": "grass"}, {"kind": "berries"}],
+            }
+        )
+    )
+    (world / "homes" / "coral_reef.json").write_text(
+        json.dumps(
+            {
+                "habitat": "sea",
+                "ecoregions": [150],
+                "food": [{"kind": "grass"}, {"kind": "berries"}],
+            }
+        )
+    )
+    listed = json.loads((world / "animal-list.json").read_text())
+    for entry in listed["animals"]:
+        entry["habitats"].append("rainforest")
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    cell = [150, 1.0, None, 0.0, 1, 0.6, 0.0, 53.0]
+    cells = {f"{c},{r}": list(cell) for r in (293, 294, 295) for c in (580, 581, 582)}
+    grid = _habitat_grid(tmp_path, cells)
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        grid,
+        world,
+        builder_root=tmp_path,
+        species={
+            "place": "Tropical rainforest coast with coral reef",
+            "parts": [{"kind": "forest", "species": ["fox", "mountain_hare"]}],
+            "plants": [],
+            "trees": [],
+            "name_en": "Rainforest coast",
+            "name_fi": "Sademetsän rannikko",
+        },
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["home"] == "coral_reef"
+
+
 def test_cell_level() -> None:
     assert cell_level("sea", 0) == 5
     assert cell_level("open_ocean", -100) == 5

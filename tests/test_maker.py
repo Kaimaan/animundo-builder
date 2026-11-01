@@ -3306,6 +3306,50 @@ def test_marks_prompt_names_head_views() -> None:
     assert "When unsure" in text
 
 
+def test_marks_prompt_judges_shapes_on_simple_models() -> None:
+    """#193.2: a mark is met when a child would see its shape."""
+    text = (PROMPTS_DIR / "model_marks.md").read_text(encoding="utf-8")
+    assert "simple, never realistic" in text
+    assert "its shape, not its fine detail" in text
+    assert "in the TOP view" in text
+
+
+def test_research_prompt_writes_marks_a_child_sees() -> None:
+    """#193.2: research marks are shapes, never fine detail."""
+    text = (PROMPTS_DIR / "research.md").read_text(encoding="utf-8")
+    assert "shapes, never fine detail" in text
+    assert "hammer-shaped head" in text
+
+
+def test_animal_prompt_picks_hunts_from_reviewed_tags() -> None:
+    """#193.3: every hunts entry is a reviewed prey tag, nothing else."""
+    prompt = (PROMPTS_DIR / "animal_write.md").read_text(encoding="utf-8")
+    flat = " ".join(prompt.split())
+    assert "$HUNT_TAGS" in prompt
+    assert "Reviewed prey tags" in prompt
+    assert "never a cast tag that isn't reviewed" in flat
+
+
+def test_animal_prompt_lists_the_reviewed_hunt_tags(tmp_path: Path) -> None:
+    """#193.3: the ask carries the tags shipped hunters hunt."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "animals" / "fox.json").write_text(
+        json.dumps({"latin": "Vulpes vulpes", "hunts": ["rodent"]})
+    )
+    (world / "animals" / "lizard.json").write_text(
+        json.dumps({"id": "lizard", "note": "a scaly example"})
+    )
+    brief = json.loads((tmp_path / "home.json").read_text())
+    research = json.loads((tmp_path / "research.json").read_text())
+    region = json.loads((tmp_path / "regions" / "fi_test.json").read_text())
+    prompt = AnimalMakerStage()._animal_prompt(
+        world, brief, research, region, _anaconda_target()
+    )
+    assert "rodent" in prompt
+    assert "$HUNT_TAGS" not in prompt
+
+
 HAMMERHEAD = {
     "id": "hammerhead",
     "name": "Scalloped hammerhead",

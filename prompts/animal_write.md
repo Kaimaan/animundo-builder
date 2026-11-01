@@ -33,11 +33,18 @@ The region's cast:
 $REGION_CAST
 ```
 
-Tags the cast's existing animals carry (every `hunts` entry must be
-one of these; `hunts` names prey tags, never animal ids):
+Tags the cast's existing animals carry (`hunts` names prey tags,
+never animal ids):
 
 ```
 $CAST_TAGS
+```
+
+Reviewed prey tags: every `hunts` entry must be one of these and
+nothing else. When the list is empty, `hunts` is `[]`:
+
+```
+$HUNT_TAGS
 ```
 
 Tags the cast's hunters need that no existing cast animal carries
@@ -89,8 +96,9 @@ None. Write from the inputs only.
 ## Hard rules
 
 - Food first: every `diet` kind is in the region's food above, and
-  every `hunts` entry is a prey tag from the cast tags above, never an
-  animal id. Never invent a food or a tag to fill a gap. Carry every
+  every `hunts` entry is a reviewed prey tag from the hunt tags
+  above, never an animal id and never a cast tag that isn't
+  reviewed. Never invent a food or a tag to fill a gap. Carry every
   needed tag above that fits this animal, so the cast's hunters find
   their prey.
 - `latin` is exactly the surveyed Latin name, and `taxon` is exactly

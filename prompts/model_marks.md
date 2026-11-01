@@ -5,7 +5,9 @@
 Look at the render of $TITLE and say which of its key
 marks show. These marks make the species known; a child
 must see them at game distance. Judge only what the
-render shows, never what the species should have.
+render shows, never what the species should have. Our
+models are simple, never realistic: a mark is met when a
+child would see its shape, not its fine detail.
 
 ## Input
 
@@ -14,9 +16,10 @@ The key marks:
 $MARKS
 
 The render is attached: four views of the model, FRONT,
-SIDE, BACK 3/4 and TOP. For a mark on the head, judge it
-in the FRONT and TOP views; it shows only when visible
-there.
+SIDE, BACK 3/4 and TOP. Judge each mark in the views that
+show it: a head's outline in the TOP view, a head-on mark
+in FRONT and TOP. A mark shows only when visible in its
+views.
 
 ## Output
 

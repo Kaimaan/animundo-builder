@@ -38,6 +38,8 @@ from ..packs import (
 )
 from ..tiles import place_cells
 from ..world import check_draft
+from .animals import _hunt_tags
+from .models import build_in_sandbox
 from .safety import SafetyStage
 from .words import WordsStage
 
@@ -55,15 +57,18 @@ class ShipStage:
         self,
         store: Any | None = None,
         flatten: Callable[[Path], str] | None = None,
+        build: Callable[[Path, str], dict[str, Any]] | None = None,
     ) -> None:
         self._store = store
         self._flatten = flatten or run_flatten
+        self._build = build or build_in_sandbox
 
     def run(self, ctx: Any) -> dict[str, Any]:
         if ctx.world_path is None:
             raise ValueError("ship needs --world")
         world = Path(ctx.world_path)
         brief = json.loads((ctx.job_dir / "home.json").read_text(encoding="utf-8"))
+        self._ensure_place_plants(world, ctx.job_dir)
         if brief.get("species_key") is None and not brief.get("plant"):
             raise _Stopped("ship packs animals; this item ships by hand")
         if brief.get("plant") is not None and brief.get("species_key") is None:
@@ -91,6 +96,26 @@ class ShipStage:
         if problems:
             raise _Stopped("; ".join(problems[:5]))
         return self._pack(ctx, world, brief, animal_id, animal)
+
+    def _ensure_place_plants(self, world: Path, job_dir: Path) -> None:
+        """The place's plant models, built in the ship's world (#193.1).
+
+        The region check fails a world without the place's plant
+        models, so the ship builds every missing one first: a
+        spec with no `.glb` gets one, here. Built models stay in
+        the checkout, so each worker builds them once.
+        """
+        for plant_id in sorted(_place_plant_ids(job_dir)):
+            if not (world / "models" / "plants" / f"{plant_id}.json").is_file():
+                continue
+            if (world / "assets" / "plants" / f"{plant_id}.glb").is_file():
+                continue
+            built = self._build(world, f"models/plants/{plant_id}.json")
+            if not built.get("ok"):
+                raise _Stopped(
+                    f"{plant_id}: the plant model would not build: "
+                    f"{built.get('log', 'no log')[:200]}"
+                )
 
     def _finnish(
         self, ctx: Any, world: Path, animal_id: str, animal: dict[str, Any]
@@ -360,6 +385,35 @@ class ShipStage:
         if self._store is not None:
             prefix = publish_pack(self._store, item_id, version, pack)
         return {"pack": prefix, "version": version, "files": sorted(pack)}
+
+
+def _place_plant_ids(job_dir: Path) -> set[str]:
+    """Every plant id the laid places name, both shapes (#193.1).
+
+    The old ground-cover models and the layered cover and water
+    lists, like the region stage reads them.
+    """
+    used: set[str] = set()
+    regions = job_dir / "regions"
+    if not regions.is_dir():
+        return used
+    for laid_path in sorted(regions.glob("*.json")):
+        if laid_path.stem.startswith("tl_"):
+            continue
+        try:
+            laid = json.loads(laid_path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if not isinstance(laid, dict):
+            continue
+        for plant in laid.get("ground_cover", {}).get("plants", []) or []:
+            if isinstance(plant, dict) and plant.get("model"):
+                used.add(str(plant["model"]))
+        for side in ("cover", "water"):
+            for entry in (laid.get("plants") or {}).get(side, []) or []:
+                if isinstance(entry, dict) and entry.get("id"):
+                    used.add(str(entry["id"]))
+    return used
 
 
 def _laid_regions(
@@ -847,15 +901,7 @@ def _month(day: Any) -> int | None:
 
 def _world_hunts(world: Path) -> set[str]:
     """Every tag a shipped animal hunts: the reviewed prey tags."""
-    hunts: set[str] = set()
-    for path in sorted((world / "animals").glob("*.json")):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        for hunt in data.get("hunts", []) or []:
-            hunts.add(hunt)
-    return hunts
+    return _hunt_tags(world)
 
 
 def _gate_fish_count(

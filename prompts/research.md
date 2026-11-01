@@ -31,9 +31,12 @@ Five searches at most. Answer with JSON only, no prose.
   `shoulder_cm` (or `height_cm` for birds and fish),
   `tail_cm`, `coat` (`main` and `belly` or chest colour in
   plain words plus `main_hex` and `belly_hex` like
-  "#7a4a2b") and `marks` (the 2-3 field-guide marks that
-  tell the species apart, like "ear tufts" or "short
-  black-tipped tail"). Each with its `source`. The main
+  "#7a4a2b") and `marks` (the 2-3 marks that tell the
+  species apart, at the level a child sees on a simple
+  model: shapes, never fine detail — "a wide, flat,
+  hammer-shaped head with eyes at its ends", not
+  "scalloped front edge with a central notch"). Each with
+  its `source`. The main
   colour is the one a child would name when looking at the
   animal, as a field guide's plate shows it — not the most
   striking variant.

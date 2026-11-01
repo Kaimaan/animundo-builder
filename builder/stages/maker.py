@@ -1435,6 +1435,7 @@ class AnimalMakerStage:
                 "CAST_TAGS": ", ".join(
                     sorted(animal_writers._cast_tags(world, region))
                 ),
+                "HUNT_TAGS": ", ".join(sorted(animal_writers._hunt_tags(world))),
                 "NEEDED_TAGS": ", ".join(
                     sorted(animal_writers._needed_tags(world, region))
                 ),

@@ -246,6 +246,94 @@ def test_ship_publishes_a_passing_pack(tmp_path: Path) -> None:
     assert (job_dir / "pack" / "manifest.json").is_file()
 
 
+def _unbuilt_checker(world: Path) -> None:
+    """A draft check that fails the region until the plant models build."""
+    (world / "tools" / "check_draft.py").write_text(
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "draft, at, where = sys.argv[1], sys.argv[2], sys.argv[3]\n"
+        "assert at == '--world'\n"
+        "missing = []\n"
+        "for path in sorted((Path(draft) / 'regions').glob('*.json')):\n"
+        "    region = json.loads(path.read_text())\n"
+        "    cover = (region.get('ground_cover') or {}).get('plants', [])\n"
+        "    for plant in cover:\n"
+        "        model = (plant or {}).get('model', '')\n"
+        "        built = Path(where) / 'assets' / 'plants' / f'{model}.glb'\n"
+        "        if model and not built.is_file():\n"
+        "            missing.append(f'build it first: {model}')\n"
+        "if missing:\n"
+        "    fail = {'check': 'region', 'status': 'fail'}\n"
+        "    fail['problems'] = missing\n"
+        "    print(json.dumps({'results': [fail]}))\n"
+        "else:\n"
+        "    print(json.dumps({'results': []}))\n"
+    )
+
+
+def _fake_build(world: Path, spec: str) -> dict[str, Any]:
+    dest = world / "assets" / "plants" / f"{Path(spec).stem}.glb"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(b"glb-bytes")
+    return {"ok": True, "summary": f"{spec}: built", "log": f"BUILT {spec}: built"}
+
+
+def test_ship_builds_the_place_plants_before_the_world_check(
+    tmp_path: Path,
+) -> None:
+    """#193.1: the ship builds missing plant models, then the check passes."""
+    world = _world(tmp_path)
+    _unbuilt_checker(world)
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True)
+    for stem in ("staghorn", "seagrass"):
+        (greens / f"{stem}.json").write_text(json.dumps({"id": stem}))
+    cover = {"plants": [{"model": "staghorn"}, {"model": "seagrass"}]}
+    region = json.loads((world / "regions" / f"{REGION}.json").read_text())
+    region["ground_cover"] = cover
+    (world / "regions" / f"{REGION}.json").write_text(json.dumps(region))
+    job_dir = _item(tmp_path, _animal(), _research())
+    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
+    laid["ground_cover"] = cover
+    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
+    store = _Store()
+    translated = {"name": "Kampavasarahai", "intro": "Hai, jolla on leveä pää."}
+    result = ShipStage(store=store, build=_fake_build).run(
+        _ctx(job_dir, world, [json.dumps(translated)])
+    )
+    assert result["pack"] == "packs/animal_hammerhead/1/"
+    assert (world / "assets" / "plants" / "staghorn.glb").is_file()
+    assert (world / "assets" / "plants" / "seagrass.glb").is_file()
+    ship = json.loads((job_dir / "checks" / "ship.json").read_text())
+    assert ship == {"status": "pass", "problems": []}
+
+
+def test_ship_stops_when_a_plant_model_would_not_build(tmp_path: Path) -> None:
+    """#193.1: a failing plant build stops the ship loudly."""
+    world = _world(tmp_path)
+    _unbuilt_checker(world)
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True)
+    (greens / "staghorn.json").write_text(json.dumps({"id": "staghorn"}))
+    cover = {"plants": [{"model": "staghorn"}]}
+    region = json.loads((world / "regions" / f"{REGION}.json").read_text())
+    region["ground_cover"] = cover
+    (world / "regions" / f"{REGION}.json").write_text(json.dumps(region))
+    job_dir = _item(tmp_path, _animal(), _research())
+    laid = json.loads((job_dir / "regions" / f"{REGION}.json").read_text())
+    laid["ground_cover"] = cover
+    (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
+
+    def _broken(world: Path, spec: str) -> dict[str, Any]:
+        return {"ok": False, "summary": "the build failed", "log": "ERROR: boom"}
+
+    translated = {"name": "Kampavasarahai", "intro": "Hai, jolla on leveä pää."}
+    with pytest.raises(_Stopped, match="would not build"):
+        ShipStage(store=_Store(), build=_broken).run(
+            _ctx(job_dir, world, [json.dumps(translated)])
+        )
+
+
 def test_ship_second_publish_makes_version_2(tmp_path: Path) -> None:
     """#176.4: a republish is version 2; version 1 stays as it was."""
     store = _Store()
@@ -610,6 +698,16 @@ def _gate_problems(
 
 def test_gate_passes_a_clean_item(tmp_path: Path) -> None:
     assert _gate_problems(tmp_path) == []
+
+
+def test_reviewed_prey_tags_come_from_shipped_hunters(tmp_path: Path) -> None:
+    """#193.3: the gate and the maker read the same reviewed list."""
+    from builder.stages.animals import _hunt_tags
+    from builder.stages.ship import _world_hunts
+
+    world = _world(tmp_path)
+    assert _hunt_tags(world) == {"small_fish"}
+    assert _world_hunts(world) == {"small_fish"}
 
 
 def test_gate_fails_a_region_that_rewrites_food(tmp_path: Path) -> None:

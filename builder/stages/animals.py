@@ -137,6 +137,7 @@ class AnimalsStage:
                 "REGION_FOODS": ", ".join(sorted(_region_foods(region))),
                 "REGION_CAST": ", ".join(sorted(_region_cast(region))),
                 "CAST_TAGS": ", ".join(sorted(_cast_tags(world, region))),
+                "HUNT_TAGS": ", ".join(sorted(_hunt_tags(world))),
                 "NEEDED_TAGS": ", ".join(sorted(_needed_tags(world, region))),
                 "EXISTING_TAGS": _existing_tags(world),
                 "ARCHETYPES": ", ".join(sorted(_archetypes(world))),
@@ -328,8 +329,29 @@ def _region_cast(region: dict[str, Any]) -> set[str]:
     return cast - {""}
 
 
+def _hunt_tags(world: Path) -> set[str]:
+    """Every tag a shipped animal hunts: the reviewed prey tags (#193.3).
+
+    The maker picks `hunts` from this list only, and the ship's
+    gate checks against it, so the two agree.
+    """
+    hunts: set[str] = set()
+    for path in sorted((world / "animals").glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for hunt in data.get("hunts", []) or []:
+            hunts.add(hunt)
+    return hunts
+
+
 def _cast_tags(world: Path, region: dict[str, Any]) -> set[str]:
-    """Tags the cast's existing animals carry: legal `hunts` entries."""
+    """Tags the cast's existing animals carry.
+
+    Context for the new species' own tags; `hunts` picks from
+    the reviewed prey tags (`_hunt_tags`) instead (#193.3).
+    """
     tags: set[str] = set()
     for stem in _region_cast(region):
         path = world / "animals" / f"{stem}.json"

@@ -124,7 +124,8 @@ def write_brief(
 
     A home item carries no species: research covers the habitat's
     surroundings and minimum makes only the home. An animal item
-    carries its animal-list entry. A plant item carries its names.
+    carries its animal-list entry. A plant item carries its names
+    and the filed plant it starts from, when the plan names one.
     Ids and keys only, never free text, and never anything about
     the player. An enrich item names its target tiles, whose
     converter places the checks run against (#161.1). A place
@@ -141,6 +142,8 @@ def write_brief(
             "needs_home": False,
             "center": {"lat": lat, "lon": lon},
         }
+        if item.get("from"):
+            brief["from"] = item["from"]
     else:
         assert entry is not None, f"animal item {item['id']} needs its list entry"
         brief = {

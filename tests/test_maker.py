@@ -2326,7 +2326,8 @@ def test_home_choices_schema_is_strict() -> None:
     assert "mud otherwise" in schema["properties"]["seabed"]["description"]
     plants = schema["properties"]["plants"]["items"]["properties"]
     assert plants["model"]["enum"] == ["bilberry", "bracken"]
-    assert plants["on"]["enum"] == ["ground", "seabed"]
+    assert plants["on"]["enum"] == ["ground", "seabed", "reef"]
+    assert "reef: corals, on the coral rock" in plants["on"]["description"]
     assert sorted(schema["properties"]["plants"]["items"]["required"]) == [
         "model",
         "on",

@@ -355,11 +355,18 @@ def new_plant_ids(draft: dict[str, Any], world: Path) -> set[str]:
 
     These are what the plants stage builds (at most MAX_NEW_PLANTS);
     earlier excuses for unknown-plant checker lines cover exactly them.
+    Both shapes count: the old ground-cover models and the layered
+    cover and water lists, so an enrich plant on a biome-place
+    builds too (#184.2).
     """
     used = {
         plant.get("model", "")
         for plant in draft.get("ground_cover", {}).get("plants", [])
     } - {""}
+    for side in ("cover", "water"):
+        for entry in (draft.get("plants") or {}).get(side, []) or []:
+            if isinstance(entry, dict) and entry.get("id"):
+                used.add(entry["id"])
     checkout = {path.stem for path in (world / "models" / "plants").glob("*.json")}
     return used - checkout
 

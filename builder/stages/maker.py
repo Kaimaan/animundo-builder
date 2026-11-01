@@ -3340,8 +3340,9 @@ def _home_choices_schema(plants: list[str], trees: list[str]) -> dict[str, Any]:
                             ),
                         ),
                         "on": enum(
-                            ["ground", "seabed"],
-                            "seabed: corals and sea grass, under the water",
+                            ["ground", "seabed", "reef"],
+                            "seabed: corals and sea grass, under the water; "
+                            "reef: corals, on the coral rock",
                         ),
                     }
                 ),

@@ -81,6 +81,10 @@ class PlantsStage:
             for plant in region.get("ground_cover", {}).get("plants", [])
         }
         entries.pop("", None)
+        for side in ("cover", "water"):
+            for listed in (region.get("plants") or {}).get(side, []) or []:
+                if isinstance(listed, dict) and listed.get("id"):
+                    entries.setdefault(listed["id"], {"model": listed["id"]})
         new_ids = sorted(new_plant_ids(region, world))
         if len(new_ids) > self.max_new_plants:
             raise _Stopped(
@@ -93,6 +97,13 @@ class PlantsStage:
             return self._nothing()
         survey = json.loads((ctx.job_dir / "survey.json").read_text(encoding="utf-8"))
         sandbox = _ensure_sandbox(ctx.job_dir, world)
+        brief_path = ctx.job_dir / "home.json"
+        brief = (
+            json.loads(brief_path.read_text(encoding="utf-8"))
+            if brief_path.is_file()
+            else {}
+        )
+        start = brief.get("from") if isinstance(brief, dict) else None
         facts = _flora_facts(survey)
         progress = _load_progress(ctx.job_dir)
         rounds: dict[str, int] = dict(progress.get("rounds", {}))
@@ -105,7 +116,14 @@ class PlantsStage:
                 files.append(f"models/plants/{plant_id}.json")
                 continue
             target, seconds = self._plant(
-                ctx, world, sandbox, region, entries[plant_id], facts, plant_id
+                ctx,
+                world,
+                sandbox,
+                region,
+                entries[plant_id],
+                facts,
+                plant_id,
+                start,
             )
             rounds[plant_id] = seconds
             if target != plant_id:
@@ -140,6 +158,7 @@ class PlantsStage:
         entry: dict[str, Any],
         facts: str,
         plant_id: str,
+        start: str | None = None,
     ) -> tuple[str, int]:
         names = ", ".join(entry.get("names", [])) or plant_id.replace("_", " ")
         spec: dict[str, Any] | None = None
@@ -162,6 +181,7 @@ class PlantsStage:
             if spec.get("id") != plant_id:
                 renamed = spec.get("id")
                 raise _Stopped(f"{plant_id}: the draft renamed itself {renamed!r}")
+            spec = _keep_grows_on(world, start, spec)
             try:
                 _validate_plant(world, spec)
             except jsonschema.ValidationError as error:
@@ -565,11 +585,43 @@ def _reuse_target(found: dict[str, Any]) -> str | None:
     return None
 
 
+def _keep_grows_on(
+    world: Path, start: str | None, spec: dict[str, Any]
+) -> dict[str, Any]:
+    """The start plant's grounds, kept by code, never the draft (#184.2).
+
+    A new plant made from a coral grows on the reef, as the
+    coral does; sea grass and algae keep the seabed. Without
+    a start plant, or one that won't read, the draft stands.
+    """
+    if not start:
+        return spec
+    try:
+        grown = json.loads(
+            (world / "models" / "plants" / f"{start}.json").read_text(encoding="utf-8")
+        ).get("grows", {})
+    except (OSError, ValueError):
+        return spec
+    on = grown.get("on") if isinstance(grown, dict) else None
+    if not on:
+        return spec
+    grows = spec.get("grows")
+    if not isinstance(grows, dict):
+        grows = {}
+        spec["grows"] = grows
+    grows["on"] = list(on) if isinstance(on, list) else [on]
+    return spec
+
+
 def _rewrite_model(region_path: Path, plant_id: str, target: str) -> None:
     region = json.loads(region_path.read_text(encoding="utf-8"))
     for plant in region.get("ground_cover", {}).get("plants", []):
         if plant.get("model") == plant_id:
             plant["model"] = target
+    for side in ("cover", "water"):
+        for listed in (region.get("plants") or {}).get(side, []) or []:
+            if isinstance(listed, dict) and listed.get("id") == plant_id:
+                listed["id"] = target
     region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
 
 

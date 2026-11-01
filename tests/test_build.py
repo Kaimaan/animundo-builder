@@ -91,6 +91,17 @@ def test_write_place_home_brief_carries_the_example(tmp_path: Path) -> None:
     assert json.loads((tmp_path / "home.json").read_text()) == brief
 
 
+def test_write_plant_brief_carries_its_start(tmp_path: Path) -> None:
+    """#184.2: a plant item's brief names the filed plant it starts from."""
+    item = {"id": "plant_table_coral", "kind": "plant", "what": "table_coral"}
+    brief = build_mod.write_brief(tmp_path, item, "sea", -16.6, 146.0, None)
+    assert "from" not in brief
+    item["from"] = "closed_brain_coral"
+    brief = build_mod.write_brief(tmp_path, item, "sea", -16.6, 146.0, None)
+    assert brief["from"] == "closed_brain_coral"
+    assert json.loads((tmp_path / "home.json").read_text()) == brief
+
+
 def test_write_animal_brief_carries_list_entry(tmp_path: Path) -> None:
     item = {"id": "animal_lion", "kind": "animal", "what": "lion"}
     entry = {"id": "lion", "gbif_key": 5219404, "latin": "Panthera leo", "name": "Lion"}

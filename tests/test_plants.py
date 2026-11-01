@@ -240,6 +240,62 @@ def test_builds_one_new_plant(tmp_path: Path) -> None:
     assert "40 triangles" in chat.prompts[1], "review sees the build stats"
 
 
+def test_builds_a_layered_water_plant_keeping_its_grounds(tmp_path: Path) -> None:
+    """#184.2: a layered water id builds, keeping the start plant's grounds."""
+    from builder.stages.plants import _keep_grows_on
+
+    world = _world(tmp_path)
+    schema_path = world / "schemas" / "model.schema.json"
+    schema = json.loads(schema_path.read_text())
+    schema["$defs"]["plant_model"]["properties"]["grows"] = {}
+    schema_path.write_text(json.dumps(schema))
+    (world / "models" / "plants" / "closed_brain_coral.json").write_text(
+        json.dumps({"grows": {"on": ["reef"], "density": 0.08}})
+    )
+    (tmp_path / "survey.json").write_text(json.dumps({"facts": [], "species": []}))
+    regions = tmp_path / "regions"
+    regions.mkdir(parents=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_reef",
+                "biome": "coral_reef",
+                "plants": {"water": [{"id": "table_coral", "density": 0.2}]},
+            }
+        )
+    )
+    (tmp_path / "home.json").write_text(
+        json.dumps({"plant": "table_coral", "from": "closed_brain_coral"})
+    )
+    draft = dict(
+        SPEC,
+        id="table_coral",
+        name="Table coral",
+        latin="Acropora hyacinthus",
+        kind="bush",
+        grows={"on": ["seabed"], "density": 0.2},
+    )
+    review = {"species": "table_coral", "round": 1, "issues": []}
+    chat = ScriptChat([json.dumps(draft), json.dumps(review)])
+
+    def match(world: Path, latin: str) -> dict[str, Any]:
+        assert latin == "Acropora hyacinthus"
+        return {"taxon": TAXON, "files": []}
+
+    result = PlantsStage(match=match, chat=chat, build=_build_ok).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/table_coral.json"]
+    final = json.loads(
+        (tmp_path / "models" / "plants" / "table_coral.json").read_text()
+    )
+    assert final["grows"]["on"] == ["reef"]
+    assert _keep_grows_on(world, None, {"grows": {"on": ["seabed"]}})["grows"][
+        "on"
+    ] == ["seabed"]
+    assert _keep_grows_on(world, "missing_plant", {"id": "x"}) == {"id": "x"}
+
+
 def test_known_species_reuses_its_spec(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

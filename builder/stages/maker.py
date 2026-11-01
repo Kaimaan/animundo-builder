@@ -480,6 +480,11 @@ class AnimalMakerStage:
             },
         }
         sizes = _edits_sizes(research, target)
+        sourced = _sourced_sizes(research, target)
+        # The file's game length: the researched typical adult
+        # (prey: the minimum set's size), not the build's mesh
+        # reading. The game scales the model to it (#181.4).
+        game_length = sourced.get("length_m") or None
         errors: list[str] | None = None
         previous: str | None = None
         code_fixed = False
@@ -516,11 +521,18 @@ class AnimalMakerStage:
                     dict.fromkeys([*(edits.get("unmakable") or []), *unmatched])
                 )
                 spec, file_errors = self._adapt_build_place(
-                    ctx, world, animal_id, target, ref, edits, sizes, attempt
+                    ctx,
+                    world,
+                    animal_id,
+                    target,
+                    ref,
+                    edits,
+                    sizes,
+                    attempt,
+                    game_length,
                 )
                 if spec is not None and not file_errors:
                     found = _measure_spec(spec)
-                    sourced = _sourced_sizes(research, target)
                     misses = _size_misses(found, sourced, spec)
                     if misses and not code_fixed:
                         # Code owns the sizes: rescale and re-run,
@@ -534,7 +546,15 @@ class AnimalMakerStage:
                         }
                         code_fixed = True
                         spec, file_errors = self._adapt_build_place(
-                            ctx, world, animal_id, target, ref, edits, sizes, attempt
+                            ctx,
+                            world,
+                            animal_id,
+                            target,
+                            ref,
+                            edits,
+                            sizes,
+                            attempt,
+                            game_length,
                         )
                     if spec is not None and not file_errors:
                         found = _measure_spec(spec)
@@ -1122,6 +1142,7 @@ class AnimalMakerStage:
         edits: dict[str, Any],
         sizes: dict[str, float],
         attempt: int,
+        game_length: float | None,
     ) -> tuple[dict[str, Any] | None, list[str]]:
         """Edits plus code sizes through adapt, placed, built, checked."""
         folder = ctx.job_dir / "tries" / animal_id / "edits" / str(attempt)
@@ -1157,7 +1178,7 @@ class AnimalMakerStage:
         if not isinstance(spec, dict):
             return None, ["the adapt tool wrote no spec"]
         self._place_spec(ctx, world, animal_id, spec)
-        return spec, self._build_and_check(ctx, world, animal_id, attempt)
+        return spec, self._build_and_check(ctx, world, animal_id, attempt, game_length)
 
     def _place_spec(
         self, ctx: Any, world: Path, animal_id: str, spec: dict[str, Any]
@@ -1174,7 +1195,12 @@ class AnimalMakerStage:
         )
 
     def _build_and_check(
-        self, ctx: Any, world: Path, animal_id: str, attempt: int
+        self,
+        ctx: Any,
+        world: Path,
+        animal_id: str,
+        attempt: int,
+        game_length: float | None,
     ) -> list[str]:
         """Build the adapted spec, then read the models verdict. Errors, if any."""
         sandbox = _ensure_sandbox(ctx.job_dir, world)
@@ -1188,7 +1214,7 @@ class AnimalMakerStage:
                 "did not run here, not the spec. A person looks."
             )
         if built["ok"]:
-            self._write_measured_length(ctx, animal_id, built["log"])
+            self._write_game_length(ctx, animal_id, built["log"], game_length)
         self._collect_built(ctx, sandbox, animal_id)
         errors = [] if built["ok"] else [f"the build failed: {built['log']}"]
         from ..enrich import split_not_built
@@ -1205,13 +1231,19 @@ class AnimalMakerStage:
         )
         return errors
 
-    def _write_measured_length(self, ctx: Any, animal_id: str, log: str) -> None:
-        """The file's game length, from the build's measurement (#140.3).
+    def _write_game_length(
+        self, ctx: Any, animal_id: str, log: str, game_length: float | None
+    ) -> None:
+        """The file's game length: the researched typical adult (#181.4).
 
-        The build prints what `animals/{id}.json` carries; the
-        model's guess never stands. A good build with no line
-        means the world's script changed under us: a person
-        looks, no fix round can help.
+        The game scales the model to this length, so the
+        researched adult stands, not the build's mesh reading
+        (fins and curves read long) and never the model's own
+        guess. The measured line must still be there: a good
+        build with no line means the world's script changed
+        under us, and a person looks (#140.3). Without a
+        sourced length the build's measurement stands, as
+        before.
         """
         measured = _measured_length(log, animal_id)
         if measured is None:
@@ -1221,11 +1253,10 @@ class AnimalMakerStage:
         path = ctx.job_dir / "animals" / f"{animal_id}.json"
         try:
             animal = json.loads(path.read_text(encoding="utf-8"))
-            animal["model"]["length"] = measured
+            animal["model"]["length"] = game_length if game_length else measured
         except (OSError, ValueError, KeyError, TypeError) as error:
             raise _Stopped(
-                f"{animal_id}: cannot write the measured length: {error}; "
-                "a person looks"
+                f"{animal_id}: cannot write the game length: {error}; a person looks"
             ) from error
         path.write_text(json.dumps(animal, indent=2), encoding="utf-8")
 

@@ -673,8 +673,10 @@ def test_edit_errors_exclude_unbuilt_plant_models(
     log = 'for animals/hammerhead.json: "length": 3.20 (real size)'
     stage = AnimalMakerStage(build=lambda sandbox, aid: {"ok": True, "log": log})
     ctx = SimpleNamespace(job_dir=job, check_budget=lambda: None)
-    errors = stage._build_and_check(ctx, tmp_path / "world", "hammerhead", 1)
+    errors = stage._build_and_check(ctx, tmp_path / "world", "hammerhead", 1, None)
     assert errors == ["animals/hammerhead.json: flippers too short"]
+    filed = json.loads((animals / "hammerhead.json").read_text())
+    assert filed["model"]["length"] == 3.20
 
 
 def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
@@ -1149,7 +1151,7 @@ def test_resume_skips_a_passed_animal_file(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())
     placed = json.loads(_animal_answer("capybara"))
-    placed["model"]["length"] = 0.233
+    placed["model"]["length"] = 1.1
     (tmp_path / "animals").mkdir()
     (tmp_path / "animals" / "capybara.json").write_text(json.dumps(placed))
     attempt = tmp_path / "tries" / "capybara" / "animal" / "1"
@@ -1380,8 +1382,8 @@ def test_prey_keeps_the_models_diet(tmp_path: Path) -> None:
     assert hunter["diet"] == ["berries"]
 
 
-def test_length_comes_from_the_build(tmp_path: Path) -> None:
-    """#140.3: the file's length is the build's measurement, not 0.61."""
+def test_length_comes_from_the_research(tmp_path: Path) -> None:
+    """#181.4: the file's length is the researched adult, not 0.233."""
     world = _world(tmp_path)
     _inputs(tmp_path)
     client = ScriptClient(
@@ -1392,8 +1394,27 @@ def test_length_comes_from_the_build(tmp_path: Path) -> None:
     )
     _stage().run(_ctx(tmp_path, world, client))
     made = json.loads((tmp_path / "animals" / "lynx.json").read_text())
-    assert made["model"]["length"] == 0.233
+    assert made["model"]["length"] == 1.1
     assert made["box"] == [0.45, 0.45, 0.65]
+
+
+def test_prey_length_comes_from_the_minset(tmp_path: Path) -> None:
+    """#181.4: a prey file's length is its set size, not 0.233."""
+    world = _world(tmp_path)
+    minset = _minset_with_prey()
+    minset["prey"]["size_cm"] = 120
+    _inputs(tmp_path, minset=minset)
+    client = ScriptClient(
+        [
+            _animal_answer("capybara"),
+            _edits_answer(),
+            _animal_answer("lynx"),
+            _edits_answer(),
+        ]
+    )
+    _stage().run(_ctx(tmp_path, world, client))
+    made = json.loads((tmp_path / "animals" / "capybara.json").read_text())
+    assert made["model"]["length"] == 1.2
 
 
 def test_build_without_a_measured_length_stops(tmp_path: Path) -> None:

@@ -3,6 +3,73 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #199
+  (builder 3fe2020,
+  98579f3)
+
+- .1: a spread job
+  carries spread.kind
+  and what plus
+  tiles; the worker
+  claims it and
+  remakes each listed
+  grid tile by code
+  with no client, so
+  $0 and no model
+  calls. Versions
+  and the pack land
+  on the job; cost
+  stays 0.0.
+- .1 skips: a tile
+  where the species
+  is off the survey,
+  off the list, or
+  out of habitat
+  skips with the
+  reason; place
+  cells and non-grid
+  tiles skip too.
+  Only the spread
+  species may leave
+  wanted.
+- .2: the species
+  file comes from
+  the world's
+  library, else a
+  live pack's
+  manifest copy,
+  staged into the
+  checkout for the
+  job and removed
+  after. Neither
+  means the job
+  fails (no file).
+- .3 (3fe2020):
+  unknown kinds
+  return before the
+  claim, staying
+  queued unowned.
+- .4: four tests in
+  test_worker.py: a
+  keyless run that
+  publishes the fit
+  tile and skips the
+  miss, a drifted
+  remake that fails
+  (remake_failed),
+  a pack-only lion
+  that spreads and
+  leaves no file,
+  and a listed-sea
+  home fitting a
+  coast tile.
+- Full suite: 1105
+  passed, 12
+  skipped; only the
+  known world
+  checkout failure
+  stays red.
+
 ## 2026-11-01: inbox #198
   (builder 8cf2083,
   bff41dd, 0be3d53)

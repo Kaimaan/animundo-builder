@@ -3,6 +3,69 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #198
+  (builder 8cf2083,
+  bff41dd, 0be3d53)
+
+- .1: a probe that
+  fails the world's
+  check returns a
+  blocked plan with
+  the reason, so the
+  area reconciles to
+  blocked; transient
+  faults still raise
+  to retry.
+- .2 why: 0927_0563
+  is 60% land on the
+  Mission Beach coast
+  (-17.8, 146.07)
+  with marine eco 150
+  over all of it; no
+  rainforest home
+  lists 150, and the
+  fallback ignored
+  the ecoregion, so
+  the tile failed the
+  check and waited.
+- .2 fix: a coast
+  cell with no home
+  for its land side
+  builds as sea when
+  a listed sea home
+  covers the eco
+  (coral_reef here);
+  the generic sea
+  never flips new
+  land (Tallinn still
+  no_home). Bundles
+  must list a listed
+  eco.
+- After the fix the
+  tile makes (sea,
+  coral_reef, passes
+  the check) and the
+  plan is code_only:
+  $0 to ship, with 2
+  optional improves
+  (hammerhead,
+  crocodile) at $0.84
+  total. Name: Sea
+  south of Great
+  Barrier Reef.
+- Cost: $0 spent and
+  $0 to ship; the
+  $0.02 survey is
+  sunk. The plan ran
+  on the neighbour
+  reef survey ($0,
+  synthetic for this
+  tile); the worker's
+  real survey may
+  vary the improves.
+  Nothing builds
+  without Kai's go.
+
 ## 2026-11-01: inbox #197
   (gates 1-4; .5 waits
   on Kai's go)

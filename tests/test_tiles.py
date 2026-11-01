@@ -16,7 +16,7 @@ from builder.tiles import (
     cell_level,
     home_for_cell,
     make_tile,
-    near_made_or_place,
+    near_made_place_or_noted,
     open_sea_entries,
     pick_species,
     place_cells,
@@ -1626,6 +1626,10 @@ def _open_sea_world(tmp_path: Path) -> Path:
             }
         )
     )
+    (world / "lands").mkdir(exist_ok=True)
+    (world / "lands" / "index.json").write_text(
+        json.dumps({"styles": [{"land": "boreal", "biome": 6}]})
+    )
     return world
 
 
@@ -1677,14 +1681,14 @@ def test_open_sea_tile_carries_sea_name_and_land(
     assert "blend" not in made
     assert made["sea"] == "gulf_of_finland"
     assert made["name"] == {"en": "Gulf of Finland", "fi": "Suomenlahti"}
-    assert made["land"] == "boreal_forest"
+    assert made["land"] == "boreal"
     assert made["land_share"] == 0.0
     assert made["sources"]["habitat"] == "spec04:open_ocean"
     assert made["sources"]["name"] == "evs:test"
-    assert made["sources"]["land"] == "nearest_coast:717"
+    assert made["sources"]["land"] == "lands/index.json:nearest_coast:717"
     assert made["sources"]["species"] == "gbif:density"
     assert made["species"]["playable"] == ["herring_gull"]
-    assert set(made["requires"]["homes"]) == {"open_sea", "boreal_forest"}
+    assert set(made["requires"]["homes"]) == {"open_sea"}
     assert made["level"] < 8
     validate("tile", made)
     assert seen["tile"] == "n_413_478"
@@ -1710,14 +1714,15 @@ def test_open_sea_tile_without_sea_stays_open_water(tmp_path: Path) -> None:
     assert blocked["reason"] == "open_water"
 
 
-def test_open_sea_tile_without_coast_home_has_no_land(tmp_path: Path) -> None:
-    """#177.1: no home on the nearest coast blocks the tile as no_land."""
+def test_open_sea_tile_without_coast_style_has_no_land(tmp_path: Path) -> None:
+    """#177.1: a coast biome with no land style blocks the tile as no_land."""
     world = _open_sea_world(tmp_path)
     _seas_file(tmp_path, {"n_413_478": "gulf_of_finland"})
     cells = _open_sea_cells(413, 478)
     for key, cell in cells.items():
         if cell[0] == 717:
             cell[0] = 999
+            cell[4] = 99
     grids = _grids(tmp_path, cells)
     made, blocked = make_tile(
         "n_413_478",
@@ -1731,14 +1736,16 @@ def test_open_sea_tile_without_coast_home_has_no_land(tmp_path: Path) -> None:
     assert blocked["reason"] == "no_land"
 
 
-def test_near_made_or_place_reaches_three_cells(tmp_path: Path) -> None:
-    """#177.6: a place or made tile within 3 cells counts, farther not."""
+def test_near_made_place_or_noted_reaches_three_cells(tmp_path: Path) -> None:
+    """#177.6: a place, made or noted tile within 3 cells counts, else not."""
     world = _world(tmp_path)
-    assert near_made_or_place("n_413_478", world, set()) is False
+    assert near_made_place_or_noted("n_413_478", world, set()) is False
     _region(world, "fi_test", [[416, 478]])
-    assert near_made_or_place("n_413_478", world, set()) is True
-    assert near_made_or_place("n_413_478", world, {"n_413_481"}) is True
+    assert near_made_place_or_noted("n_413_478", world, set()) is True
+    assert near_made_place_or_noted("n_413_478", world, {"n_413_481"}) is True
+    assert near_made_place_or_noted("n_413_478", world, set(), {"n_416_475"}) is True
     world = _world(tmp_path / "far")
     _region(world, "fi_test", [[417, 478]])
-    assert near_made_or_place("n_413_478", world, set()) is False
-    assert near_made_or_place("n_413_478", world, {"n_417_478"}) is False
+    assert near_made_place_or_noted("n_413_478", world, set()) is False
+    assert near_made_place_or_noted("n_413_478", world, {"n_417_478"}) is False
+    assert near_made_place_or_noted("n_413_478", world, set(), {"n_417_478"}) is False

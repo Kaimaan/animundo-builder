@@ -170,8 +170,8 @@ def _open_sea_name(tile: str, builder_root: Path, world: Path) -> dict[str, Any]
 
 def _nearest_land(
     tile: str, grids: dict[GridName, HabitatGrid]
-) -> tuple[int | None, str | None, int | None]:
-    """The nearest land cell: ecoregion, habitat, biome (#177.1).
+) -> tuple[int | None, int | None]:
+    """The nearest land cell's ecoregion and biome number (#177.1).
 
     Expanding rings around the cell, same grid; the first cell
     with an ecoregion wins, so the Gulf of Finland takes the
@@ -192,15 +192,24 @@ def _nearest_land(
                 except KeyError:
                     continue
                 if cell[0] is not None:
-                    return cell[0], habitat_grid.habitat(ncol, nrow), cell[4]
-    return None, None, None
+                    return cell[0], cell[4]
+    return None, None
 
 
-def near_made_or_place(tile: str, world: Path, made: set[str] | None = None) -> bool:
-    """Whether a made tile or place sits within 3 cells (#177.6).
+def near_made_place_or_noted(
+    tile: str,
+    world: Path,
+    made: set[str] | None = None,
+    noted: set[str] | None = None,
+) -> bool:
+    """Whether building reaches within 3 cells of this tile (#177.6).
 
-    Same grid, Chebyshev distance; `made` carries the published
-    tile ids the caller knows (the worker reads the groups).
+    Same grid, Chebyshev distance: a made tile, a hand-made
+    place, or a tile with border notes. `made` carries the
+    published ids the caller knows (the worker reads the
+    groups); `noted` the tiles with notes. Around a noted
+    tile counts the same 3 cells: players waiting there
+    want the sea made.
     """
     grid, col, row = parse_tile(tile)
     cells = place_cells(world)
@@ -209,9 +218,12 @@ def near_made_or_place(tile: str, world: Path, made: set[str] | None = None) -> 
             ncol, nrow = col + dcol, row + drow
             if not (0 <= ncol < CELLS and 0 <= nrow < CELLS):
                 continue
-            if tile_id(grid, ncol, nrow) in cells:
+            cell = tile_id(grid, ncol, nrow)
+            if cell in cells:
                 return True
-            if made is not None and tile_id(grid, ncol, nrow) in made:
+            if made is not None and cell in made:
+                return True
+            if noted is not None and cell in noted:
                 return True
     return False
 
@@ -1260,20 +1272,21 @@ def make_tile(
             return None, {"reason": "no_home", "habitat": habitat}
     house = homes.get(home, biomes[home])
     sea: dict[str, Any] | None = None
-    land_home: str | None = None
+    land_style: str | None = None
     land_eco: int | None = None
     if habitat == "open_ocean":
         # Open sea resolves before any species work: unnamed water
         # stays open_water, and the preview land is the nearest
-        # coast's home and ecoregion (#177.1, #177.2).
+        # coast's land style, so the Gulf of Finland is boreal
+        # (#177.1, #177.2).
         sea = _open_sea_name(tile, builder_root or BUILDER_ROOT, world)
         if sea is None:
             return None, {"reason": "open_water", "habitat": habitat}
-        land_eco, land_hab, land_biome = _nearest_land(tile, grids)
-        if land_eco is None or land_hab is None:
+        land_eco, land_biome = _nearest_land(tile, grids)
+        if land_eco is None:
             return None, {"reason": "no_land", "habitat": habitat}
-        land_home = home_for_cell(land_eco, land_hab, biomes, land_biome)
-        if land_home is None:
+        land_style = land_style_for(world, land_biome)
+        if land_style is None:
             return None, {"reason": "no_land", "habitat": habitat}
     blend: dict[str, Any] | None = None
     blend_home = home_for_cell(eco2, habitat, biomes) if eco2 is not None else None
@@ -1383,11 +1396,7 @@ def make_tile(
     if not playable:
         return None, _blocked("no_animal", habitat, wanted)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
-    needed = sorted(
-        {home}
-        | ({blend["home"]} if blend else set())
-        | ({land_home} if land_home is not None else set())
-    )
+    needed = sorted({home} | ({blend["home"]} if blend else set()))
     requires: dict[str, Any] = {
         "homes": needed,
         "biomes": list(needed),
@@ -1429,15 +1438,15 @@ def make_tile(
         },
     }
     if habitat == "open_ocean":
-        assert sea is not None and land_home is not None and land_eco is not None
+        assert sea is not None and land_style is not None and land_eco is not None
         del made_tile["ecoregion"]
         made_tile["sea"] = sea["sea"]
         made_tile["name"] = sea["name"]
-        made_tile["land"] = land_home
+        made_tile["land"] = land_style
         made_tile["land_share"] = round(land, 2)
         made_tile["sources"]["habitat"] = "spec04:open_ocean"
         made_tile["sources"]["name"] = sea["source"]
-        made_tile["sources"]["land"] = f"nearest_coast:{land_eco}"
+        made_tile["sources"]["land"] = f"lands/index.json:nearest_coast:{land_eco}"
     if blend is not None:
         made_tile["blend"] = blend
     if coast is not None:

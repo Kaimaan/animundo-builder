@@ -643,6 +643,18 @@ def test_code_job_makes_open_sea_near_a_made_tile(tmp_path: Path) -> None:
     assert job["error"] == "no_home"
 
 
+def test_code_job_makes_open_sea_near_a_noted_tile(tmp_path: Path) -> None:
+    """#177.6: notes 3 cells off let the open-sea tile through to making."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    store.requests["n_416_478"] = {"tile": "n_416_478", "notes": 3}
+    store.requests["n_417_478"] = {"tile": "n_417_478", "notes": 0}
+    worker = _flow_worker(tmp_path, store, _open_sea_cells())
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["error"] == "no_home"
+
+
 def test_broken_history_never_stops_the_tile(tmp_path: Path, monkeypatch: Any) -> None:
     """#165.3: a failing history write prints; the tile still ships."""
 

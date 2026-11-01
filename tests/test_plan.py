@@ -1179,6 +1179,10 @@ def _open_sea_world(tmp_path: Path) -> Path:
     data.mkdir(exist_ok=True)
     with gzip.open(data / "seas.json.gz", "wt", encoding="utf-8") as handle:
         json.dump({"cells": {"n_413_478": "gulf_of_finland"}}, handle)
+    (world / "lands").mkdir(exist_ok=True)
+    (world / "lands" / "index.json").write_text(
+        json.dumps({"styles": [{"land": "boreal", "biome": 6}]})
+    )
     return world
 
 

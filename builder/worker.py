@@ -1382,16 +1382,17 @@ class Worker:
         )
 
     def _near_made_tile(self, tile: str) -> bool:
-        """A made tile or place within 3 cells: the open-sea gate (#177.6).
+        """A made tile, place or noted tile within 3 cells (#177.6).
 
-        Made ids come from the group blobs covering the window;
-        places from the world's regions. Open sea grows from the
-        shore outward, never alone mid-ocean.
+        Made ids come from the group blobs covering the window,
+        places from the world's regions, noted tiles from the
+        border requests with notes. Open sea grows from the
+        shore outward, or where players wait, never alone.
         """
         import json
 
         from .grid import CELLS, group_path, parse_tile, tile_id
-        from .tiles import near_made_or_place
+        from .tiles import near_made_place_or_noted
 
         assert self.world is not None
         grid, col, row = parse_tile(tile)
@@ -1414,7 +1415,15 @@ class Worker:
                 except ValueError:
                     continue
                 made.update((group.get("tiles") or {}).keys())
-        return near_made_or_place(tile, self.world, made)
+        noted: set[str] = set()
+        for noted_tile, doc in self.store.list_requests():
+            try:
+                count = int((doc or {}).get("notes", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if count > 0:
+                noted.add(noted_tile)
+        return near_made_place_or_noted(tile, self.world, made, noted)
 
     def _tile_refused(self, tile: str, job_id: str, stage: str) -> bool:
         """An open-sea tile far from everything fails before making (#177.6)."""

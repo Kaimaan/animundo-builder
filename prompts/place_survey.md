@@ -17,7 +17,7 @@ A few web searches at most. Answer with JSON only, no prose.
   and in Finnish (`fi`), each written as in that language
   (Finnish takes a lower-case initial unless it is a proper noun).
 - `country`: the country it is in, in English.
-- `region_id`: the region file's id: `<two-letter country>_<place>`,
+- `region_id`: the place file's id: `<two-letter country>_<place>`,
   lowercase, like `au_great_barrier_reef`.
 - `animals`: the animals living there, best known to children
   first, each with `id` (from the list below only) and `source`

@@ -262,15 +262,15 @@ def test_survey_missing_lists_unfiled_finds(tmp_path: Path) -> None:
 
 def _file_world(tmp_path: Path) -> Path:
     world = tmp_path / "world"
-    regions = world / "regions"
-    regions.mkdir(parents=True)
-    (regions / "xx_test_reef.json").write_text(
+    places = world / "places"
+    places.mkdir(parents=True)
+    (places / "xx_test_reef.json").write_text(
         json.dumps(
             {
                 "id": "xx_test_reef",
                 "name": "Test Reef",
                 "center": {"lat": -16.7, "lon": 145.9},
-                "grid": {"grid": "z10", "tiles": [[927, 560]]},
+                "tiles": [[927, 560]],
             }
         )
     )
@@ -360,16 +360,16 @@ def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
 
 
 def test_file_places_falls_back_to_the_centre_tile(tmp_path: Path) -> None:
-    """#170.2: a region without grid tiles files under its centre."""
+    """#170.2: a place without tiles files under its centre."""
     from fake_store import FakeStore
 
     from builder.grid import tile_at
-    from builder.place import file_places, region_tiles
+    from builder.place import file_places, place_tiles
 
     world = tmp_path / "world"
-    regions = world / "regions"
-    regions.mkdir(parents=True)
-    (regions / "xx_test_reef.json").write_text(
+    places = world / "places"
+    places.mkdir(parents=True)
+    (places / "xx_test_reef.json").write_text(
         json.dumps(
             {
                 "id": "xx_test_reef",
@@ -379,10 +379,10 @@ def test_file_places_falls_back_to_the_centre_tile(tmp_path: Path) -> None:
     )
     survey_dir = _file_survey(tmp_path)
     store = FakeStore()
-    assert region_tiles(world, "xx_test_reef", "z10_0927_0560") == [
+    assert place_tiles(world, "xx_test_reef", "z10_0927_0560") == [
         tile_at(-16.7, 145.9)
     ]
-    assert region_tiles(world, "xx_missing", "z10_0927_0560") == ["z10_0927_0560"]
+    assert place_tiles(world, "xx_missing", "z10_0927_0560") == ["z10_0927_0560"]
     paths = file_places(store, world, survey_dir, "abc123")
     assert len(paths) == 1
     data = json.loads(store.blobs[paths[0]].decode("utf-8"))
@@ -420,7 +420,7 @@ def test_file_places_dates_an_old_survey_from_its_plan(tmp_path: Path) -> None:
 
 
 def test_improve_survey_writes_missing_too(tmp_path: Path) -> None:
-    """#170.3: an improve survey keeps finds the region still lacks."""
+    """#170.3: an improve survey keeps finds the world still lacks."""
     import gzip
 
     world = tmp_path / "world"
@@ -430,16 +430,6 @@ def test_improve_survey_writes_missing_too(tmp_path: Path) -> None:
     (world / "models" / "plants").mkdir(parents=True)
     (world / "models" / "plants" / "paddle_grass.json").write_text(
         json.dumps({"id": "paddle_grass"})
-    )
-    regions = world / "regions"
-    regions.mkdir()
-    (regions / "xx_test_reef.json").write_text(
-        json.dumps(
-            {
-                "id": "xx_test_reef",
-                "ground_cover": {"plants": [{"model": "paddle_grass"}]},
-            }
-        )
     )
     grid_path = tmp_path / "z10.json.gz"
     with gzip.open(grid_path, "wt", encoding="utf-8") as handle:
@@ -813,10 +803,10 @@ def test_reef_plan_lists_home_whale_and_plants(
     assert "plant_brown_seaweed_sargassum" in by_id
 
 
-def test_new_region_plan_still_lists_a_home(
+def test_new_place_plan_still_lists_a_home(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """#167.2: only existing regions skip the home item."""
+    """#167.2: only existing places skip the home item."""
     from builder.place import plan_place
 
     world = _needs_world()
@@ -958,28 +948,6 @@ def test_closest_plant_matches_reef_and_seabed_grounds() -> None:
     assert closest_plant("neptune_cup", ["reef"], grass_only, have) == "dugong_grass"
 
 
-def test_region_plants_seat_reef_in_water(tmp_path: Path) -> None:
-    """#184.1: a home plant whose file grows reef lands in water."""
-    import json
-
-    from builder.place import _region_plants
-
-    world = tmp_path / "world"
-    greens = world / "models" / "plants"
-    greens.mkdir(parents=True)
-    (greens / "table_coral.json").write_text(
-        json.dumps({"grows": {"on": ["reef"], "density": 0.2}})
-    )
-    (greens / "beach_naupaka.json").write_text(
-        json.dumps({"grows": {"on": ["sand"], "density": 0.3}})
-    )
-    home = {"plants": [{"model": "table_coral"}, {"model": "beach_naupaka"}]}
-    parts = _region_plants(home, tmp_path, world)
-    assert parts is not None
-    assert [p["id"] for p in parts["water"]] == ["table_coral"]
-    assert [p["id"] for p in parts["cover"]] == ["beach_naupaka"]
-
-
 def test_unmakeable_animals_are_blocked_not_built(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1066,7 +1034,7 @@ def test_cells_within_two() -> None:
     assert "z10_0000_0002" in edge
 
 
-def test_improve_tile_from_region() -> None:
+def test_improve_tile_from_place() -> None:
     world = _needs_world()
     assert improve_tile("z10_0927_0560", world) == "z10_0927_0560"
     tile = improve_tile("fi_nuuksio", world)
@@ -1076,13 +1044,13 @@ def test_improve_tile_from_region() -> None:
         "z10_0581_0296",
         "z10_0582_0296",
     }
-    with pytest.raises(SurveyError, match="neither a tile nor a region"):
+    with pytest.raises(SurveyError, match="neither a tile nor a place"):
         improve_tile("atlantis", world)
 
 
-def test_missing_plants_match_names_latin_and_region(tmp_path: Path) -> None:
-    """#167.1: the place's own plants are never planned again."""
-    from builder.place import _missing_plants, _plant_latins, _region_models
+def test_missing_plants_match_names_and_latin(tmp_path: Path) -> None:
+    """#167.1: the world's own plants are never planned again."""
+    from builder.place import _missing_plants, _plant_latins
 
     world = tmp_path / "world"
     plants_dir = world / "models" / "plants"
@@ -1090,15 +1058,8 @@ def test_missing_plants_match_names_latin_and_region(tmp_path: Path) -> None:
     (plants_dir / "dugong_grass.json").write_text(
         json.dumps({"id": "dugong_grass", "latin": "Halodule uninervis"})
     )
-    regions = world / "regions"
-    regions.mkdir()
-    (regions / "au_reef.json").write_text(
-        json.dumps(
-            {
-                "ground_cover": {"plants": [{"model": "halimeda", "on": ["seabed"]}]},
-                "plants": {"water": [{"id": "sea_fan"}]},
-            }
-        )
+    (plants_dir / "halimeda.json").write_text(
+        json.dumps({"id": "halimeda", "latin": "Halimeda"})
     )
     survey = {
         "plants": [
@@ -1110,13 +1071,11 @@ def test_missing_plants_match_names_latin_and_region(tmp_path: Path) -> None:
     missing, blocked = _missing_plants(
         {},
         survey,
-        ["dugong_grass"],
-        region_have=_region_models(world, "au_reef"),
+        ["dugong_grass", "halimeda"],
         latin_have=_plant_latins(world),
     )
     assert [slug for slug, _ in missing] == ["brown_seaweed_sargassum"]
     assert blocked == []
-    assert _region_models(world, "xx_nowhere") == set()
 
 
 def test_reef_improve_replay_plans_only_what_it_lacks(
@@ -1174,8 +1133,8 @@ def test_habitat_first_asks_matching_animals_first() -> None:
     ]
 
 
-def test_improve_habitats_from_region_and_tile() -> None:
-    """#167.4: residents' habitats for a region, the cell's for a tile."""
+def test_improve_habitats_from_place_and_tile() -> None:
+    """#167.4: residents' habitats for a place, the cell's for a tile."""
     from builder.place import improve_habitats
 
     world = _needs_world()
@@ -1190,27 +1149,26 @@ def test_improve_habitats_from_region_and_tile() -> None:
     assert improve_habitats(animals, world, "xx_nowhere", _habitat_grid()) == set()
 
 
-def test_region_residents_read_a_biome_place(tmp_path: Path) -> None:
-    """A biome place carries its species and its biome's fish."""
-    from builder.place import region_residents
+def test_place_residents_read_the_cast(tmp_path: Path) -> None:
+    """#167.4: a place carries its species lists, nothing else."""
+    from builder.place import place_residents
 
     world = tmp_path / "world"
-    (world / "regions").mkdir(parents=True)
-    (world / "regions" / "xx_place.json").write_text(
+    (world / "places").mkdir(parents=True)
+    (world / "places" / "xx_place.json").write_text(
         json.dumps(
             {
                 "id": "xx_place",
-                "biome": "xx_biome",
-                "species": {"playable": ["fox"], "prey": [], "predators": []},
+                "species": {
+                    "playable": ["fox", "perch"],
+                    "prey": ["perch"],
+                    "predators": ["fox"],
+                },
             }
         )
     )
-    (world / "biomes").mkdir(parents=True)
-    (world / "biomes" / "xx_biome.json").write_text(
-        json.dumps({"id": "xx_biome", "fish": [{"kind": "perch", "count": 6}]})
-    )
-    assert region_residents(world, "xx_place") == {"fox", "perch"}
-    assert region_residents(world, "xx_nowhere") == set()
+    assert place_residents(world, "xx_place") == {"fox", "perch"}
+    assert place_residents(world, "xx_nowhere") == set()
 
 
 def test_recorded_gbif_counts_keep_replay_offline(
@@ -1370,14 +1328,14 @@ def _grid_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
 
 
-def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
+def test_replayed_reef_home_job_reaches_checking_with_a_passing_place(
     tmp_path: Path,
 ) -> None:
-    """T99's done-when: the reef home replays, the region passes, take lays out."""
-    from builder.place import check_region_file, replay_place, take_place_job
+    """T99's done-when: the reef home replays, the place passes, take lays out."""
+    from builder.place import check_place_file, replay_place, take_place_job
 
     world = _needs_world()
-    reports, region_path = replay_place(
+    reports, place_path = replay_place(
         FIXTURES / "reef-home", tmp_path / "out", world, _grid_dir()
     )
     assert list(reports) == ["home_reef"]
@@ -1385,14 +1343,25 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
     job_dir = tmp_path / "out" / "replay"
     assert (job_dir / "home_reef" / "homes" / "reef.json").is_file()
     assert (job_dir / "home_reef" / "checks" / "newhome.json").is_file()
-    assert region_path == job_dir / "regions" / "au_great_barrier_reef.json"
-    region = json.loads(region_path.read_text())
-    assert region["id"] == "au_great_barrier_reef"
-    assert region["name"] == "Great Barrier Reef"
-    assert region["status"] == "draft"
+    assert place_path == job_dir / "places" / "au_great_barrier_reef.json"
+    place = json.loads(place_path.read_text())
+    assert place["id"] == "au_great_barrier_reef"
+    assert place["name"] == {"en": "Great Barrier Reef", "fi": "Iso Valliriutta"}
+    assert place["country"] == "Australia"
+    assert place["tiles"] == [[927, 560]]
+    assert place["live"] is False
+    assert place["points"] == [
+        {
+            "kind": "start",
+            "id": "default",
+            "lat": place["center"]["lat"],
+            "lon": place["center"]["lon"],
+            "facing": "north",
+        }
+    ]
     # The live reef filed its animals, whale since: surveyed
     # and filed means playable, in survey order.
-    assert region["animals"]["playable"] == [
+    assert place["species"]["playable"] == [
         "clownfish",
         "green_sea_turtle",
         "blue_tang",
@@ -1402,20 +1371,14 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
         "lionfish",
         "butterflyfish",
     ]
-    # #149.2: the adapted home's plants as the region's parts.
-    assert [p["id"] for p in region["plants"]["water"]] == [
-        "branching_staghorn_coral",
-        "closed_brain_coral",
-        "giant_sea_fan",
-    ]
     # #162.1: the replayed reef home has the deep sea.
     home = json.loads((job_dir / "home_reef" / "homes" / "reef.json").read_text())
     assert home["terrain"]["water_level"] == 40
     assert home["terrain"]["sea_depth"] == 35
     assert home["lakes"][0]["depth"] == 35
-    assert check_region_file(region_path, world) == []
+    assert check_place_file(place_path, world) == []
     dest = take_place_job(job_dir, tmp_path / "take", world)
-    assert (dest / "regions" / "au_great_barrier_reef.json").is_file()
+    assert (dest / "places" / "au_great_barrier_reef.json").is_file()
     assert (dest / "homes" / "reef.json").is_file()
     assert (dest / "report.html").is_file()
 
@@ -1441,7 +1404,7 @@ def test_replayed_place_files_its_missing_on_ship(tmp_path: Path) -> None:
     ]
     survey_path.write_text(json.dumps(survey))
     store = FakeStore()
-    reports, region_path = replay_place(
+    reports, _place_path = replay_place(
         place_dir, tmp_path / "out", world, _grid_dir(), store, "abc123"
     )
     assert list(reports) == ["home_reef"]
@@ -1455,15 +1418,13 @@ def test_replayed_place_files_its_missing_on_ship(tmp_path: Path) -> None:
     }
 
 
-def test_write_region_derives_groups_and_fish_from_filed_animals(
+def test_write_place_derives_groups_from_filed_animals(
     tmp_path: Path,
 ) -> None:
-    """T99: playable in survey order, hunters and hunted, fish swim."""
-    from builder.place import check_region_file, write_region
-    from builder.stages.region import seed_for_area
+    """T99: playable in survey order, hunters and hunted, no land."""
+    from builder.place import check_place_file, write_place
 
     world = _needs_world()
-    home = json.loads((world / "homes" / "sea.json").read_text())
     survey = {
         "tile": "z10_0582_0296",
         "name": {"en": "Helsinki shore", "fi": "Helsingin ranta"},
@@ -1477,65 +1438,23 @@ def test_write_region_derives_groups_and_fish_from_filed_animals(
         ],
         "plants": [],
     }
-    region = write_region(home, survey, tmp_path, world)
-    assert region["animals"] == {
+    place = write_place(survey, tmp_path, world)
+    assert place["id"] == "fi_test_shore"
+    assert place["name"] == {"en": "Helsinki shore", "fi": "Helsingin ranta"}
+    assert place["country"] == "Finland"
+    assert place["tiles"] == [[582, 296]]
+    assert place["live"] is False
+    assert place["species"] == {
         "playable": ["perch", "pike", "frog"],
         "predators": ["pike"],
         "prey": ["frog"],
     }
-    assert region["fish"] == [
-        {"kind": "perch", "count": 6},
-        {"kind": "pike", "count": 6},
-    ]
-    assert region["terrain"]["seed"] == seed_for_area("fi_test_shore")
-    assert region["status"] == "draft"
-    for stale in ("about", "based_on", "ecoregions", "habitat"):
-        assert stale not in region
+    assert place["points"][0]["kind"] == "start"
+    for land in ("terrain", "plants", "trees", "fish", "food", "animals", "status"):
+        assert land not in place
     path = tmp_path / "fi_test_shore.json"
-    path.write_text(json.dumps(region, indent=2))
-    assert check_region_file(path, world) == []
-
-
-def test_write_region_leaves_out_a_nameless_lake() -> None:
-    """#151: a home lake named "none" never reaches the region."""
-    from builder.place import write_region
-
-    world = _needs_world()
-    home = json.loads((world / "homes" / "sea.json").read_text())
-    home["lakes"] = [{"name": "none", "x": 0.5, "z": 0.36}]
-    survey = {
-        "tile": "z10_0582_0296",
-        "name": {"en": "Helsinki shore", "fi": "Helsingin ranta"},
-        "country": "Finland",
-        "region_id": "fi_test_shore",
-        "animals": [],
-        "plants": [],
-    }
-    region = write_region(home, survey, Path.cwd(), world)
-    assert region["lakes"] == []
-
-
-def test_write_region_leaves_out_treeless_none() -> None:
-    """#180.4: a home marking no trees "none" leaves trees out."""
-    from builder.place import write_region
-
-    world = _needs_world()
-    home = json.loads((world / "homes" / "examples" / "reef.json").read_text())
-    assert home["trees"] == {"density": "none", "mix": []}
-    survey = {
-        "tile": "z10_0927_0560",
-        "name": {"en": "Test reef", "fi": "Testiriutta"},
-        "country": "Australia",
-        "region_id": "xx_test_reef",
-        "animals": [],
-        "plants": [],
-    }
-    region = write_region(home, survey, Path.cwd(), world)
-    assert "trees" not in region
-    numbered = dict(home)
-    numbered["trees"] = {"density": 0.0, "mix": []}
-    region = write_region(numbered, survey, Path.cwd(), world)
-    assert region["trees"] == {"density": 0.0, "mix": []}
+    path.write_text(json.dumps(place, indent=2))
+    assert check_place_file(path, world) == []
 
 
 def test_request_build_local_rejects_a_split_answers_dir(tmp_path: Path) -> None:

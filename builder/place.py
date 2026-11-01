@@ -72,7 +72,7 @@ def survey_schema(ids: list[str]) -> dict[str, Any]:
             },
             "region_id": {
                 "type": "string",
-                "description": "The region file's id, like au_great_barrier_reef.",
+                "description": "The place file's id, like au_great_barrier_reef.",
             },
             "animals": {
                 "type": "array",
@@ -276,7 +276,7 @@ def check_survey(
     if not isinstance(data["region_id"], str) or not re.fullmatch(
         r"[a-z]{2}_[a-z0-9_]+", data["region_id"]
     ):
-        raise SurveyError(f"{data['region_id']} is no region id")
+        raise SurveyError(f"{data['region_id']} is no place id")
     tile = data["tile"]
     try:
         col, row = parse_tile(tile)
@@ -345,7 +345,7 @@ def check_survey(
         "plants": plants,
         "food": [{"name": e["name"], "source": e["source"]} for e in data["food"]],
         "wanted": [w for w in want if w in by_id],
-        "missing": _survey_missing(kept, plants, world, habitat, data["region_id"]),
+        "missing": _survey_missing(kept, plants, world, habitat),
         "surveyed_at": (recorded or {}).get("surveyed_at") or _today(),
         "budget_usd": budget_usd,
         "gbif_counts": counts,
@@ -364,7 +364,6 @@ def _survey_missing(
     plants: list[dict[str, Any]],
     world: Path,
     part: str,
-    region_id: str,
 ) -> list[dict[str, str]]:
     """What the survey found that the world doesn't have yet (#170.1).
 
@@ -387,7 +386,6 @@ def _survey_missing(
         {},
         {"plants": plants},
         have,
-        region_have=_region_models(world, region_id),
         latin_have=_plant_latins(world),
     )
     for slug, _grounds in slugs:
@@ -409,7 +407,7 @@ def plan_place(
     """The §7 plan from a place survey (T98), not from the grid.
 
     A home item when `home_from` is an example (examples are not
-    buildable) — never for an existing region, where `--improve`
+    buildable) — never for an existing place, where `--improve`
     adds animals and plants only, no home and no terrain change
     (#167.2). Each unfiled survey animal with its food, the
     children's animals first; one findable plant per kind the
@@ -440,7 +438,7 @@ def plan_place(
         return spent + estimate <= budget
 
     home_from = survey["home_from"]
-    existing = (world / "regions" / f"{survey['region_id']}.json").is_file()
+    existing = (world / "places" / f"{survey['region_id']}.json").is_file()
     if home_from.startswith("examples/") and not existing:
         stem = home_from.split("/")[-1]
         estimate = ITEM_ESTIMATES["home"]
@@ -487,7 +485,6 @@ def plan_place(
         home,
         survey,
         have,
-        region_have=_region_models(world, survey["region_id"]),
         latin_have=_plant_latins(world),
     )
     blocked.extend(not_plants)
@@ -513,7 +510,7 @@ def plan_place(
         and e["id"] not in unplanned
         and not (world / "animals" / f"{e['id']}.json").is_file()
     ]
-    residents = region_residents(world, survey["region_id"])
+    residents = place_residents(world, survey["region_id"])
     looked_for: list[str] = []
     if residents:
         habitats: set[str] = set()
@@ -559,28 +556,6 @@ def _common_slug(name: str) -> str:
     return plant_slug(re.sub(r"\s*\([^()]*\)\s*$", "", name))
 
 
-def _region_models(world: Path, region_id: str) -> set[str]:
-    """Plant models an existing region already carries (#167.1)."""
-    try:
-        region = json.loads(
-            (world / "regions" / f"{region_id}.json").read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError):
-        return set()
-    models: set[str] = set()
-    ground = region.get("ground_cover") or {}
-    for entry in ground.get("plants", []) or []:
-        if isinstance(entry, dict) and entry.get("model"):
-            models.add(str(entry["model"]))
-    plants = region.get("plants") or {}
-    groups = plants.values() if isinstance(plants, dict) else [plants]
-    for group in groups:
-        for entry in group or []:
-            if isinstance(entry, dict) and entry.get("id"):
-                models.add(str(entry["id"]))
-    return models
-
-
 def _plant_latins(world: Path) -> dict[str, str]:
     """Lower Latin name to plant file stem, for survey matching (#167.1)."""
     latins: dict[str, str] = {}
@@ -600,7 +575,6 @@ def _missing_plants(
     survey: dict[str, Any],
     have: list[str],
     *,
-    region_have: set[str] | None = None,
     latin_have: dict[str, str] | None = None,
 ) -> tuple[list[tuple[str, list[str]]], list[dict[str, str]]]:
     """Named plants with no model yet: the home's, then the survey's.
@@ -610,11 +584,10 @@ def _missing_plants(
     grows on when the home says. A survey plant whose GBIF
     kingdom is outside Plantae and Fungi is blocked, never
     built (#146.2). A survey plant the place already has is
-    skipped: the common name without parentheses, the Latin
-    against the world's plant files (or as a stem), and the
-    improved region's own models (#167.1).
+    skipped: the common name without parentheses, and the Latin
+    against the world's plant files (or as a stem) (#167.1).
     """
-    have_all = set(have) | (region_have or set())
+    have_all = set(have)
     latin_have = latin_have or {}
     missing: list[tuple[str, list[str]]] = []
     blocked: list[dict[str, str]] = []
@@ -662,20 +635,19 @@ def write_plan(out_dir: Path, plan: dict[str, Any]) -> Path:
     return path
 
 
-def region_tiles(world: Path, region_id: str, survey_tile: str) -> list[str]:
+def place_tiles(world: Path, place_id: str, survey_tile: str) -> list[str]:
     """The tiles a place's wanted list is filed under (#170.2).
 
-    The region file's own grid tiles; its centre's tile when it
-    has none; the surveyed tile when the region isn't filed yet.
+    The place file's own tiles; its centre's tile when it has
+    none; the surveyed tile when the place isn't filed yet.
     """
     try:
-        region = json.loads(
-            (world / "regions" / f"{region_id}.json").read_text(encoding="utf-8")
+        place = json.loads(
+            (world / "places" / f"{place_id}.json").read_text(encoding="utf-8")
         )
     except (OSError, ValueError):
         return [survey_tile]
-    grid = region.get("grid") if isinstance(region, dict) else None
-    listed = grid.get("tiles") if isinstance(grid, dict) else None
+    listed = place.get("tiles") if isinstance(place, dict) else None
     if isinstance(listed, list) and listed:
         found = sorted(
             tile_id(cell[0], cell[1])
@@ -685,7 +657,7 @@ def region_tiles(world: Path, region_id: str, survey_tile: str) -> list[str]:
             and all(isinstance(v, int) and not isinstance(v, bool) for v in cell)
         )
         return found or [survey_tile]
-    center = region.get("center") if isinstance(region, dict) else None
+    center = place.get("center") if isinstance(place, dict) else None
     lat = center.get("lat") if isinstance(center, dict) else None
     lon = center.get("lon") if isinstance(center, dict) else None
     if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
@@ -706,7 +678,7 @@ def file_places(
     from .build import publish_places
 
     survey = json.loads((survey_dir / "survey.json").read_text(encoding="utf-8"))
-    region_id = survey["region_id"]
+    place_id = survey["region_id"]
     surveyed_at = survey.get("surveyed_at")
     if not surveyed_at:
         plan_path = survey_dir / "plan.json"
@@ -721,31 +693,14 @@ def file_places(
     if not surveyed_at:
         surveyed_at = _today()
     entry = {
-        "region": region_id,
+        "region": place_id,
         "wanted": survey.get("missing", []),
         "surveyed_at": surveyed_at,
     }
     paths = []
-    for tile in region_tiles(world, region_id, survey["tile"]):
+    for tile in place_tiles(world, place_id, survey["tile"]):
         paths.append(publish_places(tile, entry, store, world_commit))
     return paths
-
-
-#: Fish near the player in a draft: a modest school each; the
-#: reviewer tunes it.
-DRAFT_FISH_COUNT = 6
-
-
-def _region_keys(world: Path) -> set[str]:
-    """The region schema's own keys, fresh from the checkout.
-
-    A made home carries extras (`about`, `based_on`,
-    `ecoregions`, `habitat`) the region must not keep.
-    """
-    schema = json.loads(
-        (world / "schemas" / "region.schema.json").read_text(encoding="utf-8")
-    )
-    return set(schema["properties"])
 
 
 def _animal_file(world: Path, job_dir: Path, animal_id: str) -> dict[str, Any] | None:
@@ -758,113 +713,25 @@ def _animal_file(world: Path, job_dir: Path, animal_id: str) -> dict[str, Any] |
     return None
 
 
-#: Density for a region plant whose file names none: modest,
-#: for a draft a person reviews.
-DRAFT_PLANT_DENSITY = 0.05
-
-
-def _plant_file(world: Path, job_dir: Path, model: str) -> dict[str, Any] | None:
-    """The plant's file: the world's, else the job's made one."""
-    filed = world / "models" / "plants" / f"{model}.json"
-    if filed.is_file():
-        return json.loads(filed.read_text(encoding="utf-8"))
-    for path in sorted(job_dir.glob(f"*/models/plants/{model}.json")):
-        return json.loads(path.read_text(encoding="utf-8"))
-    return None
-
-
-def _region_plants(
-    home: dict[str, Any], job_dir: Path, world: Path
-) -> dict[str, Any] | None:
-    """The home's plants as the region's parts (game 0043).
-
-    Each entry keeps its model as the id and takes its part
-    and density from the plant file's grows: seabed and reef
-    grow in water, everything else in cover. A plant with no file
-    follows its entry's grounds; one with no density takes a
-    modest default. Trees stay out: the old home names
-    shapes, never species. A home already in parts passes
-    through; one with no plants leaves the key out.
-    """
-    listed = home.get("plants", [])
-    if isinstance(listed, dict):
-        return listed
-    cover: list[dict[str, Any]] = []
-    water: list[dict[str, Any]] = []
-    for entry in listed:
-        if not isinstance(entry, dict) or not entry.get("model"):
-            continue
-        model = entry["model"]
-        grows = (_plant_file(world, job_dir, model) or {}).get("grows", {})
-        if not isinstance(grows, dict):
-            grows = {}
-        ons = grows.get("on") or ([entry.get("on")] if entry.get("on") else [])
-        part = water if "seabed" in ons or "reef" in ons else cover
-        density = grows.get("density")
-        if not isinstance(density, (int, float)) or not 0 < density <= 1:
-            density = DRAFT_PLANT_DENSITY
-        part.append({"id": model, "density": density})
-    plants: dict[str, Any] = {}
-    if cover:
-        plants["cover"] = cover
-    if water:
-        plants["water"] = water
-    return plants or None
-
-
-def write_region(
-    home: dict[str, Any],
+def write_place(
     survey: dict[str, Any],
     job_dir: Path,
     world: Path,
 ) -> dict[str, Any]:
-    """The draft region from the made home and the survey, by code.
+    """The draft place from the survey, by code (#202.3).
 
-    The land is the home's own sections (terrain, palette, trees,
-    ground cover, lakes, food); the meta is the survey's (name,
-    country, centre). Nameless waters and places are left out
-    (#151); the home's plants become the region's parts
-    (#149.2). Playable is every surveyed animal already
-    filed or made by this job, in survey order; predators hunt a
-    place animal, prey are hunted by one, fish swim. The seed is
-    the region id's own, so the land stays put; the status is
-    draft until a person reviews it.
+    A name and points over ordinary tiles, with no land: id,
+    both names, country, centre, the surveyed tile, the cast,
+    and the start at the centre. Playable is every surveyed
+    animal already filed or made by this job, in survey order;
+    predators hunt a place animal, prey are hunted by one.
+    `live` is false: the game plays the region file until a
+    person has played the place (#205).
     """
     from .grid import center
-    from .stages.region import drop_nameless, seed_for_area
 
-    region = drop_nameless({k: v for k, v in home.items() if k in _region_keys(world)})
-    for key in ("ice", "caves"):
-        if not isinstance(region.get(key), dict):
-            # Old homes mark "none"; new regions leave it out.
-            region.pop(key, None)
-    trees = region.get("trees")
-    if (
-        isinstance(trees, dict)
-        and not trees.get("mix")
-        and not isinstance(trees.get("density"), (int, float))
-    ):
-        # Old homes mark no trees "none"; new regions leave them
-        # out, since the schema wants a number (#180.4).
-        region.pop("trees", None)
-    translated = _region_plants(home, job_dir, world)
-    if translated is None:
-        region.pop("plants", None)
-    else:
-        region["plants"] = translated
-    region_id = survey["region_id"]
-    region["id"] = region_id
-    region["name"] = survey["name"]["en"]
-    region["country"] = survey["country"]
+    col, row = parse_tile(survey["tile"])
     lat, lon = center(survey["tile"])
-    region["center"] = {"lat": lat, "lon": lon}
-    region["author"] = "Animundo Builder"
-    region["status"] = "draft"
-    region.setdefault("terrain", {})["seed"] = seed_for_area(region_id)
-    sources = [s for s in home.get("sources", []) if isinstance(s, str) and s.strip()]
-    if not sources:
-        sources = _survey_sources(survey)
-    region["sources"] = sources
     playable: list[str] = []
     files: dict[str, dict[str, Any]] = {}
     for entry in survey.get("animals", []):
@@ -873,106 +740,63 @@ def write_region(
             continue
         playable.append(entry["id"])
         files[entry["id"]] = data
-    region["animals"] = {
-        "playable": playable,
-        "predators": sorted(
-            a for a, d in files.items() if set(d.get("hunts", [])) & set(playable)
-        ),
-        "prey": sorted(
-            {p for d in files.values() for p in d.get("hunts", [])} & set(playable)
-        ),
+    return {
+        "id": survey["region_id"],
+        "name": {"en": survey["name"]["en"], "fi": survey["name"]["fi"]},
+        "country": survey["country"],
+        "center": {"lat": lat, "lon": lon},
+        "tiles": [[col, row]],
+        "species": {
+            "playable": playable,
+            "predators": sorted(
+                a for a, d in files.items() if set(d.get("hunts", [])) & set(playable)
+            ),
+            "prey": sorted(
+                {p for d in files.values() for p in d.get("hunts", [])} & set(playable)
+            ),
+        },
+        "points": [
+            {
+                "kind": "start",
+                "id": "default",
+                "lat": lat,
+                "lon": lon,
+                "facing": "north",
+            }
+        ],
+        "live": False,
     }
-    region["fish"] = [
-        {"kind": a, "count": DRAFT_FISH_COUNT}
-        for a in playable
-        if "fish" in files[a].get("tags", [])
-    ]
-    return region
 
 
-def _survey_sources(survey: dict[str, Any]) -> list[str]:
-    """The survey's own sources, when the home names none."""
-    sources: list[str] = []
-    for entry in survey.get("animals", []):
-        source = entry.get("source")
-        if isinstance(source, str) and source.strip() and source not in sources:
-            sources.append(source)
-    for entry in survey.get("plants", []):
-        source = entry.get("source")
-        if isinstance(source, str) and source.strip() and source not in sources:
-            sources.append(source)
-    return sources or ["GBIF.org"]
-
-
-def check_region_file(path: Path, world: Path) -> list[str]:
-    """The world's own region checks over a draft file; [] when clean."""
-    import subprocess
-    import sys
-
+def check_place_file(path: Path, world: Path) -> list[str]:
+    """The world's place schema over a draft file; [] when clean."""
     import jsonschema
 
     schema = json.loads(
-        (world / "schemas" / "region.schema.json").read_text(encoding="utf-8")
+        (world / "schemas" / "place.schema.json").read_text(encoding="utf-8")
     )
     draft = json.loads(path.read_text(encoding="utf-8"))
     try:
         jsonschema.validate(draft, schema)
     except jsonschema.ValidationError as error:
-        return [f"the draft breaks the region schema: {error.message}"]
-    tool = world / "tools" / "validate_region.py"
-    proc = subprocess.run(
-        [sys.executable, str(tool), str(path)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=120,
-    )
-    if proc.returncode == 0:
-        return []
-    return [
-        line.strip()
-        for line in (proc.stdout + proc.stderr).splitlines()
-        if line.strip()
-    ] or ["the region check failed"]
+        return [f"the draft breaks the place schema: {error.message}"]
+    return []
 
 
-def _place_home(
-    plan: dict[str, Any], job_dir: Path, survey: dict[str, Any], world: Path
-) -> dict[str, Any]:
-    """The job's made home, else the survey's own `home_from` file.
-
-    An improve job on a filed home makes no home item; the region
-    still needs its land.
-    """
-    for item in plan.get("items", []):
-        if item.get("kind") != "home":
-            continue
-        made = sorted((job_dir / item["id"] / "homes").glob("*.json"))
-        if made:
-            return json.loads(made[0].read_text(encoding="utf-8"))
-    home_from = survey["home_from"]
-    path = world / "homes" / f"{home_from}.json"
-    if not path.is_file():
-        raise ValueError(f"the job made no home and {home_from} is not filed")
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_job_region(
+def write_job_place(
     place_dir: Path, job_dir: Path, world: Path
 ) -> tuple[Path, list[str]]:
-    """The job's draft region, and the world's verdict on it.
+    """The job's draft place, and the world's verdict on it.
 
-    Writes `regions/<region_id>.json` under the job dir; the
-    problems are [] when the draft passes. Take lays it out.
+    Writes `places/<id>.json` under the job dir; the problems
+    are [] when the draft passes. Take lays it out.
     """
     survey = json.loads((place_dir / "survey.json").read_text(encoding="utf-8"))
-    plan = json.loads((place_dir / "plan.json").read_text(encoding="utf-8"))
-    home = _place_home(plan, job_dir, survey, world)
-    region = write_region(home, survey, job_dir, world)
-    out = job_dir / "regions" / f"{survey['region_id']}.json"
+    place = write_place(survey, job_dir, world)
+    out = job_dir / "places" / f"{survey['region_id']}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(region, indent=2) + "\n", encoding="utf-8")
-    return out, check_region_file(out, world)
+    out.write_text(json.dumps(place, indent=2) + "\n", encoding="utf-8")
+    return out, check_place_file(out, world)
 
 
 def replay_place(
@@ -986,8 +810,8 @@ def replay_place(
     """Rebuild a place job from its own answers: no key, no cost.
 
     The plan and survey come from the place folder, the answers
-    from its `items/` records; then the job writes its region.
-    Anything failing — an item, the region — raises instead of
+    from its `items/` records; then the job writes its place.
+    Anything failing — an item, the place — raises instead of
     reaching review. With a store, the shipped job files its
     survey's `missing` as #170.2 says, with no extra step (#188.4).
     """
@@ -995,12 +819,12 @@ def replay_place(
 
     plan = json.loads((place_dir / "plan.json").read_text(encoding="utf-8"))
     reports = replay_request(plan["tile"], place_dir, out_dir, world, grid_dir)
-    region_path, problems = write_job_region(place_dir, out_dir / JOB_ID, world)
+    place_path, problems = write_job_place(place_dir, out_dir / JOB_ID, world)
     if problems:
-        raise ValueError(f"the draft region fails the world's checks: {problems[0]}")
+        raise ValueError(f"the draft place fails the world's checks: {problems[0]}")
     if store is not None:
         file_places(store, world, place_dir, world_commit)
-    return reports, region_path
+    return reports, place_path
 
 
 def record_place(
@@ -1042,19 +866,19 @@ def record_place(
         return ctx
 
     reports = run_request(plan["tile"], plan, out_dir, world, grid_dir, make_ctx, place)
-    region_path, problems = write_job_region(place_dir, out_dir / JOB_ID, world)
+    place_path, problems = write_job_place(place_dir, out_dir / JOB_ID, world)
     if problems:
-        raise ValueError(f"the draft region fails the world's checks: {problems[0]}")
+        raise ValueError(f"the draft place fails the world's checks: {problems[0]}")
     if store is not None:
         file_places(store, world, place_dir, world_commit)
-    return reports, region_path
+    return reports, place_path
 
 
 def take_place_job(job_dir: Path, out_dir: Path, world: Path) -> Path:
     """A place job's checked files, laid out like animundo-world.
 
-    Each item's take dirs plus the job's draft region; every
-    item passes the world's draft check and the region its own,
+    Each item's take dirs plus the job's draft place; every
+    item passes the world's draft check and the place its own,
     or the take stops with the first problems.
     """
     from .build import TAKE_DIRS, check_draft, take_report
@@ -1063,7 +887,7 @@ def take_place_job(job_dir: Path, out_dir: Path, world: Path) -> Path:
     if dest.exists():
         raise ValueError(f"{dest} is already taken; clear it first")
     for item_dir in sorted(p for p in job_dir.iterdir() if p.is_dir()):
-        if item_dir.name == "regions":
+        if item_dir.name == "places":
             continue
         for name in TAKE_DIRS:
             root = item_dir / name
@@ -1073,24 +897,42 @@ def take_place_job(job_dir: Path, out_dir: Path, world: Path) -> Path:
                 target = dest / name / path.relative_to(root)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(path.read_bytes())
-    regions = job_dir / "regions"
-    if regions.is_dir():
-        for path in sorted(regions.glob("*.json")):
-            target = dest / "regions" / path.name
+    places = job_dir / "places"
+    if places.is_dir():
+        for path in sorted(places.glob("*.json")):
+            target = dest / "places" / path.name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(path.read_bytes())
-            problems = check_region_file(target, world)
+            problems = check_place_file(target, world)
             if problems:
-                raise ValueError(f"{path.name} fails the region checks: {problems[0]}")
-    problems = check_draft(dest, world)
-    if problems:
-        raise ValueError(f"the take fails the draft check: {problems[0]}")
+                raise ValueError(f"{path.name} fails the place checks: {problems[0]}")
+    if _has_draft_content(dest):
+        problems = check_draft(dest, world)
+        if problems:
+            raise ValueError(f"the take fails the draft check: {problems[0]}")
     take_report(dest)
     return dest
 
 
-def place_of(region_id: str, survey: dict[str, Any]) -> dict[str, str]:
-    """The intake's place: its region id and its own home (#175.2).
+#: Take dirs the world's draft check reads (its CONTENT, minus
+#: homes/ which no take checks that way). A take of only a place
+#: and homes skips it: the place passed its schema above, the
+#: home its build checks. When the tool reads places/, list it.
+_DRAFT_CONTENT_DIRS = ("regions", "animals", "models", "assets", "locale")
+
+
+def _has_draft_content(dest: Path) -> bool:
+    """Whether the take holds files the world's draft check reads."""
+    return any(
+        path.is_file()
+        for name in _DRAFT_CONTENT_DIRS
+        for path in (dest / name).rglob("*")
+        if (dest / name).is_dir()
+    )
+
+
+def place_of(place_id: str, survey: dict[str, Any]) -> dict[str, str]:
+    """The intake's place: its place id and its own home (#175.2).
 
     The home is the `home_from` stem (`examples/reef` is the
     `reef` home); empty when the survey names none, and the
@@ -1098,54 +940,27 @@ def place_of(region_id: str, survey: dict[str, Any]) -> dict[str, str]:
     """
     home_from = str(survey.get("home_from") or "")
     home = home_from.split("/")[-1] if home_from else ""
-    return {"id": region_id, "home": home}
+    return {"id": place_id, "home": home}
 
 
-def region_residents(world: Path, region_id: str) -> set[str]:
-    """Animal ids an existing region already carries (#167.4).
-
-    A place on a `biome` names its cast in `species`, as a tile
-    does (game 0043), and swims its biome's fish when it writes
-    none of its own: those count too, as the resolved place
-    carries them.
-    """
+def place_residents(world: Path, place_id: str) -> set[str]:
+    """Animal ids an existing place already carries (#167.4)."""
     try:
-        region = json.loads(
-            (world / "regions" / f"{region_id}.json").read_text(encoding="utf-8")
+        place = json.loads(
+            (world / "places" / f"{place_id}.json").read_text(encoding="utf-8")
         )
     except (OSError, ValueError):
         return set()
     residents: set[str] = set()
-    key = "species" if region.get("biome") else "animals"
-    animals = region.get(key) or {}
-    groups = animals.values() if isinstance(animals, dict) else [animals]
+    species = place.get("species") or {}
+    groups = species.values() if isinstance(species, dict) else [species]
     for group in groups:
         for entry in group or []:
             if isinstance(entry, str):
                 residents.add(entry)
             elif isinstance(entry, dict) and entry.get("id"):
                 residents.add(str(entry["id"]))
-    fish = region.get("fish", [])
-    if not isinstance(fish, list) or (not fish and region.get("biome")):
-        fish = _biome_fish(world, region.get("biome"))
-    for entry in fish or []:
-        if isinstance(entry, dict) and entry.get("kind"):
-            residents.add(str(entry["kind"]))
     return residents
-
-
-def _biome_fish(world: Path, biome_id: Any) -> list[Any]:
-    """The biome's fish list, or nothing without one."""
-    if not isinstance(biome_id, str):
-        return []
-    try:
-        biome = json.loads(
-            (world / "biomes" / f"{biome_id}.json").read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError):
-        return []
-    fish = biome.get("fish", [])
-    return list(fish) if isinstance(fish, list) else []
 
 
 def improve_habitats(
@@ -1156,7 +971,7 @@ def improve_habitats(
 ) -> set[str]:
     """The place's habitats for `--improve` asks (#167.4).
 
-    A region's own: its residents' habitats, so the survey asks
+    A place's own: its residents' habitats, so the survey asks
     for more of what lives there. A bare tile's: the cell's grid
     habitat, the only signal before the answer.
     """
@@ -1165,7 +980,7 @@ def improve_habitats(
         return {habitat_grid.habitat(col, row)}
     except (ValueError, KeyError):
         pass
-    residents = region_residents(world, improve_arg)
+    residents = place_residents(world, improve_arg)
     by_id = {animal["id"]: animal for animal in animals}
     habitats: set[str] = set()
     for resident in residents:
@@ -1183,15 +998,15 @@ def habitat_first(
 
 
 def improve_tile(improve: str, world: Path) -> str:
-    """The surveyed tile for `--improve`: a tile id, or a region's own."""
+    """The surveyed tile for `--improve`: a tile id, or a place's own."""
     try:
         parse_tile(improve)
         return improve
     except ValueError:
         pass
-    path = world / "regions" / f"{improve}.json"
+    path = world / "places" / f"{improve}.json"
     if not path.is_file():
-        raise SurveyError(f"{improve} is neither a tile nor a region")
-    region = json.loads(path.read_text(encoding="utf-8"))
-    center = region.get("center", {})
+        raise SurveyError(f"{improve} is neither a tile nor a place")
+    place = json.loads(path.read_text(encoding="utf-8"))
+    center = place.get("center", {})
     return tile_at(float(center["lat"]), float(center["lon"]))

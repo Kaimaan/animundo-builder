@@ -313,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
     survey.add_argument(
         "--improve",
         default=None,
-        help="Survey an existing place: a region id or a tile id.",
+        help="Survey an existing place: a place id or a tile id.",
     )
     survey.add_argument(
         "--budget", type=float, required=True, help="The request's budget in USD."

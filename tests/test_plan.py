@@ -891,10 +891,10 @@ def test_plan_names_direction_from_nearest_place() -> None:
     }
 
 
-def _reef_region(world: Path) -> None:
-    regions = world / "regions"
-    regions.mkdir(exist_ok=True)
-    (regions / "au_great_barrier_reef.json").write_text(
+def _reef_place(world: Path) -> None:
+    places = world / "places"
+    places.mkdir(exist_ok=True)
+    (places / "au_great_barrier_reef.json").write_text(
         json.dumps(
             {
                 "id": "au_great_barrier_reef",
@@ -905,12 +905,12 @@ def _reef_region(world: Path) -> None:
     )
 
 
-def test_plan_names_from_the_nearest_region(tmp_path: Path) -> None:
+def test_plan_names_from_the_nearest_place(tmp_path: Path) -> None:
     """#169.2: a reef neighbour is named from the reef, both languages."""
     from builder.grid import center
 
     world = _world(tmp_path)
-    _reef_region(world)
+    _reef_place(world)
     lat, lon = center("z10_0927_0559")
     named = plan_name("open_ocean", lat, lon, world)
     assert named["en"] == "Open ocean north of Great Barrier Reef – Green Island"
@@ -920,11 +920,11 @@ def test_plan_names_from_the_nearest_region(tmp_path: Path) -> None:
 
 
 def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
-    """#169.2: where a curated name exists, the region doesn't rename it."""
+    """#169.2: where a curated name exists, the place doesn't rename it."""
     world = _world(tmp_path)
-    regions = world / "regions"
-    regions.mkdir(exist_ok=True)
-    (regions / "fi_nuuksio.json").write_text(
+    places = world / "places"
+    places.mkdir(exist_ok=True)
+    (places / "fi_nuuksio.json").write_text(
         json.dumps(
             {
                 "id": "fi_nuuksio",
@@ -989,10 +989,10 @@ def test_plan_probe_reraises_a_real_tile_error(
         )
 
 
-def test_open_water_plan_names_its_region_neighbour(tmp_path: Path) -> None:
+def test_open_water_plan_names_its_place_neighbour(tmp_path: Path) -> None:
     """#169.2: z10_0927_0559's plan points from the Great Barrier Reef."""
     world = _world(tmp_path)
-    _reef_region(world)
+    _reef_place(world)
     path = tmp_path / "z10.json.gz"
     with gzip.open(path, "wt", encoding="utf-8") as handle:
         json.dump(

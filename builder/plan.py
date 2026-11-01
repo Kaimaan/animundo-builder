@@ -65,8 +65,8 @@ _FI_VOWELS = frozenset("aeiouyäöåAEIOUYÄÖÅ")
 def _fi_genitive(base: str) -> str:
     """The Finnish genitive of a place name, by rule (#169.2).
 
-    The world's region files carry no genitive field yet, so a
-    compass fallback derives it: `Nuuksio` → `Nuuksion`,
+    The world's place files carry no genitive field yet, so
+    a compass fallback derives it: `Nuuksio` → `Nuuksion`,
     `Green Island` → `Green Islandin`. A surveyed name always
     wins over this guess.
     """
@@ -78,30 +78,30 @@ def _fi_genitive(base: str) -> str:
     return word + "in"
 
 
-def region_places(world: Path) -> list[tuple[str, str, str, float, float]]:
-    """The world's hand-made regions as plan-name places (#169.2).
+def named_places(world: Path) -> list[tuple[str, str, str, float, float]]:
+    """The world's places as plan-name places (#169.2, #202.3).
 
     Id, English and genitive Finnish names, and the centre, as
-    `PLACES`. A region without a centre or a name is skipped;
+    `PLACES`. A place without a centre or a name is skipped;
     a name dict takes its `en`/`fi`, else the name is both.
     """
     out: list[tuple[str, str, str, float, float]] = []
-    folder = world / "regions"
+    folder = world / "places"
     if not folder.is_dir():
         return out
     for path in sorted(folder.glob("*.json")):
         try:
-            region = json.loads(path.read_text(encoding="utf-8"))
+            place = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if not isinstance(region, dict):
+        if not isinstance(place, dict):
             continue
-        center = region.get("center")
+        center = place.get("center")
         lat = center.get("lat") if isinstance(center, dict) else None
         lon = center.get("lon") if isinstance(center, dict) else None
         if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
             continue
-        name = region.get("name")
+        name = place.get("name")
         if isinstance(name, dict):
             en = name.get("en")
             fi = name.get("fi") or en
@@ -111,10 +111,10 @@ def region_places(world: Path) -> list[tuple[str, str, str, float, float]]:
             continue
         if not isinstance(fi, str) or not fi.strip():
             fi = en
-        rid = region.get("id")
+        pid = place.get("id")
         out.append(
             (
-                str(rid) if isinstance(rid, str) and rid else path.stem,
+                str(pid) if isinstance(pid, str) and pid else path.stem,
                 en.strip(),
                 _fi_genitive(fi),
                 float(lat),
@@ -172,7 +172,7 @@ def plan_name(
     pohjoispuolella" by code: one plain style everywhere,
     English and Finnish saying the same tree. Survey answers
     name nothing, however fancy their words. With a world,
-    the hand-made regions join the places and the nearest
+    the world's places join the curated names and the nearest
     wins; a tie keeps the curated name (#169.2).
     """
     words = HABITATS.get(habitat, (habitat.replace("_", " ").title(), habitat))
@@ -181,7 +181,7 @@ def plan_name(
         (place, 0) for place in PLACES
     ]
     if world is not None:
-        candidates += [(place, 1) for place in region_places(world)]
+        candidates += [(place, 1) for place in named_places(world)]
     for (_pid, en, gen, plat, plon), order in candidates:
         east = (lon - plon) * math.cos(math.radians(lat))
         north = lat - plat

@@ -1482,16 +1482,47 @@ def make_tile(
     if wanted:
         made_tile["wanted"] = wanted
     validate("tile", made_tile)
-    failures = check_with_world(made_tile, world)
-    if failures:
+    failures: list[tuple[str, list[str]]] = []
+    for _ in range(3):
+        failures = check_with_world(made_tile, world)
+        if not failures:
+            return made_tile, None
         if all(check == "food" for check, _ in failures):
             return None, _blocked("no_animal", habitat, wanted)
-        detail = "; ".join(
-            f"{check}: {', '.join(problems) or 'failed'}"
-            for check, problems in failures
-        )
-        raise RuntimeError(f"tile {tile} failed the world's check: {detail}")
-    return made_tile, None
+        if not _budget_failure(failures):
+            break
+        _thin_densities(made_tile)
+    detail = "; ".join(
+        f"{check}: {', '.join(problems) or 'failed'}" for check, problems in failures
+    )
+    raise RuntimeError(f"tile {tile} failed the world's check: {detail}")
+
+
+def _budget_failure(failures: list[tuple[str, list[str]]]) -> bool:
+    """Whether every failure is a plant-density budget (#186).
+
+    The world's ground, reef and bog budgets all end the same
+    way; the maker thins its own densities and tries again.
+    Anything else mixed in is a real error, raised at once.
+    """
+    return bool(failures) and all(
+        "must add up to 1 or less" in problem
+        for _, problems in failures
+        for problem in problems
+    )
+
+
+def _thin_densities(made_tile: dict[str, Any]) -> None:
+    """Halve the tile's own plant densities, in place (#186).
+
+    The counts' ratios stand; the world fits what grows. Never
+    below 0.001: the tile still grows what the survey saw.
+    """
+    for side in ("cover", "water"):
+        for entry in (made_tile.get("plants") or {}).get(side, []) or []:
+            density = entry.get("density")
+            if isinstance(density, (int, float)):
+                entry["density"] = max(0.001, round(density / 2, 3))
 
 
 def write_group(

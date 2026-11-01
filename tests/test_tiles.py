@@ -1250,6 +1250,109 @@ def test_make_tile_raises_when_world_check_fails_land(tmp_path: Path) -> None:
         )
 
 
+def _budget_checker(world: Path) -> None:
+    """A tile check that enforces the ground budget, like the world's."""
+    tools = world / "tools"
+    tools.mkdir(exist_ok=True)
+    (tools / "tile_region.py").write_text('"""A converter new enough.\n"""\n')
+    (tools / "check_tile.py").write_text(
+        "import json, sys\n"
+        "tile = json.load(open(sys.argv[1]))\n"
+        "total = sum(\n"
+        "    p.get('density', 0)\n"
+        "    for p in (tile.get('plants') or {}).get('cover', []) or []\n"
+        ")\n"
+        "if total > 1:\n"
+        "    print(json.dumps({'ok': False, 'results': [{'check': 'region',"
+        " 'status': 'fail', 'problems': ['\"ground_cover\" grass + flowers +"
+        " stones + plant densities must add up to 1 or less']}]}))\n"
+        "else:\n"
+        "    print(json.dumps({'ok': True, 'results': []}))\n"
+    )
+
+
+def _berry_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True)
+    for stem, latin in (
+        ("bilberry", "Vaccinium myrtillus"),
+        ("crowberry", "Empetrum nigrum"),
+    ):
+        (greens / f"{stem}.json").write_text(
+            json.dumps(
+                {
+                    "id": stem,
+                    "name": stem.replace("_", " ").title(),
+                    "latin": latin,
+                    "grows": {"on": ["grassland"], "density": 0.8},
+                }
+            )
+        )
+    return world
+
+
+def _berry_species() -> dict[str, Any]:
+    return {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox", "mountain_hare", "vole"]}],
+        "plants": [{"id": "bilberry", "count": 10}, {"id": "crowberry", "count": 10}],
+        "trees": [],
+        "name_en": "Berry woods",
+        "name_fi": "Marjametsä",
+    }
+
+
+def test_make_tile_thins_densities_to_fit_the_world_budget(
+    tmp_path: Path,
+) -> None:
+    """#186: a tile over the ground budget retries halved, then passes."""
+    world = _berry_world(tmp_path)
+    _budget_checker(world)
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species=_berry_species(),
+    )
+    assert blocked is None
+    assert made is not None
+    assert [p["density"] for p in made["plants"]["cover"]] == [0.4, 0.4]
+
+
+def test_make_tile_raises_when_densities_cannot_fit(tmp_path: Path) -> None:
+    """#186: three thinnings that still fail stop loudly, like before."""
+    world = _berry_world(tmp_path)
+    _checker(
+        world,
+        {
+            "ok": False,
+            "results": [
+                {
+                    "check": "region",
+                    "status": "fail",
+                    "problems": [
+                        '"ground_cover" grass + flowers + stones + plant '
+                        "densities must add up to 1 or less"
+                    ],
+                }
+            ],
+        },
+        1,
+    )
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    with pytest.raises(RuntimeError, match="must add up to 1 or less"):
+        make_tile(
+            "z10_0581_0294",
+            habitat_grid,
+            world,
+            builder_root=tmp_path,
+            species=_berry_species(),
+        )
+
+
 def test_surveyed_plants_keep_the_hare_on_the_tundra(tmp_path: Path) -> None:
     """#154: surveyed clover and birch feed the hare the biome starves."""
     from builder.schemas import ROOT

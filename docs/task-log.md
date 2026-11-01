@@ -2265,3 +2265,49 @@ One commit each, all pushed, suite 896 passed + 12 skipped
   an equivalent whale-free item. Plant enrich
   items stop the ship with "ships by hand":
   packs have no plant shape yet.
+
+## 2026-11-01: inbox #177 (builder 6121ec0, ba5f97f, 5a34077)
+
+- Open-sea cells are code tiles now, not
+  `blocked (open_water)`: biome and home
+  `open_sea`, no ecoregion, coast or blend.
+  `land` is the nearest coast's land style
+  from `lands/index.json` (the Gulf of
+  Finland is `boreal`), `land_share` the
+  grid's own land for the cell. `sea` comes
+  from the baked `data/seas.json.gz` (every
+  named open-ocean cell, smallest NE area
+  wins); `name` is the table's `{en, fi}`
+  exactly. Unnamed water stays `open_water`.
+- Species by code, no Muse Spark: animals
+  with `open_sea: true` and a GBIF key,
+  counted by the density fetch over the cell
+  and its neighbours, kept by the world's
+  converter and food rules. Sources cite
+  `spec04:open_ocean`, the marine-polys
+  table, `gbif:density` and the coast's
+  ecoregion number.
+- The plan lists them `code_only` and never
+  starts a survey for them. The worker makes
+  them only within 3 cells of a made tile, a
+  hand-made place, or a tile with border
+  notes (`border_requests` with notes > 0);
+  anything farther fails `too_far` before
+  the maker runs.
+- Remade `n_414_481` and `n_415_480`
+  locally (world 5579041, no live run):
+  both Gulf of Finland / Suomenlahti,
+  `boreal`, herring gull playable, and the
+  world's `check_tile.py` passes both. The
+  `n` and `w` edges of `n_415_480` match
+  the worked example byte for byte.
+- Three judgment calls, all reported: the
+  level stays 5 (the sea formula, under the
+  water 8), not the example's 2, because
+  the shared edges with the published
+  neighbours only agree that way; the
+  example's `land_share` 0.03 and `e`/`s`
+  edges are its own hand values, where the
+  remake writes the grid's 0.0 and computed
+  edges; "around noted tiles" counts the
+  same 3 cells as the made-tile rule.

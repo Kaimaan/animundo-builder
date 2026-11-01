@@ -78,9 +78,13 @@ class MinimumStage:
         if stem:
             return False, f"{stem} is in the library"
         made = ctx.job_dir / "animals" / f"{entry.get('id', 'animal')}.json"
-        if made.is_file():
-            return False, f"{made.name} is already made in this job"
-        return True, f"{brief['latin']} is not in the library yet"
+        if not made.is_file():
+            return True, f"{brief['latin']} is not in the library yet"
+        if _model_missing(ctx.job_dir, entry.get("id", "animal")):
+            # A rerun after a cap stop: the file is made but its
+            # model is not built yet, so the rounds continue (#180.2).
+            return True, f"{made.name} is made but its model is not built yet"
+        return False, f"{made.name} is already made in this job"
 
     def _need_home(self, ctx: Any, brief: dict[str, Any]) -> tuple[bool, str]:
         if brief.get("reuse_place_id"):
@@ -252,6 +256,11 @@ class MinimumStage:
             return "in_place", f"{matched[0]} is in {where}"
         first = names[0] if names else "its food"
         return "no_food", f"{first} is not in {where}"
+
+
+def _model_missing(job_dir: Path, animal_id: str) -> bool:
+    """Whether the animal's built model spec is not there yet (#180.2)."""
+    return not (job_dir / "models" / f"{animal_id}.json").is_file()
 
 
 def _never_prey_reason(brief: dict[str, Any]) -> str:

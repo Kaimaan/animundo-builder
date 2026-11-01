@@ -124,7 +124,14 @@ class ModelsStage:
         spec: dict[str, Any] | None = None
         issues: list[dict[str, Any]] = []
         errors: list[str] = []
-        for round_no in range(1, self.max_rounds + 1):
+        start = 1
+        resumed = self._resume_round(ctx, sandbox, species_id, sheet, ref)
+        if resumed is not None:
+            start, spec, issues, errors, passed = resumed
+            if passed:
+                self._save_final(ctx, sandbox, species_id)
+                return f"models/{species_id}.json"
+        for round_no in range(start, self.max_rounds + 1):
             if spec is None:
                 prompt = load_prompt(
                     "model_spec",
@@ -171,6 +178,10 @@ class ModelsStage:
             if not built["ok"]:
                 problems = [built["log"]] + problems
             self._save_round(ctx, species_id, round_no, spec, sandbox, built)
+            folder = ctx.job_dir / "rounds" / species_id / str(round_no)
+            (folder / "errors.json").write_text(
+                json.dumps(problems, indent=2), encoding="utf-8"
+            )
             if preview.is_file():
                 review = self._review(
                     ctx, species_id, round_no, sheet, sandbox, built, ref
@@ -385,6 +396,98 @@ class ModelsStage:
         if preview.is_file():
             (folder / "preview.png").write_bytes(preview.read_bytes())
 
+    def _resume_round(
+        self,
+        ctx: Any,
+        sandbox: Path,
+        species_id: str,
+        sheet: Path | None,
+        ref: dict[str, str],
+    ) -> tuple[int, dict[str, Any] | None, list[Any], list[str], bool] | None:
+        """Continue a stopped loop from its last round, or nothing fresh.
+
+        A loop that stopped on the cap (not on its round limit)
+        goes on from the last `rounds/<id>/<n>`: its spec, its
+        review's issues, its check errors. A loop that ran out
+        of rounds stays out (#180.2).
+        """
+        rounds = ctx.job_dir / "rounds" / species_id
+        numbers = (
+            sorted(int(p.name) for p in rounds.iterdir() if p.name.isdigit())
+            if rounds.is_dir()
+            else []
+        )
+        if not numbers:
+            return None
+        last = numbers[-1]
+        if last >= self.max_rounds:
+            raise _Stopped(
+                f"{species_id}: still failing after {self.max_rounds} rounds; "
+                "a person looks"
+            )
+        spec = _read_json(rounds / str(last) / "spec.json")
+        if not isinstance(spec, dict):
+            return None
+        review = _read_json(ctx.job_dir / "reviews" / f"{species_id}-{last}.json")
+        errors = _read_json(rounds / str(last) / "errors.json")
+        if review is None or errors is None:
+            return self._finish_round(
+                ctx, sandbox, species_id, sheet, ref, last, spec, review
+            )
+        issues = review.get("issues", [])
+        if not isinstance(issues, list) or not isinstance(errors, list):
+            return None
+        return (last + 1, spec, issues, [str(e) for e in errors], False)
+
+    def _finish_round(
+        self,
+        ctx: Any,
+        sandbox: Path,
+        species_id: str,
+        sheet: Path | None,
+        ref: dict[str, str],
+        round_no: int,
+        spec: dict[str, Any],
+        review: dict[str, Any] | None,
+    ) -> tuple[int, dict[str, Any], list[Any], list[str], bool]:
+        """Rebuild an interrupted round from its spec, then review it.
+
+        The rebuild and check are free; only a missing review
+        costs a call. A round that passes on the rebuild is done.
+        """
+        (sandbox / "models" / f"{species_id}.json").write_text(
+            json.dumps(spec, indent=2), encoding="utf-8"
+        )
+        preview = sandbox / "models" / "previews" / f"{species_id}.png"
+        preview.unlink(missing_ok=True)
+        built = self._build(sandbox, species_id)
+        if not built["ok"] and not built["log"].strip():
+            raise _Stopped(
+                "the build failed with no output: Blender itself "
+                "did not run here, not the spec. A person looks."
+            )
+        problems = list(self._check(ctx, sandbox, species_id, round_no))
+        if not built["ok"]:
+            problems = [built["log"]] + problems
+        self._save_round(ctx, species_id, round_no, spec, sandbox, built)
+        folder = ctx.job_dir / "rounds" / species_id / str(round_no)
+        (folder / "errors.json").write_text(
+            json.dumps(problems, indent=2), encoding="utf-8"
+        )
+        if review is None:
+            if preview.is_file():
+                review = self._review(
+                    ctx, species_id, round_no, sheet, sandbox, built, ref
+                )
+                issues = review["issues"]
+            else:
+                issues = []
+        else:
+            issues = review.get("issues", [])
+        if built["ok"] and not problems and not _blocking(issues):
+            return (round_no + 1, spec, issues, problems, True)
+        return (round_no + 1, spec, issues, problems, False)
+
     def _save_final(self, ctx: Any, sandbox: Path, species_id: str) -> None:
         folder = ctx.job_dir / "models"
         folder.mkdir(exist_ok=True)
@@ -397,6 +500,14 @@ class ModelsStage:
         preview = sandbox / "models" / "previews" / f"{species_id}.png"
         if preview.is_file():
             (folder / f"{species_id}.png").write_bytes(preview.read_bytes())
+
+
+def _read_json(path: Path) -> Any:
+    """The JSON file, or nothing when it won't read (#180.2)."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 def _ensure_sandbox(job_dir: Path, world: Path) -> Path:

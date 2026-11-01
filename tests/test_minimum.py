@@ -126,6 +126,32 @@ def test_library_set_makes_nothing(tmp_path: Path) -> None:
     assert "shares its habitat" in minset["prey_reason"]
 
 
+def test_made_file_without_model_still_makes(tmp_path: Path) -> None:
+    """#180.2: a rerun after a cap stop continues to the model."""
+    brief = _brief(
+        species_key=5225712,
+        latin="Eunectes murinus",
+        in_library=None,
+        home="rainforest",
+        needs_home=False,
+    )
+    world = _files(tmp_path, [ANACONDA], brief, _research())
+    animals = tmp_path / "animals"
+    animals.mkdir(exist_ok=True)
+    (animals / "anaconda.json").write_text(json.dumps({"id": "anaconda"}))
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == ["animal"]
+    minset = json.loads((tmp_path / "minset.json").read_text())
+    assert minset["make_animal"] is True
+    models = tmp_path / "models"
+    models.mkdir(exist_ok=True)
+    (models / "anaconda.json").write_text(json.dumps({"id": "anaconda"}))
+    result = MinimumStage().run(_ctx(tmp_path, world))
+    assert result["make"] == []
+    minset = json.loads((tmp_path / "minset.json").read_text())
+    assert minset["make_animal"] is False
+
+
 def test_new_animal_and_home_make_list(tmp_path: Path) -> None:
     brief = _brief(
         species_key=5225712,

@@ -152,6 +152,107 @@ def _build_ok(sandbox: Path, species_id: str) -> dict[str, Any]:
     return {"ok": True, "summary": "golden_eagle: 900 triangles", "log": "BUILT"}
 
 
+class CappedChat(ScriptChat):
+    """A scripted chat that hits the cap after a number of calls."""
+
+    def __init__(self, answers: list[str], cap_calls: int) -> None:
+        super().__init__(answers)
+        self.cap_calls = cap_calls
+
+    def __call__(self, messages: list[dict], **kwargs: Any) -> Any:
+        from builder.ledger import CapExceeded
+
+        if len(self.prompts) >= self.cap_calls:
+            raise CapExceeded("job cap $1.50 refuses this call ($0.29 spent)")
+        return super().__call__(messages, **kwargs)
+
+
+def test_resume_continues_rounds_after_a_cap_stop(tmp_path: Path) -> None:
+    """#180.2: a rerun with a higher cap builds round 2, not round 1 again."""
+    from builder.ledger import CapExceeded
+
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    review_blocking = {
+        "species": "golden_eagle",
+        "round": 1,
+        "issues": [
+            {
+                "part": "beak",
+                "problem": "Floats.",
+                "severity": "blocking",
+                "fix": "Sink it in.",
+            }
+        ],
+    }
+    chat = CappedChat(
+        [
+            json.dumps(SPEC),
+            json.dumps(review_blocking),
+            json.dumps(SPEC),
+            json.dumps({**REVIEW_CLEAN, "round": 2}),
+            json.dumps({**REVIEW_CLEAN, "round": 2}),
+        ],
+        cap_calls=2,
+    )
+    stage = ModelsStage(chat=chat, build=_build_ok, check=lambda c, s, i, n: [])
+    with pytest.raises(CapExceeded):
+        stage.run(_ctx(tmp_path, world))
+    assert (tmp_path / "rounds" / "golden_eagle" / "1" / "spec.json").is_file()
+    assert not (tmp_path / "rounds" / "golden_eagle" / "2").exists()
+    first_spec = (tmp_path / "rounds" / "golden_eagle" / "1" / "spec.json").read_bytes()
+    chat.cap_calls = 99
+    result = stage.run(_ctx(tmp_path, world))
+    assert result == {"model_files": ["models/golden_eagle.json"]}
+    assert (tmp_path / "rounds" / "golden_eagle" / "2" / "spec.json").is_file()
+    assert (
+        tmp_path / "rounds" / "golden_eagle" / "1" / "spec.json"
+    ).read_bytes() == first_spec
+    assert len(chat.prompts) == 5, "spec, review, fix, review, verify"
+    assert "Floats." in chat.prompts[2], "the fix round sees round 1's issue"
+
+
+def test_resume_reviews_a_round_the_cap_interrupted(tmp_path: Path) -> None:
+    """#180.2: a round saved but never reviewed gets its review on rerun."""
+    from builder.ledger import CapExceeded
+
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    review_blocking = {
+        "species": "golden_eagle",
+        "round": 1,
+        "issues": [
+            {
+                "part": "beak",
+                "problem": "Floats.",
+                "severity": "blocking",
+                "fix": "Sink it in.",
+            }
+        ],
+    }
+    chat = CappedChat(
+        [
+            json.dumps(SPEC),
+            json.dumps(review_blocking),
+            json.dumps(SPEC),
+            json.dumps({**REVIEW_CLEAN, "round": 2}),
+            json.dumps({**REVIEW_CLEAN, "round": 2}),
+        ],
+        cap_calls=1,
+    )
+    stage = ModelsStage(chat=chat, build=_build_ok, check=lambda c, s, i, n: [])
+    with pytest.raises(CapExceeded):
+        stage.run(_ctx(tmp_path, world))
+    assert (tmp_path / "rounds" / "golden_eagle" / "1" / "spec.json").is_file()
+    assert not (tmp_path / "reviews" / "golden_eagle-1.json").exists()
+    chat.cap_calls = 99
+    result = stage.run(_ctx(tmp_path, world))
+    assert result == {"model_files": ["models/golden_eagle.json"]}
+    assert (tmp_path / "rounds" / "golden_eagle" / "2" / "spec.json").is_file()
+    assert len(chat.prompts) == 5, "spec, review, fix, review, verify"
+    assert "Floats." in chat.prompts[2], "the fix round sees round 1's issue"
+
+
 def test_fix_round_then_pass(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

@@ -80,6 +80,7 @@ class ShipStage:
         animal = json.loads(animal_path.read_text(encoding="utf-8"))
         self._finnish(ctx, world, animal_id, animal)
         SafetyStage().run(ctx)
+        self._render_look(ctx, brief, animal_id, animal)
         problems = gate_checks(ctx, world, brief, animal_id, animal)
         checks = ctx.job_dir / "checks"
         checks.mkdir(parents=True, exist_ok=True)
@@ -152,6 +153,59 @@ class ShipStage:
                 + "\n",
                 encoding="utf-8",
             )
+
+    def _render_look(
+        self, ctx: Any, brief: dict[str, Any], animal_id: str, animal: dict[str, Any]
+    ) -> None:
+        """The ship's own look at the final preview's key marks (#197.4).
+
+        The edit round's review judged an older model; the ship
+        looks at the final preview itself, mark by mark, and the
+        gate compares the two looks. Always writes
+        `checks/marks_ship.json`, skipped when there is nothing
+        to judge (library animals, markless research).
+        """
+        from .maker import review_marks
+
+        job_dir = ctx.job_dir
+        try:
+            research = json.loads(
+                (job_dir / "research.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            research = {}
+        marks = _research_marks(research)
+        verdict: dict[str, Any] = {"shown": [], "missing": [], "skipped": None}
+        if not brief.get("in_library") and marks:
+            preview = job_dir / "models" / f"{animal_id}.png"
+            if not preview.is_file():
+                raise _Stopped(f"{animal_id}: no final preview to look at")
+            try:
+                review = review_marks(
+                    ctx.chat,
+                    ctx.check_budget,
+                    animal.get("name", animal_id),
+                    marks,
+                    preview.read_bytes(),
+                )
+            except ValueError as error:
+                raise _Stopped(
+                    f"{animal_id}: the ship's look never wrote valid JSON: {error}"
+                ) from error
+            verdict = {
+                "shown": review["shown"],
+                "missing": review["missing"],
+                "skipped": None,
+            }
+        else:
+            verdict["skipped"] = (
+                "in_library" if brief.get("in_library") else "no key marks"
+            )
+        checks = job_dir / "checks"
+        checks.mkdir(parents=True, exist_ok=True)
+        (checks / "marks_ship.json").write_text(
+            json.dumps(verdict, indent=2), encoding="utf-8"
+        )
 
     def _run_plant(
         self, ctx: Any, world: Path, brief: dict[str, Any]
@@ -728,16 +782,50 @@ def _gate_world(ctx: Any, world: Path) -> list[str]:
     return problems
 
 
+def _research_marks(research: dict[str, Any]) -> list[str]:
+    """The research's key mark words, in order (#197.4)."""
+    marks = (research.get("looks", {}) or {}).get("marks", []) or []
+    return [
+        mark["mark"]
+        for mark in marks
+        if isinstance(mark, dict) and isinstance(mark.get("mark"), str)
+    ]
+
+
+def _ship_look(job_dir: Path) -> dict[str, Any] | None:
+    """The ship's own look at the final preview, or nothing (#197.4)."""
+    try:
+        review = json.loads(
+            (job_dir / "checks" / "marks_ship.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return None
+    return review if isinstance(review, dict) else None
+
+
 def _gate_render(job_dir: Path, brief: dict[str, Any], animal_id: str) -> list[str]:
     """The research-named marks show, and it reads as its species.
 
     An adapted model's marks review names what shows; the marks are
     what make the species known, so none missing is the species
     reading too. A new shape's final model review carries the same
-    verdict in its issues.
+    verdict in its issues. The ship's own look at the final
+    preview must agree with the edit round's: when the two looks
+    disagree it fails with both (#197.4).
     """
     if brief.get("in_library"):
         return []
+    try:
+        research = json.loads((job_dir / "research.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        research = {}
+    owed = bool(_research_marks(research))
+    ship = _ship_look(job_dir)
+    ship_missing = (
+        [m for m in (ship.get("missing", []) if ship else []) if isinstance(m, str)]
+        if ship and not ship.get("skipped")
+        else None
+    )
     edits = job_dir / "tries" / animal_id / "edits"
     marks = sorted(edits.glob("*/marks_review.json")) if edits.is_dir() else []
     if marks:
@@ -747,8 +835,24 @@ def _gate_render(job_dir: Path, brief: dict[str, Any], animal_id: str) -> list[s
         except ValueError:
             return [f"render: {last.parent.name} wrote no marks review"]
         missing = [m for m in review.get("missing", []) if isinstance(m, str)]
-        if missing:
-            return [f"render: {', '.join(missing)} missing from the views"]
+        problems = []
+        if ship_missing is None:
+            if owed:
+                problems.append("render: the ship never looked at the final preview")
+            elif missing:
+                problems.append(f"render: {', '.join(missing)} missing from the views")
+        else:
+            if ship_missing:
+                problems.append(
+                    f"render: the final look misses: {', '.join(ship_missing)}"
+                )
+            if set(missing) != set(ship_missing):
+                edit = ", ".join(missing) if missing else "none"
+                final = ", ".join(ship_missing) if ship_missing else "none"
+                problems.append(
+                    "render: the looks disagree "
+                    f"(edit round missing: {edit}; final look missing: {final})"
+                )
         try:
             unmakable = json.loads(
                 (job_dir / "checks" / "oneshot.json").read_text(encoding="utf-8")
@@ -757,8 +861,8 @@ def _gate_render(job_dir: Path, brief: dict[str, Any], animal_id: str) -> list[s
             unmakable = {}
         left = unmakable.get(animal_id) or []
         if left:
-            return [f"render: unmakable marks: {', '.join(left)}"]
-        return []
+            problems.append(f"render: unmakable marks: {', '.join(left)}")
+        return problems
     rounds = [
         p
         for p in (job_dir / "reviews").glob(f"{animal_id}-*.json")
@@ -770,6 +874,11 @@ def _gate_render(job_dir: Path, brief: dict[str, Any], animal_id: str) -> list[s
             review = json.loads(last.read_text(encoding="utf-8"))
         except ValueError:
             return ["render: the final review wrote no JSON"]
+        if ship_missing is None:
+            if owed:
+                return ["render: the ship never looked at the final preview"]
+        elif ship_missing:
+            return [f"render: the final look misses: {', '.join(ship_missing)}"]
         blocking = [
             i
             for i in review.get("issues", [])

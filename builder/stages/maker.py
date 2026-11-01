@@ -662,72 +662,27 @@ class AnimalMakerStage:
         if not preview.is_file():
             return []
         title = target["entry"].get("name", animal_id)
-        prompt = load_prompt(
-            "model_marks",
-            {
-                "TITLE": title,
-                "MARKS": "\n".join(f"- {mark}" for mark in key_marks),
-            },
-        )
-        encoded = base64.b64encode(preview.read_bytes()).decode()
-        first = {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{encoded}"},
-                },
-            ],
-        }
-        request = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "MarksReview",
-                "schema": _marks_schema(),
-                "strict": True,
-            },
-        }
-        problems = ""
-        previous: str | None = None
-        for _ in range(2):
-            ctx.check_budget()
-            messages = (
-                fix_messages(first, previous, problems)
-                if problems and previous is not None
-                else [first]
+        try:
+            review = review_marks(
+                self._chat or ctx.chat,
+                ctx.check_budget,
+                title,
+                key_marks,
+                preview.read_bytes(),
             )
-            chat = self._chat or ctx.chat
-            answer = (
-                _ask_with_room(
-                    chat, messages, response_format=request, reasoning_effort="low"
-                )
-                .choices[0]
-                .message.content
-                or ""
-            ).strip()
-            previous = answer
-            try:
-                review = json.loads(_unfence(answer))
-                shown = review["shown"]
-                missing = review["missing"]
-                if not isinstance(shown, list) or not isinstance(missing, list):
-                    raise ValueError("shown and missing are lists")
-                if not all(isinstance(m, str) for m in shown + missing):
-                    raise ValueError("shown and missing hold plain words")
-            except (ValueError, KeyError, TypeError) as error:
-                problems = f"PREVIOUS TRY was no marks review: {error}"
-                continue
-            folder = ctx.job_dir / "tries" / animal_id / "edits" / str(attempt)
-            folder.mkdir(parents=True, exist_ok=True)
-            (folder / "marks_review.json").write_text(
-                json.dumps({"shown": shown, "missing": missing}, indent=2),
-                encoding="utf-8",
-            )
-            return [_mark_miss(mark) for mark in missing if isinstance(mark, str)]
-        raise _Stopped(
-            f"{animal_id}: the marks review never wrote valid JSON: {problems}"
+        except ValueError as error:
+            raise _Stopped(
+                f"{animal_id}: the marks review never wrote valid JSON: {error}"
+            ) from error
+        folder = ctx.job_dir / "tries" / animal_id / "edits" / str(attempt)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "marks_review.json").write_text(
+            json.dumps(
+                {"shown": review["shown"], "missing": review["missing"]}, indent=2
+            ),
+            encoding="utf-8",
         )
+        return [_mark_miss(mark) for mark in review["missing"] if isinstance(mark, str)]
 
     def _animal_files(
         self, world: Path, answer: str
@@ -2335,6 +2290,79 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
             },
         },
     }
+
+
+def review_marks(
+    chat: Any,
+    check_budget: Any,
+    title: str,
+    key_marks: list[str],
+    preview: bytes,
+) -> dict[str, list[str]]:
+    """One look at a preview's key marks: shown and missing (#197.4).
+
+    The maker looks at each attempt's render, the ship at the
+    final preview; both judge by the same prompt (a mark shows
+    when a child would see it). Raises ValueError when no
+    valid review comes back.
+    """
+    prompt = load_prompt(
+        "model_marks",
+        {
+            "TITLE": title,
+            "MARKS": "\n".join(f"- {mark}" for mark in key_marks),
+        },
+    )
+    encoded = base64.b64encode(preview).decode()
+    first = {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{encoded}"},
+            },
+        ],
+    }
+    request = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "MarksReview",
+            "schema": _marks_schema(),
+            "strict": True,
+        },
+    }
+    problems = ""
+    previous: str | None = None
+    for _ in range(2):
+        check_budget()
+        messages = (
+            fix_messages(first, previous, problems)
+            if problems and previous is not None
+            else [first]
+        )
+        answer = (
+            _ask_with_room(
+                chat, messages, response_format=request, reasoning_effort="low"
+            )
+            .choices[0]
+            .message.content
+            or ""
+        ).strip()
+        previous = answer
+        try:
+            review = json.loads(_unfence(answer))
+            shown = review["shown"]
+            missing = review["missing"]
+            if not isinstance(shown, list) or not isinstance(missing, list):
+                raise ValueError("shown and missing are lists")
+            if not all(isinstance(m, str) for m in shown + missing):
+                raise ValueError("shown and missing hold plain words")
+        except (ValueError, KeyError, TypeError) as error:
+            problems = f"PREVIOUS TRY was no marks review: {error}"
+            continue
+        return {"shown": shown, "missing": missing}
+    raise ValueError(problems)
 
 
 def _marks_schema() -> dict[str, Any]:

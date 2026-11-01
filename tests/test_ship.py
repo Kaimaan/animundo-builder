@@ -81,6 +81,7 @@ def _research(**over: Any) -> dict[str, Any]:
         "year": {"winter": "active"},
         "main_food": {"name": "small fish", "kind": "prey"},
         "other_foods": [],
+        "looks": {"marks": [{"mark": "wide hammer head", "source": "test"}]},
     }
     research.update(over)
     return research
@@ -116,6 +117,9 @@ def _item(tmp_path: Path, animal: dict[str, Any], research: dict[str, Any]) -> P
     (job_dir / "checks").mkdir(exist_ok=True)
     (job_dir / "checks" / "oneshot.json").write_text(
         json.dumps({"made": ["hammerhead"], "unmakable": {}})
+    )
+    (job_dir / "checks" / "marks_ship.json").write_text(
+        json.dumps({"shown": ["wide hammer head"], "missing": [], "skipped": None})
     )
     (job_dir / "models").mkdir(exist_ok=True)
     (job_dir / "models" / "hammerhead.glb").write_bytes(b"glb-bytes")
@@ -158,8 +162,16 @@ class _Store:
         self.blobs[name] = data
 
 
+def _look() -> str:
+    return json.dumps({"shown": ["wide hammer head"], "missing": []})
+
+
 def _ctx(
-    job_dir: Path, world: Path, answers: list[str], job_id: str | None = None
+    job_dir: Path,
+    world: Path,
+    answers: list[str],
+    job_id: str | None = None,
+    look: str | None = None,
 ) -> SimpleNamespace:
     from builder.stages.safety import collect_texts
 
@@ -169,12 +181,15 @@ def _ctx(
             {"key": key, "verdict": "pass", "reasons": [], "rule": "ok"} for key in keys
         ]
     }
+    replies = answers + [json.dumps(verdicts)]
+    if look is not None:
+        replies.append(look)
     return SimpleNamespace(
         job_id=job_id or "enrich_x/enrich_hammerhead",
         job_dir=job_dir,
         world_path=world,
         check_budget=lambda: None,
-        chat=_Chat(answers + [json.dumps(verdicts)]),
+        chat=_Chat(replies),
     )
 
 
@@ -186,7 +201,9 @@ def _passing_run(tmp_path: Path, store: _Store) -> tuple[Path, Path, dict[str, A
         "name": "Kampavasarahai",
         "intro": "Hai, jolla on leveä pää.",
     }
-    result = ShipStage(store=store).run(_ctx(job_dir, world, [json.dumps(translated)]))
+    result = ShipStage(store=store).run(
+        _ctx(job_dir, world, [json.dumps(translated)], look=_look())
+    )
     return world, job_dir, result
 
 
@@ -308,7 +325,7 @@ def test_ship_builds_the_place_plants_before_the_world_check(
         "intro": "Hai, jolla on leveä pää.",
     }
     result = ShipStage(store=store, build=_fake_build).run(
-        _ctx(job_dir, world, [json.dumps(translated)])
+        _ctx(job_dir, world, [json.dumps(translated)], look=_look())
     )
     assert result["pack"] == "packs/animal_hammerhead/1/"
     assert (world / "assets" / "plants" / "staghorn.glb").is_file()
@@ -343,7 +360,7 @@ def test_ship_stops_when_a_plant_model_would_not_build(tmp_path: Path) -> None:
     }
     with pytest.raises(_Stopped, match="would not build"):
         ShipStage(store=_Store(), build=_broken).run(
-            _ctx(job_dir, world, [json.dumps(translated)])
+            _ctx(job_dir, world, [json.dumps(translated)], look=_look())
         )
 
 
@@ -934,8 +951,77 @@ def test_gate_fails_missing_marks(tmp_path: Path) -> None:
     made = json.loads((job_dir / "animals" / "hammerhead.json").read_text())
     ctx = SimpleNamespace(job_dir=job_dir, world_path=world)
     assert gate_checks(ctx, world, brief, "hammerhead", made) == [
-        "render: wide hammer head missing from the views"
+        "render: the looks disagree "
+        "(edit round missing: wide hammer head; final look missing: none)"
     ]
+
+
+def test_gate_fails_when_the_final_look_misses(tmp_path: Path) -> None:
+    """#197.4: the ship's own look gates, with both verdicts on dispute."""
+    world = _world(tmp_path)
+    job_dir = _item(tmp_path, _animal(), _research())
+    ship = job_dir / "checks" / "marks_ship.json"
+    ship.write_text(
+        json.dumps({"shown": [], "missing": ["wide hammer head"], "skipped": None})
+    )
+    brief = json.loads((job_dir / "home.json").read_text())
+    made = json.loads((job_dir / "animals" / "hammerhead.json").read_text())
+    ctx = SimpleNamespace(job_dir=job_dir, world_path=world)
+    assert gate_checks(ctx, world, brief, "hammerhead", made) == [
+        "render: the final look misses: wide hammer head",
+        "render: the looks disagree "
+        "(edit round missing: none; final look missing: wide hammer head)",
+    ]
+    review = job_dir / "tries" / "hammerhead" / "edits" / "1" / "marks_review.json"
+    review.write_text(json.dumps({"shown": [], "missing": ["wide hammer head"]}))
+    assert gate_checks(ctx, world, brief, "hammerhead", made) == [
+        "render: the final look misses: wide hammer head"
+    ]
+
+
+def test_render_look_writes_the_ships_verdict(tmp_path: Path) -> None:
+    """#197.4: the look judges the final preview's researched marks."""
+    world = _world(tmp_path)
+    job_dir = _item(tmp_path, _animal(), _research())
+    (job_dir / "checks" / "marks_ship.json").unlink()
+    ctx = SimpleNamespace(
+        job_dir=job_dir,
+        world_path=world,
+        check_budget=lambda: None,
+        chat=_Chat([_look()]),
+    )
+    brief = json.loads((job_dir / "home.json").read_text())
+    made = json.loads((job_dir / "animals" / "hammerhead.json").read_text())
+    ShipStage(store=_Store())._render_look(ctx, brief, "hammerhead", made)
+    written = json.loads((job_dir / "checks" / "marks_ship.json").read_text())
+    assert written == {
+        "shown": ["wide hammer head"],
+        "missing": [],
+        "skipped": None,
+    }
+
+
+def test_render_look_skips_library_animals(tmp_path: Path) -> None:
+    """#197.4: nothing to judge, no call spent."""
+    world = _world(tmp_path)
+    job_dir = _item(tmp_path, _animal(), _research())
+    (job_dir / "checks" / "marks_ship.json").unlink()
+
+    def _boom(messages: Any, **kwargs: Any) -> Any:
+        raise AssertionError("must not call")
+
+    ctx = SimpleNamespace(
+        job_dir=job_dir,
+        world_path=world,
+        check_budget=lambda: None,
+        chat=_boom,
+    )
+    brief = json.loads((job_dir / "home.json").read_text())
+    brief["in_library"] = "hammerhead"
+    made = json.loads((job_dir / "animals" / "hammerhead.json").read_text())
+    ShipStage(store=_Store())._render_look(ctx, brief, "hammerhead", made)
+    written = json.loads((job_dir / "checks" / "marks_ship.json").read_text())
+    assert written["skipped"] == "in_library"
 
 
 def test_ship_fails_unsafe_english_at_safety(tmp_path: Path) -> None:

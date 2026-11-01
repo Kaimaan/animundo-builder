@@ -1081,6 +1081,65 @@ def _open_water() -> dict[str, list[Any]]:
     return {f"{c},{r}": list(cell) for r in (293, 294, 295) for c in (580, 581, 582)}
 
 
+def test_plan_blocked_when_probe_fails_world_check(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#198.1: a world-check failure ends the request as blocked."""
+    import builder.plan as plan_mod
+
+    world = _world(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError(
+            "tile z10_0581_0294 failed the world's check: "
+            "animals: no home lists ecoregion 999"
+        )
+
+    monkeypatch.setattr(plan_mod, "make_tile", boom)
+    plan = plan_tile(
+        "z10_0581_0294",
+        None,
+        habitat_grid,
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={},
+        species=_survey(),
+    )
+    assert plan["blocked"] == "world_check: animals: no home lists ecoregion 999"
+    assert plan["items"] == []
+    assert plan["coming"] == []
+
+
+def test_plan_reraises_a_transient_probe_failure(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#198.1: anything but the world check still raises to retry."""
+    import pytest
+
+    import builder.plan as plan_mod
+
+    world = _world(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("GBIF stayed down")
+
+    monkeypatch.setattr(plan_mod, "make_tile", boom)
+    with pytest.raises(RuntimeError, match="GBIF stayed down"):
+        plan_tile(
+            "z10_0581_0294",
+            None,
+            habitat_grid,
+            world,
+            "abc123",
+            presence={},
+            unfiled_presence={},
+            species=_survey(),
+        )
+
+
 def test_plan_marks_open_water_blocked(tmp_path: Path) -> None:
     """#141.2: open water says nobody can go there yet, with no coming."""
     world = _world(tmp_path)

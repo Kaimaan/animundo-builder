@@ -602,6 +602,29 @@ def plan_tile(
                     world,
                     "needs_survey",
                 )
+            except RuntimeError as error:
+                # The probe tile fails the world's check for good:
+                # a blocked plan ends the request, so the area
+                # never waits for ever (#198.1). Anything else
+                # still raises: transient faults retry.
+                if "failed the world's check" not in str(error):
+                    raise
+                detail = str(error).split("failed the world's check:", 1)[1].strip()
+                return _finish(
+                    tile,
+                    False,
+                    [],
+                    unfiled,
+                    unfiled_counts,
+                    request,
+                    habitat,
+                    lat,
+                    lon,
+                    world_commit,
+                    answer,
+                    f"world_check: {detail}",
+                    world,
+                )
         if made is not None:
             return _finish(
                 tile,

@@ -367,6 +367,26 @@ def test_handle_request_skips_old_grid_quietly(
     assert captured.err == ""
 
 
+def test_handle_request_writes_a_blocked_plan(tmp_path: Path, monkeypatch: Any) -> None:
+    """#198.1: an unplannable request ends blocked, never waiting."""
+    import builder.plan as plan_mod
+
+    store = FakeStore()
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
+    worker = _planned_worker(tmp_path, store, monkeypatch)
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError(
+            "tile z10_0581_0294 failed the world's check: animals: no home"
+        )
+
+    monkeypatch.setattr(plan_mod, "make_tile", boom)
+    worker.handle_request("z10_0581_0294")
+    plan = store.plans["z10_0581_0294"]
+    assert plan["blocked"] == "world_check: animals: no home"
+    assert plan["items"] == []
+
+
 def test_sync_world_replans_on_move(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
     store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}

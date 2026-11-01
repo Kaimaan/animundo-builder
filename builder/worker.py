@@ -216,7 +216,8 @@ class Worker:
             self.alert({"kind": "plan_failed", "tile": tile, "error": str(error)[:200]})
             return
         self.store.set_plan(tile, plan)
-        print(f"request {tile}: planned code_only={plan['code_only']}")
+        blocked = f" blocked={plan['blocked']}" if plan.get("blocked") else ""
+        print(f"request {tile}: planned code_only={plan['code_only']}{blocked}")
 
     def handle_build_job(self, job_id: str) -> None:
         """Build one job, or ship its reviewed items (T76)."""

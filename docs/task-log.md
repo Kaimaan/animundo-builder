@@ -3,6 +3,50 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #181 (builder 320cb9c, f492969, 09a05a1, 39f304b)
+
+- On a place with a biome, every
+  cast seats in `species` only
+  (#181.1): maker, home and
+  species plan all test the
+  biome now, so no stray
+  `animals` key reaches the
+  region check.
+- The edit rounds leave unbuilt
+  plant models out of their
+  problems (#181.2): the sandbox
+  never builds them, so the
+  rounds spent themselves on a
+  region check that could not
+  pass there.
+- The render review's marks run
+  inside the edit rounds
+  (#181.3): the answer's key
+  marks, or the research's when
+  it names none. A missing mark
+  blocks the round for a fix
+  while budget lasts, and fails
+  the job only when the rounds
+  are used up.
+- The file's game length is the
+  researched typical adult
+  (#181.4): the game rescales
+  the model to it, so the
+  build's mesh reading (fins
+  read long) never stands. The
+  measured line stays as the
+  #140.3 tripwire; unsourced
+  lengths keep the measured
+  value.
+- Evidence: an enrich replay on
+  the reef region ends with no
+  `animals` key; a markless
+  answer still gets its research
+  marks judged; the lynx files
+  1.1 m and a 120 cm prey files
+  1.2 m; suite, ruff, gitleaks,
+  `builder check --world`.
+
 ## 2026-10-29: inbox #141, no species call for open water (3)
 
 - The species answer resolved before the open-water

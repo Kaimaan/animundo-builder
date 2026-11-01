@@ -183,6 +183,28 @@ def _passing_run(tmp_path: Path, store: _Store) -> tuple[Path, Path, dict[str, A
     return world, job_dir, result
 
 
+def test_additions_read_a_biome_place_species() -> None:
+    """#178: on a biome the lists come from species, as the game merges."""
+    from builder.stages.ship import _additions
+
+    region = _region()
+    region["biome"] = "xx_biome"
+    region["species"] = {
+        "playable": ["clownfish", "hammerhead"],
+        "prey": [],
+        "predators": ["reef_shark"],
+    }
+    del region["animals"]
+    region["fish"].append({"kind": "hammerhead", "count": 2})
+    additions = _additions(region, "hammerhead", _animal())
+    assert check_additions(additions) == []
+    assert additions == {
+        "format": 1,
+        "fish": [{"kind": "hammerhead", "count": 2}],
+        "playable": ["hammerhead"],
+    }
+
+
 def test_ship_publishes_a_passing_pack(tmp_path: Path) -> None:
     """#174.1, #176.1: a clean item ships `packs/animal_hammerhead/1/`."""
     store = _Store()

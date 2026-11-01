@@ -187,7 +187,9 @@ def _additions(
     laid place seats it. Any other key refuses the whole pack, so
     there are no others, ever.
     """
-    groups = region.get("animals", {}) or {}
+    # A place on a biome names its animals as a tile does (game 0043).
+    key = "species" if region.get("biome") else "animals"
+    groups = region.get(key, {}) or {}
     additions: dict[str, Any] = {"format": 1}
     if (animal.get("model") or {}).get("archetype") == "fish":
         count = 0
@@ -491,5 +493,5 @@ def _gate_region(
         return [f"region {region_id}: the built-in file won't read"]
     return [
         f"region {region_id}: {line}"
-        for line in region_additions_only(before, region, animal_id)
+        for line in region_additions_only(before, region, animal_id, world)
     ]

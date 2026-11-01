@@ -112,11 +112,14 @@ def region_place(
 ) -> dict[str, Any]:
     """One hand-made region with the new thing seated (#168.1).
 
-    An enrich item only adds: the animal to `playable` (its
-    `fish` seat comes from the maker, which knows its file), a
+    An enrich item only adds: the animal to `playable`, a
     plant to its grown side. Food, terrain and everything else
     stay exactly as they are: reworking food rewrote the reef's
-    (#173.1).
+    (#173.1). A place on a `biome` writes the new way, as the
+    game reads it (#178): the animal to `species.playable`,
+    never `animals` (the region check refuses that); a plant
+    or fish onto its side's biome list when the place writes
+    none of its own, or the resolved place loses the biome's.
     """
     region_path = world / "regions" / f"{region_id}.json"
     try:
@@ -125,17 +128,35 @@ def region_place(
         raise ConvertError(f"the region file {region_id} won't read: {error}")
     if not what:
         return region
+    biome_id = region.get("biome") if isinstance(region, dict) else None
     if kind == "plant":
         side = "water" if _seabed_plant(world, what) else "cover"
-        plants = region.setdefault("plants", {})
-        grown = plants.get(side)
-        if not isinstance(grown, list):
-            grown = next((v for v in plants.values() if isinstance(v, list)), None)
-            if grown is None:
-                grown = []
-                plants[side] = grown
-        if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
-            grown.append({"id": what, "density": 0.1})
+        if biome_id is not None and not isinstance(
+            (region.get("plants") or {}).get(side), list
+        ):
+            # No list of its own: the biome's, or resolve drops
+            # every plant on this side (#178.2).
+            region.setdefault("plants", {})[side] = _biome_list(
+                world, biome_id, region_id, "plants", side
+            )
+        _seat_plant(region, what, side)
+    elif biome_id is not None:
+        species = region.setdefault("species", {})
+        if isinstance(species, dict):
+            lists = species.setdefault("playable", [])
+        else:
+            lists = species
+        if what not in lists:
+            lists.append(what)
+        small: bool | None = _fish_size(world, what)
+        if small is not None:
+            # A fish: the biome's fish first, like the game's
+            # live packs, then the new one with its count (#178.3).
+            if not isinstance(region.get("fish"), list):
+                region["fish"] = _biome_list(world, biome_id, region_id, "fish")
+            fish = region["fish"]
+            if what not in [e.get("kind") for e in fish if isinstance(e, dict)]:
+                fish.append({"kind": what, "count": 5 if small else 2})
     else:
         animals = region.setdefault("animals", {})
         if isinstance(animals, dict):
@@ -147,25 +168,125 @@ def region_place(
     return region
 
 
+def _seat_plant(region: dict[str, Any], what: str, side: str) -> None:
+    """The plant onto its grown side, once (#168.1)."""
+    plants = region.setdefault("plants", {})
+    grown = plants.get(side)
+    if not isinstance(grown, list):
+        grown = next((v for v in plants.values() if isinstance(v, list)), None)
+        if grown is None:
+            grown = []
+            plants[side] = grown
+    if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
+        grown.append({"id": what, "density": 0.1})
+
+
+def _biome_list(
+    world: Path, biome_id: str, region_id: str, key: str, side: str = ""
+) -> list[Any]:
+    """A copy of the biome's list for this side, or nothing (#178.2).
+
+    The copy seats the new thing; the biome file itself is never
+    touched. A biome that won't read stops the item loudly: seating
+    on nothing would silently drop the whole side.
+    """
+    import copy
+
+    try:
+        biome = json.loads(
+            (world / "biomes" / f"{biome_id}.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError) as error:
+        raise ConvertError(f"the biome {biome_id} of {region_id} won't read: {error}")
+    if key == "fish":
+        found = biome.get("fish", [])
+    else:
+        found = (biome.get("plants") or {}).get(side, [])
+    return copy.deepcopy(found) if isinstance(found, list) else []
+
+
+def _fish_size(world: Path, what: str) -> bool | None:
+    """Whether the new animal swims small, or nothing when it doesn't.
+
+    The animal file says (tags, or a made file's archetype);
+    before it is written the animal list's file example does:
+    a fish adapts from a fish, a whale from a seal (#178.3).
+    None when neither says fish, or nothing says anything.
+    """
+    data = _animal_data(world, what)
+    if data is None:
+        data = _animal_data(world, _file_example(world, what))
+    if data is None:
+        return None
+    tags = data.get("tags") or []
+    if (data.get("model") or {}).get("archetype") == "fish" or "fish" in tags:
+        return "small_fish" in tags
+    return None
+
+
+def _animal_data(world: Path, what: str | None) -> dict[str, Any] | None:
+    """The animal file's JSON, or nothing without one."""
+    if not what:
+        return None
+    try:
+        data = json.loads(
+            (world / "animals" / f"{what}.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _file_example(world: Path, what: str) -> str | None:
+    """The animal list's file example for this id, if it names one."""
+    try:
+        listed = json.loads((world / "animal-list.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    animals = listed.get("animals") if isinstance(listed, dict) else None
+    if not isinstance(animals, list):
+        return None
+    for entry in animals:
+        if isinstance(entry, dict) and entry.get("id") == what:
+            return entry.get("file_from") or entry.get("start_from")
+    return None
+
+
 def region_additions_only(
-    before: dict[str, Any], after: dict[str, Any], animal_id: str
+    before: dict[str, Any],
+    after: dict[str, Any],
+    animal_id: str,
+    world: Path | None = None,
 ) -> list[str]:
     """Why the region change is not additions-only, or nothing (#174.1).
 
     An enrich item only adds: the animal to `fish` (or `animals`)
     and to `animals.playable` / `predators` / `prey`. Anything
     else changed, removed, reordered, or added is one problem per
-    offending key.
+    offending key. A place on a `biome` adds to `species` instead
+    of `animals`, and its `fish` starts from the biome's, so the
+    biome's lists are the base the change is weighed against
+    (#178): `world` must be given to read them.
     """
     problems = []
+    biome_id = before.get("biome") if isinstance(before, dict) else None
     for key in after:
-        if key not in before and key not in ("animals", "fish"):
+        if key not in before and key not in ("animals", "fish", "species"):
             problems.append(f"{key} was added")
             continue
-        if key == "animals":
-            problems.extend(_added_lists(before.get(key, {}), after[key], animal_id))
+        if key in ("animals", "species"):
+            problems.extend(
+                _added_lists(before.get(key, {}), after[key], animal_id, key)
+            )
         elif key == "fish":
-            problems.extend(_added_fish(before.get(key, []), after[key], animal_id))
+            if key not in before and biome_id is not None and world is not None:
+                base = _gate_biome_fish(world, biome_id, before)
+                if base is None:
+                    problems.append("fish has no base: the biome won't read")
+                    continue
+            else:
+                base = before.get(key, [])
+            problems.extend(_added_fish(base, after[key], animal_id))
         elif after[key] != before[key]:
             problems.append(f"{key} changed")
     for key in before:
@@ -174,31 +295,45 @@ def region_additions_only(
     return problems
 
 
-def _added_lists(before: Any, after: Any, animal_id: str) -> list[str]:
+def _gate_biome_fish(
+    world: Path | None, biome_id: Any, before: dict[str, Any]
+) -> list[Any] | None:
+    """The fish the laid place should start from, or nothing unreadable."""
+    if world is None or not isinstance(biome_id, str):
+        return None
+    try:
+        return _biome_list(world, biome_id, str(before.get("id", "?")), "fish")
+    except ConvertError:
+        return None
+
+
+def _added_lists(
+    before: Any, after: Any, animal_id: str, key: str = "animals"
+) -> list[str]:
     if not isinstance(before, dict) or not isinstance(after, dict):
         if after != before:
-            return ["animals changed shape"]
+            return [f"{key} changed shape"]
         return []
     problems = []
     for group in ("playable", "predators", "prey"):
         old = before.get(group, [])
         new = after.get(group, [])
         if not isinstance(old, list) or not isinstance(new, list):
-            problems.append(f"animals.{group} changed shape")
+            problems.append(f"{key}.{group} changed shape")
             continue
         if [i for i in new if i != animal_id] != old:
-            problems.append(f"animals.{group} changed beyond {animal_id}")
+            problems.append(f"{key}.{group} changed beyond {animal_id}")
         if new.count(animal_id) > 1:
-            problems.append(f"animals.{group} lists {animal_id} twice")
+            problems.append(f"{key}.{group} lists {animal_id} twice")
     for group in after:
         if group not in ("playable", "predators", "prey"):
             if group not in before:
-                problems.append(f"animals.{group} was added")
+                problems.append(f"{key}.{group} was added")
             elif after[group] != before[group]:
-                problems.append(f"animals.{group} changed")
+                problems.append(f"{key}.{group} changed")
     for group in before:
         if group not in after:
-            problems.append(f"animals.{group} was removed")
+            problems.append(f"{key}.{group} was removed")
     return problems
 
 

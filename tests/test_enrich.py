@@ -164,18 +164,342 @@ def test_region_place_seats_a_plant_where_it_grows(tmp_path: Path) -> None:
     ]
 
 
+def _biome_place(world: Path) -> None:
+    regions = world / "regions"
+    regions.mkdir(parents=True, exist_ok=True)
+    (regions / "xx_test_place.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_place",
+                "name": {"en": "Test Place"},
+                "biome": "xx_test_biome",
+                "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]},
+                "species": {
+                    "playable": ["fox", "perch"],
+                    "prey": ["vole"],
+                    "predators": ["fox"],
+                },
+                "terrain": {"water_level": 8, "height": 32},
+            }
+        ),
+        encoding="utf-8",
+    )
+    biomes = world / "biomes"
+    biomes.mkdir(parents=True, exist_ok=True)
+    (biomes / "xx_test_biome.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_biome",
+                "fish": [{"kind": "perch", "count": 6}],
+                "plants": {"cover": [{"id": "bilberry", "density": 0.2}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_region_place_seats_a_biome_animal_in_species(tmp_path: Path) -> None:
+    """#178.1: on a biome the animal joins species, never animals."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    _biome_place(world)
+    (world / "animals" / "marten.json").write_text(
+        json.dumps({"playable": True, "tags": ["predator"], "diet": ["berries"]})
+    )
+    before = json.loads((world / "regions" / "xx_test_place.json").read_text())
+    place = region_place("xx_test_place", world, "marten", "animal")
+    assert "animals" not in place
+    assert "fish" not in place
+    assert place["species"]["playable"] == ["fox", "perch", "marten"]
+    assert place["species"]["predators"] == ["fox"]
+    changed = [key for key in place if place[key] != before.get(key)]
+    assert changed == ["species"]
+
+
+def test_region_place_starts_a_biome_plant_from_its_cover(
+    tmp_path: Path,
+) -> None:
+    """#178.2: without its own list the plant joins the biome's cover."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    _biome_place(world)
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True, exist_ok=True)
+    (greens / "cloudberry.json").write_text(
+        json.dumps({"grows": {"on": ["grassland"], "density": 0.3}})
+    )
+    place = region_place("xx_test_place", world, "cloudberry", "plant")
+    assert [p["id"] for p in place["plants"]["cover"]] == [
+        "bilberry",
+        "cloudberry",
+    ]
+    biome = json.loads((world / "biomes" / "xx_test_biome.json").read_text())
+    assert [p["id"] for p in biome["plants"]["cover"]] == ["bilberry"]
+
+
+def test_region_place_keeps_a_biome_place_own_cover(tmp_path: Path) -> None:
+    """#178.2: with its own list the plant joins that, not the biome's."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    _biome_place(world)
+    region_path = world / "regions" / "xx_test_place.json"
+    region = json.loads(region_path.read_text())
+    region["plants"] = {"cover": [{"id": "lingonberry", "density": 0.1}]}
+    region_path.write_text(json.dumps(region), encoding="utf-8")
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True, exist_ok=True)
+    (greens / "cloudberry.json").write_text(
+        json.dumps({"grows": {"on": ["grassland"], "density": 0.3}})
+    )
+    place = region_place("xx_test_place", world, "cloudberry", "plant")
+    assert [p["id"] for p in place["plants"]["cover"]] == [
+        "lingonberry",
+        "cloudberry",
+    ]
+
+
+def test_region_place_seats_a_biome_fish_from_its_fish(tmp_path: Path) -> None:
+    """#178.3: a fish joins species and the biome's fish with its count."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    _biome_place(world)
+    (world / "animals" / "minnow.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "tags": ["fish", "small_fish"],
+                "diet": ["water_bugs"],
+            }
+        )
+    )
+    (world / "animals" / "hucho.json").write_text(
+        json.dumps(
+            {"playable": True, "tags": ["fish", "big_fish"], "diet": ["small_fish"]}
+        )
+    )
+    small = region_place("xx_test_place", world, "minnow", "animal")
+    assert small["species"]["playable"] == ["fox", "perch", "minnow"]
+    assert small["fish"] == [
+        {"kind": "perch", "count": 6},
+        {"kind": "minnow", "count": 5},
+    ]
+    big = region_place("xx_test_place", world, "hucho", "animal")
+    assert big["fish"][-1] == {"kind": "hucho", "count": 2}
+    biome = json.loads((world / "biomes" / "xx_test_biome.json").read_text())
+    assert biome["fish"] == [{"kind": "perch", "count": 6}]
+
+
+def test_region_place_seats_a_fish_from_its_list_example(
+    tmp_path: Path,
+) -> None:
+    """#178.3: before its file exists the list's example says fish."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    _biome_place(world)
+    (world / "animals" / "perch.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    (world / "animals" / "seal.json").write_text(
+        json.dumps({"playable": True, "tags": ["mammal"], "diet": ["fish"]})
+    )
+    (world / "animal-list.json").write_text(
+        json.dumps(
+            {
+                "animals": [
+                    {"id": "new_fish", "file_from": "perch"},
+                    {"id": "new_whale", "file_from": "seal"},
+                ]
+            }
+        )
+    )
+    fish = region_place("xx_test_place", world, "new_fish", "animal")
+    assert [e["kind"] for e in fish["fish"]] == ["perch", "new_fish"]
+    whale = region_place("xx_test_place", world, "new_whale", "animal")
+    assert "fish" not in whale
+    assert "new_whale" in whale["species"]["playable"]
+
+
+def test_region_additions_only_weighs_the_biome_base(tmp_path: Path) -> None:
+    """#178: species and biome-started fish additions pass; the rest fails."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    _biome_place(world)
+    (world / "animals" / "minnow.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    before = json.loads((world / "regions" / "xx_test_place.json").read_text())
+    assert (
+        region_additions_only(
+            before,
+            region_place("xx_test_place", world, "minnow", "animal"),
+            "minnow",
+            world,
+        )
+        == []
+    )
+    (world / "animals" / "marten.json").write_text(
+        json.dumps({"playable": True, "tags": ["predator"], "diet": ["berries"]})
+    )
+    assert (
+        region_additions_only(
+            before,
+            region_place("xx_test_place", world, "marten", "animal"),
+            "marten",
+            world,
+        )
+        == []
+    )
+    tampered = region_place("xx_test_place", world, "minnow", "animal")
+    tampered["fish"] = [{"kind": "minnow", "count": 5}]
+    assert region_additions_only(before, tampered, "minnow", world) == [
+        "fish changed beyond minnow"
+    ]
+    renamed = region_place("xx_test_place", world, "marten", "animal")
+    renamed["species"]["playable"] = ["marten"]
+    assert region_additions_only(before, renamed, "marten", world) == [
+        "species.playable changed beyond marten"
+    ]
+
+
 def test_region_place_leaves_the_reef_otherwise_alone() -> None:
-    """#173.1: the reef before and after differs only in its lists."""
+    """#173.1: the reef before and after differs only in its lists.
+
+    The reef is on a biome too now (world 68d9571), so the new
+    way: species and the biome's fish, nothing else (#178).
+    """
     import pytest
 
     world = ROOT.parent / "animundo-world"
     if not (world / "regions" / "au_great_barrier_reef.json").is_file():
         pytest.skip("needs the world checkout next to the builder")
     before = json.loads((world / "regions" / "au_great_barrier_reef.json").read_text())
+    biome = json.loads((world / "biomes" / "coral_reef.json").read_text())
     place = region_place("au_great_barrier_reef", world, "hammerhead", "animal")
     changed = [key for key in place if place[key] != before.get(key)]
-    assert changed == ["animals"]
-    assert place["animals"]["playable"][-1] == "hammerhead"
+    assert changed == ["species", "fish"]
+    assert place["species"]["playable"][-1] == "hammerhead"
+    assert place["fish"][:-1] == biome["fish"]
+    assert place["fish"][-1]["kind"] == "hammerhead"
+
+
+_RESOLVE = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import layers
+region = json.load(open(sys.argv[2], encoding="utf-8"))
+print(json.dumps(layers.resolve(region)))
+"""
+
+
+def _nuuksio_world(tmp_path: Path) -> Path | None:
+    """A scratch world with Nuuksio, its biome and the real tools."""
+    import shutil
+
+    real = ROOT.parent / "animundo-world"
+    if not (real / "regions" / "fi_nuuksio.json").is_file():
+        return None
+    world = tmp_path / "world"
+    for name in ("animals", "food", "lands", "models/plants", "models/trees"):
+        shutil.copytree(real / name, world / name)
+    (world / "regions").mkdir(parents=True)
+    shutil.copy(real / "regions" / "fi_nuuksio.json", world / "regions")
+    (world / "biomes").mkdir(parents=True)
+    shutil.copy(real / "biomes" / "boreal_forest.json", world / "biomes")
+    (world / "tools").mkdir(parents=True)
+    for tool in ("layers.py", "food.py"):
+        shutil.copy(real / "tools" / tool, world / "tools")
+    (world / "animals" / "xx_newt.json").write_text(
+        json.dumps({"playable": True, "tags": ["amphibian"], "diet": ["insects"]}),
+        encoding="utf-8",
+    )
+    (world / "animals" / "xx_minnow.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "tags": ["fish", "small_fish"],
+                "diet": ["water_bugs"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (world / "models" / "plants" / "xx_cloudberry.json").write_text(
+        json.dumps({"grows": {"on": ["grassland"], "density": 0.3}}),
+        encoding="utf-8",
+    )
+    return world
+
+
+def _resolved(world: Path, place: dict) -> dict:
+    import subprocess
+    import sys
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".json", delete=False, encoding="utf-8"
+    ) as handle:
+        json.dump(place, handle)
+        path = handle.name
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _RESOLVE, str(world / "tools"), path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        Path(path).unlink(missing_ok=True)
+    if proc.returncode != 0:
+        raise AssertionError(f"layers.resolve refused: {proc.stderr.strip()[:400]}")
+    return json.loads(proc.stdout)
+
+
+def test_nuuksio_enrich_keeps_the_biome_whole(tmp_path: Path) -> None:
+    """#178.4: an animal, plant and fish join Nuuksio; the biome stays."""
+    import pytest
+
+    world = _nuuksio_world(tmp_path)
+    if world is None:
+        pytest.skip("needs the world checkout next to the builder")
+    pristine = json.loads((world / "regions" / "fi_nuuksio.json").read_text())
+    before = _resolved(world, pristine)
+    before_fish = list(before["fish"])
+    before_plant_ids = {
+        p.get("model", p.get("id"))
+        for p in before["ground_cover"]["plants"]
+        if isinstance(p, dict)
+    }
+    before_playable = list(before["animals"]["playable"])
+
+    animal = region_place("fi_nuuksio", world, "xx_newt", "animal")
+    assert "animals" not in animal
+    resolved = _resolved(world, animal)
+    assert "xx_newt" in resolved["animals"]["playable"]
+    assert set(before_playable) <= set(resolved["animals"]["playable"])
+    assert resolved["fish"] == before_fish
+
+    plant = region_place("fi_nuuksio", world, "xx_cloudberry", "plant")
+    resolved = _resolved(world, plant)
+    plant_ids = {
+        p.get("model", p.get("id"))
+        for p in resolved["ground_cover"]["plants"]
+        if isinstance(p, dict)
+    }
+    assert "xx_cloudberry" in plant_ids
+    assert before_plant_ids <= plant_ids
+
+    fish = region_place("fi_nuuksio", world, "xx_minnow", "animal")
+    resolved = _resolved(world, fish)
+    assert "xx_minnow" in resolved["animals"]["playable"]
+    assert resolved["fish"] == [
+        *before_fish,
+        {"kind": "xx_minnow", "count": 5},
+    ]
 
 
 def test_place_tiles_maps_a_region_to_itself(tmp_path: Path) -> None:

@@ -1463,6 +1463,13 @@ def make_tile(
             "at": datetime.now(UTC).isoformat(),
         },
     }
+    if habitat != "open_ocean":
+        # Every land tile carries its compass name, like the plan
+        # (#195.1): the game reads it straight from the tile. The
+        # import stays local: plan.py builds on this module.
+        from .plan import plan_name
+
+        made_tile["name"] = plan_name(habitat, lat, lon, world)
     if habitat == "open_ocean":
         assert sea is not None and land_style is not None and land_eco is not None
         del made_tile["ecoregion"]

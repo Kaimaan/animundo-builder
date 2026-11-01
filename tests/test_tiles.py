@@ -1353,6 +1353,36 @@ def test_make_tile_raises_when_densities_cannot_fit(tmp_path: Path) -> None:
         )
 
 
+def test_published_batch_tile_carries_its_compass_name(tmp_path: Path) -> None:
+    """#195.1: a made land tile publishes with name.en and name.fi."""
+    import json
+
+    from fake_store import FakeStore
+
+    from builder.build import publish_group
+
+    world = _berry_world(tmp_path)
+    _budget_checker(world)
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species=_berry_species(),
+    )
+    assert blocked is None
+    assert made is not None
+    assert set(made["name"]) == {"en", "fi"}
+    assert "Nuuksio" in made["name"]["en"]
+    store = FakeStore()
+    path = publish_group("z10_0581_0294", made, store, "abc123")
+    group = json.loads(store.blobs[path].decode("utf-8"))
+    tile = group["tiles"]["z10_0581_0294"]
+    assert tile["name"]["en"] == made["name"]["en"]
+    assert tile["name"]["fi"] == made["name"]["fi"]
+
+
 def test_surveyed_plants_keep_the_hare_on_the_tundra(tmp_path: Path) -> None:
     """#154: surveyed clover and birch feed the hare the biome starves."""
     from builder.schemas import ROOT

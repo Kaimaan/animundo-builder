@@ -3,6 +3,20 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #192
+  (builder c29a34f)
+
+- The builder's storage
+  block reads `tiles/v2/`
+  get-only, like v1; v1
+  stays. The game drops its
+  copy at the next sync.
+- Evidence: emulator tests
+  for a v2 group file and
+  the v2 index (run in CI;
+  the sandbox here refuses
+  emulator ports).
+
 ## 2026-11-01: inbox #189
   (STOP: both reef items
   need more than $0.15)

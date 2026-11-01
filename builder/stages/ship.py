@@ -123,7 +123,9 @@ class ShipStage:
         """Its English and Finnish texts, this animal's keys only (#174.2).
 
         The animal file stays English; the chat translates (the open
-        host when set, else Muse Spark).
+        host when set, else Muse Spark). The Finnish file also
+        carries the map name, translated from the file's `name`;
+        English needs none: the map reads it from the file (#197.2).
         """
         strings = animal.get("text")
         if not isinstance(strings, dict) or not strings:
@@ -131,7 +133,12 @@ class ShipStage:
         for key, text in strings.items():
             if not isinstance(text, str):
                 raise _Stopped(f"{animal_id}: text.{key} is no string")
-        translated = WordsStage()._translate(ctx, world, "fi", strings)
+        name = animal.get("name")
+        if not isinstance(name, str) or not name:
+            raise _Stopped(f"{animal_id}: the animal file carries no name")
+        translated = WordsStage()._translate(
+            ctx, world, "fi", {"map_name": name, **strings}
+        )
         locale = ctx.job_dir / "locale"
         for language, texts in (("en", strings), ("fi", translated)):
             path = locale / language / "animals.json"
@@ -780,6 +787,8 @@ def _gate_finnish(job_dir: Path, animal_id: str) -> list[str]:
 
     Presence and key shape here; the world's language check reads
     the translations themselves when the copy job files the pack.
+    A Finnish `map_name` with no English key is the world's rule,
+    not an error: the English map name is the file's `name` (#197.2).
     """
     problems = []
     try:
@@ -800,7 +809,7 @@ def _gate_finnish(job_dir: Path, animal_id: str) -> list[str]:
         elif value == text:
             problems.append(f"finnish: {key} is still English")
     for key in fi:
-        if key not in en:
+        if key not in en and not key.endswith(".map_name"):
             problems.append(f"finnish: {key} is not in the English")
     return problems
 

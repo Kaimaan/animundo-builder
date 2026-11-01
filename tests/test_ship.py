@@ -62,6 +62,7 @@ def _region() -> dict[str, Any]:
 def _animal(**over: Any) -> dict[str, Any]:
     animal = {
         "id": "hammerhead",
+        "name": "Scalloped hammerhead",
         "text": {"name": "Scalloped hammerhead", "intro": "A shark with a wide head."},
         "model": {"archetype": "fish", "length": 3.5},
         "tags": ["fish", "big_fish"],
@@ -180,7 +181,11 @@ def _ctx(
 def _passing_run(tmp_path: Path, store: _Store) -> tuple[Path, Path, dict[str, Any]]:
     world = _world(tmp_path)
     job_dir = _item(tmp_path, _animal(), _research())
-    translated = {"name": "Kampavasarahai", "intro": "Hai, jolla on leveä pää."}
+    translated = {
+        "map_name": "Kampavasarahai",
+        "name": "Kampavasarahai",
+        "intro": "Hai, jolla on leveä pää.",
+    }
     result = ShipStage(store=store).run(_ctx(job_dir, world, [json.dumps(translated)]))
     return world, job_dir, result
 
@@ -297,7 +302,11 @@ def test_ship_builds_the_place_plants_before_the_world_check(
     laid["ground_cover"] = cover
     (job_dir / "regions" / f"{REGION}.json").write_text(json.dumps(laid))
     store = _Store()
-    translated = {"name": "Kampavasarahai", "intro": "Hai, jolla on leveä pää."}
+    translated = {
+        "map_name": "Kampavasarahai",
+        "name": "Kampavasarahai",
+        "intro": "Hai, jolla on leveä pää.",
+    }
     result = ShipStage(store=store, build=_fake_build).run(
         _ctx(job_dir, world, [json.dumps(translated)])
     )
@@ -327,11 +336,41 @@ def test_ship_stops_when_a_plant_model_would_not_build(tmp_path: Path) -> None:
     def _broken(world: Path, spec: str) -> dict[str, Any]:
         return {"ok": False, "summary": "the build failed", "log": "ERROR: boom"}
 
-    translated = {"name": "Kampavasarahai", "intro": "Hai, jolla on leveä pää."}
+    translated = {
+        "map_name": "Kampavasarahai",
+        "name": "Kampavasarahai",
+        "intro": "Hai, jolla on leveä pää.",
+    }
     with pytest.raises(_Stopped, match="would not build"):
         ShipStage(store=_Store(), build=_broken).run(
             _ctx(job_dir, world, [json.dumps(translated)])
         )
+
+
+def test_ship_writes_the_finnish_map_name(tmp_path: Path) -> None:
+    """#197.2: the Finnish file names the animal on the map too."""
+    _world, job_dir, _result = _passing_run(tmp_path, _Store())
+    fi = json.loads((job_dir / "locale" / "fi" / "animals.json").read_text())
+    assert fi["animal.hammerhead.map_name"] == "Kampavasarahai"
+    en = json.loads((job_dir / "locale" / "en" / "animals.json").read_text())
+    assert "animal.hammerhead.map_name" not in en
+
+
+def test_finnish_gate_allows_a_lone_map_name(tmp_path: Path) -> None:
+    """#197.2: a Finnish map_name with no English key is the world's rule."""
+    from builder.stages.ship import _gate_finnish
+
+    job_dir = _item(tmp_path, _animal(), _research())
+    fi_path = job_dir / "locale" / "fi" / "animals.json"
+    fi = json.loads(fi_path.read_text())
+    fi["animal.hammerhead.map_name"] = "Kampavasarahai"
+    fi_path.write_text(json.dumps(fi))
+    assert _gate_finnish(job_dir, "hammerhead") == []
+    fi["animal.hammerhead.stray"] = "Kulkuri"
+    fi_path.write_text(json.dumps(fi))
+    assert _gate_finnish(job_dir, "hammerhead") == [
+        "finnish: animal.hammerhead.stray is not in the English"
+    ]
 
 
 def test_ship_second_publish_makes_version_2(tmp_path: Path) -> None:
@@ -865,7 +904,11 @@ def test_ship_fails_unsafe_english_at_safety(tmp_path: Path) -> None:
     world = _world(tmp_path)
     animal = _animal(text={"name": "Scalloped hammerhead", "intro": "Bite them all."})
     job_dir = _item(tmp_path, animal, _research())
-    translated = {"name": "Kampavasarahai", "intro": "Pure kaikkia."}
+    translated = {
+        "map_name": "Kampavasarahai",
+        "name": "Kampavasarahai",
+        "intro": "Pure kaikkia.",
+    }
     keys = [item["key"] for item in collect_texts(job_dir, world)]
     verdicts = {
         "verdicts": [

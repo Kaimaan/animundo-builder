@@ -34,6 +34,7 @@ from .grid import (
 from .habitats import HabitatGrid, habitat_for
 from .presence import animals_for_habitat, fetch_smoothed
 from .schemas import validate
+from .shore import shore_for_tile
 from .species import MODEL as SPECIES_MODEL
 from .species import Source as SpeciesSource
 from .species import (
@@ -1437,6 +1438,9 @@ def make_tile(
         made_tile["blend"] = blend
     if coast is not None:
         made_tile["coast"] = coast
+    shore = shore_for_tile(tile, habitat_grid.grid_dir)
+    if shore is not None:
+        made_tile["shore"] = shore
     if greens is not None:
         made_tile["plants"] = greens
     if wanted:

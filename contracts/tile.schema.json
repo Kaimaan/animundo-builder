@@ -62,6 +62,31 @@
       "maxItems": 5,
       "items": {"type": "string", "pattern": "^[01]{5}$"}
     },
+    "shore": {
+      "type": "object",
+      "description": "Where the water is, finer than `coast`, on a tile with a real 1:10m shore within reach (spec 02, #204).",
+      "additionalProperties": false,
+      "required": ["span", "reach", "d", "lake", "lakes"],
+      "properties": {
+        "span": {"const": 32},
+        "reach": {"const": 512},
+        "d": {"type": "string", "minLength": 1},
+        "lake": {"type": "string", "minLength": 1},
+        "lakes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["en", "fi", "wikidata"],
+            "properties": {
+              "en": {"type": "string", "minLength": 1},
+              "fi": {"type": "string", "minLength": 1},
+              "wikidata": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
     "ecoregion": {"type": "integer", "minimum": 0},
     "sea": {"type": "string", "minLength": 1},
     "name": {

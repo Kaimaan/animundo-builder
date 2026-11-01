@@ -93,8 +93,11 @@ def load_grid(grid_dir: Path) -> HabitatGrid:
 class HabitatGrid:
     """The baked grid file: cell data and habitats by tile."""
 
-    def __init__(self, cells: dict[str, list[Any]]) -> None:
+    def __init__(
+        self, cells: dict[str, list[Any]], grid_dir: Path | None = None
+    ) -> None:
         self._cells = cells
+        self.grid_dir = grid_dir
 
     @classmethod
     def load(cls, path: Path) -> HabitatGrid:
@@ -103,7 +106,7 @@ class HabitatGrid:
         data = json.loads(raw)
         if data.get("grid") != NAME:
             raise ValueError(f"{path} is a {data.get('grid')} grid, not {NAME}")
-        return cls(data["cells"])
+        return cls(data["cells"], grid_dir=path.parent)
 
     def cells(self) -> list[str]:
         """Every baked cell key (`"x,y"`)."""

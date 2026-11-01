@@ -1297,7 +1297,7 @@ class Worker:
             col, row = parse_tile(tile)
             habitat = self._habitat_grid().habitat(col, row)
             lat, lon = center(tile)
-            name = plan_name(habitat, lat, lon, None, self.world)["en"]
+            name = plan_name(habitat, lat, lon, self.world)["en"]
         build_mod.write_state_params(
             item_dir, {"area": f"{tile} ({name})", "kind": "enrich"}
         )

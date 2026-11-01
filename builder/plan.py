@@ -164,21 +164,17 @@ def plan_name(
     habitat: str,
     lat: float,
     lon: float,
-    species: dict[str, Any] | None = None,
     world: Path | None = None,
 ) -> dict[str, str]:
-    """The area name: the species call's own, else the compass (#135.5).
+    """The area name, always the compass (#135.5, #195.4).
 
-    "Helsinki shore" / "Helsingin ranta" when the answer names the
-    square; without names, "Forest north of Nuuksio" / "Metsä
-    Nuuksion pohjoispuolella" by code as before. With a world,
-    the hand-made regions join the places and the nearest wins;
-    a tie keeps the curated name (#169.2).
+    "Forest north of Nuuksio" / "Metsä Nuuksion
+    pohjoispuolella" by code: one plain style everywhere,
+    English and Finnish saying the same tree. Survey answers
+    name nothing, however fancy their words. With a world,
+    the hand-made regions join the places and the nearest
+    wins; a tie keeps the curated name (#169.2).
     """
-    if species is not None:
-        en, fi = species.get("name_en"), species.get("name_fi")
-        if isinstance(en, str) and en.strip() and isinstance(fi, str) and fi.strip():
-            return {"en": en.strip(), "fi": fi.strip()}
     words = HABITATS.get(habitat, (habitat.replace("_", " ").title(), habitat))
     scored = []
     candidates: list[tuple[tuple[str, str, str, float, float], int]] = [
@@ -703,13 +699,13 @@ def _resolve_species(
     species_source: Any | None,
     facts: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, bool]:
-    """The survey for the plan's name and probe (#141.1).
+    """The survey for the plan's probe (#141.1, #195.4).
 
     A recorded answer passes through untouched; else the cache,
-    else one call, like the tile maker. Anything failing leaves
-    the name to the compass: a name never stops a plan. Only a
-    twice-misread cell blocks the probe, as the maker would.
-    Returns (probe_species, answer, place_blocked).
+    else one call, like the tile maker. The compass names the
+    plan either way. Only a twice-misread cell blocks the probe,
+    as the maker would. Returns (probe_species, answer,
+    place_blocked).
     """
     if species is not None:
         return species, species, False
@@ -803,7 +799,7 @@ def _finish(
         "items": items,
         "improve": improve,
         "estimate_usd": round(estimate, 2),
-        "name": plan_name(habitat, lat, lon, answer, world),
+        "name": plan_name(habitat, lat, lon, world),
         "coming": coming,
         "world": world_commit,
         "planned_at": datetime.now(UTC).isoformat(),

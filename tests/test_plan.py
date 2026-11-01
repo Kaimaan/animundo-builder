@@ -909,7 +909,7 @@ def test_plan_names_from_the_nearest_region(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _reef_region(world)
     lat, lon = center("z10_0927_0559")
-    named = plan_name("open_ocean", lat, lon, None, world)
+    named = plan_name("open_ocean", lat, lon, world)
     assert named["en"] == "Open ocean north of Great Barrier Reef – Green Island"
     assert named["fi"] == (
         "Avomeri Great Barrier Reef – Green Islandin pohjoispuolella"
@@ -930,7 +930,7 @@ def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
             }
         )
     )
-    assert plan_name("sea", 52.077, -5.007, None, world) == {
+    assert plan_name("sea", 52.077, -5.007, world) == {
         "en": "Sea southwest of Nuuksio",
         "fi": "Meri Nuuksion lounaispuolella",
     }
@@ -1014,8 +1014,10 @@ def test_open_water_plan_names_its_region_neighbour(tmp_path: Path) -> None:
     assert "Green Islandin" in plan["name"]["fi"]
 
 
-def test_plan_uses_the_species_names(tmp_path: Path) -> None:
-    """#135.5: a recorded answer names the plan in both languages."""
+def test_plan_ignores_the_species_names(tmp_path: Path) -> None:
+    """#195.4: however fancy the answer's names, the compass names it."""
+    from builder.grid import center
+
     world = _world(tmp_path)
     habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
@@ -1031,11 +1033,12 @@ def test_plan_uses_the_species_names(tmp_path: Path) -> None:
             "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
             "plants": [],
             "trees": [],
-            "name_en": "Nuuksio forest",
-            "name_fi": "Nuuksion metsä",
+            "name_en": "Whispering Pinewoods, Farms and Brook",
+            "name_fi": "Kuusimetsien, peltojen ja puron maa",
         },
     )
-    assert plan["name"] == {"en": "Nuuksio forest", "fi": "Nuuksion metsä"}
+    assert plan["name"] == plan_name("boreal_forest", *center("z10_0581_0294"), world)
+    assert plan["name"]["en"] != "Whispering Pinewoods, Farms and Brook"
 
 
 def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:

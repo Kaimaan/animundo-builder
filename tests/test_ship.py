@@ -778,6 +778,48 @@ def test_gate_counts_not_built_as_unknown(tmp_path: Path) -> None:
     assert _gate_problems(tmp_path, results=results) == []
 
 
+def test_gate_counts_a_big_fish_by_its_tags(tmp_path: Path) -> None:
+    """#197.3: tags say the fish; no archetype anywhere."""
+    from builder.stages.ship import _gate_reef
+
+    world = _world(tmp_path)
+    region = _region()
+    region["fish"].append({"kind": "hammerhead", "count": 2})
+    animal = _animal(model={"length": 3.5}, tags=["fish", "big_fish"])
+    assert "archetype" not in animal["model"]
+    research = _research(size={"length_cm": 350, "largest_cm": 400})
+    assert _gate_reef(animal, research, REGION, region, world) == []
+    region["fish"][-1]["count"] = 5
+    assert _gate_reef(animal, research, REGION, region, world) == [
+        f"{REGION}: fish: count 5 is no fewer than the small fish (5)"
+    ]
+    small = _animal(model={"length": 0.126}, tags=["fish", "small_fish"])
+    small_found = _research(size={"length_cm": 8, "largest_cm": 12})
+    assert _gate_reef(small, small_found, REGION, region, world) == []
+
+
+def test_gate_reads_the_biome_depth_on_a_biome_place(tmp_path: Path) -> None:
+    """#197.3: cam_height 40 fails against the reef biome's 35."""
+    from builder.stages.ship import _gate_reef
+
+    world = _world(tmp_path)
+    (world / "biomes").mkdir()
+    (world / "biomes" / "xx_biome.json").write_text(
+        json.dumps({"terrain": {"sea_depth": 35}})
+    )
+    region = _region()
+    region["biome"] = "xx_biome"
+    del region["terrain"]["sea_depth"]
+    region["fish"].append({"kind": "hammerhead", "count": 2})
+    animal = _animal(cam_height=40)
+    research = _research()
+    assert _gate_reef(animal, research, REGION, region, world) == [
+        f"{REGION}: camera: cam_height 40 is above the water (35 m)"
+    ]
+    region["terrain"]["sea_depth"] = 50
+    assert _gate_reef(animal, research, REGION, region, world) == []
+
+
 def test_gate_fails_a_record_length(tmp_path: Path) -> None:
     """#197.1: 4.97 m stands past the researched largest adult (400 cm)."""
     animal = _animal(model={"archetype": "fish", "length": 4.97}, cam_dist=6.0)

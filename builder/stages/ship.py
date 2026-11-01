@@ -487,7 +487,7 @@ def _additions(
     key = "species" if region.get("biome") else "animals"
     groups = region.get(key, {}) or {}
     additions: dict[str, Any] = {"format": 1}
-    if (animal.get("model") or {}).get("archetype") == "fish":
+    if _is_big_fish(animal):
         count = 0
         for entry in region.get("fish", []) or []:
             if isinstance(entry, dict) and entry.get("kind") == animal_id:
@@ -854,8 +854,7 @@ def _gate_reef(
     for hunt in hunts:
         if hunt not in allowed:
             problems.append(f"hunts: {hunt} is no reviewed prey tag")
-    tags = animal.get("tags", []) or []
-    if model.get("archetype") == "fish" and "small_fish" not in tags:
+    if _is_big_fish(animal):
         problems.extend(_gate_fish_count(animal, region_id, region, world))
     cam_dist = animal.get("cam_dist")
     if (
@@ -866,7 +865,7 @@ def _gate_reef(
         problems.append(
             f"camera: cam_dist {cam_dist} sits inside the body ({length} m)"
         )
-    sea_depth = (region.get("terrain", {}) or {}).get("sea_depth")
+    sea_depth = _place_sea_depth(region, world)
     cam_height = animal.get("cam_height")
     if (
         isinstance(cam_height, (int, float))
@@ -929,6 +928,31 @@ def _month(day: Any) -> int | None:
 def _world_hunts(world: Path) -> set[str]:
     """Every tag a shipped animal hunts: the reviewed prey tags."""
     return _hunt_tags(world)
+
+
+def _is_big_fish(animal: dict[str, Any]) -> bool:
+    """A fish that is no small fish, by the file's tags (#197.3).
+
+    No animal file carries `model.archetype`; the tags say it.
+    """
+    tags = animal.get("tags", []) or []
+    return "fish" in tags and "small_fish" not in tags
+
+
+def _place_sea_depth(region: dict[str, Any], world: Path) -> Any:
+    """The resolved place's sea depth: region, else its biome (#197.3)."""
+    sea_depth = (region.get("terrain", {}) or {}).get("sea_depth")
+    if isinstance(sea_depth, (int, float)):
+        return sea_depth
+    biome = region.get("biome")
+    if not isinstance(biome, str) or not biome:
+        return None
+    try:
+        data = json.loads((world / "biomes" / f"{biome}.json").read_text())
+    except (OSError, ValueError):
+        return None
+    depth = (data.get("terrain", {}) or {}).get("sea_depth")
+    return depth if isinstance(depth, (int, float)) else None
 
 
 def _gate_fish_count(

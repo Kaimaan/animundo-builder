@@ -335,10 +335,15 @@ def home_for_cell(
     (#169.1). Open ocean with no ecoregion builds from the one
     `open_sea` home when the checkout has it (#177.1). Boreal
     water picks the lake home through the tile's habitat: a
-    boreal_lake cell builds from boreal_lake, a boreal_forest
-    cell from boreal_forest.
+    boreal_lake cell builds from boreal_lakeland, a
+    boreal_forest cell from boreal_forest. Retired biomes are
+    never picked: no new or remade tile builds on one (#201.1).
     """
-    if habitat == "open_ocean" and "open_sea" in homes:
+    if (
+        habitat == "open_ocean"
+        and "open_sea" in homes
+        and not homes["open_sea"].get("retired")
+    ):
         return "open_sea"
     if eco is None:
         return None
@@ -346,16 +351,26 @@ def home_for_cell(
         listed = sorted(
             home_id
             for home_id, data in homes.items()
-            if data.get("habitat") == "sea" and eco in (data.get("ecoregions") or [])
+            if data.get("habitat") == "sea"
+            and eco in (data.get("ecoregions") or [])
+            and not data.get("retired")
         )
         if listed:
             return listed[0]
-        if "sea" in homes and (biome is None or biome in SEA_BIOMES):
+        if (
+            "sea" in homes
+            and not homes["sea"].get("retired")
+            and (biome is None or biome in SEA_BIOMES)
+        ):
             return "sea"
         return None
     for home_id in sorted(homes):
         data = homes[home_id]
-        if eco in (data.get("ecoregions") or []) and data.get("habitat") == habitat:
+        if (
+            eco in (data.get("ecoregions") or [])
+            and data.get("habitat") == habitat
+            and not data.get("retired")
+        ):
             return home_id
     return None
 

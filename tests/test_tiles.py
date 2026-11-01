@@ -2287,3 +2287,19 @@ def test_near_made_place_or_noted_reaches_three_cells(tmp_path: Path) -> None:
         near_made_place_or_noted("z10_0581_0294", world, set(), {"z10_0585_0296"})
         is False
     )
+
+
+def test_retired_biomes_are_never_picked() -> None:
+    """#201.1: a 717 lake cell gets boreal_lakeland; forest unchanged."""
+    import pytest
+
+    from builder.schemas import ROOT
+    from builder.tiles import available_biomes, home_for_cell
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "biomes" / "boreal_lakeland.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    biomes = available_biomes(world)
+    assert biomes["boreal_lake"].get("retired") is True
+    assert home_for_cell(717, "boreal_lake", biomes, 6) == "boreal_lakeland"
+    assert home_for_cell(717, "boreal_forest", biomes, 6) == "boreal_forest"

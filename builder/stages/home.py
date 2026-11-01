@@ -402,13 +402,16 @@ class HomeStage:
         main_role = backfill_role(main, hunts) or "playable"
         placed[stem] = {"backfilled": True, "file": stem, "role": main_role}
         SpeciesPlanStage.place_backfilled(world, region, placed, overlay)
+        # A place on a biome names its cast in `species`,
+        # as a tile does (game 0043), never `animals` (#181.1).
+        key = "species" if region.get("biome") else "animals"
         if not main:
             # No file yet: the maker writes it next, but the cast
             # seats the animal now, as the one to play.
-            playable = region.setdefault("animals", {}).setdefault("playable", [])
+            playable = region.setdefault(key, {}).setdefault("playable", [])
             if stem not in playable:
                 playable.append(stem)
-        playable = region.setdefault("animals", {}).setdefault("playable", [])
+        playable = region.setdefault(key, {}).setdefault("playable", [])
         if stem in playable:
             playable.remove(stem)
             playable.insert(0, stem)
@@ -652,7 +655,8 @@ def _main_food(
 def _cast_files(region: dict[str, Any]) -> set[str]:
     """Every animal file stem seated in the region."""
     files = set()
-    for group in region.get("animals", {}).values():
+    key = "species" if region.get("biome") else "animals"
+    for group in region.get(key, {}).values():
         files.update(group or [])
     for fish in region.get("fish", []) or []:
         # Fish swim under `kind`, like the regions and the game (#85.2).

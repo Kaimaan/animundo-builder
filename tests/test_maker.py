@@ -610,6 +610,34 @@ def test_whale_box_stays_without_a_round_spec(tmp_path: Path) -> None:
     assert animal["box"] == [2, 3, 7]
 
 
+def test_enrich_seating_on_the_reef_writes_no_animals(tmp_path: Path) -> None:
+    """#181.1: replaying the hammerhead seating ends with species only."""
+    from builder.stages.maker import seat_made
+
+    world = tmp_path / "world"
+    animals = world / "animals"
+    animals.mkdir(parents=True)
+    (animals / "hammerhead.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish", "small_fish"]})
+    )
+    job = tmp_path / "job"
+    regions = job / "regions"
+    regions.mkdir(parents=True)
+    region = {
+        "id": "au_great_barrier_reef",
+        "biome": "coral_reef",
+        "species": {"playable": ["clownfish"], "prey": [], "predators": []},
+    }
+    path = regions / "au_great_barrier_reef.json"
+    path.write_text(json.dumps(region))
+    seat_made(world, job, region, path, "hammerhead", False)
+    assert "animals" not in region
+    assert region["species"]["playable"] == ["clownfish", "hammerhead"]
+    on_disk = json.loads(path.read_text())
+    assert "animals" not in on_disk
+    assert on_disk["species"]["playable"] == ["clownfish", "hammerhead"]
+
+
 def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

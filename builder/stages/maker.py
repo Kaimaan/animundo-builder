@@ -1521,7 +1521,10 @@ def seat_made(
         job_dir,
     )
     if not is_prey:
-        playable = region.setdefault("animals", {}).setdefault("playable", [])
+        # A place on a biome names its cast in `species`,
+        # as a tile does (game 0043), never `animals` (#181.1).
+        key = "species" if region.get("biome") else "animals"
+        playable = region.setdefault(key, {}).setdefault("playable", [])
         if animal_id not in playable:
             playable.append(animal_id)
     region_path.write_text(json.dumps(region, indent=2), encoding="utf-8")
@@ -1529,7 +1532,8 @@ def seat_made(
 
 def _seated(region: dict[str, Any], stem: str) -> bool:
     """Whether the cast seats this stem, on land or as a fish."""
-    for group in region.get("animals", {}).values():
+    key = "species" if region.get("biome") else "animals"
+    for group in region.get(key, {}).values():
         if stem in (group or []):
             return True
     for fish in region.get("fish", []) or []:
@@ -1644,14 +1648,16 @@ def _animal_passed(job_dir: Path, animal_id: str) -> bool:
 def _pruned_regions(job_dir: Path, excused: set[str], dest: Path) -> dict[str, Path]:
     """Copies of the job's regions without the still-unmade targets (#67.1).
 
-    The cast (`animals.*`) and the `fish` lose every excused id;
-    regions naming none keep their own bytes. The paths overlay
-    the draft the checks run on, so the job itself never changes.
+    The cast (`species.*` on a biome, `animals.*` elsewhere) and
+    the `fish` lose every excused id; regions naming none keep
+    their own bytes. The paths overlay the draft the checks run
+    on, so the job itself never changes.
     """
     overlaid = {}
     for path in sorted((job_dir / "regions").glob("*.json")):
         region = json.loads(path.read_text(encoding="utf-8"))
-        cast = region.get("animals")
+        key = "species" if region.get("biome") else "animals"
+        cast = region.get(key)
         changed = False
         if isinstance(cast, dict):
             for group in ("playable", "predators", "prey"):

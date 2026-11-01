@@ -605,7 +605,10 @@ class SpeciesPlanStage:
                 if stem not in {entry.get("kind") for entry in fish}:
                     small = "small_fish" in (data.get("tags") or [])
                     fish.append({"kind": stem, "count": 5 if small else 2})
-            animals = region.setdefault("animals", {})
+            # A place on a biome names its cast in `species`,
+            # as a tile does (game 0043), never `animals` (#181.1).
+            key = "species" if region.get("biome") else "animals"
+            animals = region.setdefault(key, {})
             if data.get("playable"):
                 group = animals.setdefault("playable", [])
                 if stem not in group:
@@ -702,7 +705,8 @@ class SpeciesPlanStage:
             for entry in plan["species"]
             if entry["decision"] in ("food", "candidate", "needs_code")
         }
-        for group in region.get("animals", {}).values():
+        key = "species" if region.get("biome") else "animals"
+        for group in region.get(key, {}).values():
             kept = []
             for animal_id in group:
                 animal_id = rename.get(animal_id, animal_id)
@@ -748,7 +752,8 @@ class SpeciesPlanStage:
 
 def _cast_files(region: dict[str, Any]) -> set[str]:
     cast = set()
-    for group in region.get("animals", {}).values():
+    key = "species" if region.get("biome") else "animals"
+    for group in region.get(key, {}).values():
         cast.update(group)
     cast.update(fish.get("kind", "") for fish in region.get("fish", []))
     return cast - {""}

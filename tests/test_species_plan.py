@@ -980,3 +980,26 @@ def test_backfilled_fish_count_follows_their_size(tmp_path: Path) -> None:
     assert counts == {"xx_minnow": 5, "xx_shark": 2}
     assert region["animals"]["playable"] == ["xx_minnow", "xx_shark"]
     assert region["animals"]["predators"] == ["xx_shark"]
+
+
+def test_backfilled_cast_joins_species_on_a_biome(tmp_path: Path) -> None:
+    """#181.1: backfilled animals join species, never animals, on a biome."""
+    world = tmp_path / "world"
+    animals = world / "animals"
+    animals.mkdir(parents=True)
+    (animals / "xx_fox.json").write_text(
+        json.dumps({"playable": True, "tags": ["predator"], "hunts": ["hare"]})
+    )
+    region: dict[str, Any] = {
+        "id": "xx_place",
+        "biome": "xx_biome",
+        "species": {"playable": [], "prey": [], "predators": []},
+    }
+    SpeciesPlanStage.place_backfilled(
+        world,
+        region,
+        {"xx_fox": {"backfilled": True, "file": "xx_fox", "role": "predator"}},
+    )
+    assert "animals" not in region
+    assert region["species"]["playable"] == ["xx_fox"]
+    assert region["species"]["predators"] == ["xx_fox"]

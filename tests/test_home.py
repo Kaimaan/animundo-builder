@@ -872,6 +872,48 @@ def test_home_replays_saved_research(
     assert (tmp_path / "species-plan.json").is_file()
 
 
+def test_seat_cast_writes_species_on_a_biome(tmp_path: Path) -> None:
+    """#181.1: seated neighbours join species, never animals, on a biome."""
+    from builder.stages.home import HomeStage
+
+    world = tmp_path / "world"
+    animals = world / "animals"
+    animals.mkdir(parents=True)
+    (animals / "fox.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "tags": ["predator"],
+                "latin": "Vulpes vulpes",
+                "hunts": ["hare"],
+                "diet": ["hare"],
+            }
+        )
+    )
+    region: dict[str, Any] = {
+        "id": "xx_place",
+        "biome": "xx_biome",
+        "food": [{"kind": "hare"}],
+        "species": {"playable": [], "prey": [], "predators": []},
+    }
+    brief = {
+        "species_key": 1,
+        "center": {"lat": 60.0, "lon": 24.0},
+        "place": {"radius_km": 10},
+    }
+    stage = HomeStage(facets=lambda lat, lon, radius_km: {})
+    stage._seat_cast(
+        world,
+        tmp_path / "job",
+        region,
+        brief,
+        {"fox": {"gbif_key": 1, "name": "Vulpes vulpes"}},
+        "fox",
+    )
+    assert "animals" not in region
+    assert region["species"]["playable"] == ["fox"]
+
+
 @pytest.mark.parametrize("stem", ["fox", "lynx", "anaconda"])
 def test_research_fixtures_validate(stem: str) -> None:
     line = (FIXTURES / f"research-{stem}.jsonl").read_text(encoding="utf-8")

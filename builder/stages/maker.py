@@ -1187,9 +1187,15 @@ class AnimalMakerStage:
             self._write_measured_length(ctx, animal_id, built["log"])
         self._collect_built(ctx, sandbox, animal_id)
         errors = [] if built["ok"] else [f"the build failed: {built['log']}"]
-        errors += _verdict_errors(
+        from ..enrich import split_not_built
+
+        verdict_errors = _verdict_errors(
             _verdicts(world, ctx, animal_id, "edits", attempt), ("models",), animal_id
         )
+        # Plant models their items haven't built yet are unknown,
+        # not failures: the rounds fix what's fixable (#181.2).
+        real, _unbuilt = split_not_built(verdict_errors)
+        errors += real
         (folder / "errors.json").write_text(
             json.dumps(errors, indent=2), encoding="utf-8"
         )

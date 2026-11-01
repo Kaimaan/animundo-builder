@@ -638,6 +638,45 @@ def test_enrich_seating_on_the_reef_writes_no_animals(tmp_path: Path) -> None:
     assert on_disk["species"]["playable"] == ["clownfish", "hammerhead"]
 
 
+def test_edit_errors_exclude_unbuilt_plant_models(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#181.2: edit rounds never fight plant specs that aren't built yet."""
+    from types import SimpleNamespace
+
+    from builder.stages import maker as maker_mod
+    from builder.stages.maker import AnimalMakerStage
+
+    job = tmp_path / "job"
+    animals = job / "animals"
+    animals.mkdir(parents=True)
+    (animals / "hammerhead.json").write_text(
+        json.dumps({"id": "hammerhead", "model": {"length": 0.7}})
+    )
+    monkeypatch.setattr(
+        maker_mod, "_ensure_sandbox", lambda job_dir, world: tmp_path / "sandbox"
+    )
+    monkeypatch.setattr(
+        maker_mod,
+        "_verdicts",
+        lambda world, ctx, aid, phase, attempt, extra=None: {
+            "models": {
+                "status": "fail",
+                "problems": [
+                    "models/plants/paddle_grass.json: "
+                    "build it first with tools/build_model.sh paddle_grass",
+                    "- animals/hammerhead.json: flippers too short",
+                ],
+            }
+        },
+    )
+    log = 'for animals/hammerhead.json: "length": 3.20 (real size)'
+    stage = AnimalMakerStage(build=lambda sandbox, aid: {"ok": True, "log": log})
+    ctx = SimpleNamespace(job_dir=job, check_budget=lambda: None)
+    errors = stage._build_and_check(ctx, tmp_path / "world", "hammerhead", 1)
+    assert errors == ["animals/hammerhead.json: flippers too short"]
+
+
 def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

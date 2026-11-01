@@ -373,7 +373,7 @@ def test_review_prompts_check_parts_and_frames() -> None:
         "one white piece",
         "merges into the fluke",
         "one even mid blue-grey",
-        "never ask for legs",
+        "no legs, walk frames or run pose",
     ):
         assert anchor in text
 

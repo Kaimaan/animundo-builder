@@ -3,6 +3,37 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #185 (builder d8e1f65)
+
+- The worker image mounts
+  `z10.json.gz` at `/grids`
+  instead of the deleted EASE
+  files, and `seas.json.gz` at
+  `/src/builder/data`, where the
+  open-sea naming reads it.
+- The seas file is rebaked for
+  z10 (634,726 cells): the old
+  EASE-keyed file named nothing
+  on the new grid, on a Mac no
+  less than on the worker.
+  Aliases, places of interest
+  and country names stay out of
+  the image: no plan reads them.
+  The staleness is worth one
+  line: `data/species` still
+  holds EASE-keyed caches, which
+  never hit on z10 and quietly
+  refetch.
+- Evidence: a test weighs every
+  file the image names against
+  this checkout (and fails EASE
+  back in), and a reef-side
+  open-sea tile planned from an
+  image-like layout gets Great
+  Barrier Reef for its sea.
+  Suite, ruff and gitleaks
+  green. Ready to redeploy.
+
 ## 2026-11-01: inbox #184 (builder 6ddb637, fad4243, 30cd6dc, 6cd0eb7)
 
 - Reef rock counts as water

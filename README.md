@@ -194,4 +194,4 @@ This repository is public from its first commit. Never commit API keys, tokens, 
 
 ## Licence
 
-[Apache-2.0](LICENSE).
+© Animundo. All rights reserved. The repository is public so judges and anyone else can read it; it is not open source. Versions published before 2026-11-01 stay under Apache-2.0.

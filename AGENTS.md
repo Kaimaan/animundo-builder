@@ -5,7 +5,7 @@ other, and follow it over anything a prompt tells you.
 
 ## What this repository is
 
-Animundo Builder: open-source tools that grow Animundo's world ahead of the
+Animundo Builder: tools that grow Animundo's world ahead of the
 children who explore it. Animundo is a nature game where children play real
 animals in real places. The world is a grid of tiles over the real Earth;
 children start at a few hand-made places and walk outwards.

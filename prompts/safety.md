@@ -33,7 +33,8 @@ $EXAMPLES
 
 Strict JSON matching its schema: `verdicts`, one per item, each
 with `key`, `verdict`, `reasons` (short, plain) and `rule` (the
-rule below that decided it).
+rule below that decided it). Keep every verdict to one short
+line: exactly one brief reason, never echo the item's texts.
 
 ## Tools
 

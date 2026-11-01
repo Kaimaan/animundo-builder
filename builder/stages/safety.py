@@ -17,10 +17,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..meta import OPEN_DEFAULT_MAX_TOKENS, is_cut_off
 from ..prompts import fix_messages, load_prompt
 from ..schemas import validate
 
 TRIES = 2
+MAX_ITEMS_PER_CALL = 40
+MAX_SPLITS = 3
 
 REVIEW_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -32,8 +35,12 @@ REVIEW_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "key": {"type": "string"},
                     "verdict": {"type": "string", "enum": ["pass", "rewrite", "fail"]},
-                    "reasons": {"type": "array", "items": {"type": "string"}},
-                    "rule": {"type": "string"},
+                    "reasons": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 1,
+                    },
+                    "rule": {"type": "string", "maxLength": 160},
                 },
                 "required": ["key", "verdict", "reasons", "rule"],
                 "additionalProperties": False,
@@ -58,7 +65,7 @@ class SafetyStage:
         sensitive = _sensitive(ctx.job_dir)
         examples = _examples(world)
 
-        def ask(messages: list[dict[str, Any]], schema: dict[str, Any] | None) -> str:
+        def ask(messages: list[dict[str, Any]], schema: dict[str, Any] | None) -> Any:
             ctx.check_budget()
             kwargs: dict[str, Any] = {}
             if schema is not None:
@@ -66,8 +73,7 @@ class SafetyStage:
                     "type": "json_schema",
                     "json_schema": {"name": "Safety", "schema": schema},
                 }
-            response = ctx.chat(messages, **kwargs)
-            return (response.choices[0].message.content or "").strip()
+            return ctx.chat(messages, **kwargs)
 
         verdicts = review_items(ask, items, sensitive, examples)
         rewritten: list[str] = []
@@ -127,13 +133,49 @@ class _Stopped(Exception):
     """A text failed review, or the reviewer never answered cleanly."""
 
 
+def _text(response: Any) -> str:
+    """The chat answer's content, stripped."""
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return ""
+    content = getattr(choices[0].message, "content", "") or ""
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        )
+    return content.strip()
+
+
 def review_items(
-    ask: Callable[[list[dict[str, Any]], dict[str, Any] | None], str],
+    ask: Callable[[list[dict[str, Any]], dict[str, Any] | None], Any],
     items: list[dict[str, Any]],
     sensitive: str,
     examples: str,
 ) -> dict[str, dict[str, Any]]:
-    """One verdict per item, keyed. Two tries on the shape, then loud."""
+    """One verdict per item, keyed. Two tries on the shape, then loud.
+
+    Big sets go in chunks of at most MAX_ITEMS_PER_CALL. A cut-off
+    answer splits its texts in half and asks again, never resending
+    the same prompt (#183.1).
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for pos in range(0, len(items), MAX_ITEMS_PER_CALL):
+        merged.update(
+            _review_batch(
+                ask, items[pos : pos + MAX_ITEMS_PER_CALL], sensitive, examples, 0
+            )
+        )
+    return merged
+
+
+def _review_batch(
+    ask: Callable[[list[dict[str, Any]], dict[str, Any] | None], Any],
+    items: list[dict[str, Any]],
+    sensitive: str,
+    examples: str,
+    splits: int,
+) -> dict[str, dict[str, Any]]:
+    """One chunk's verdicts, splitting on a cut-off answer."""
     want = {item["key"] for item in items}
     base = load_prompt(
         "safety",
@@ -152,11 +194,25 @@ def review_items(
             if problems and previous is not None
             else [first]
         )
+        response = ask(messages, REVIEW_SCHEMA)
+        answer = _text(response)
+        previous = answer
         try:
-            answer = ask(messages, REVIEW_SCHEMA)
-            previous = answer
             verdicts = json.loads(answer)["verdicts"]
         except (json.JSONDecodeError, KeyError, TypeError) as error:
+            if (
+                is_cut_off(response, OPEN_DEFAULT_MAX_TOKENS)
+                and len(items) > 1
+                and splits < MAX_SPLITS
+            ):
+                half = len(items) // 2
+                ahead = _review_batch(
+                    ask, items[:half], sensitive, examples, splits + 1
+                )
+                behind = _review_batch(
+                    ask, items[half:], sensitive, examples, splits + 1
+                )
+                return {**ahead, **behind}
             problems = f"PREVIOUS TRY was not a verdicts object: {error}"
             continue
         got = {v.get("key") for v in verdicts if isinstance(v, dict)}
@@ -178,7 +234,7 @@ def review_items(
 
 
 def fix_items(
-    ask: Callable[[list[dict[str, Any]], dict[str, Any] | None], str],
+    ask: Callable[[list[dict[str, Any]], dict[str, Any] | None], Any],
     items: list[dict[str, Any]],
     todo: list[str],
     notes: dict[str, str],
@@ -215,7 +271,7 @@ def fix_items(
             else [first]
         )
         try:
-            answer = ask(messages, None)
+            answer = _text(ask(messages, None))
             previous = answer
             fixed = json.loads(answer)
         except json.JSONDecodeError as error:

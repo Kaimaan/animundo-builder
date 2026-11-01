@@ -368,3 +368,96 @@ def test_no_texts_passes_empty(tmp_path: Path) -> None:
     chat = ScriptChat([json.dumps({"verdicts": []})])
     result = SafetyStage().run(_ctx(tmp_path, chat, world))
     assert result == {"reviewed": 0, "rewritten": [], "failed": []}
+
+
+class CutOffChat:
+    """Plays back (answer, finish_reason) pairs, recording prompts."""
+
+    model = "fake-test-model"
+
+    def __init__(self, script: list[tuple[str, str]]) -> None:
+        self.script = list(script)
+        self.prompts: list[str] = []
+
+    def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
+        content = messages[0]["content"]
+        self.prompts.append(content if isinstance(content, str) else content[0]["text"])
+        text, finish = self.script.pop(0)
+        message = SimpleNamespace(content=text, tool_calls=None)
+        return SimpleNamespace(
+            model="fake-test-model",
+            choices=[SimpleNamespace(message=message, finish_reason=finish)],
+            usage=SimpleNamespace(
+                prompt_tokens=10,
+                completion_tokens=8000 if finish == "length" else 10,
+                prompt_tokens_details=None,
+            ),
+        )
+
+
+def test_cut_off_answer_splits_texts(tmp_path: Path) -> None:
+    """#183.1: the hammerhead safety prompt replays to valid verdicts.
+
+    The first answer stops at the cap mid-JSON; the texts split in
+    half and each half is asked fresh. The full prompt goes out once,
+    never resent.
+    """
+    from builder.stages.safety import collect_texts
+
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    keys = [item["key"] for item in collect_texts(tmp_path, world)]
+    assert len(keys) == 8
+    cut = (
+        '{"verdicts": [{"key": "animal.red_deer.title", "verdict": '
+        '"pass", "reasons": [], "rule": "ok'
+    )
+    chat = CutOffChat(
+        [
+            (cut, "length"),
+            (_pass_all(keys[:4]), "stop"),
+            (_pass_all(keys[4:]), "stop"),
+        ]
+    )
+    result = SafetyStage().run(_ctx(tmp_path, chat, world))
+    assert result == {"reviewed": 8, "rewritten": [], "failed": []}
+    assert len(chat.prompts) == 3
+    full = [prompt for prompt in chat.prompts if all(k in prompt for k in keys)]
+    assert len(full) == 1
+    halves = [prompt for prompt in chat.prompts if prompt is not full[0]]
+    assert all(k in halves[0] for k in keys[:4])
+    assert all(k in halves[1] for k in keys[4:])
+    assert not any(k in halves[0] for k in keys[4:])
+
+
+def test_big_sets_go_in_chunks() -> None:
+    """#183.1: more texts than fit one call are asked in chunks."""
+    from builder.stages.safety import MAX_ITEMS_PER_CALL, review_items
+
+    items = [
+        {"key": f"animal.deer.line.{n:03d}", "en": "Grazes.", "sources": []}
+        for n in range(MAX_ITEMS_PER_CALL + 5)
+    ]
+    seen: list[list[str]] = []
+
+    def ask(messages: list[dict], schema: Any) -> SimpleNamespace:
+        fenced = messages[0]["content"].split("```")[1]
+        asked = [entry["key"] for entry in json.loads(fenced)]
+        seen.append(asked)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=_pass_all(asked), tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=10,
+                completion_tokens=10,
+                prompt_tokens_details=None,
+            ),
+        )
+
+    verdicts = review_items(ask, items, "(none)", "(none)")
+    assert sorted(verdicts) == sorted(entry["key"] for entry in items)
+    assert [len(chunk) for chunk in seen] == [MAX_ITEMS_PER_CALL, 5]

@@ -256,15 +256,14 @@ def test_live_safety_sixty(tmp_path) -> None:
     ]
     client = make_live_client(tmp_path)
 
-    def ask(prompt: str, schema: dict | None) -> str:
-        response = client.chat(
+    def ask(prompt: str, schema: dict | None) -> object:
+        return client.chat(
             [{"role": "user", "content": prompt}],
             response_format={
                 "type": "json_schema",
                 "json_schema": {"name": "Safety", "schema": schema or REVIEW_SCHEMA},
             },
         )
-        return (response.choices[0].message.content or "").strip()
 
     verdicts = review_items(
         ask, items, "(no sensitive species in this place)", "title: Moose"

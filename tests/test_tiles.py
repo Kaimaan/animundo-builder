@@ -1747,6 +1747,45 @@ def test_open_sea_tile_without_sea_stays_open_water(tmp_path: Path) -> None:
     assert blocked["reason"] == "open_water"
 
 
+def test_open_sea_tile_names_its_sea_from_the_image_layout(
+    tmp_path: Path,
+) -> None:
+    """#185: the worker's data file names a reef-side open-sea tile.
+
+    `builder_root` holds only what the image mounts under
+    `/src/builder/data`: the baked seas file, copied from this
+    checkout.
+    """
+    import shutil
+
+    root = Path(__file__).resolve().parent.parent
+    builder_root = tmp_path / "src" / "builder"
+    (builder_root / "data").mkdir(parents=True)
+    shutil.copy(root / "data" / "seas.json.gz", builder_root / "data" / "seas.json.gz")
+    assert [p.name for p in (builder_root / "data").iterdir()] == ["seas.json.gz"]
+    world = _open_sea_world(tmp_path)
+    table = json.loads((world / "seas" / "names.json").read_text())
+    table["seas"]["great_barrier_reef"] = {
+        "en": "Great Barrier Reef",
+        "fi": "Iso Valliriutta",
+        "ne_ids": [1],
+        "wikidata": "Q7343",
+    }
+    (world / "seas" / "names.json").write_text(json.dumps(table))
+    habitat_grid = _habitat_grid(tmp_path, _open_sea_cells(928, 560))
+    made, blocked = make_tile(
+        "z10_0928_0560",
+        habitat_grid,
+        world,
+        presence={"herring_gull": 5.0},
+        builder_root=builder_root,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["sea"] == "great_barrier_reef"
+    assert made["name"] == {"en": "Great Barrier Reef", "fi": "Iso Valliriutta"}
+
+
 def test_open_sea_tile_without_coast_style_has_no_land(tmp_path: Path) -> None:
     """#177.1: a coast biome with no land style blocks the tile as no_land."""
     world = _open_sea_world(tmp_path)

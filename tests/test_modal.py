@@ -105,6 +105,55 @@ def test_deploy_installs_editable_for_its_data(monkeypatch: Any) -> None:
     assert "-e" in module.PIP_INSTALL_CMD.split()
 
 
+def _image_files() -> list[tuple[Path, str]]:
+    """The image's named local files, out of the deploy file (#185).
+
+    Reads `modal_worker.py` as text, so the test holds without a
+    Modal account: every `add_local_file` local path resolves
+    against this checkout, with its image path beside it.
+    """
+    import ast
+
+    root = DEPLOY.parent.parent
+    tree = ast.parse(DEPLOY.read_text(encoding="utf-8"))
+
+    def local(node: ast.AST) -> Path:
+        if isinstance(node, ast.Name) and node.id == "BUILDER":
+            return root
+        if (
+            isinstance(node, ast.BinOp)
+            and isinstance(node.op, ast.Div)
+            and isinstance(node.right, ast.Constant)
+            and isinstance(node.right.value, str)
+        ):
+            return local(node.left) / node.right.value
+        raise AssertionError(f"add_local_file names no plain path: {ast.dump(node)}")
+
+    found = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_local_file"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+        ):
+            found.append((local(node.args[0]), node.args[1].value))
+    return found
+
+
+def test_deploy_names_files_that_exist() -> None:
+    """#185: every file the image names exists in this checkout."""
+    files = _image_files()
+    assert files, "the image names no local files"
+    for path, remote in files:
+        assert path.is_file(), f"{remote} names {path}, which is missing"
+    remotes = [remote for _, remote in files]
+    assert "/grids/z10.json.gz" in remotes
+    assert "/src/builder/data/seas.json.gz" in remotes
+    assert not any("ease2" in remote for remote in remotes)
+
+
 def test_supervise_commits_while_the_worker_runs(monkeypatch: Any) -> None:
     """#133.2: the Volume commits during the run, and once at the end."""
     module = _load(monkeypatch)

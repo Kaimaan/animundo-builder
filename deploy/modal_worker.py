@@ -91,7 +91,7 @@ image = (
     )
     # The builder, installed from this checkout. No keys, no job
     # folders (764M locally), no venv, no history, no raw data:
-    # the baked grids below are all the worker reads.
+    # the baked grid and sea names below are all the worker reads.
     .add_local_dir(
         BUILDER,
         "/src/builder",
@@ -114,12 +114,12 @@ image = (
     # calls without copy, or the deploy fails (#134).
     .env(WORKER_ENV)
     .add_local_file(
-        BUILDER / "data" / "habitat-grid" / "ease2_n25.json.gz",
-        "/grids/ease2_n25.json.gz",
+        BUILDER / "data" / "habitat-grid" / "z10.json.gz",
+        "/grids/z10.json.gz",
     )
     .add_local_file(
-        BUILDER / "data" / "habitat-grid" / "ease2_s25.json.gz",
-        "/grids/ease2_s25.json.gz",
+        BUILDER / "data" / "seas.json.gz",
+        "/src/builder/data/seas.json.gz",
     )
 )
 

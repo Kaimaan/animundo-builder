@@ -4,6 +4,42 @@ What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
 ## 2026-11-01: inbox #202.3
+  conversion 3 of 4
+  (builder 3d5901a)
+
+- Plan names from
+  places (#169.2):
+  region_places is
+  named_places and
+  reads places/,
+  not regions/.
+  Same English
+  names and
+  centres; Finnish
+  now derives from
+  the places'
+  real Finnish
+  names. Tests
+  write places.
+- Stays playable:
+  tile index + all
+  six groups hash-
+  identical to the
+  #202 baseline,
+  live
+  enrich_hammerhead
+  manifest 1053
+  bytes. The world
+  checkout holds
+  your uncommitted
+  places work
+  (places/,
+  place schema,
+  sync); this
+  commit touches
+  nothing there.
+
+## 2026-11-01: inbox #202.3
   conversion 2 of 4
   (builder 3cc4bc7)
 

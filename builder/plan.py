@@ -43,6 +43,7 @@ from .tiles import (
     home_for_cell,
     land_style_for,
     make_tile,
+    open_sea_entries,
     pick_species,
     place_cells,
     ring_cells,
@@ -535,17 +536,22 @@ def plan_tile(
     else:
         home_id = home
         adapt = False
-    probe_species, answer, place_blocked = _resolve_species(
-        tile,
-        world,
-        habitat,
-        lat,
-        lon,
-        builder_root,
-        species,
-        species_source,
-        tile_facts(tile, grids, world, home_id, adapt),
-    )
+    if habitat == "open_ocean":
+        # Open sea needs no survey: the maker reads GBIF
+        # densities by code, never the model (#177.8).
+        probe_species, answer, place_blocked = None, None, False
+    else:
+        probe_species, answer, place_blocked = _resolve_species(
+            tile,
+            world,
+            habitat,
+            lat,
+            lon,
+            builder_root,
+            species,
+            species_source,
+            tile_facts(tile, grids, world, home_id, adapt),
+        )
     if home is None and bundle is None:
         items.append(
             {
@@ -609,6 +615,10 @@ def plan_tile(
     house = homes.get(home_id, biomes[home_id])
     if presence is not None:
         present = {s: n for s, n in presence.items() if n > 0}
+    elif habitat == "open_ocean":
+        # Open sea counts only sea animals, like the maker (#177.3).
+        fetched = fetch_smoothed(tile, open_sea_entries(world, entries))
+        present = {s: n for s, n in fetched.items() if n > 0}
     else:
         candidates = animals_for_habitat(entries, habitat)
         if habitat in ("sea", "open_ocean"):

@@ -1129,6 +1129,98 @@ def test_plan_makes_no_species_call_for_open_water(tmp_path: Path) -> None:
     assert plan["name"] == plan_name("open_ocean", *center("n_413_478"))
 
 
+def _open_sea_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    (world / "biomes").mkdir(exist_ok=True)
+    (world / "biomes" / "open_sea.json").write_text(
+        json.dumps({"habitat": "sea", "food": [{"kind": "fish"}]})
+    )
+    (world / "biomes" / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "boreal_forest",
+                "ecoregions": [717],
+                "food": [{"kind": "grass"}, {"kind": "berries"}],
+            }
+        )
+    )
+    (world / "animals" / "herring_gull.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "open_sea": True,
+                "tags": ["seabird"],
+                "diet": ["fish"],
+            }
+        )
+    )
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"].append(
+        {"id": "herring_gull", "gbif_key": 2481126, "habitats": ["open_ocean"]}
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    (world / "seas").mkdir(exist_ok=True)
+    (world / "seas" / "names.json").write_text(
+        json.dumps(
+            {
+                "source": "evs:test",
+                "seas": {
+                    "gulf_of_finland": {
+                        "en": "Gulf of Finland",
+                        "fi": "Suomenlahti",
+                        "ne_ids": [1],
+                        "wikidata": "Q16978",
+                    }
+                },
+            }
+        )
+    )
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    with gzip.open(data / "seas.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump({"cells": {"n_413_478": "gulf_of_finland"}}, handle)
+    return world
+
+
+def _open_sea_cells() -> dict[str, list[Any]]:
+    cells = _open_water()
+    cells["412,477"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    return cells
+
+
+def test_plan_lists_open_sea_as_code_only_with_no_survey(
+    tmp_path: Path,
+) -> None:
+    """#177.5: a named sea tile is code_only, and asks the model nothing."""
+    from builder.species import Source
+
+    world = _open_sea_world(tmp_path)
+    grids = _grids(tmp_path, _open_sea_cells())
+    calls: list[str] = []
+
+    class SpyClient:
+        def chat(self, **kwargs: Any) -> Any:
+            calls.append("chat")
+            raise RuntimeError("no species call for open sea")
+
+    plan = plan_tile(
+        "n_413_478",
+        None,
+        grids,  # type: ignore[arg-type]
+        world,
+        "abc123",
+        presence={"herring_gull": 5.0},
+        unfiled_presence={},
+        builder_root=tmp_path,
+        species_source=Source(client=SpyClient(), cache_dir=tmp_path / "sp"),
+    )
+    validate("plan", plan)
+    assert calls == []
+    assert plan["code_only"] is True
+    assert plan["items"] == []
+    assert "blocked" not in plan
+
+
 def test_finish_blocked_carries_no_improve() -> None:
     """#141.2: a blocked plan keeps no improve species."""
     from builder.plan import _finish

@@ -64,6 +64,18 @@
       "items": {"type": "string", "pattern": "^[01]{5}$"}
     },
     "ecoregion": {"type": "integer", "minimum": 0},
+    "sea": {"type": "string", "minLength": 1},
+    "name": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en"],
+      "properties": {
+        "en": {"type": "string", "minLength": 1},
+        "fi": {"type": "string", "minLength": 1}
+      }
+    },
+    "land": {"type": "string", "minLength": 1},
+    "land_share": {"type": "number", "minimum": 0, "maximum": 0.1},
     "home": {"type": "string", "minLength": 1},
     "biome": {
       "type": "string",
@@ -245,7 +257,9 @@
         "habitat": {"type": "string", "minLength": 1},
         "water": {"type": "string", "minLength": 1},
         "species": {"type": "string", "minLength": 1},
-        "elevation": {"type": "string", "minLength": 1}
+        "elevation": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "land": {"type": "string", "minLength": 1}
       }
     },
     "made": {
@@ -271,8 +285,21 @@
     {
       "if": {"properties": {"kind": {"const": "code"}}},
       "then": {
-        "required": ["habitat", "ecoregion", "home", "seed", "water", "species", "sources", "made"],
+        "required": ["habitat", "home", "seed", "water", "species", "sources", "made"],
         "properties": {"place": false, "part": false}
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "code"}, "habitat": {"const": "open_ocean"}}, "required": ["kind", "habitat"]},
+      "then": {
+        "required": ["sea", "name", "land", "land_share"],
+        "properties": {"ecoregion": false}
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "code"}, "habitat": {"not": {"const": "open_ocean"}}}, "required": ["kind", "habitat"]},
+      "then": {
+        "required": ["ecoregion"]
       }
     },
     {

@@ -611,6 +611,38 @@ def test_blocked_code_job_records_its_reason(tmp_path: Path) -> None:
     assert entry["version"] is None
 
 
+def _open_sea_cells() -> dict[str, Any]:
+    cell: list[Any] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
+    return {f"{c},{r}": list(cell) for r in (477, 478, 479) for c in (412, 413, 414)}
+
+
+def test_code_job_refuses_open_sea_far_from_everything(tmp_path: Path) -> None:
+    """#177.6: a lone open-sea tile fails before the maker runs."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    worker = _flow_worker(tmp_path, store, _open_sea_cells())
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "too_far"
+    (entry,) = store.tile_history
+    assert entry["event"] == "blocked"
+    assert entry["reason"] == "too_far"
+
+
+def test_code_job_makes_open_sea_near_a_made_tile(tmp_path: Path) -> None:
+    """#177.6: a made neighbour lets the open-sea tile through to making."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _code_job()
+    store.blobs["tiles/v1/ease2_n25/51_59.json"] = json.dumps(
+        {"tiles": {"n_414_478": {"id": "n_414_478"}}}
+    ).encode("utf-8")
+    worker = _flow_worker(tmp_path, store, _open_sea_cells())
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["error"] == "no_home"
+
+
 def test_broken_history_never_stops_the_tile(tmp_path: Path, monkeypatch: Any) -> None:
     """#165.3: a failing history write prints; the tile still ships."""
 

@@ -31,7 +31,7 @@ from .grid import (
     tile_id,
 )
 from .habitats import HabitatGrid, habitat_for
-from .presence import animals_for_habitat
+from .presence import animals_for_habitat, fetch_smoothed
 from .schemas import validate
 from .species import MODEL as SPECIES_MODEL
 from .species import Source as SpeciesSource
@@ -115,6 +115,105 @@ def land_style_for(world: Path, biome: int | None) -> str | None:
             land = entry.get("land")
             return str(land) if land else None
     return None
+
+
+def _open_sea(world: Path, animal_id: str) -> bool:
+    """Whether the animal file says it lives at sea (#177.3)."""
+    try:
+        data = json.loads((world / "animals" / f"{animal_id}.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return bool(data.get("open_sea"))
+
+
+def open_sea_entries(
+    world: Path, entries: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The open-sea candidates: sea animals with GBIF keys (#177.3)."""
+    return [
+        entry
+        for entry in entries
+        if entry.get("gbif_key") and _open_sea(world, entry["id"])
+    ]
+
+
+_SEAS_CELLS: dict[Path, dict[str, str]] = {}
+
+
+def _open_sea_name(tile: str, builder_root: Path, world: Path) -> dict[str, Any] | None:
+    """The cell's sea and names, or nothing when no sea covers it (#177.2).
+
+    The baked `data/seas.json.gz` names the sea; `seas/names.json`
+    gives the entry's own `en` (and `fi` where the table has it).
+    """
+    path = builder_root / "data" / "seas.json.gz"
+    if path not in _SEAS_CELLS:
+        if not path.is_file():
+            return None
+        from .seas import load_seas
+
+        _SEAS_CELLS[path] = load_seas(path)
+    try:
+        table = json.loads((world / "seas" / "names.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    seas = table.get("seas", {})
+    sea = _SEAS_CELLS[path].get(tile)
+    if sea is None or sea not in seas:
+        return None
+    entry = seas[sea]
+    name = {"en": entry["en"]}
+    if entry.get("fi"):
+        name["fi"] = entry["fi"]
+    return {"sea": sea, "name": name, "source": table.get("source", "")}
+
+
+def _nearest_land(
+    tile: str, grids: dict[GridName, HabitatGrid]
+) -> tuple[int | None, str | None, int | None]:
+    """The nearest land cell: ecoregion, habitat, biome (#177.1).
+
+    Expanding rings around the cell, same grid; the first cell
+    with an ecoregion wins, so the Gulf of Finland takes the
+    boreal coast's. Nothing when the grid holds no land cell.
+    """
+    grid, col, row = parse_tile(tile)
+    habitat_grid = grids[grid]
+    for radius in range(1, CELLS + 1):
+        for dcol in range(-radius, radius + 1):
+            for drow in range(-radius, radius + 1):
+                if max(abs(dcol), abs(drow)) != radius:
+                    continue
+                ncol, nrow = col + dcol, row + drow
+                if not (0 <= ncol < CELLS and 0 <= nrow < CELLS):
+                    continue
+                try:
+                    cell = habitat_grid.cell_data(ncol, nrow)
+                except KeyError:
+                    continue
+                if cell[0] is not None:
+                    return cell[0], habitat_grid.habitat(ncol, nrow), cell[4]
+    return None, None, None
+
+
+def near_made_or_place(tile: str, world: Path, made: set[str] | None = None) -> bool:
+    """Whether a made tile or place sits within 3 cells (#177.6).
+
+    Same grid, Chebyshev distance; `made` carries the published
+    tile ids the caller knows (the worker reads the groups).
+    """
+    grid, col, row = parse_tile(tile)
+    cells = place_cells(world)
+    for dcol in range(-3, 4):
+        for drow in range(-3, 4):
+            ncol, nrow = col + dcol, row + drow
+            if not (0 <= ncol < CELLS and 0 <= nrow < CELLS):
+                continue
+            if tile_id(grid, ncol, nrow) in cells:
+                return True
+            if made is not None and tile_id(grid, ncol, nrow) in made:
+                return True
+    return False
 
 
 def ring_cells(habitat_grid: Any, col: int, row: int) -> Any:
@@ -211,10 +310,14 @@ def home_for_cell(
     Sea and open ocean build from a home of habitat `sea` that
     lists the cell's ecoregion, else the generic `sea` (#140.1),
     but only where it fits: a known tropical biome refuses it
-    (#169.1). Boreal water picks the lake home through the
-    tile's habitat: a boreal_lake cell builds from boreal_lake,
-    a boreal_forest cell from boreal_forest.
+    (#169.1). Open ocean with no ecoregion builds from the one
+    `open_sea` home when the checkout has it (#177.1). Boreal
+    water picks the lake home through the tile's habitat: a
+    boreal_lake cell builds from boreal_lake, a boreal_forest
+    cell from boreal_forest.
     """
+    if habitat == "open_ocean" and "open_sea" in homes:
+        return "open_sea"
     if eco is None:
         return None
     if habitat in ("sea", "open_ocean"):
@@ -1156,6 +1259,22 @@ def make_tile(
         if home is None:
             return None, {"reason": "no_home", "habitat": habitat}
     house = homes.get(home, biomes[home])
+    sea: dict[str, Any] | None = None
+    land_home: str | None = None
+    land_eco: int | None = None
+    if habitat == "open_ocean":
+        # Open sea resolves before any species work: unnamed water
+        # stays open_water, and the preview land is the nearest
+        # coast's home and ecoregion (#177.1, #177.2).
+        sea = _open_sea_name(tile, builder_root or BUILDER_ROOT, world)
+        if sea is None:
+            return None, {"reason": "open_water", "habitat": habitat}
+        land_eco, land_hab, land_biome = _nearest_land(tile, grids)
+        if land_eco is None or land_hab is None:
+            return None, {"reason": "no_land", "habitat": habitat}
+        land_home = home_for_cell(land_eco, land_hab, biomes, land_biome)
+        if land_home is None:
+            return None, {"reason": "no_land", "habitat": habitat}
     blend: dict[str, Any] | None = None
     blend_home = home_for_cell(eco2, habitat, biomes) if eco2 is not None else None
     if blend_home is not None and blend_home != home and share2 >= 0.1:
@@ -1165,7 +1284,7 @@ def make_tile(
             "share": round(share2, 2),
         }
     coast: list[str] | None = None
-    if 0.0 < land < 1.0:
+    if 0.0 < land < 1.0 and habitat != "open_ocean":
         mask = habitat_grid.coast(col, row)
         if mask is not None:
             coast = [mask[r * 5 : (r + 1) * 5] for r in range(5)]
@@ -1178,11 +1297,17 @@ def make_tile(
             if entry["id"] not in seen:
                 seen.add(entry["id"])
                 candidates.append(entry)
+    if habitat == "open_ocean":
+        # Open sea: only animals that live at sea, by code (#177.3).
+        candidates = open_sea_entries(world, animals)
     wanted: list[dict[str, str]] | None = None
     greens: dict[str, Any] | None = None
     if presence is not None:
         present = {s: n for s, n in presence.items() if n > 0}
         species_tag = f"gbif:search:{datetime.now(UTC).date().isoformat()}"
+    elif habitat == "open_ocean":
+        present = {s: n for s, n in fetch_smoothed(tile, candidates).items() if n > 0}
+        species_tag = "gbif:density"
     else:
         ids = [a["id"] for a in animals]
         greens_list = list_library(world, "plants")
@@ -1258,7 +1383,11 @@ def make_tile(
     if not playable:
         return None, _blocked("no_animal", habitat, wanted)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
-    needed = sorted({home} | ({blend["home"]} if blend else set()))
+    needed = sorted(
+        {home}
+        | ({blend["home"]} if blend else set())
+        | ({land_home} if land_home is not None else set())
+    )
     requires: dict[str, Any] = {
         "homes": needed,
         "biomes": list(needed),
@@ -1299,6 +1428,16 @@ def make_tile(
             "at": datetime.now(UTC).isoformat(),
         },
     }
+    if habitat == "open_ocean":
+        assert sea is not None and land_home is not None and land_eco is not None
+        del made_tile["ecoregion"]
+        made_tile["sea"] = sea["sea"]
+        made_tile["name"] = sea["name"]
+        made_tile["land"] = land_home
+        made_tile["land_share"] = round(land, 2)
+        made_tile["sources"]["habitat"] = "spec04:open_ocean"
+        made_tile["sources"]["name"] = sea["source"]
+        made_tile["sources"]["land"] = f"nearest_coast:{land_eco}"
     if blend is not None:
         made_tile["blend"] = blend
     if coast is not None:

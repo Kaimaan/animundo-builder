@@ -394,6 +394,8 @@ class Worker:
         else:
             self._snapshot_plan(job_id, job, tile)
         if job.get("kind") == "code":
+            if self._tile_refused(tile, job_id, "code"):
+                return
             if self.pull_world():  # a merged change reaches this tile (#99.4)
                 self.world_commit = git_commit(self.world)
             made, blocked = make_tile(
@@ -817,6 +819,8 @@ class Worker:
             return
         if not shipped_any:
             self._fail(job_id, "nothing_shipped")
+            return
+        if self._tile_refused(tile, job_id, "build"):
             return
         made, blocked = make_tile(
             tile,
@@ -1376,6 +1380,54 @@ class Worker:
         (checks / MANIFEST).write_text(
             json.dumps({"places": sorted(done)}, indent=2), encoding="utf-8"
         )
+
+    def _near_made_tile(self, tile: str) -> bool:
+        """A made tile or place within 3 cells: the open-sea gate (#177.6).
+
+        Made ids come from the group blobs covering the window;
+        places from the world's regions. Open sea grows from the
+        shore outward, never alone mid-ocean.
+        """
+        import json
+
+        from .grid import CELLS, group_path, parse_tile, tile_id
+        from .tiles import near_made_or_place
+
+        assert self.world is not None
+        grid, col, row = parse_tile(tile)
+        made: set[str] = set()
+        seen: set[str] = set()
+        for dcol in range(-3, 4):
+            for drow in range(-3, 4):
+                ncol, nrow = col + dcol, row + drow
+                if not (0 <= ncol < CELLS and 0 <= nrow < CELLS):
+                    continue
+                path = group_path(tile_id(grid, ncol, nrow))
+                if path in seen:
+                    continue
+                seen.add(path)
+                raw = self.store.read_blob(path)
+                if raw is None:
+                    continue
+                try:
+                    group = json.loads(raw.decode("utf-8"))
+                except ValueError:
+                    continue
+                made.update((group.get("tiles") or {}).keys())
+        return near_made_or_place(tile, self.world, made)
+
+    def _tile_refused(self, tile: str, job_id: str, stage: str) -> bool:
+        """An open-sea tile far from everything fails before making (#177.6)."""
+        from .grid import parse_tile
+
+        grid, col, row = parse_tile(tile)
+        if self._grids()[grid].habitat(col, row) != "open_ocean":
+            return False
+        if self._near_made_tile(tile):
+            return False
+        self._history_blocked(job_id, tile, stage, "too_far")
+        self._fail(job_id, "too_far")
+        return True
 
     def _tile_doc(self, tile: str) -> dict[str, Any]:
         """The tile's doc: published first, else remade by code, keyless."""

@@ -16,6 +16,8 @@ from builder.tiles import (
     cell_level,
     home_for_cell,
     make_tile,
+    near_made_or_place,
+    open_sea_entries,
     pick_species,
     place_cells,
     tile_edges,
@@ -1576,3 +1578,167 @@ def test_make_at_records_to_the_store_when_given(tmp_path: Path) -> None:
     assert entry["tile"] == "n_413_478"
     assert entry["event"] == "blocked"
     assert not (tmp_path / "out" / "tile-history.jsonl").exists()
+
+
+def _open_sea_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    (world / "biomes").mkdir(exist_ok=True)
+    (world / "biomes" / "open_sea.json").write_text(
+        json.dumps({"habitat": "sea", "food": [{"kind": "fish"}]})
+    )
+    (world / "biomes" / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "boreal_forest",
+                "ecoregions": [717],
+                "food": [{"kind": "grass"}, {"kind": "berries"}],
+            }
+        )
+    )
+    (world / "animals" / "herring_gull.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "open_sea": True,
+                "tags": ["seabird"],
+                "diet": ["fish"],
+            }
+        )
+    )
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"].append(
+        {"id": "herring_gull", "gbif_key": 2481126, "habitats": ["open_ocean"]}
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    (world / "seas").mkdir(exist_ok=True)
+    (world / "seas" / "names.json").write_text(
+        json.dumps(
+            {
+                "source": "evs:test",
+                "seas": {
+                    "gulf_of_finland": {
+                        "en": "Gulf of Finland",
+                        "fi": "Suomenlahti",
+                        "ne_ids": [1],
+                        "wikidata": "Q16978",
+                    }
+                },
+            }
+        )
+    )
+    return world
+
+
+def _open_sea_cells(col: int, row: int) -> dict[str, list]:
+    cells = _boreal_3x3(col, row)
+    cells[f"{col},{row}"] = [None, 0.0, None, 0.0, None, 0.0, 1.0, -5.0]
+    return cells
+
+
+def _seas_file(tmp_path: Path, mapping: dict[str, str]) -> Path:
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    path = data / "seas.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump({"cells": mapping}, handle)
+    return path
+
+
+def test_open_sea_tile_carries_sea_name_and_land(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#177.1-4: the gulf tile names its sea and its boreal shore."""
+    from builder.species import list_animals
+
+    seen: dict[str, Any] = {}
+
+    def fake_fetch(tile: str, candidates: list[dict[str, Any]]) -> dict[str, float]:
+        seen["tile"] = tile
+        seen["candidates"] = sorted(c["id"] for c in candidates)
+        return {"herring_gull": 5.0}
+
+    monkeypatch.setattr("builder.tiles.fetch_smoothed", fake_fetch)
+    world = _open_sea_world(tmp_path)
+    _seas_file(tmp_path, {"n_413_478": "gulf_of_finland"})
+    grids = _grids(tmp_path, _open_sea_cells(413, 478))
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["habitat"] == "open_ocean"
+    assert made["home"] == "open_sea"
+    assert made["biome"] == "open_sea"
+    assert "ecoregion" not in made
+    assert "coast" not in made
+    assert "blend" not in made
+    assert made["sea"] == "gulf_of_finland"
+    assert made["name"] == {"en": "Gulf of Finland", "fi": "Suomenlahti"}
+    assert made["land"] == "boreal_forest"
+    assert made["land_share"] == 0.0
+    assert made["sources"]["habitat"] == "spec04:open_ocean"
+    assert made["sources"]["name"] == "evs:test"
+    assert made["sources"]["land"] == "nearest_coast:717"
+    assert made["sources"]["species"] == "gbif:density"
+    assert made["species"]["playable"] == ["herring_gull"]
+    assert set(made["requires"]["homes"]) == {"open_sea", "boreal_forest"}
+    assert made["level"] < 8
+    validate("tile", made)
+    assert seen["tile"] == "n_413_478"
+    assert seen["candidates"] == ["herring_gull"]
+    entries = list_animals(world)
+    assert [e["id"] for e in open_sea_entries(world, entries)] == ["herring_gull"]
+
+
+def test_open_sea_tile_without_sea_stays_open_water(tmp_path: Path) -> None:
+    """#177.2: unnamed water is still blocked, before any species work."""
+    world = _open_sea_world(tmp_path)
+    _seas_file(tmp_path, {})
+    grids = _grids(tmp_path, _open_sea_cells(413, 478))
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        presence={"herring_gull": 5.0},
+        builder_root=tmp_path,
+    )
+    assert made is None
+    assert blocked is not None
+    assert blocked["reason"] == "open_water"
+
+
+def test_open_sea_tile_without_coast_home_has_no_land(tmp_path: Path) -> None:
+    """#177.1: no home on the nearest coast blocks the tile as no_land."""
+    world = _open_sea_world(tmp_path)
+    _seas_file(tmp_path, {"n_413_478": "gulf_of_finland"})
+    cells = _open_sea_cells(413, 478)
+    for key, cell in cells.items():
+        if cell[0] == 717:
+            cell[0] = 999
+    grids = _grids(tmp_path, cells)
+    made, blocked = make_tile(
+        "n_413_478",
+        grids,  # type: ignore[arg-type]
+        world,
+        presence={"herring_gull": 5.0},
+        builder_root=tmp_path,
+    )
+    assert made is None
+    assert blocked is not None
+    assert blocked["reason"] == "no_land"
+
+
+def test_near_made_or_place_reaches_three_cells(tmp_path: Path) -> None:
+    """#177.6: a place or made tile within 3 cells counts, farther not."""
+    world = _world(tmp_path)
+    assert near_made_or_place("n_413_478", world, set()) is False
+    _region(world, "fi_test", [[416, 478]])
+    assert near_made_or_place("n_413_478", world, set()) is True
+    assert near_made_or_place("n_413_478", world, {"n_413_481"}) is True
+    world = _world(tmp_path / "far")
+    _region(world, "fi_test", [[417, 478]])
+    assert near_made_or_place("n_413_478", world, set()) is False
+    assert near_made_or_place("n_413_478", world, {"n_417_478"}) is False

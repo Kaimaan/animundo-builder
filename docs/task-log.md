@@ -3,6 +3,76 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #189
+  (STOP: both reef items
+  need more than $0.15)
+
+- Commits: none. Nothing
+  in the builder changed;
+  this was make, build and
+  publish only.
+- Published, first v2
+  files, world `ec0d9d0`:
+  `tiles/v2/z10/072_036.json`
+  (4 Nuuksio tiles),
+  `072_037.json` (4 more),
+  `074_035.json` (4 Saimaa
+  tiles), `115_070.json`
+  (2 reef-neighbour sea
+  tiles), and
+  `tiles/v2/index.json`
+  (14 ready, 0 blocked).
+  `tiles/v1/` untouched.
+- Real spend: $0.30 of the
+  approved $0.60. The 14
+  code tiles cost $0.00
+  (ledger delta 0.0000).
+- STOP, as approved: neither
+  reef item fits $0.15.
+  `common_tern` spent $0.10
+  (research $0.055, looks
+  $0.047) and the $0.08
+  maker call refused the
+  cap. `blue_mussel` spent
+  $0.19 on research alone
+  (one call, its searches)
+  and the $0.15 cap stopped
+  the pipeline after it.
+  The $0.15 animal/plant
+  medians in `prices.py`
+  don't hold here; not
+  re-measured without word.
+- The two reef tiles are
+  NOT published: their
+  plans name the unbuilt
+  items, and only filed
+  species land in a tile.
+  Nothing was filed, and
+  the second tile's copies
+  were not attempted.
+- Built state, for review:
+  `jobs/rec189-0928_0560/`
+  (plan + records) and
+  `jobs/out189-0928_0560/
+  replay/` (tern: research,
+  minimum, looks, newhome;
+  mussel: research).
+- Waiting on Kai: raise the
+  per-item caps (to what?),
+  then the builds resume,
+  the items file, and the
+  reef tiles remake and
+  publish as versions.
+- #190 noted: worker v15
+  (with #185) is live, so
+  the Modal caveat is
+  lifted; unneeded, since
+  the publish ran locally.
+  The mussel's origin (open-
+  sea food name, planned as
+  a plant) is on the record;
+  kept, as asked.
+
 ## 2026-11-01: inbox #188
   (builder 1c9fbec,
   4b23f5a)

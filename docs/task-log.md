@@ -4,6 +4,47 @@ What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
 ## 2026-11-01: inbox #202.3
+  conversion 2 of 4
+  (builder 3cc4bc7)
+
+- Packs without
+  additions
+  (#176/#179) go:
+  an enrich pack
+  is the model +
+  locale + the
+  manifest. Region,
+  fish-count and
+  cam_height gates
+  go with the
+  seating; the
+  file's own gates
+  check length,
+  year, hunts and
+  camera against
+  the research and
+  the brief's
+  tiles.
+- Stays playable:
+  tile index + all
+  six groups hash-
+  identical to the
+  #202 baseline,
+  live
+  enrich_hammerhead
+  manifest 1053
+  bytes, world
+  clean. No game
+  change needed:
+  the game skips a
+  missing
+  additions file
+  (add_to_region
+  continues, packs
+  validate only
+  present files).
+
+## 2026-11-01: inbox #202.3
   conversion 1 of 4
   (builder c56045a)
 

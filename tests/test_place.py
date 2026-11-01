@@ -9,7 +9,6 @@ from typing import Any
 
 import pytest
 
-from builder.grid import parse_tile
 from builder.habitats import HabitatGrid
 from builder.place import (
     SurveyError,
@@ -28,12 +27,9 @@ def _world() -> Path:
     return Path(__file__).resolve().parent.parent.parent / "animundo-world"
 
 
-def _grids() -> dict[str, HabitatGrid]:
+def _habitat_grid() -> HabitatGrid:
     grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
-    return {
-        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
-        for name in ("ease2_n25", "ease2_s25")
-    }
+    return HabitatGrid.load(grid_dir / "z10.json.gz")
 
 
 def _animals(world: Path) -> list[dict[str, Any]]:
@@ -123,9 +119,9 @@ def test_recorded_gbr_survey_surveys_the_reef(
     )
     assert searches == 6
     survey = check_survey(
-        data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+        data, "Great Barrier Reef", _habitat_grid(), world, animals, [], 8.0, None
     )
-    assert survey["tile"] == "s_530_612"
+    assert survey["tile"] == "z10_0927_0560"
     assert survey["home_from"] == "examples/reef"
     assert survey["name"] == {"en": "Great Barrier Reef", "fi": "Iso Valliriutta"}
     assert survey["country"] == "Australia"
@@ -183,7 +179,7 @@ def test_recorded_gbr_survey_keeps_what_the_world_lacks(
         ctx, "Great Barrier Reef", animals, list_homes(world), [], None
     )
     survey = check_survey(
-        data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+        data, "Great Barrier Reef", _habitat_grid(), world, animals, [], 8.0, None
     )
     missing = survey["missing"]
     assert missing
@@ -210,22 +206,22 @@ def test_survey_missing_lists_unfiled_finds(tmp_path: Path) -> None:
     (world / "models" / "plants" / "paddle_grass.json").write_text(
         json.dumps({"id": "paddle_grass", "latin": "Halophila ovalis"})
     )
-    grid_path = tmp_path / "ease2_s25.json.gz"
+    grid_path = tmp_path / "z10.json.gz"
     with gzip.open(grid_path, "wt", encoding="utf-8") as handle:
         json.dump(
             {
-                "grid": "ease2_s25",
-                "cells": {"530,612": [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]},
+                "grid": "z10",
+                "cells": {"927,560": [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]},
             },
             handle,
         )
-    grids = {"ease2_s25": HabitatGrid.load(grid_path, "ease2_s25")}
+    habitat_grid = HabitatGrid.load(grid_path)
     animals = [
         {"id": "clownfish", "gbif_key": 1, "habitats": ["sea"]},
         {"id": "hammerhead", "gbif_key": 2, "habitats": ["sea"]},
     ]
     data = {
-        "tile": "s_530_612",
+        "tile": "z10_0927_0560",
         "habitat": "reef",
         "home_from": "reef",
         "name": {"en": "Test Reef", "fi": "Testiriutta"},
@@ -244,7 +240,7 @@ def test_survey_missing_lists_unfiled_finds(tmp_path: Path) -> None:
     survey = check_survey(
         data,
         "Test Reef",
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         animals,
         [],
@@ -274,7 +270,7 @@ def _file_world(tmp_path: Path) -> Path:
                 "id": "xx_test_reef",
                 "name": "Test Reef",
                 "center": {"lat": -16.7, "lon": 145.9},
-                "grid": {"grid": "ease2_s25", "tiles": [[530, 612]]},
+                "grid": {"grid": "z10", "tiles": [[927, 560]]},
             }
         )
     )
@@ -285,7 +281,7 @@ def _file_survey(tmp_path: Path, **over: Any) -> Path:
     survey_dir = tmp_path / "request"
     survey_dir.mkdir(exist_ok=True)
     survey = {
-        "tile": "s_530_612",
+        "tile": "z10_0927_0560",
         "region_id": "xx_test_reef",
         "missing": [
             {"kind": "animal", "what": "hammerhead", "part": "sea"},
@@ -312,16 +308,16 @@ def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
     world = _file_world(tmp_path)
     survey_dir = _file_survey(tmp_path)
     store = FakeStore()
-    blob = group_path("s_530_612")
+    blob = group_path("z10_0927_0560")
     store.blobs[blob] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_s25",
-            "group": [66, 76],
+            "grid": "z10",
+            "group": [115, 70],
             "version": 3,
             "tiles": {
-                "s_530_612": {
-                    "id": "s_530_612",
+                "z10_0927_0560": {
+                    "id": "z10_0927_0560",
                     "kind": "place",
                     "place": "xx_test_reef",
                     "version": 3,
@@ -330,7 +326,7 @@ def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
             "blocked": {},
         }
     ).encode("utf-8")
-    store.blobs["tiles/v1/index.json"] = json.dumps(
+    store.blobs["tiles/v2/index.json"] = json.dumps(
         {
             "format": 1,
             "made_at": "",
@@ -343,9 +339,9 @@ def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
     assert paths == [blob]
     data = json.loads(store.blobs[blob].decode("utf-8"))
     assert data["version"] == 4
-    assert data["tiles"]["s_530_612"]["kind"] == "place"
+    assert data["tiles"]["z10_0927_0560"]["kind"] == "place"
     assert data["places"] == {
-        "s_530_612": {
+        "z10_0927_0560": {
             "region": "xx_test_reef",
             "wanted": [
                 {"kind": "animal", "what": "hammerhead", "part": "sea"},
@@ -358,9 +354,9 @@ def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
             "surveyed_at": "2026-10-30",
         }
     }
-    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
     assert index["counts"] == {"ready": 1, "blocked": {}}
-    assert index["groups"] == {blob.removeprefix("tiles/v1/").removesuffix(".json"): 4}
+    assert index["groups"] == {"z10/115_070": 4}
 
 
 def test_file_places_falls_back_to_the_centre_tile(tmp_path: Path) -> None:
@@ -383,8 +379,10 @@ def test_file_places_falls_back_to_the_centre_tile(tmp_path: Path) -> None:
     )
     survey_dir = _file_survey(tmp_path)
     store = FakeStore()
-    assert region_tiles(world, "xx_test_reef", "s_530_612") == [tile_at(-16.7, 145.9)]
-    assert region_tiles(world, "xx_missing", "s_530_612") == ["s_530_612"]
+    assert region_tiles(world, "xx_test_reef", "z10_0927_0560") == [
+        tile_at(-16.7, 145.9)
+    ]
+    assert region_tiles(world, "xx_missing", "z10_0927_0560") == ["z10_0927_0560"]
     paths = file_places(store, world, survey_dir, "abc123")
     assert len(paths) == 1
     data = json.loads(store.blobs[paths[0]].decode("utf-8"))
@@ -411,12 +409,12 @@ def test_file_places_dates_an_old_survey_from_its_plan(tmp_path: Path) -> None:
     store = FakeStore()
     (path,) = file_places(store, world, survey_dir, "abc123")
     data = json.loads(store.blobs[path].decode("utf-8"))
-    assert data["places"]["s_530_612"]["surveyed_at"] == "2026-10-30"
+    assert data["places"]["z10_0927_0560"]["surveyed_at"] == "2026-10-30"
     (survey_dir / "plan.json").unlink()
     store = FakeStore()
     (path,) = file_places(store, world, survey_dir, "abc123")
     data = json.loads(store.blobs[path].decode("utf-8"))
-    assert data["places"]["s_530_612"]["surveyed_at"] == (
+    assert data["places"]["z10_0927_0560"]["surveyed_at"] == (
         datetime.now(UTC).date().isoformat()
     )
 
@@ -443,19 +441,19 @@ def test_improve_survey_writes_missing_too(tmp_path: Path) -> None:
             }
         )
     )
-    grid_path = tmp_path / "ease2_s25.json.gz"
+    grid_path = tmp_path / "z10.json.gz"
     with gzip.open(grid_path, "wt", encoding="utf-8") as handle:
         json.dump(
             {
-                "grid": "ease2_s25",
-                "cells": {"530,612": [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]},
+                "grid": "z10",
+                "cells": {"927,560": [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]},
             },
             handle,
         )
-    grids = {"ease2_s25": HabitatGrid.load(grid_path, "ease2_s25")}
+    habitat_grid = HabitatGrid.load(grid_path)
     animals = [{"id": "hammerhead", "gbif_key": 2, "habitats": ["sea"]}]
     data = {
-        "tile": "s_530_612",
+        "tile": "z10_0927_0560",
         "habitat": "reef",
         "home_from": "reef",
         "name": {"en": "Test Reef", "fi": "Testiriutta"},
@@ -471,12 +469,12 @@ def test_improve_survey_writes_missing_too(tmp_path: Path) -> None:
     survey = check_survey(
         data,
         "Test Reef",
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         animals,
         [],
         8.0,
-        "s_530_612",
+        "z10_0927_0560",
         recorded={
             "counts": {"hammerhead": 5},
             "kingdoms": {
@@ -529,7 +527,7 @@ def test_survey_blocks_a_plant_outside_plantae_and_fungi(
         ctx, "Great Barrier Reef", animals, list_homes(world), [], None
     )
     survey = check_survey(
-        data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+        data, "Great Barrier Reef", _habitat_grid(), world, animals, [], 8.0, None
     )
     assert matched == [
         "Halodule uninervis",
@@ -558,7 +556,7 @@ def test_plan_keeps_plants_without_a_matched_kingdom(tmp_path: Path) -> None:
     world = fake_world.make_world(tmp_path)
     survey = {
         "place": "Nuuksio",
-        "tile": "n_413_478",
+        "tile": "z10_0581_0294",
         "habitat": "boreal forest",
         "home_from": "boreal_forest",
         "name": {"en": "Nuuksio", "fi": "Nuuksio"},
@@ -591,12 +589,19 @@ def test_survey_drops_animals_without_gbif_records(
     world = _needs_world()
     animals = _animals(world)
     seen = _reef_counts(monkeypatch, {"clownfish"})
-    counts = gbif_near("s_530_612", animals)
+    counts = gbif_near("z10_0927_0560", animals)
     assert counts.get("clownfish", 0) > 0
     assert counts.get("manta_ray", 0) == 0
     assert len(seen) == 25
     survey = check_survey(
-        _gbr_answer(), "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+        _gbr_answer(),
+        "Great Barrier Reef",
+        _habitat_grid(),
+        world,
+        animals,
+        [],
+        8.0,
+        None,
     )
     assert [a["id"] for a in survey["animals"]] == ["clownfish"]
 
@@ -610,7 +615,7 @@ def test_survey_keeps_wanted_first_without_records(
     survey = check_survey(
         _gbr_answer(),
         "Great Barrier Reef",
-        _grids(),
+        _habitat_grid(),
         world,
         animals,
         ["manta_ray"],
@@ -626,11 +631,11 @@ def test_survey_refuses_a_tile_off_the_grid() -> None:
     from builder.animal_list import find_list, load_list
 
     animals = load_list(find_list(world))["animals"]
-    data = dict(_gbr_answer(), tile="n_000_000")
+    data = dict(_gbr_answer(), tile="z10_0000_0000")
     data["tile"] = "s_999_999"
     with pytest.raises(SurveyError, match="no tile id|no baked cell"):
         check_survey(
-            data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+            data, "Great Barrier Reef", _habitat_grid(), world, animals, [], 8.0, None
         )
 
 
@@ -642,7 +647,7 @@ def test_survey_refuses_a_missing_home() -> None:
     data = dict(_gbr_answer(), home_from="examples/atlantis")
     with pytest.raises(SurveyError, match="no home file"):
         check_survey(
-            data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+            data, "Great Barrier Reef", _habitat_grid(), world, animals, [], 8.0, None
         )
 
 
@@ -655,7 +660,7 @@ def test_survey_refuses_an_animal_off_the_list() -> None:
     data["animals"].append({"id": "kraken", "source": "sailors"})
     with pytest.raises(SurveyError, match="not on the animal list"):
         check_survey(
-            data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+            data, "Great Barrier Reef", _habitat_grid(), world, animals, [], 8.0, None
         )
 
 
@@ -668,7 +673,7 @@ def test_survey_refuses_an_animal_without_a_source() -> None:
     data["animals"][0]["source"] = ""
     with pytest.raises(SurveyError, match="has no source"):
         check_survey(
-            data, "Great Barrier Reef", _grids(), world, animals, [], 8.0, None
+            data, "Great Barrier Reef", _habitat_grid(), world, animals, [], 8.0, None
         )
 
 
@@ -681,24 +686,24 @@ def test_survey_with_improve_keeps_the_places_tile(
     survey = check_survey(
         _gbr_answer(),
         "Great Barrier Reef",
-        _grids(),
+        _habitat_grid(),
         world,
         animals,
         [],
         8.0,
-        "s_530_612",
+        "z10_0927_0560",
     )
-    assert survey["tile"] == "s_530_612"
-    with pytest.raises(SurveyError, match="not s_530_611"):
+    assert survey["tile"] == "z10_0927_0560"
+    with pytest.raises(SurveyError, match="not z10_0926_0560"):
         check_survey(
             _gbr_answer(),
             "Great Barrier Reef",
-            _grids(),
+            _habitat_grid(),
             world,
             animals,
             [],
             8.0,
-            "s_530_611",
+            "z10_0926_0560",
         )
 
 
@@ -729,7 +734,7 @@ def test_place_survey_replays_from_records(
     )
     assert code == 0
     survey = json.loads((tmp_path / "gbr" / "survey.json").read_text())
-    assert survey["tile"] == "s_530_612"
+    assert survey["tile"] == "z10_0927_0560"
     assert survey["home_from"] == "examples/reef"
 
 
@@ -760,7 +765,9 @@ def _replay_survey(
         world_path=world,
     )
     data, _ = ask_survey(ctx, place, animals, list_homes(world), want, improve)
-    survey = check_survey(data, place, _grids(), world, animals, want, budget, improve)
+    survey = check_survey(
+        data, place, _habitat_grid(), world, animals, want, budget, improve
+    )
     client.verify_consumed()
     return survey
 
@@ -788,21 +795,21 @@ def test_reef_plan_lists_home_whale_and_plants(
     by_id = {i["id"]: i for i in plan["items"]}
     # #167.2: the reef exists, so no home item and no terrain change.
     assert "home_reef" not in by_id
-    # The live reef filed its fish (world f2a9fb3), and #167.1 skips
-    # its own plants: only the whale and the sargassum need making.
-    assert by_id["animal_humpback_whale"]["from"] == "harbour_porpoise"
+    # The live reef filed its fish and its whale, and #167.1
+    # skips its own plants: only the sargassum needs making.
+    assert "animal_humpback_whale" not in by_id
     whale = next(a for a in animals if a["id"] == "humpback_whale")
     assert whale["shape"] == "new"
     assert plan["blocked"] == [
         {"what": "whale_shark", "reason": "not_makeable"},
         {"what": "jellyfish", "reason": "not_makeable"},
     ]
-    assert plan["estimate_usd"] == 0.3
+    assert plan["estimate_usd"] == 0.15
     assert plan["survey"] == "survey.json"
     assert plan["improve"] == []
     assert plan["country"] == "Australia"
     assert plan["region_id"] == "au_great_barrier_reef"
-    assert [i["kind"] for i in plan["items"]] == ["animal", "plant"]
+    assert [i["kind"] for i in plan["items"]] == ["plant"]
     assert "plant_brown_seaweed_sargassum" in by_id
 
 
@@ -859,7 +866,7 @@ def test_improve_plan_puts_the_bear_first_and_stops_at_budget(
         "Nuuksio National Park",
         ["brown_bear"],
         1.0,
-        "n_414_479",
+        "z10_0581_0295",
         world,
         animals,
     )
@@ -897,7 +904,7 @@ def test_improve_with_room_plans_the_missing_plant_from_its_kind(
         "Nuuksio National Park",
         ["brown_bear"],
         8.0,
-        "n_414_479",
+        "z10_0581_0295",
         world,
         animals,
     )
@@ -954,7 +961,7 @@ def test_unmakeable_animals_are_blocked_not_built(
     monkeypatch.setattr(list_mod, "load_list", fake_load)
     survey = {
         "place": "Great Barrier Reef",
-        "tile": "s_530_612",
+        "tile": "z10_0927_0560",
         "habitat": "coral reef",
         "home_from": "examples/reef",
         "name": {"en": "Green Island Reef", "fi": "Green Islandin riutta"},
@@ -1001,29 +1008,34 @@ def test_place_plan_writes_plan_json(
     code = main(["place", "plan", str(out), "--world", str(world)])
     assert code == 0
     plan = json.loads((out / "plan.json").read_text())
-    assert plan["tile"] == "s_530_612"
-    # #167.2: the reef exists, so the first item is the whale, not a home.
-    assert plan["items"][0]["id"] == "animal_humpback_whale"
+    assert plan["tile"] == "z10_0927_0560"
+    # #167.2: the reef exists, so the first item is a plant, not a home.
+    assert plan["items"][0]["id"] == "plant_brown_seaweed_sargassum"
 
 
 def test_cells_within_two() -> None:
-    cells = cells_within("n_413_478")
+    cells = cells_within("z10_0581_0294")
     assert len(cells) == 25
-    assert "n_413_478" in cells
-    assert "n_411_476" in cells
-    assert "n_415_480" in cells
-    edge = cells_within("n_000_000")
-    assert len(edge) == 9
-    assert "n_000_000" in edge
+    assert "z10_0581_0294" in cells
+    assert "z10_0579_0292" in cells
+    assert "z10_0583_0296" in cells
+    edge = cells_within("z10_0000_0000")
+    assert len(edge) == 15
+    assert "z10_0000_0000" in edge
+    assert "z10_1023_0000" in edge
+    assert "z10_0000_0002" in edge
 
 
 def test_improve_tile_from_region() -> None:
     world = _needs_world()
-    assert improve_tile("s_530_612", world) == "s_530_612"
+    assert improve_tile("z10_0927_0560", world) == "z10_0927_0560"
     tile = improve_tile("fi_nuuksio", world)
-    grid, col, row = parse_tile(tile)
-    assert grid == "ease2_n25"
-    assert 405 <= col <= 420 and 470 <= row <= 485
+    assert tile in {
+        "z10_0581_0295",
+        "z10_0582_0295",
+        "z10_0581_0296",
+        "z10_0582_0296",
+    }
     with pytest.raises(SurveyError, match="neither a tile nor a region"):
         improve_tile("atlantis", world)
 
@@ -1076,7 +1088,14 @@ def test_reef_improve_replay_plans_only_what_it_lacks(
     _reef_counts(monkeypatch, _LIVE_GBR)
     data = _gbr_answer()
     survey = check_survey(
-        data, "Great Barrier Reef", _grids(), world, animals, [], 2.0, "s_530_612"
+        data,
+        "Great Barrier Reef",
+        _habitat_grid(),
+        world,
+        animals,
+        [],
+        2.0,
+        "z10_0927_0560",
     )
     plan = plan_place(survey, world, "test")
     ids = [item["id"] for item in plan["items"]]
@@ -1121,10 +1140,14 @@ def test_improve_habitats_from_region_and_tile() -> None:
 
     world = _needs_world()
     animals = _animals(world)
-    habitats = improve_habitats(animals, world, "au_great_barrier_reef", _grids())
+    habitats = improve_habitats(
+        animals, world, "au_great_barrier_reef", _habitat_grid()
+    )
     assert {"reef", "sea"} <= habitats
-    assert improve_habitats(animals, world, "s_530_612", _grids()) == {"open_ocean"}
-    assert improve_habitats(animals, world, "xx_nowhere", _grids()) == set()
+    assert improve_habitats(animals, world, "z10_0927_0560", _habitat_grid()) == {
+        "open_ocean"
+    }
+    assert improve_habitats(animals, world, "xx_nowhere", _habitat_grid()) == set()
 
 
 def test_region_residents_read_a_biome_place(tmp_path: Path) -> None:
@@ -1176,12 +1199,12 @@ def test_recorded_gbif_counts_keep_replay_offline(
     survey = check_survey(
         data,
         "Great Barrier Reef",
-        _grids(),
+        _habitat_grid(),
         world,
         animals,
         [],
         2.0,
-        "s_530_612",
+        "z10_0927_0560",
         recorded,
     )
     assert sorted(a["id"] for a in survey["animals"]) == sorted(_LIVE_GBR)
@@ -1327,14 +1350,15 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_region(
     assert region["id"] == "au_great_barrier_reef"
     assert region["name"] == "Great Barrier Reef"
     assert region["status"] == "draft"
-    # The live reef filed its animals (world f2a9fb3): surveyed and filed
-    # means playable, in survey order.
+    # The live reef filed its animals, whale since: surveyed
+    # and filed means playable, in survey order.
     assert region["animals"]["playable"] == [
         "clownfish",
         "green_sea_turtle",
         "blue_tang",
         "reef_shark",
         "bottlenose_dolphin",
+        "humpback_whale",
         "lionfish",
         "butterflyfish",
     ]
@@ -1366,7 +1390,7 @@ def test_write_region_derives_groups_and_fish_from_filed_animals(
     world = _needs_world()
     home = json.loads((world / "homes" / "sea.json").read_text())
     survey = {
-        "tile": "n_415_479",
+        "tile": "z10_0582_0296",
         "name": {"en": "Helsinki shore", "fi": "Helsingin ranta"},
         "country": "Finland",
         "region_id": "fi_test_shore",
@@ -1405,7 +1429,7 @@ def test_write_region_leaves_out_a_nameless_lake() -> None:
     home = json.loads((world / "homes" / "sea.json").read_text())
     home["lakes"] = [{"name": "none", "x": 0.5, "z": 0.36}]
     survey = {
-        "tile": "n_415_479",
+        "tile": "z10_0582_0296",
         "name": {"en": "Helsinki shore", "fi": "Helsingin ranta"},
         "country": "Finland",
         "region_id": "fi_test_shore",
@@ -1424,7 +1448,7 @@ def test_write_region_leaves_out_treeless_none() -> None:
     home = json.loads((world / "homes" / "examples" / "reef.json").read_text())
     assert home["trees"] == {"density": "none", "mix": []}
     survey = {
-        "tile": "s_530_612",
+        "tile": "z10_0927_0560",
         "name": {"en": "Test reef", "fi": "Testiriutta"},
         "country": "Australia",
         "region_id": "xx_test_reef",

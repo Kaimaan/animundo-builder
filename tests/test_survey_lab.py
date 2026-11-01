@@ -13,18 +13,18 @@ from builder.survey_lab import TILES, comparison, run_lab, write_lab
 
 def test_tiles_are_the_six_we_have() -> None:
     assert TILES == (
-        "n_414_478",
-        "n_414_480",
-        "n_415_479",
-        "n_414_481",
-        "n_416_482",
-        "n_417_469",
+        "z10_0582_0294",
+        "z10_0581_0297",
+        "z10_0582_0296",
+        "z10_0580_0298",
+        "z10_0582_0300",
+        "z10_0590_0285",
     )
 
 
 def _old() -> dict[str, dict[str, Any]]:
     return {
-        "n_413_478": {
+        "z10_0581_0294": {
             "answer": {
                 "place": "Boreal forest in southern Finland",
                 "present": ["fox"],
@@ -38,7 +38,7 @@ def _old() -> dict[str, dict[str, Any]]:
 def _results() -> list[dict[str, Any]]:
     return [
         {
-            "tile": "n_413_478",
+            "tile": "z10_0581_0294",
             "facts": {
                 "habitat": "boreal_forest",
                 "eco1": 717,
@@ -74,7 +74,7 @@ def _animals() -> list[dict[str, Any]]:
 
 def test_comparison_reads_old_against_new() -> None:
     text = comparison(_old(), _results(), _animals())
-    assert "## n_413_478" in text
+    assert "## z10_0581_0294" in text
     assert "Old: Boreal forest in southern Finland — Seal Forest" in text
     assert "Old name: names seal, which is not on the tile" in text
     assert "New: Boreal forest in southern Finland — Nuuksio forest" in text
@@ -86,7 +86,7 @@ def test_write_lab_writes_new_and_comparison(tmp_path: Path) -> None:
     new_path, comparison_path = write_lab(tmp_path, _old(), _results(), _animals())
     data = json.loads(new_path.read_text())
     assert data["tiles"] == _results()
-    assert "## n_413_478" in comparison_path.read_text()
+    assert "## z10_0581_0294" in comparison_path.read_text()
 
 
 def test_run_lab_surveys_each_tile(tmp_path: Path, monkeypatch: Any) -> None:
@@ -116,11 +116,11 @@ def test_run_lab_surveys_each_tile(tmp_path: Path, monkeypatch: Any) -> None:
         )
     )
     cell = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
-    cells = {f"{c},{r}": list(cell) for r in (477, 478, 479) for c in (412, 413, 414)}
-    path = tmp_path / "ease2_n25.json.gz"
+    cells = {f"{c},{r}": list(cell) for r in (293, 294, 295) for c in (580, 581, 582)}
+    path = tmp_path / "z10.json.gz"
     with gzip.open(path, "wt", encoding="utf-8") as handle:
-        json.dump({"grid": "ease2_n25", "cells": cells}, handle)
-    grids = {"ease2_n25": HabitatGrid.load(path, "ease2_n25")}
+        json.dump({"grid": "z10", "cells": cells}, handle)
+    habitat_grid = HabitatGrid.load(path)
 
     def fake_fetch(
         tile: str,
@@ -148,7 +148,7 @@ def test_run_lab_surveys_each_tile(tmp_path: Path, monkeypatch: Any) -> None:
         }
 
     monkeypatch.setattr(lab_mod, "fetch_species", fake_fetch)
-    results = run_lab(["n_413_478"], grids, world, source=None)  # type: ignore[arg-type]
+    results = run_lab(["z10_0581_0294"], habitat_grid, world, source=None)
     assert len(results) == 1
     assert results[0]["status"] == "ready"
     assert results[0]["check"] is None

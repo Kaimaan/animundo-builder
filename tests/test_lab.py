@@ -28,10 +28,10 @@ def test_counts_groups_by_reason() -> None:
 
 def test_draw_globe_marks_cells() -> None:
     results = [
-        {"spot": "nuuksio", "tile": "n_413_478", "status": "ready"},
+        {"spot": "nuuksio", "tile": "z10_0581_0294", "status": "ready"},
         {
             "spot": "amazon",
-            "tile": "s_014_270",
+            "tile": "z10_0297_0515",
             "status": "blocked",
             "reason": "no_animal",
         },
@@ -44,7 +44,7 @@ def test_draw_globe_marks_cells() -> None:
 
 
 def test_write_lab_writes_counts_and_globe(tmp_path: Path) -> None:
-    results = [{"spot": "nuuksio", "tile": "n_413_478", "status": "ready"}]
+    results = [{"spot": "nuuksio", "tile": "z10_0581_0294", "status": "ready"}]
     counts_path, globe_path = write_lab(tmp_path, results)
     data = json.loads(counts_path.read_text())
     assert data["counts"] == {"ready": 1, "blocked": {}}

@@ -62,7 +62,7 @@ def test_code_job_pulls_before_its_tile(tmp_path: Path, monkeypatch: Any) -> Non
     from test_worker import _code_job, _code_plan, _flow_worker
 
     store = FakeStore()
-    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")
     store.build_jobs["j1"] = _code_job()
     order: list[str] = []
     flow = _flow_worker(tmp_path, store, fake_world.boreal_3x3())

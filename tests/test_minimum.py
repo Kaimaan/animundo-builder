@@ -421,7 +421,7 @@ def test_enrich_item_never_makes_prey(tmp_path: Path) -> None:
         latin="Megaptera novaeangliae",
         in_library=None,
         home="open_ocean",
-        enrich={"tiles": ["s_530_612"]},
+        enrich={"tiles": ["z10_0927_0560"]},
     )
     research = _research(
         main_food={"name": "Antarctic krill", "kind": "prey", "size_cm": 6},

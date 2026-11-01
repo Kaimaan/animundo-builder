@@ -3621,7 +3621,7 @@ def test_newshape_loop_failure_goes_to_review_not_passed(
 _SORT_STUB = """\
 import json
 problems = [
-    'ERROR: squirrel in tl_n_413_479 eats "mushrooms", '
+    'ERROR: squirrel in tl_z10_0580_0295 eats "mushrooms", '
     "but the region has no such food",
 ]
 report = {
@@ -3673,24 +3673,24 @@ def _enrich_inputs(tmp_path: Path) -> None:
             "habitats": ["boreal_forest"],
             "home": "boreal_forest",
             "needs_home": False,
-            "enrich": {"tiles": ["n_413_478", "n_413_479"]},
+            "enrich": {"tiles": ["z10_0581_0294", "z10_0580_0295"]},
         },
     )
     regions = tmp_path / "regions"
     (regions / "fi_test.json").unlink()
-    (regions / "tl_n_413_478.json").write_text(
+    (regions / "tl_z10_0581_0294.json").write_text(
         json.dumps(
             {
-                "id": "tl_n_413_478",
+                "id": "tl_z10_0581_0294",
                 "animals": {"playable": ["lynx"], "prey": [], "predators": []},
                 "food": [{"kind": "grass"}],
             }
         )
     )
-    (regions / "tl_n_413_479.json").write_text(
+    (regions / "tl_z10_0580_0295.json").write_text(
         json.dumps(
             {
-                "id": "tl_n_413_479",
+                "id": "tl_z10_0580_0295",
                 "animals": {
                     "playable": ["lynx", "squirrel"],
                     "prey": [],
@@ -3714,8 +3714,8 @@ def test_enrich_run_sorts_place_failures_per_tile(tmp_path: Path) -> None:
     places = json.loads((tmp_path / "checks" / "places.json").read_text())
     assert places["ok"] is False
     by_check = {entry["check"]: entry for entry in places["results"]}
-    assert by_check["place n_413_478"]["status"] == "pass"
-    failed = by_check["place n_413_479"]
+    assert by_check["place z10_0581_0294"]["status"] == "pass"
+    failed = by_check["place z10_0580_0295"]
     assert failed["status"] == "fail"
     assert "mushrooms" in failed["problems"][0]
     assert by_check["region"]["status"] == "skip"
@@ -3734,8 +3734,8 @@ def test_enrich_run_still_fix_rounds_the_new_file(tmp_path: Path) -> None:
     assert len(client.prompts) == 2
     places = json.loads((tmp_path / "checks" / "places.json").read_text())
     by_check = {entry["check"]: entry for entry in places["results"]}
-    assert by_check["place n_413_478"]["status"] == "pass"
-    assert by_check["place n_413_479"]["status"] == "pass"
+    assert by_check["place z10_0581_0294"]["status"] == "pass"
+    assert by_check["place z10_0580_0295"]["status"] == "pass"
 
 
 def test_migrating_animal_needs_both_dates() -> None:

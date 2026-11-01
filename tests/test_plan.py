@@ -108,16 +108,16 @@ def _world(tmp_path: Path) -> Path:
     return world
 
 
-def _grids(tmp_path: Path, cells: dict[str, list[Any]]) -> dict[str, HabitatGrid]:
-    path = tmp_path / "ease2_n25.json.gz"
+def _habitat_grid(tmp_path: Path, cells: dict[str, list[Any]]) -> HabitatGrid:
+    path = tmp_path / "z10.json.gz"
     with gzip.open(path, "wt", encoding="utf-8") as handle:
-        json.dump({"grid": "ease2_n25", "cells": cells}, handle)
-    return {"ease2_n25": HabitatGrid.load(path, "ease2_n25")}  # type: ignore[dict-item]
+        json.dump({"grid": "z10", "cells": cells}, handle)
+    return HabitatGrid.load(path)
 
 
 def _boreal(cell: list[Any] | None = None) -> dict[str, list[Any]]:
     base = cell or [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
-    return {f"{c},{r}": list(base) for r in (477, 478, 479) for c in (412, 413, 414)}
+    return {f"{c},{r}": list(base) for r in (293, 294, 295) for c in (580, 581, 582)}
 
 
 def test_plan_skips_place_cells(tmp_path: Path) -> None:
@@ -125,15 +125,13 @@ def test_plan_skips_place_cells(tmp_path: Path) -> None:
     world = _world(tmp_path)
     (world / "regions").mkdir()
     (world / "regions" / "fi_test.json").write_text(
-        json.dumps(
-            {"id": "fi_test", "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]}}
-        )
+        json.dumps({"id": "fi_test", "grid": {"grid": "z10", "tiles": [[581, 294]]}})
     )
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -148,11 +146,11 @@ def test_plan_skips_place_cells(tmp_path: Path) -> None:
 
 def test_plan_is_code_only_when_tile_makes(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={"fox": 5.0, "vole": 20.0},
@@ -163,21 +161,21 @@ def test_plan_is_code_only_when_tile_makes(tmp_path: Path) -> None:
     assert plan["items"] == []
     assert plan["improve"] == []
     assert plan["estimate_usd"] == 0
-    assert plan["tile"] == "n_413_478"
+    assert plan["tile"] == "z10_0581_0294"
     assert plan["world"] == "abc123"
-    assert plan["name"]["en"] == "Boreal forest northwest of Nuuksio"
-    assert plan["name"]["fi"] == "Havumetsä Nuuksion luoteispuolella"
+    assert plan["name"]["en"] == "Boreal forest north of Nuuksio"
+    assert plan["name"]["fi"] == "Havumetsä Nuuksion pohjoispuolella"
 
 
 def test_plan_lists_home_from_nearest(tmp_path: Path) -> None:
     world = _world(tmp_path)
     cells = _boreal([999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0])
-    cells["414,478"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
-    grids = _grids(tmp_path, cells)
+    cells["582,294"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    habitat_grid = _habitat_grid(tmp_path, cells)
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -199,13 +197,15 @@ def test_plan_lists_home_from_nearest(tmp_path: Path) -> None:
 
 def test_nearest_home_falls_back_without_neighbours(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal([999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]))
+    habitat_grid = _habitat_grid(
+        tmp_path, _boreal([999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0])
+    )
     from builder.tiles import available_homes
 
     assert (
         nearest_home(
-            "n_413_478",
-            grids,
+            "z10_0581_0294",
+            habitat_grid,
             available_homes(world),
             "tundra",  # type: ignore[arg-type]
         )
@@ -219,13 +219,13 @@ def test_nearest_home_prefers_the_same_habitat(tmp_path: Path) -> None:
     (world / "homes" / "sea.json").write_text(
         json.dumps({"habitat": "sea", "ecoregions": [651]})
     )
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     from builder.tiles import available_homes
 
     assert (
         nearest_home(
-            "n_413_478",
-            grids,  # type: ignore[arg-type]
+            "z10_0581_0294",
+            habitat_grid,
             available_homes(world),
             "sea",  # type: ignore[arg-type]
         )
@@ -243,17 +243,17 @@ def test_nearest_home_prefers_land_behind_the_coast(tmp_path: Path) -> None:
     sea = [651, 1.0, None, 0.0, 4, 0.3, 0.0, 0.0]
     boreal = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
     bare = [999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]
-    cells = {f"{c},{r}": list(bare) for r in range(476, 481) for c in range(411, 416)}
-    cells["413,478"] = list(forest)
-    cells["414,478"] = list(sea)
-    cells["411,478"] = list(boreal)
-    grids = _grids(tmp_path, cells)
+    cells = {f"{c},{r}": list(bare) for r in range(292, 297) for c in range(579, 584)}
+    cells["581,294"] = list(forest)
+    cells["582,294"] = list(sea)
+    cells["579,294"] = list(boreal)
+    habitat_grid = _habitat_grid(tmp_path, cells)
     from builder.tiles import available_homes
 
     assert (
         nearest_home(
-            "n_413_478",
-            grids,  # type: ignore[arg-type]
+            "z10_0581_0294",
+            habitat_grid,
             available_homes(world),
             "forest",  # type: ignore[arg-type]
         )
@@ -270,17 +270,17 @@ def test_nearest_home_prefers_water_for_the_sea(tmp_path: Path) -> None:
     sea = [651, 1.0, None, 0.0, 4, 0.3, 0.0, 0.0]
     boreal = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
     bare = [999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]
-    cells = {f"{c},{r}": list(bare) for r in (477, 478, 479) for c in (412, 413, 414)}
-    cells["413,478"] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
-    cells["412,478"] = list(boreal)
-    cells["414,478"] = list(sea)
-    grids = _grids(tmp_path, cells)
+    cells = {f"{c},{r}": list(bare) for r in (293, 294, 295) for c in (580, 581, 582)}
+    cells["581,294"] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
+    cells["580,294"] = list(boreal)
+    cells["582,294"] = list(sea)
+    habitat_grid = _habitat_grid(tmp_path, cells)
     from builder.tiles import available_homes
 
     assert (
         nearest_home(
-            "n_413_478",
-            grids,  # type: ignore[arg-type]
+            "z10_0581_0294",
+            habitat_grid,
             available_homes(world),
             "open_ocean",  # type: ignore[arg-type]
         )
@@ -289,7 +289,7 @@ def test_nearest_home_prefers_water_for_the_sea(tmp_path: Path) -> None:
 
 
 def test_tallinn_adapts_from_the_land_home() -> None:
-    """#141.4: n_416_482 adapts from boreal_forest, not sea."""
+    """#141.4: z10_0582_0300 adapts from boreal_forest, not sea."""
     import pytest
 
     from builder.tiles import available_homes
@@ -298,14 +298,12 @@ def test_tallinn_adapts_from_the_land_home() -> None:
     if not (world / "animal-list.json").is_file():
         pytest.skip("needs an animundo-world checkout")
     grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
-    grids = {
-        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
-        for name in ("ease2_n25", "ease2_s25")
-    }
+    from builder.habitats import load_grid
+
+    habitat_grid = load_grid(grid_dir)
     homes = available_homes(world)
     assert (
-        nearest_home("n_416_482", grids, homes, "forest")  # type: ignore[arg-type]
-        == "boreal_forest"
+        nearest_home("z10_0582_0300", habitat_grid, homes, "forest") == "boreal_forest"
     )
 
 
@@ -317,12 +315,12 @@ def test_plan_blocks_no_land_without_a_style(tmp_path: Path) -> None:
         json.dumps({"styles": [{"land": "boreal", "biome": 6}]})
     )
     cells = _boreal()
-    cells["413,478"] = [999, 1.0, None, 0.0, 13, 1.0, 0.0, 80.0]
-    grids = _grids(tmp_path, cells)
+    cells["581,294"] = [999, 1.0, None, 0.0, 13, 1.0, 0.0, 80.0]
+    habitat_grid = _habitat_grid(tmp_path, cells)
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -333,7 +331,7 @@ def test_plan_blocks_no_land_without_a_style(tmp_path: Path) -> None:
 
 
 def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
-    """#169.1: s_530_611 never plans with home: sea."""
+    """#169.1: z10_0926_0560 never plans with home: sea."""
     import gzip
 
     from builder.tiles import available_biomes, home_for_cell
@@ -366,16 +364,16 @@ def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
     )
     tropical = [150, 1.0, None, 0.0, 1, 0.28, 0.0, 165.6]
     cells = {
-        f"{c},{r}": list(tropical) for r in (610, 611, 612) for c in (529, 530, 531)
+        f"{c},{r}": list(tropical) for r in (559, 560, 561) for c in (926, 927, 928)
     }
-    path = tmp_path / "ease2_s25.json.gz"
+    path = tmp_path / "z10.json.gz"
     with gzip.open(path, "wt", encoding="utf-8") as handle:
-        json.dump({"grid": "ease2_s25", "cells": cells}, handle)
-    grids = {"ease2_s25": HabitatGrid.load(path, "ease2_s25")}
+        json.dump({"grid": "z10", "cells": cells}, handle)
+    habitat_grid = HabitatGrid.load(path)
     plan = plan_tile(
-        "s_530_611",
+        "z10_0926_0560",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -389,7 +387,10 @@ def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
 
 
 def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
-    """#148.3: 717 by the sea plans code-only on sea_717, no home item."""
+    """#148.3: 717 by the sea plans code-only on sea_717, no home item.
+
+    The tile sits just east of Nuuksio's place cells (#182).
+    """
     import pytest
 
     from builder.tiles import make_tile
@@ -398,10 +399,9 @@ def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
     if not (world / "homes" / "sea_717.json").is_file():
         pytest.skip("needs world d009df2 with the reviewed sea home")
     grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
-    grids = {
-        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
-        for name in ("ease2_n25", "ease2_s25")
-    }
+    from builder.habitats import load_grid
+
+    habitat_grid = load_grid(grid_dir)
     answer = {
         "place": "Helsinki shore on the Gulf of Finland",
         "parts": [
@@ -431,9 +431,9 @@ def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
         "name_fi": "Helsingin ranta",
     }
     plan = plan_tile(
-        "n_415_479",
+        "z10_0583_0296",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence=None,
@@ -443,8 +443,8 @@ def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
     assert plan["code_only"] is True
     assert plan["items"] == []
     made, blocked = make_tile(
-        "n_415_479",
-        grids,  # type: ignore[arg-type]
+        "z10_0583_0296",
+        habitat_grid,
         world,
         species=answer,
     )
@@ -455,21 +455,20 @@ def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
 
 
 def test_tallinn_blocks_without_a_matching_bundle() -> None:
-    """#148.3: styled but unmatched, n_416_482 blocks instead of a home item."""
+    """#148.3: styled but unmatched, z10_0582_0300 blocks instead of a home item."""
     import pytest
 
     world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
     if not (world / "animal-list.json").is_file():
         pytest.skip("needs an animundo-world checkout")
     grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
-    grids = {
-        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
-        for name in ("ease2_n25", "ease2_s25")
-    }
+    from builder.habitats import load_grid
+
+    habitat_grid = load_grid(grid_dir)
     plan = plan_tile(
-        "n_416_482",
+        "z10_0582_0300",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -481,11 +480,11 @@ def test_tallinn_blocks_without_a_matching_bundle() -> None:
 
 def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -508,11 +507,11 @@ def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:
 
 def test_plan_prefers_the_explorers_animal(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         {"species_played": {"okapi": 3, "fox": 1}},
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -524,11 +523,11 @@ def test_plan_prefers_the_explorers_animal(tmp_path: Path) -> None:
 
 def test_plan_skips_animals_it_cannot_make(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -549,11 +548,11 @@ def test_plan_lists_missing_food_for_filed_animals(tmp_path: Path) -> None:
             }
         )
     )
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={"mountain_hare": 9.0},
@@ -583,11 +582,11 @@ def test_plan_lists_food_and_animal_together(tmp_path: Path) -> None:
             }
         )
     )
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={"mountain_hare": 9.0},
@@ -623,11 +622,11 @@ def test_plan_skips_animal_when_one_serves(tmp_path: Path) -> None:
         "]}))\n"
     )
     (tools / "tile_region.py").write_text('"""A converter new enough.\n"""\n')
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={"fox": 5.0, "dormouse": 4.0, "mountain_hare": 9.0},
@@ -655,11 +654,11 @@ def test_plan_lists_one_thing_to_find(tmp_path: Path) -> None:
             }
         )
     )
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -711,11 +710,11 @@ def _survey(*plant_ids: str) -> dict[str, Any]:
 def test_plan_plant_prefers_the_survey_pick(tmp_path: Path) -> None:
     """#147.3: the survey's unfiled pick becomes the plant item."""
     world = _find_world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -738,11 +737,11 @@ def test_plan_plant_falls_back_when_the_survey_pick_is_filed(
 ) -> None:
     """#147.3: a filed survey pick leaves the home's missing one."""
     world = _find_world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -765,11 +764,11 @@ def test_plan_plant_without_survey_picks_is_the_home_missing(
 ) -> None:
     """#147.3: no survey picks, the home's missing plant as before."""
     world = _find_world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -782,12 +781,12 @@ def test_plan_plant_without_survey_picks_is_the_home_missing(
 def test_plan_writes_no_items_for_excluded_cells(tmp_path: Path) -> None:
     """#133.7: an excluded cell is never planned and never built."""
     world = _world(tmp_path)
-    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["n_413_478"]}))
-    grids = _grids(tmp_path, _boreal())
+    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["z10_0581_0294"]}))
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={"fox": 5.0, "vole": 20.0},
@@ -804,11 +803,11 @@ def test_plan_writes_no_items_for_excluded_cells(tmp_path: Path) -> None:
 def test_plan_leaves_out_animals_without_start_from(tmp_path: Path) -> None:
     """#133.8: no reference on the list means no item, not a home `from`."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -824,11 +823,11 @@ def test_plan_prefers_a_buildable_animal_over_an_unbuildable_one(
 ) -> None:
     """#133.8: the most recorded animal with a reference wins."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -857,11 +856,11 @@ def test_plan_adapts_a_find_from_the_same_food_kind(tmp_path: Path) -> None:
             }
         )
     )
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -909,7 +908,7 @@ def test_plan_names_from_the_nearest_region(tmp_path: Path) -> None:
 
     world = _world(tmp_path)
     _reef_region(world)
-    lat, lon = center("s_530_613")
+    lat, lon = center("z10_0927_0559")
     named = plan_name("open_ocean", lat, lon, None, world)
     assert named["en"] == "Open ocean north of Great Barrier Reef – Green Island"
     assert named["fi"] == (
@@ -942,11 +941,11 @@ def test_plan_leaves_the_probe_undecided_without_a_key(tmp_path: Path) -> None:
     from builder.species import Source
 
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence=None,
@@ -969,7 +968,7 @@ def test_plan_probe_reraises_a_real_tile_error(
     import builder.plan as plan_mod
 
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
 
     def broken(*args: Any, **kwargs: Any) -> Any:
         raise ValueError("the tile maker broke")
@@ -977,9 +976,9 @@ def test_plan_probe_reraises_a_real_tile_error(
     monkeypatch.setattr(plan_mod, "make_tile", broken)
     with pytest.raises(ValueError, match="the tile maker broke"):
         plan_tile(
-            "n_413_478",
+            "z10_0581_0294",
             None,
-            grids,  # type: ignore[arg-type]
+            habitat_grid,
             world,
             "abc123",
             presence={},
@@ -988,23 +987,23 @@ def test_plan_probe_reraises_a_real_tile_error(
 
 
 def test_open_water_plan_names_its_region_neighbour(tmp_path: Path) -> None:
-    """#169.2: s_530_613's plan points from the Great Barrier Reef."""
+    """#169.2: z10_0927_0559's plan points from the Great Barrier Reef."""
     world = _world(tmp_path)
     _reef_region(world)
-    path = tmp_path / "ease2_s25.json.gz"
+    path = tmp_path / "z10.json.gz"
     with gzip.open(path, "wt", encoding="utf-8") as handle:
         json.dump(
             {
-                "grid": "ease2_s25",
-                "cells": {"530,613": [None, 0.0, None, 0.0, None, 0.0, 0.0, 0.0]},
+                "grid": "z10",
+                "cells": {"927,559": [None, 0.0, None, 0.0, None, 0.0, 0.0, 0.0]},
             },
             handle,
         )
-    grids = {"ease2_s25": HabitatGrid.load(path, "ease2_s25")}
+    habitat_grid = HabitatGrid.load(path)
     plan = plan_tile(
-        "s_530_613",
+        "z10_0927_0559",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -1018,11 +1017,11 @@ def test_open_water_plan_names_its_region_neighbour(tmp_path: Path) -> None:
 def test_plan_uses_the_species_names(tmp_path: Path) -> None:
     """#135.5: a recorded answer names the plan in both languages."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _boreal())
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={"fox": 5.0, "vole": 20.0},
@@ -1043,8 +1042,8 @@ def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:
     """#135.5: no names in the answer, the compass names it."""
     world = _world(tmp_path)
     cells = _boreal([999, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0])
-    cells["414,478"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
-    grids = _grids(tmp_path, cells)
+    cells["582,294"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    habitat_grid = _habitat_grid(tmp_path, cells)
     nameless = {
         "place": "Boreal forest in southern Finland",
         "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
@@ -1052,9 +1051,9 @@ def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:
         "trees": [],
     }
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -1062,9 +1061,9 @@ def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:
         species=nameless,
     )
     plain = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -1076,17 +1075,17 @@ def test_plan_falls_back_to_compass_without_names(tmp_path: Path) -> None:
 
 def _open_water() -> dict[str, list[Any]]:
     cell: list[Any] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
-    return {f"{c},{r}": list(cell) for r in (477, 478, 479) for c in (412, 413, 414)}
+    return {f"{c},{r}": list(cell) for r in (293, 294, 295) for c in (580, 581, 582)}
 
 
 def test_plan_marks_open_water_blocked(tmp_path: Path) -> None:
     """#141.2: open water says nobody can go there yet, with no coming."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _open_water())
+    habitat_grid = _habitat_grid(tmp_path, _open_water())
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -1104,7 +1103,7 @@ def test_plan_makes_no_species_call_for_open_water(tmp_path: Path) -> None:
     from builder.species import Source
 
     world = _world(tmp_path)
-    grids = _grids(tmp_path, _open_water())
+    habitat_grid = _habitat_grid(tmp_path, _open_water())
     calls: list[str] = []
 
     class SpyClient:
@@ -1113,9 +1112,9 @@ def test_plan_makes_no_species_call_for_open_water(tmp_path: Path) -> None:
             raise RuntimeError("no species call for open water")
 
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={},
@@ -1126,7 +1125,7 @@ def test_plan_makes_no_species_call_for_open_water(tmp_path: Path) -> None:
     assert plan["blocked"] == "open_water"
     from builder.grid import center
 
-    assert plan["name"] == plan_name("open_ocean", *center("n_413_478"))
+    assert plan["name"] == plan_name("open_ocean", *center("z10_0581_0294"))
 
 
 def _open_sea_world(tmp_path: Path) -> Path:
@@ -1178,7 +1177,7 @@ def _open_sea_world(tmp_path: Path) -> Path:
     data = tmp_path / "data"
     data.mkdir(exist_ok=True)
     with gzip.open(data / "seas.json.gz", "wt", encoding="utf-8") as handle:
-        json.dump({"cells": {"n_413_478": "gulf_of_finland"}}, handle)
+        json.dump({"cells": {"z10_0581_0294": "gulf_of_finland"}}, handle)
     (world / "lands").mkdir(exist_ok=True)
     (world / "lands" / "index.json").write_text(
         json.dumps({"styles": [{"land": "boreal", "biome": 6}]})
@@ -1188,7 +1187,7 @@ def _open_sea_world(tmp_path: Path) -> Path:
 
 def _open_sea_cells() -> dict[str, list[Any]]:
     cells = _open_water()
-    cells["412,477"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    cells["580,293"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
     return cells
 
 
@@ -1199,7 +1198,7 @@ def test_plan_lists_open_sea_as_code_only_with_no_survey(
     from builder.species import Source
 
     world = _open_sea_world(tmp_path)
-    grids = _grids(tmp_path, _open_sea_cells())
+    habitat_grid = _habitat_grid(tmp_path, _open_sea_cells())
     calls: list[str] = []
 
     class SpyClient:
@@ -1208,9 +1207,9 @@ def test_plan_lists_open_sea_as_code_only_with_no_survey(
             raise RuntimeError("no species call for open sea")
 
     plan = plan_tile(
-        "n_413_478",
+        "z10_0581_0294",
         None,
-        grids,  # type: ignore[arg-type]
+        habitat_grid,
         world,
         "abc123",
         presence={"herring_gull": 5.0},
@@ -1230,7 +1229,7 @@ def test_finish_blocked_carries_no_improve() -> None:
     from builder.plan import _finish
 
     plan = _finish(
-        "n_413_478",
+        "z10_0581_0294",
         False,
         [],
         [{"id": "arctic_tern", "start_from": "tern"}],

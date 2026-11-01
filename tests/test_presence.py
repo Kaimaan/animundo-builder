@@ -17,7 +17,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def test_cell_wkt_is_a_closed_counter_clockwise_ring() -> None:
-    wkt = cell_wkt("n_413_478")
+    wkt = cell_wkt("z10_0581_0295")
     assert wkt.startswith("POLYGON ((") and wkt.endswith("))")
     ring = wkt[len("POLYGON ((") : -len("))")].split(", ")
     assert len(ring) == 5
@@ -76,7 +76,7 @@ def test_fetch_raw_reads_species_facets(monkeypatch: Any) -> None:
         {"id": "fox", "gbif_key": 5219243},
         {"id": "lynx", "gbif_key": 2435240},
     ]
-    assert fetch_raw("n_413_478", animals) == {"fox": 21, "lynx": 11}
+    assert fetch_raw("z10_0581_0295", animals) == {"fox": 21, "lynx": 11}
 
 
 def test_smooth_weights_the_centre_triple() -> None:
@@ -94,7 +94,7 @@ def test_smooth_discounts_next_door_only() -> None:
 
 def test_nuuksio_fixture_has_boreal_birds() -> None:
     fixture = json.loads((FIXTURES / "presence-nuuksio.json").read_text())
-    assert fixture["tile"] == "n_413_478"
+    assert fixture["tile"] == "z10_0581_0294"
     counts = fixture["counts"]
     assert len(counts) >= 20
     assert counts.get("blue_tit", 0) > 100

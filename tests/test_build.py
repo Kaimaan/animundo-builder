@@ -15,7 +15,7 @@ from builder import build as build_mod
 from builder.schemas import validate
 
 
-def _plan(tile: str = "n_413_478") -> dict[str, Any]:
+def _plan(tile: str = "z10_0581_0294") -> dict[str, Any]:
     return {
         "format": 1,
         "tile": tile,
@@ -142,14 +142,14 @@ def test_write_state_params_merges_retry_safely(tmp_path: Path) -> None:
         json.dumps({"completed": ["research"], "params": {"area": "old"}})
     )
     build_mod.write_state_params(
-        tmp_path, {"area": "n_413_478 (Forest)", "kind": "enrich"}
+        tmp_path, {"area": "z10_0581_0294 (Forest)", "kind": "enrich"}
     )
     state = json.loads((tmp_path / "state.json").read_text())
     assert state["completed"] == ["research"]
-    assert state["params"] == {"area": "n_413_478 (Forest)", "kind": "enrich"}
+    assert state["params"] == {"area": "z10_0581_0294 (Forest)", "kind": "enrich"}
     build_mod.write_state_params(tmp_path, {"kind": "enrich"})
     again = json.loads((tmp_path / "state.json").read_text())
-    assert again["params"]["area"] == "n_413_478 (Forest)"
+    assert again["params"]["area"] == "z10_0581_0294 (Forest)"
 
 
 def test_write_scaffold_falls_back_to_its_own_source(tmp_path: Path) -> None:
@@ -297,12 +297,12 @@ def test_upload_bundle_keeps_world_shape_only(tmp_path: Path) -> None:
     ]
 
 
-def _made_tile(tile: str = "n_413_478") -> dict[str, Any]:
+def _made_tile(tile: str = "z10_0581_0294") -> dict[str, Any]:
     return {
         "format": 1,
         "id": tile,
         "kind": "code",
-        "grid": "ease2_n25",
+        "grid": "z10",
         "grid_north": 0.0,
         "level": 12,
         "height": 32,
@@ -322,14 +322,14 @@ def _made_tile(tile: str = "n_413_478") -> dict[str, Any]:
 
 def test_publish_group_writes_group_and_index() -> None:
     store = FakeStore()
-    path = build_mod.publish_group("n_413_478", _made_tile(), store, "abc123")
-    assert path == "tiles/v1/ease2_n25/51_59.json"
+    path = build_mod.publish_group("z10_0581_0294", _made_tile(), store, "abc123")
+    assert path == "tiles/v2/z10/072_036.json"
     group = json.loads(store.blobs[path].decode("utf-8"))
-    assert group["tiles"]["n_413_478"]["home"] == "boreal_forest"
+    assert group["tiles"]["z10_0581_0294"]["home"] == "boreal_forest"
     assert group["version"] == 1
-    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
     validate("tile-index", index)
-    assert index["groups"] == {"ease2_n25/51_59": 1}
+    assert index["groups"] == {"z10/072_036": 1}
     assert index["counts"] == {"ready": 1, "blocked": {}}
     assert index["world"] == "abc123"
 
@@ -337,35 +337,37 @@ def test_publish_group_writes_group_and_index() -> None:
 def test_publish_group_moves_counts_by_delta() -> None:
     store = FakeStore()
     store.write_blob(
-        "tiles/v1/ease2_n25/51_59.json",
+        "tiles/v2/z10/072_036.json",
         json.dumps(
             {
                 "format": 1,
-                "grid": "ease2_n25",
-                "group": [51, 59],
+                "grid": "z10",
+                "group": [72, 36],
                 "version": 1,
                 "tiles": {},
-                "blocked": {"n_413_478": {"reason": "no_home", "habitat": "tundra"}},
+                "blocked": {
+                    "z10_0581_0294": {"reason": "no_home", "habitat": "tundra"}
+                },
             }
         ).encode("utf-8"),
     )
     store.write_blob(
-        "tiles/v1/index.json",
+        "tiles/v2/index.json",
         json.dumps(
             {
                 "format": 1,
                 "made_at": "t",
                 "world": "old",
-                "groups": {"ease2_n25/51_59": 1},
+                "groups": {"z10/072_036": 1},
                 "counts": {"ready": 4, "blocked": {"no_home": 2}},
             }
         ).encode("utf-8"),
     )
-    build_mod.publish_group("n_413_478", _made_tile(), store, "abc123")
-    group = json.loads(store.blobs["tiles/v1/ease2_n25/51_59.json"].decode("utf-8"))
+    build_mod.publish_group("z10_0581_0294", _made_tile(), store, "abc123")
+    group = json.loads(store.blobs["tiles/v2/z10/072_036.json"].decode("utf-8"))
     assert group["version"] == 2
-    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
-    assert index["groups"] == {"ease2_n25/51_59": 2}
+    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    assert index["groups"] == {"z10/072_036": 2}
     assert index["counts"] == {"ready": 5, "blocked": {"no_home": 1}}
 
 
@@ -373,7 +375,7 @@ def test_assemble_preview_validates_and_hashes() -> None:
     home = b'{"id": "tundra_774"}'
     pack = build_mod.assemble_preview(
         "j1",
-        "n_401_434",
+        "z10_0594_0222",
         2,
         {"home_774": {"homes/tundra_774.json": home, "tries/x": b"no"}},
     )
@@ -381,7 +383,7 @@ def test_assemble_preview_validates_and_hashes() -> None:
     manifest = json.loads(pack["manifest.json"].decode("utf-8"))
     validate("pack-manifest", manifest)
     assert manifest["draft_id"] == "j1"
-    assert manifest["place_id"] == "n_401_434"
+    assert manifest["place_id"] == "z10_0594_0222"
     assert manifest["version"] == 2
     assert manifest["files"] == [
         {
@@ -394,7 +396,7 @@ def test_assemble_preview_validates_and_hashes() -> None:
 
 def test_assemble_preview_needs_a_file() -> None:
     with pytest.raises(ValueError, match="at least one file"):
-        build_mod.assemble_preview("j1", "n_401_434", 1, {"home_774": {}})
+        build_mod.assemble_preview("j1", "z10_0594_0222", 1, {"home_774": {}})
 
 
 def test_next_preview_version_bumps() -> None:
@@ -536,7 +538,7 @@ def test_draft_check_without_tool_errors(tmp_path: Path) -> None:
 
 def _old_tile(**over: Any) -> dict[str, Any]:
     tile: dict[str, Any] = {
-        "id": "n_413_478",
+        "id": "z10_0581_0294",
         "version": 3,
         "made": {"at": "2026-01-01", "world": "aaa", "maker": "m"},
         "seed": 7,
@@ -557,7 +559,7 @@ def test_remake_decision_skips_an_identical_tile(tmp_path: Path) -> None:
     made = _old_tile(version=1, made={"at": "2026-10-30", "world": "bbb"})
     del made["wanted"]
     verdict, no_food = build_mod.remake_decision(
-        "n_413_478", old, None, made, None, tmp_path, "lynx"
+        "z10_0581_0294", old, None, made, None, tmp_path, "lynx"
     )
     assert verdict == ("skip", None)
     assert no_food is False
@@ -574,7 +576,7 @@ def test_remake_decision_publishes_an_addition(tmp_path: Path) -> None:
     )
     del made["wanted"]
     verdict, no_food = build_mod.remake_decision(
-        "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+        "z10_0581_0294", _old_tile(), None, made, None, tmp_path, "lynx"
     )
     assert verdict[0] == "tile"
     assert verdict[1] is not None and verdict[1]["version"] == 4
@@ -588,7 +590,7 @@ def test_remake_decision_flags_no_food_and_still_bumps(tmp_path: Path) -> None:
     made = _old_tile(version=1)
     del made["wanted"]
     verdict, no_food = build_mod.remake_decision(
-        "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+        "z10_0581_0294", _old_tile(), None, made, None, tmp_path, "lynx"
     )
     assert verdict[0] == "tile"
     assert no_food is True
@@ -599,18 +601,18 @@ def test_remake_decision_refuses_a_rebuilt_tile(tmp_path: Path) -> None:
     made = _old_tile(version=1, home="tundra")
     with pytest.raises(build_mod.EnrichRemakeError, match="moved home"):
         build_mod.remake_decision(
-            "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+            "z10_0581_0294", _old_tile(), None, made, None, tmp_path, "lynx"
         )
     made = _old_tile(version=1, species={"playable": [], "prey": [], "predators": []})
     with pytest.raises(build_mod.EnrichRemakeError, match="dropped playable"):
         build_mod.remake_decision(
-            "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+            "z10_0581_0294", _old_tile(), None, made, None, tmp_path, "lynx"
         )
     made = _old_tile(version=1)
     del made["wanted"]
     with pytest.raises(build_mod.EnrichRemakeError, match="unfiled"):
         build_mod.remake_decision(
-            "n_413_478", _old_tile(), None, made, None, tmp_path, "lynx"
+            "z10_0581_0294", _old_tile(), None, made, None, tmp_path, "lynx"
         )
 
 
@@ -628,7 +630,7 @@ def test_remake_decision_opens_a_blocked_tile(tmp_path: Path) -> None:
     )
     del made["wanted"]
     verdict, no_food = build_mod.remake_decision(
-        "n_413_478", None, old_blocked, made, None, tmp_path, "lynx"
+        "z10_0581_0294", None, old_blocked, made, None, tmp_path, "lynx"
     )
     assert verdict[0] == "tile"
     assert verdict[1] is not None and verdict[1]["version"] == 1
@@ -644,13 +646,13 @@ def test_remake_decision_keeps_a_hungry_block(tmp_path: Path) -> None:
     }
     blocked = {"reason": "no_animal", "habitat": "boreal_forest"}
     verdict, no_food = build_mod.remake_decision(
-        "n_413_478", None, old_blocked, None, blocked, tmp_path, "lynx"
+        "z10_0581_0294", None, old_blocked, None, blocked, tmp_path, "lynx"
     )
     assert verdict == ("blocked", blocked)
     assert no_food is True
     with pytest.raises(build_mod.EnrichRemakeError, match="remade blocked"):
         build_mod.remake_decision(
-            "n_413_478", _old_tile(), None, None, blocked, tmp_path, "lynx"
+            "z10_0581_0294", _old_tile(), None, None, blocked, tmp_path, "lynx"
         )
 
 
@@ -663,28 +665,28 @@ def test_publish_remakes_writes_once_per_group_and_index_once() -> None:
         writes.append(path),
         real_write(path, data, **k),
     )  # type: ignore[method-assign]
-    group_blob = "tiles/v1/ease2_n25/51_59.json"
+    group_blob = "tiles/v2/z10/072_036.json"
     groups = {
         group_blob: {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 5,
             "tiles": {
-                "n_413_478": _old_tile(id="n_413_478", version=3),
-                "n_413_479": _old_tile(id="n_413_479", version=2),
+                "z10_0581_0294": _old_tile(id="z10_0581_0294", version=3),
+                "z10_0580_0295": _old_tile(id="z10_0580_0295", version=2),
             },
             "blocked": {},
         }
     }
     store.blobs[group_blob] = json.dumps(groups[group_blob]).encode("utf-8")
-    other_blob = "tiles/v1/ease2_n25/52_59.json"
+    other_blob = "tiles/v2/z10/073_037.json"
     other = {
         "format": 1,
-        "grid": "ease2_n25",
-        "group": [52, 59],
+        "grid": "z10",
+        "group": [73, 37],
         "version": 9,
-        "tiles": {"n_421_478": _old_tile(id="n_421_478", version=1)},
+        "tiles": {"z10_0590_0298": _old_tile(id="z10_0590_0298", version=1)},
         "blocked": {},
     }
     store.blobs[other_blob] = json.dumps(other).encode("utf-8")
@@ -692,37 +694,37 @@ def test_publish_remakes_writes_once_per_group_and_index_once() -> None:
         store,
         groups,
         {
-            "n_413_478": ("tile", _old_tile(id="n_413_478", version=4)),
-            "n_413_479": ("tile", _old_tile(id="n_413_479", version=3)),
-            "n_421_478": ("skip", None),
+            "z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=4)),
+            "z10_0580_0295": ("tile", _old_tile(id="z10_0580_0295", version=3)),
+            "z10_0590_0298": ("skip", None),
         },
         "abc",
     )
-    assert versions == {"n_413_478": 4, "n_413_479": 3}
+    assert versions == {"z10_0581_0294": 4, "z10_0580_0295": 3}
     assert writes.count(group_blob) == 1
-    assert writes.count("tiles/v1/index.json") == 1
+    assert writes.count("tiles/v2/index.json") == 1
     assert writes.count(other_blob) == 0
     assert store.blobs[other_blob] == json.dumps(other).encode("utf-8")
     data = json.loads(store.blobs[group_blob].decode("utf-8"))
     assert data["version"] == 6
-    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
-    assert index["groups"] == {"ease2_n25/51_59": 6}
+    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    assert index["groups"] == {"z10/072_036": 6}
     assert index["counts"]["ready"] == 0
 
 
 def test_publish_remakes_moves_counts_on_an_opener() -> None:
     """#143.4: blocked to ready shifts the index by honest delta."""
     store = FakeStore()
-    group_blob = "tiles/v1/ease2_n25/51_59.json"
+    group_blob = "tiles/v2/z10/072_036.json"
     groups = {
         group_blob: {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": {},
             "blocked": {
-                "n_413_478": {
+                "z10_0581_0294": {
                     "reason": "no_animal",
                     "habitat": "boreal_forest",
                 }
@@ -730,7 +732,7 @@ def test_publish_remakes_moves_counts_on_an_opener() -> None:
         }
     }
     store.blobs[group_blob] = json.dumps(groups[group_blob]).encode("utf-8")
-    store.blobs["tiles/v1/index.json"] = json.dumps(
+    store.blobs["tiles/v2/index.json"] = json.dumps(
         {
             "format": 1,
             "made_at": "",
@@ -742,11 +744,11 @@ def test_publish_remakes_moves_counts_on_an_opener() -> None:
     versions = build_mod.publish_remakes(
         store,
         groups,
-        {"n_413_478": ("tile", _old_tile(id="n_413_478", version=1))},
+        {"z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=1))},
         "abc",
     )
-    assert versions == {"n_413_478": 1}
-    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    assert versions == {"z10_0581_0294": 1}
+    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
     assert index["counts"] == {"ready": 1, "blocked": {}}
     data = json.loads(store.blobs[group_blob].decode("utf-8"))
     assert data["blocked"] == {}

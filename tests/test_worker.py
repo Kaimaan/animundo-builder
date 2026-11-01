@@ -70,9 +70,9 @@ def test_owner_update_encodes_delete_for_firestore() -> None:
 
 def test_note_request_queues_once(tmp_path: Path) -> None:
     worker = _worker(tmp_path, FakeStore())
-    assert worker.note_request("n_413_296", {}) is True
-    worker.in_flight.add(("request", "n_413_296"))
-    assert worker.note_request("n_413_296", {}) is False
+    assert worker.note_request("z10_0909_0217", {}) is True
+    worker.in_flight.add(("request", "z10_0909_0217"))
+    assert worker.note_request("z10_0909_0217", {}) is False
 
 
 def test_note_build_job_skips_done_and_in_flight(tmp_path: Path) -> None:
@@ -220,15 +220,15 @@ def test_restart_resumes_without_repeating_finished_items(
     store.build_jobs["j1"] = {
         "format": 1,
         "kind": "build",
-        "tile": "n_413_478",
+        "tile": "z10_0581_0294",
         "status": "queued",
         "budget_usd": 10.0,
         "cost_usd": 0.0,
         "progress": [],
         "items": ["animal_fox", "animal_hare"],
     }
-    store.plans["n_413_478"] = {
-        "tile": "n_413_478",
+    store.plans["z10_0581_0294"] = {
+        "tile": "z10_0581_0294",
         "items": [
             {"id": "animal_fox", "kind": "animal", "what": "fox", "estimate_usd": 1.0},
             {
@@ -323,10 +323,10 @@ def test_handle_request_plans_into_store(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:
     store = FakeStore()
-    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
     worker = _planned_worker(tmp_path, store, monkeypatch)
-    worker.handle_request("n_413_478")
-    plan = store.plans["n_413_478"]
+    worker.handle_request("z10_0581_0294")
+    plan = store.plans["z10_0581_0294"]
     assert plan["code_only"] is True
     assert plan["world"] == "abc123"
     assert "planned code_only=True" in capsys.readouterr().out
@@ -335,10 +335,10 @@ def test_handle_request_plans_into_store(
 def test_handle_request_skips_when_off(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
     store.enabled = False
-    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
     worker = _planned_worker(tmp_path, store, monkeypatch)
-    worker.handle_request("n_413_478")
-    assert "n_413_478" not in store.plans
+    worker.handle_request("z10_0581_0294")
+    assert "z10_0581_0294" not in store.plans
 
 
 def test_handle_request_alerts_when_unplannable(
@@ -354,13 +354,13 @@ def test_handle_request_alerts_when_unplannable(
 
 def test_sync_world_replans_on_move(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
-    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
     worker = _planned_worker(tmp_path, store, monkeypatch)
-    worker.handle_request("n_413_478")
-    assert store.plans["n_413_478"]["world"] == "abc123"
+    worker.handle_request("z10_0581_0294")
+    assert store.plans["z10_0581_0294"]["world"] == "abc123"
     worker.sync_world("def456")
     assert worker.world_commit == "def456"
-    assert store.plans["n_413_478"]["world"] == "def456"
+    assert store.plans["z10_0581_0294"]["world"] == "def456"
 
 
 def test_sync_world_ignores_same_and_unknown(
@@ -383,14 +383,14 @@ def test_dispatch_alerts_on_crash(tmp_path: Path) -> None:
 
     worker.handle_request = boom  # type: ignore[method-assign]
     listener = Listener(worker=worker, store=store)
-    listener._dispatch("request", "n_413_296")
-    assert ("request", "n_413_296") not in worker.in_flight
+    listener._dispatch("request", "z10_0909_0217")
+    assert ("request", "z10_0909_0217") not in worker.in_flight
     assert store.alerts[-1]["kind"] == "request_failed"
 
 
 def test_handle_build_job_leaves_it_queued(tmp_path: Path) -> None:
     store = FakeStore()
-    store.build_jobs["j1"] = {"status": "queued", "tile": "n_413_296"}
+    store.build_jobs["j1"] = {"status": "queued", "tile": "z10_0909_0217"}
     worker = _worker(tmp_path, store)
     worker.handle_build_job("j1")
     assert store.build_jobs["j1"]["status"] == "queued"
@@ -400,8 +400,8 @@ def test_handle_build_job_leaves_it_queued(tmp_path: Path) -> None:
 def test_dispatch_runs_and_releases(tmp_path: Path) -> None:
     worker = _worker(tmp_path, FakeStore())
     listener = Listener(worker=worker, store=FakeStore())
-    listener._dispatch("request", "n_413_296")
-    assert ("request", "n_413_296") not in worker.in_flight
+    listener._dispatch("request", "z10_0909_0217")
+    assert ("request", "z10_0909_0217") not in worker.in_flight
     listener._dispatch("build_job", "j1")
     assert ("build_job", "j1") not in worker.in_flight
 
@@ -488,7 +488,7 @@ def _code_plan(tile: str) -> dict[str, Any]:
 def _code_job() -> dict[str, Any]:
     return {
         "format": 1,
-        "tile": "n_413_478",
+        "tile": "z10_0581_0294",
         "budget_usd": 0.0,
         "kind": "code",
         "status": "queued",
@@ -511,7 +511,7 @@ def test_code_job_publishes_with_no_model_call(
 
     monkeypatch.setattr(builder.species, "ask", no_model)
     store = FakeStore()
-    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")
     store.build_jobs["j1"] = _code_job()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.handle_build_job("j1")
@@ -519,8 +519,8 @@ def test_code_job_publishes_with_no_model_call(
     assert job["status"] == "published"
     assert job["cost_usd"] == 0.0
     assert job["worker_id"] == worker.worker_id
-    assert "tiles/v1/ease2_n25/51_59.json" in store.blobs
-    assert "tiles/v1/index.json" in store.blobs
+    assert "tiles/v2/z10/072_036.json" in store.blobs
+    assert "tiles/v2/index.json" in store.blobs
 
 
 def test_second_publish_carries_the_newer_version(tmp_path: Path) -> None:
@@ -538,14 +538,14 @@ def test_second_publish_carries_the_newer_version(tmp_path: Path) -> None:
     store.build_jobs["j2"] = _code_job()
     worker.handle_build_job("j2")
     assert store.build_jobs["j2"]["version"] == 2
-    data = json.loads(store.blobs["tiles/v1/ease2_n25/51_59.json"].decode("utf-8"))
-    assert data["tiles"]["n_413_478"]["version"] == 2
-    assert "lion" in data["tiles"]["n_413_478"]["species"]["playable"]
+    data = json.loads(store.blobs["tiles/v2/z10/072_036.json"].decode("utf-8"))
+    assert data["tiles"]["z10_0581_0294"]["version"] == 2
+    assert "lion" in data["tiles"]["z10_0581_0294"]["species"]["playable"]
 
 
 def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
-    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")
     store.build_jobs["j1"] = _code_job()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.species = {
@@ -570,7 +570,7 @@ def test_code_job_records_its_tile_history(tmp_path: Path) -> None:
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.handle_build_job("j1")
     (entry,) = store.tile_history
-    assert entry["tile"] == "n_413_478"
+    assert entry["tile"] == "z10_0581_0294"
     assert entry["event"] == "made"
     assert entry["job"] == "j1"
     assert entry["kind"] == "code"
@@ -613,7 +613,7 @@ def test_blocked_code_job_records_its_reason(tmp_path: Path) -> None:
 
 def _open_sea_cells() -> dict[str, Any]:
     cell: list[Any] = [None, 1.0, None, 0.0, None, 0.0, 1.0, -50.0]
-    return {f"{c},{r}": list(cell) for r in (477, 478, 479) for c in (412, 413, 414)}
+    return {f"{c},{r}": list(cell) for r in (293, 294, 295) for c in (580, 581, 582)}
 
 
 def test_code_job_refuses_open_sea_far_from_everything(tmp_path: Path) -> None:
@@ -634,8 +634,8 @@ def test_code_job_makes_open_sea_near_a_made_tile(tmp_path: Path) -> None:
     """#177.6: a made neighbour lets the open-sea tile through to making."""
     store = FakeStore()
     store.build_jobs["j1"] = _code_job()
-    store.blobs["tiles/v1/ease2_n25/51_59.json"] = json.dumps(
-        {"tiles": {"n_414_478": {"id": "n_414_478"}}}
+    store.blobs["tiles/v2/z10/072_036.json"] = json.dumps(
+        {"tiles": {"z10_0582_0294": {"id": "z10_0582_0294"}}}
     ).encode("utf-8")
     worker = _flow_worker(tmp_path, store, _open_sea_cells())
     worker.handle_build_job("j1")
@@ -647,8 +647,8 @@ def test_code_job_makes_open_sea_near_a_noted_tile(tmp_path: Path) -> None:
     """#177.6: notes 3 cells off let the open-sea tile through to making."""
     store = FakeStore()
     store.build_jobs["j1"] = _code_job()
-    store.requests["n_416_478"] = {"tile": "n_416_478", "notes": 3}
-    store.requests["n_417_478"] = {"tile": "n_417_478", "notes": 0}
+    store.requests["z10_0584_0295"] = {"tile": "z10_0584_0295", "notes": 3}
+    store.requests["z10_0585_0296"] = {"tile": "z10_0585_0296", "notes": 0}
     worker = _flow_worker(tmp_path, store, _open_sea_cells())
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
@@ -673,11 +673,11 @@ def test_broken_history_never_stops_the_tile(tmp_path: Path, monkeypatch: Any) -
 def test_pending_request_builds_nothing(tmp_path: Path, monkeypatch: Any) -> None:
     """#118.10: a pending or turned-down request builds nothing."""
     store = FakeStore()
-    store.requests["n_413_478"] = {"tile": "n_413_478", "turned_down": "far"}
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294", "turned_down": "far"}
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     monkeypatch.setattr("builder.plan.fetch_smoothed", lambda tile, c: {})
-    worker.handle_request("n_413_478")
-    assert "n_413_478" in store.plans
+    worker.handle_request("z10_0581_0294")
+    assert "z10_0581_0294" in store.plans
     assert store.build_jobs == {}
     assert store.blobs == {}
 
@@ -687,15 +687,15 @@ def test_request_alerts_plan_failed_when_gbif_is_down(
 ) -> None:
     """A GBIF outage is a plan failure, loud and unretried."""
     store = FakeStore()
-    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
 
     def down(*args: Any, **kwargs: Any) -> Any:
         raise ConnectionError("GBIF timed out")
 
     monkeypatch.setattr("builder.worker.plan_tile", down)
     worker = _flow_worker(tmp_path, store, boreal_3x3())
-    worker.handle_request("n_413_478")
-    assert "n_413_478" not in store.plans
+    worker.handle_request("z10_0581_0294")
+    assert "z10_0581_0294" not in store.plans
     assert store.alerts[-1]["kind"] == "plan_failed"
 
 
@@ -706,7 +706,7 @@ def test_plant_item_builds_through_stages(tmp_path: Path, monkeypatch: Any) -> N
     from builder import build as build_mod
 
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [
         {
@@ -718,10 +718,10 @@ def test_plant_item_builds_through_stages(tmp_path: Path, monkeypatch: Any) -> N
         }
     ]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
+    store.plans["z10_0581_0294"] = plan
     store.build_jobs["j1"] = {
         "format": 1,
-        "tile": "n_413_478",
+        "tile": "z10_0581_0294",
         "budget_usd": 8.0,
         "kind": "build",
         "status": "queued",
@@ -780,7 +780,7 @@ def test_plant_item_builds_through_stages(tmp_path: Path, monkeypatch: Any) -> N
 def test_private_job_writes_judge_preview(tmp_path: Path, monkeypatch: Any) -> None:
     """T84: a private job's checked items become its judge's pack."""
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [
         {
@@ -792,10 +792,10 @@ def test_private_job_writes_judge_preview(tmp_path: Path, monkeypatch: Any) -> N
         }
     ]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
+    store.plans["z10_0581_0294"] = plan
     store.build_jobs["j1"] = {
         "format": 1,
-        "tile": "n_413_478",
+        "tile": "z10_0581_0294",
         "budget_usd": 8.0,
         "kind": "build",
         "status": "queued",
@@ -833,7 +833,7 @@ def test_private_job_writes_judge_preview(tmp_path: Path, monkeypatch: Any) -> N
 
 def test_build_job_fails_without_its_tile(tmp_path: Path) -> None:
     store = FakeStore()
-    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")
     job = _code_job()
     del job["tile"]
     store.build_jobs["j1"] = job
@@ -867,8 +867,8 @@ def _enrich_job(**over: Any) -> dict[str, Any]:
     job: dict[str, Any] = {
         "format": 1,
         "kind": "enrich",
-        "tile": "n_413_478",
-        "tiles": ["n_413_478", "n_413_479"],
+        "tile": "z10_0581_0294",
+        "tiles": ["z10_0581_0294", "z10_0580_0295"],
         "items": ["enrich_lion"],
         "enrich": {"kind": "animal", "what": "lion", "from": "fox"},
         "budget_usd": 1.0,
@@ -902,7 +902,7 @@ def test_enrich_job_builds_its_item_to_checking(
         cast: Any = None,
         enrich_tiles: Any = None,
     ) -> None:
-        assert tile == "n_413_478"
+        assert tile == "z10_0581_0294"
         assert item["id"] == "enrich_lion"
         folder = item_dir / "animals"
         folder.mkdir(parents=True)
@@ -1036,11 +1036,12 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     from builder.species import Source as SpeciesSource
     from builder.tiles import make_tile
 
-    A, B, C = "n_413_478", "n_413_479", "n_421_478"
-    block = boreal_3x3(413, 478)
-    side = boreal_3x3(421, 478)
-    # B's northern neighbours: the block's row above.
-    edge = {f"{c},480": list(block["413,478"]) for c in (412, 413, 414)}
+    A, B, C = "z10_0581_0294", "z10_0580_0295", "z10_0590_0298"
+    block = boreal_3x3()
+    side = boreal_3x3(590, 298)
+    # B's southern and western neighbours: the row below, column 579.
+    edge = {f"{c},{r}": list(block["581,294"]) for r in (294, 295, 296) for c in (579,)}
+    edge.update({f"{c},296": list(block["581,294"]) for c in (580, 581)})
     cells = {**block, **edge, **side}
     store = FakeStore()
     worker = _flow_worker(tmp_path, store, cells)
@@ -1053,7 +1054,7 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     for tile, species in ((A, FOUR), (B, FOUR), (C, THREE)):
         tile_made, blocked = make_tile(
             tile,
-            worker._grids(),
+            worker._habitat_grid(),
             worker.world,
             builder_root=tmp_path,
             species_source=SpeciesSource(
@@ -1069,8 +1070,8 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     store.blobs[g1] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": {A: made[A], B: made[B]},
             "blocked": {},
@@ -1079,15 +1080,15 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     store.blobs[g2] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [52, 59],
+            "grid": "z10",
+            "group": [73, 37],
             "version": 1,
             "tiles": {C: made[C]},
             "blocked": {},
         }
     ).encode("utf-8")
     before_c = store.blobs[g2]
-    store.blobs["tiles/v1/index.json"] = json.dumps(
+    store.blobs["tiles/v2/index.json"] = json.dumps(
         {
             "format": 1,
             "made_at": "",
@@ -1135,8 +1136,8 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     assert store.blobs[g2] == before_c
     assert writes.count(g1) == 1
     assert writes.count(g2) == 0
-    assert writes.count("tiles/v1/index.json") == 1
-    index = json.loads(store.blobs["tiles/v1/index.json"].decode("utf-8"))
+    assert writes.count("tiles/v2/index.json") == 1
+    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
     assert index["counts"]["ready"] == 3
 
 
@@ -1153,7 +1154,7 @@ def test_enrich_intake_writes_converter_places(
     from builder.grid import group_path
     from builder.stages.maker import AnimalMakerStage
 
-    T = "n_413_478"
+    T = "z10_0581_0294"
     store = FakeStore()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     assert worker.world is not None
@@ -1167,8 +1168,8 @@ def test_enrich_intake_writes_converter_places(
     store.blobs[group_path(T)] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": {
                 T: {
@@ -1231,7 +1232,7 @@ def test_enrich_run_item_writes_places_for_its_tiles(
 
     from builder.grid import group_path
 
-    T = "n_413_478"
+    T = "z10_0581_0294"
     store = FakeStore()
     store.build_jobs["j1"] = _enrich_job(status="building")
     worker = _flow_worker(tmp_path, store, boreal_3x3())
@@ -1241,8 +1242,8 @@ def test_enrich_run_item_writes_places_for_its_tiles(
     store.blobs[group_path(T)] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": {
                 T: {
@@ -1283,7 +1284,7 @@ def test_enrich_run_item_writes_places_for_its_tiles(
     }
     worker.run_item("j1", job, T, {"items": [item]}, item, 1.0)
     assert seen["cast"] is None
-    assert seen["tiles"] == ["n_413_478", "n_413_479"]
+    assert seen["tiles"] == ["z10_0581_0294", "z10_0580_0295"]
     region = json.loads(
         (
             tmp_path / "jobs" / "j1" / "enrich_lion" / "regions" / f"tl_{T}.json"
@@ -1294,7 +1295,7 @@ def test_enrich_run_item_writes_places_for_its_tiles(
 
 def test_enrich_item_report_names_its_tile(tmp_path: Path, monkeypatch: Any) -> None:
     """#150.2: an enrich report shows the tile, its name and the kind."""
-    T = "n_413_478"
+    T = "z10_0581_0294"
     store = FakeStore()
     store.build_jobs["j1"] = _enrich_job(status="building")
     worker = _flow_worker(tmp_path, store, boreal_3x3())
@@ -1334,7 +1335,7 @@ def test_build_item_report_keeps_old_labels(tmp_path: Path, monkeypatch: Any) ->
     store.build_jobs["j1"] = {
         "format": 1,
         "kind": "build",
-        "tile": "n_413_478",
+        "tile": "z10_0581_0294",
         "status": "building",
         "cost_usd": 0.0,
         "progress": [],
@@ -1363,7 +1364,7 @@ def test_build_item_report_keeps_old_labels(tmp_path: Path, monkeypatch: Any) ->
         "from": "fox",
         "estimate_usd": 1.0,
     }
-    worker.run_item("j1", job, "n_413_478", {"items": [item]}, item, 1.0)
+    worker.run_item("j1", job, "z10_0581_0294", {"items": [item]}, item, 1.0)
     report = (tmp_path / "jobs" / "j1" / "animal_fox" / "report.html").read_text()
     assert "(unknown area)" in report
     assert "new_place" in report
@@ -1373,7 +1374,7 @@ def test_tile_doc_remakes_an_unpublished_tile(tmp_path: Path, monkeypatch: Any) 
     """#161.1: with no published entry, the doc remakes by code."""
     import builder.tiles as tiles_mod
 
-    T = "n_413_478"
+    T = "z10_0581_0294"
     store = FakeStore()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     doc = {"id": T, "kind": "code", "species": {"playable": ["fox"]}}
@@ -1398,16 +1399,14 @@ def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> No
     from builder.grid import group_path
     from builder.species import Source as SpeciesSource
 
-    P = "n_413_478"
+    P = "z10_0581_0294"
     store = FakeStore()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     assert worker.world is not None
     regions = worker.world / "regions"
     regions.mkdir()
     (regions / "fi_test.json").write_text(
-        json.dumps(
-            {"id": "fi_test", "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]}}
-        )
+        json.dumps({"id": "fi_test", "grid": {"grid": "z10", "tiles": [[581, 294]]}})
     )
     _named_list(worker.world)
     _file_lion(worker.world, ["grass"])
@@ -1415,15 +1414,15 @@ def test_enrich_review_skips_place_cells(tmp_path: Path, monkeypatch: Any) -> No
     store.blobs[blob] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": {P: {"id": P, "kind": "code", "version": 1}},
             "blocked": {},
         }
     ).encode("utf-8")
     before = store.blobs[blob]
-    store.blobs["tiles/v1/index.json"] = json.dumps(
+    store.blobs["tiles/v2/index.json"] = json.dumps(
         {
             "format": 1,
             "made_at": "",
@@ -1472,7 +1471,7 @@ def _region_world(world: Path) -> None:
                 "id": "xx_test_reef",
                 "name": {"en": "Test Reef", "fi": "Testiriutta"},
                 "center": {"lat": 60.0, "lon": 24.0},
-                "grid": {"grid": "ease2_n25", "tiles": [[413, 478]]},
+                "grid": {"grid": "z10", "tiles": [[581, 294]]},
                 "animals": {
                     "playable": ["mountain_hare", "vole"],
                     "prey": ["vole"],
@@ -1491,7 +1490,7 @@ def test_enrich_intake_checks_a_region_tile_in_its_region(
     """#168.1: a hand-made region's tile checks in the region file."""
     import fake_world
 
-    P = "n_413_478"
+    P = "z10_0581_0294"
     store = FakeStore()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     assert worker.world is not None
@@ -1523,9 +1522,9 @@ def test_tile_home_falls_back_to_the_region(tmp_path: Path) -> None:
     fake_world.write_converter_tools(worker.world)
     _region_world(worker.world)
     plan = {"format": 1, "items": []}
-    home = worker._tile_home("n_413_478", plan, "j1")
+    home = worker._tile_home("z10_0581_0294", plan, "j1")
     assert home["id"] == "xx_test_reef"
-    assert worker._tile_home("n_413_479", plan, "j1")["habitat"] == "boreal_forest"
+    assert worker._tile_home("z10_0580_0295", plan, "j1")["habitat"] == "boreal_forest"
 
 
 def test_enrich_job_on_a_region_tile_reaches_checking(
@@ -1536,7 +1535,7 @@ def test_enrich_job_on_a_region_tile_reaches_checking(
 
     import builder.build as build_mod
 
-    P = "n_413_478"
+    P = "z10_0581_0294"
     store = FakeStore()
     store.build_jobs["j1"] = _enrich_job(tile=P, tiles=[P])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
@@ -1574,7 +1573,7 @@ def test_checking_item_with_failing_checks_says_so(
 
     import builder.build as build_mod
 
-    P = "n_413_478"
+    P = "z10_0581_0294"
     store = FakeStore()
     store.build_jobs["j1"] = _enrich_job(tile=P, tiles=[P])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
@@ -1624,7 +1623,7 @@ def test_enrich_failure_names_its_stage_and_the_region(
     """#168.3: a failed item's progress and report say the stage and why."""
     import fake_world
 
-    P = "n_413_478"
+    P = "z10_0581_0294"
     store = FakeStore()
     store.build_jobs["j1"] = _enrich_job(tile=P, tiles=[P])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
@@ -1643,7 +1642,7 @@ def test_enrich_failure_names_its_stage_and_the_region(
         cast: Any = None,
         enrich_tiles: Any = None,
     ) -> None:
-        raise ValueError("tile n_413_478 has no home in this checkout")
+        raise ValueError("tile z10_0581_0294 has no home in this checkout")
 
     monkeypatch.setattr(worker, "_run_stages", broken)
     worker.handle_build_job("j1")
@@ -1651,13 +1650,13 @@ def test_enrich_failure_names_its_stage_and_the_region(
     assert job["status"] == "failed"
     (entry,) = job["progress"]
     assert entry["status"] == "failed"
-    assert entry["error"] == "intake: tile n_413_478 has no home in this checkout"
+    assert entry["error"] == "intake: tile z10_0581_0294 has no home in this checkout"
     item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
     text = (item_dir / "report.html").read_text(encoding="utf-8")
-    assert "intake: tile n_413_478 has no home in this checkout" in text
+    assert "intake: tile z10_0581_0294 has no home in this checkout" in text
     assert "finished every built stage" not in text
     state = json.loads((item_dir / "state.json").read_text(encoding="utf-8"))
-    assert state["params"]["area"] == "n_413_478 (Test Reef)"
+    assert state["params"]["area"] == "z10_0581_0294 (Test Reef)"
 
 
 def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) -> None:
@@ -1668,7 +1667,7 @@ def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) ->
     from builder.species import Source as SpeciesSource
     from builder.tiles import make_tile
 
-    D = "n_413_478"
+    D = "z10_0581_0294"
     store = FakeStore()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     assert worker.world is not None
@@ -1676,7 +1675,7 @@ def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) ->
     cache = tmp_path / "cache"
     made, blocked = make_tile(
         D,
-        worker._grids(),
+        worker._habitat_grid(),
         worker.world,
         builder_root=tmp_path,
         species_source=SpeciesSource(
@@ -1692,8 +1691,8 @@ def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) ->
     store.blobs[blob] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": {},
             "blocked": {D: blocked},
@@ -1736,7 +1735,7 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
     from builder.species import Source as SpeciesSource
     from builder.tiles import make_tile
 
-    A = "n_413_478"
+    A = "z10_0581_0294"
     store = FakeStore()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     assert worker.world is not None
@@ -1744,7 +1743,7 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
     cache = tmp_path / "cache"
     made, blocked = make_tile(
         A,
-        worker._grids(),
+        worker._habitat_grid(),
         worker.world,
         builder_root=tmp_path,
         species_source=SpeciesSource(
@@ -1759,8 +1758,8 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
     store.blobs[blob] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": {A: made},
             "blocked": {},
@@ -1796,7 +1795,7 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
     assert "lion" not in data["tiles"][A]["species"]["playable"]
     assert "wanted" not in data["tiles"][A]
     report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
-    assert "no_food n_413_478" in report
+    assert "no_food z10_0581_0294" in report
 
 
 def _two_tile_lab(
@@ -1809,10 +1808,11 @@ def _two_tile_lab(
     from builder.species import Source as SpeciesSource
     from builder.tiles import make_tile
 
-    A, B = "n_413_478", "n_413_479"
+    A, B = "z10_0581_0294", "z10_0580_0295"
     store = FakeStore()
-    block = boreal_3x3(413, 478)
-    edge = {f"{c},480": list(block["413,478"]) for c in (412, 413, 414)}
+    block = boreal_3x3()
+    edge = {f"{c},{r}": list(block["581,294"]) for r in (294, 295, 296) for c in (579,)}
+    edge.update({f"{c},296": list(block["581,294"]) for c in (580, 581)})
     worker = _flow_worker(tmp_path, store, {**block, **edge})
     assert worker.world is not None
     _named_list(worker.world)
@@ -1821,7 +1821,7 @@ def _two_tile_lab(
     for tile in (A, B):
         tile_made, blocked = make_tile(
             tile,
-            worker._grids(),
+            worker._habitat_grid(),
             worker.world,
             builder_root=tmp_path,
             species_source=SpeciesSource(
@@ -1838,14 +1838,14 @@ def _two_tile_lab(
     store.blobs[blob] = json.dumps(
         {
             "format": 1,
-            "grid": "ease2_n25",
-            "group": [51, 59],
+            "grid": "z10",
+            "group": [72, 36],
             "version": 1,
             "tiles": made,
             "blocked": {},
         }
     ).encode("utf-8")
-    store.blobs["tiles/v1/index.json"] = json.dumps(
+    store.blobs["tiles/v2/index.json"] = json.dumps(
         {
             "format": 1,
             "made_at": "",
@@ -1945,12 +1945,16 @@ def test_enrich_review_fails_place_when_no_tile_passes(
                     {
                         "check": f"place {A}",
                         "status": "fail",
-                        "problems": ["ERROR: squirrel in tl_n_413_478 eats mushrooms"],
+                        "problems": [
+                            "ERROR: squirrel in tl_z10_0581_0294 eats mushrooms"
+                        ],
                     },
                     {
                         "check": f"place {B}",
                         "status": "fail",
-                        "problems": ["ERROR: squirrel in tl_n_413_479 eats mushrooms"],
+                        "problems": [
+                            "ERROR: squirrel in tl_z10_0580_0295 eats mushrooms"
+                        ],
                     },
                 ],
             }
@@ -2017,7 +2021,7 @@ def test_build_job_refuses_a_blocked_plan(tmp_path: Path) -> None:
     store = FakeStore()
     store.build_jobs["j1"] = {
         "format": 1,
-        "tile": "n_401_434",
+        "tile": "z10_0594_0222",
         "budget_usd": 8.0,
         "kind": "build",
         "status": "queued",
@@ -2027,7 +2031,7 @@ def test_build_job_refuses_a_blocked_plan(tmp_path: Path) -> None:
         "progress": [],
         "cost_usd": 0.0,
     }
-    store.plans["n_401_434"] = {"blocked": "open_water", "items": []}
+    store.plans["z10_0594_0222"] = {"blocked": "open_water", "items": []}
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.handle_build_job("j1")
     assert store.build_jobs["j1"]["status"] == "failed"
@@ -2037,7 +2041,7 @@ def test_build_job_refuses_a_blocked_plan(tmp_path: Path) -> None:
 def test_build_job_stops_at_zero_budget(tmp_path: Path) -> None:
     """#118.10: a judge build stops at its cap."""
     store = FakeStore()
-    plan = _code_plan("n_401_434")
+    plan = _code_plan("z10_0594_0222")
     plan["code_only"] = False
     plan["items"] = [
         {
@@ -2049,10 +2053,10 @@ def test_build_job_stops_at_zero_budget(tmp_path: Path) -> None:
         }
     ]
     plan["improve"] = []
-    store.plans["n_401_434"] = plan
+    store.plans["z10_0594_0222"] = plan
     store.build_jobs["j1"] = {
         "format": 1,
-        "tile": "n_401_434",
+        "tile": "z10_0594_0222",
         "budget_usd": 0.0,
         "kind": "build",
         "status": "queued",
@@ -2064,7 +2068,7 @@ def test_build_job_stops_at_zero_budget(tmp_path: Path) -> None:
         "private_to": "judge1",
     }
     worker = _flow_worker(
-        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
+        tmp_path, store, {"594,222": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
     )
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
@@ -2078,7 +2082,7 @@ def test_build_job_stops_at_zero_budget(tmp_path: Path) -> None:
 def test_failed_item_does_not_stop_others(tmp_path: Path, monkeypatch: Any) -> None:
     """#118.10: a failed item doesn't stop the others."""
     store = FakeStore()
-    plan = _code_plan("n_401_434")
+    plan = _code_plan("z10_0594_0222")
     plan["code_only"] = False
     plan["items"] = [
         {
@@ -2097,10 +2101,10 @@ def test_failed_item_does_not_stop_others(tmp_path: Path, monkeypatch: Any) -> N
         },
     ]
     plan["improve"] = []
-    store.plans["n_401_434"] = plan
+    store.plans["z10_0594_0222"] = plan
     store.build_jobs["j1"] = {
         "format": 1,
-        "tile": "n_401_434",
+        "tile": "z10_0594_0222",
         "budget_usd": 8.0,
         "kind": "build",
         "status": "queued",
@@ -2112,7 +2116,7 @@ def test_failed_item_does_not_stop_others(tmp_path: Path, monkeypatch: Any) -> N
     }
     calls: list[str] = []
     worker = _flow_worker(
-        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
+        tmp_path, store, {"594,222": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
     )
 
     def flaky(
@@ -2142,7 +2146,7 @@ def test_item_needing_a_failed_home_is_skipped(
 ) -> None:
     """#135.3: no home, no start: skipped with needs, job names the home."""
     store = FakeStore()
-    plan = _code_plan("n_401_434")
+    plan = _code_plan("z10_0594_0222")
     plan["code_only"] = False
     plan["items"] = [
         {
@@ -2161,10 +2165,10 @@ def test_item_needing_a_failed_home_is_skipped(
         },
     ]
     plan["improve"] = []
-    store.plans["n_401_434"] = plan
+    store.plans["z10_0594_0222"] = plan
     store.build_jobs["j1"] = {
         "format": 1,
-        "tile": "n_401_434",
+        "tile": "z10_0594_0222",
         "budget_usd": 8.0,
         "kind": "build",
         "status": "queued",
@@ -2175,7 +2179,7 @@ def test_item_needing_a_failed_home_is_skipped(
         "cost_usd": 0.0,
     }
     worker = _flow_worker(
-        tmp_path, store, {"401,434": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
+        tmp_path, store, {"594,222": [774, 1.0, None, 0.0, 11, 1.0, 0.0, 200.0]}
     )
     real_run_stages = worker._run_stages
 
@@ -2464,16 +2468,16 @@ def test_build_job_stops_second_item_at_remaining_budget(
     from builder.pipeline import BudgetExceeded
 
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [
         _file_item("animal_lion", "animal", "lion", "fox"),
         _file_item("animal_tiger", "animal", "tiger", "fox"),
     ]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
+    store.plans["z10_0581_0294"] = plan
     store.build_jobs["j1"] = _build_job(
-        "n_413_478", ["animal_lion", "animal_tiger"], budget_usd=1.0
+        "z10_0581_0294", ["animal_lion", "animal_tiger"], budget_usd=1.0
     )
     worker = _flow_worker(tmp_path, store, boreal_3x3())
 
@@ -2510,16 +2514,16 @@ def test_ledger_failure_reports_unavailable_and_stops_items(
     from builder.ledger import LedgerError
 
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [
         _file_item("animal_lion", "animal", "lion", "fox"),
         _file_item("animal_tiger", "animal", "tiger", "fox"),
     ]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
+    store.plans["z10_0581_0294"] = plan
     store.build_jobs["j1"] = _build_job(
-        "n_413_478", ["animal_lion", "animal_tiger"], budget_usd=1.0
+        "z10_0581_0294", ["animal_lion", "animal_tiger"], budget_usd=1.0
     )
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     runs: list[str] = []
@@ -2570,12 +2574,12 @@ def _fake_animal_stages(worker: Worker, monkeypatch: Any, tmp_path: Path) -> Non
 def test_review_job_publishes_shipped_items(tmp_path: Path, monkeypatch: Any) -> None:
     """#133.6: a reviewed job ships its items and publishes the tile."""
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [_file_item("animal_lion", "animal", "lion", "fox")]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
-    store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion"])
+    store.plans["z10_0581_0294"] = plan
+    store.build_jobs["j1"] = _build_job("z10_0581_0294", ["animal_lion"])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     _fake_animal_stages(worker, monkeypatch, tmp_path)
     worker.handle_build_job("j1")
@@ -2586,11 +2590,11 @@ def test_review_job_publishes_shipped_items(tmp_path: Path, monkeypatch: Any) ->
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert [e["id"] for e in job["progress"]] == ["animal_lion"]
-    assert "tiles/v1/ease2_n25/51_59.json" in store.blobs
+    assert "tiles/v2/z10/072_036.json" in store.blobs
     import json
 
-    data = json.loads(store.blobs["tiles/v1/ease2_n25/51_59.json"].decode("utf-8"))
-    assert job["version"] == data["tiles"]["n_413_478"]["version"] == 1
+    data = json.loads(store.blobs["tiles/v2/z10/072_036.json"].decode("utf-8"))
+    assert job["version"] == data["tiles"]["z10_0581_0294"]["version"] == 1
 
 
 def test_review_job_drops_not_accepted_and_ships_the_rest(
@@ -2598,15 +2602,17 @@ def test_review_job_drops_not_accepted_and_ships_the_rest(
 ) -> None:
     """#133.6: a turned-down item drops while the others ship."""
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [
         _file_item("animal_lion", "animal", "lion", "fox"),
         _file_item("animal_tiger", "animal", "tiger", "fox"),
     ]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
-    store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion", "animal_tiger"])
+    store.plans["z10_0581_0294"] = plan
+    store.build_jobs["j1"] = _build_job(
+        "z10_0581_0294", ["animal_lion", "animal_tiger"]
+    )
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     _fake_animal_stages(worker, monkeypatch, tmp_path)
     worker.handle_build_job("j1")
@@ -2626,13 +2632,13 @@ def test_private_preview_is_rewritten_after_a_review(
 ) -> None:
     """#133.6: a private job's preview moves on as reviews land."""
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [_file_item("animal_lion", "animal", "lion", "fox")]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
+    store.plans["z10_0581_0294"] = plan
     store.build_jobs["j1"] = _build_job(
-        "n_413_478",
+        "z10_0581_0294",
         ["animal_lion"],
         visibility="private",
         private_to="judge1",
@@ -2654,18 +2660,18 @@ def test_claim_snapshot_survives_a_replan(tmp_path: Path, monkeypatch: Any) -> N
     import json
 
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [_file_item("animal_lion", "animal", "lion", "fox")]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
-    store.build_jobs["j1"] = _build_job("n_413_478", ["animal_lion"])
+    store.plans["z10_0581_0294"] = plan
+    store.build_jobs["j1"] = _build_job("z10_0581_0294", ["animal_lion"])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     _fake_animal_stages(worker, monkeypatch, tmp_path)
     worker.handle_build_job("j1")
     snapshot = json.loads((tmp_path / "jobs" / "j1" / "plan.json").read_text())
     assert [i["id"] for i in snapshot["items"]] == ["animal_lion"]
-    store.plans["n_413_478"] = _code_plan("n_413_478")  # the world moved on
+    store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")  # the world moved on
     (worker.world / "animals" / "lion.json").write_text('{"id": "lion"}')
     store.build_jobs["j1"]["review"] = {"animal_lion": {"result": "shipped"}}
     worker.handle_build_job("j1")
@@ -2679,7 +2685,7 @@ def test_plant_item_ships_and_publishes(tmp_path: Path, monkeypatch: Any) -> Non
     from builder import build as build_mod
 
     store = FakeStore()
-    plan = _code_plan("n_413_478")
+    plan = _code_plan("z10_0581_0294")
     plan["code_only"] = False
     plan["items"] = [
         {
@@ -2691,8 +2697,8 @@ def test_plant_item_ships_and_publishes(tmp_path: Path, monkeypatch: Any) -> Non
         }
     ]
     plan["improve"] = []
-    store.plans["n_413_478"] = plan
-    store.build_jobs["j1"] = _build_job("n_413_478", ["plant_cloudberry"])
+    store.plans["z10_0581_0294"] = plan
+    store.build_jobs["j1"] = _build_job("z10_0581_0294", ["plant_cloudberry"])
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     home_path = worker.world / "homes" / "boreal_forest.json"
     home = json.loads(home_path.read_text())
@@ -2719,9 +2725,9 @@ def test_code_job_fails_on_excluded_tile(tmp_path: Path, monkeypatch: Any) -> No
     import json
 
     store = FakeStore()
-    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")
     store.build_jobs["j1"] = _code_job()
-    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["n_413_478"]}))
+    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["z10_0581_0294"]}))
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.builder_root = tmp_path
     worker.handle_build_job("j1")
@@ -2789,17 +2795,17 @@ def test_no_player_field_anywhere(tmp_path: Path, monkeypatch: Any) -> None:
     import json
 
     store = FakeStore()
-    store.requests["n_413_478"] = {
-        "tile": "n_413_478",
+    store.requests["z10_0581_0294"] = {
+        "tile": "z10_0581_0294",
         "uid": "kid-1",
         "player": {"device": "x", "ip": "1.2.3.4"},
         "email": "kid@example.org",
     }
-    store.plans["n_413_478"] = _code_plan("n_413_478")
+    store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")
     store.build_jobs["j1"] = _code_job()
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     monkeypatch.setattr("builder.plan.fetch_smoothed", lambda tile, c: {})
-    worker.handle_request("n_413_478")
+    worker.handle_request("z10_0581_0294")
     worker.handle_build_job("j1")
 
     def keys_below(data: Any) -> set[str]:
@@ -2814,7 +2820,7 @@ def test_no_player_field_anywhere(tmp_path: Path, monkeypatch: Any) -> None:
         return found
 
     written = [
-        store.plans["n_413_478"],
+        store.plans["z10_0581_0294"],
         store.build_jobs["j1"],
         *[json.loads(v.decode("utf-8")) for v in store.blobs.values()],
     ]
@@ -2910,7 +2916,7 @@ def test_reenable_recovers_queued_job_and_request_once(
 
     store = FakeStore()
     store.build_jobs["j1"] = _enrich_job(status="queued")
-    store.requests["n_413_478"] = {"tile": "n_413_478"}
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
     worker = _planned_worker(tmp_path, store, monkeypatch)
     worker.worker_id = "wA"
     listener = Listener(worker=worker, store=store)
@@ -2932,24 +2938,24 @@ def test_reenable_recovers_queued_job_and_request_once(
 
     store.enabled = False
     listener._dispatch("build_job", "j1")
-    listener._dispatch("request", "n_413_478")
+    listener._dispatch("request", "z10_0581_0294")
     assert worker.poll() == []
     assert store.build_jobs["j1"]["status"] == "queued"
-    assert "n_413_478" not in store.plans
+    assert "z10_0581_0294" not in store.plans
     assert runs == []
     assert planned == []
 
     store.enabled = True
     found = worker.poll()
     assert ("build_job", "j1") in found
-    assert ("request", "n_413_478") in found
+    assert ("request", "z10_0581_0294") in found
     assert worker.poll() == []
     for kind, doc_id in found:
         listener._dispatch(kind, doc_id)
     assert store.build_jobs["j1"]["status"] == "checking"
-    assert "n_413_478" in store.plans
+    assert "z10_0581_0294" in store.plans
     assert runs == ["stages"]
-    assert planned == ["n_413_478"]
+    assert planned == ["z10_0581_0294"]
 
 
 def test_reenable_protects_owned_terminal_and_planned(
@@ -2962,8 +2968,8 @@ def test_reenable_protects_owned_terminal_and_planned(
     store.build_jobs["live"] = _owned_job(owner="wB")
     store.build_jobs["pub"] = _enrich_job(status="published")
     store.build_jobs["fail"] = _enrich_job(status="failed")
-    store.requests["n_413_478"] = {"tile": "n_413_478"}
-    store.plans["n_413_478"] = {"tile": "n_413_478"}
+    store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
+    store.plans["z10_0581_0294"] = {"tile": "z10_0581_0294"}
     worker = _planned_worker(tmp_path, store, monkeypatch)
     worker.worker_id = "wA"
     listener = Listener(worker=worker, store=store)
@@ -2983,7 +2989,7 @@ def test_reenable_protects_owned_terminal_and_planned(
     assert "live" in ids
     assert "pub" not in ids
     assert "fail" not in ids
-    assert ("request", "n_413_478") not in found
+    assert ("request", "z10_0581_0294") not in found
     for kind, doc_id in found:
         listener._dispatch(kind, doc_id)
     assert runs == []

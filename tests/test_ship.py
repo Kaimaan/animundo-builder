@@ -12,7 +12,7 @@ import pytest
 from builder.packs import check_additions, check_pack
 from builder.stages.ship import ShipStage, _Stopped, gate_checks
 
-TILE = "s_530_612"
+TILE = "z10_0927_0560"
 REGION = "xx_reef"
 
 
@@ -51,7 +51,7 @@ def _region() -> dict[str, Any]:
         "name": "Test Reef",
         "description": "A reef for the ship tests.",
         "center": {"lat": -16.7, "lon": 146.0},
-        "grid": {"grid": "ease2_s25", "tiles": [[530, 612]]},
+        "grid": {"grid": "z10", "tiles": [[927, 560]]},
         "terrain": {"water_level": 40, "sea_depth": 35},
         "food": [{"kind": "water_plants", "names": ["seagrass"]}],
         "fish": [{"kind": "clownfish", "count": 5}],

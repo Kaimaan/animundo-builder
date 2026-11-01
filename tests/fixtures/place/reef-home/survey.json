@@ -1,6 +1,6 @@
 {
   "place": "Great Barrier Reef",
-  "tile": "s_530_612",
+  "tile": "z10_0927_0560",
   "habitat": "tropical coral reef sea",
   "grid_habitat": "open_ocean",
   "home_from": "examples/reef",

@@ -92,15 +92,15 @@ def _world(tmp_path: Path) -> Path:
     return world
 
 
-def _grids(tmp_path: Path) -> dict[str, HabitatGrid]:
+def _habitat_grid(tmp_path: Path) -> HabitatGrid:
     import gzip
 
     cell = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
-    cells = {f"{c},{r}": list(cell) for r in (477, 478, 479) for c in (412, 413, 414)}
-    path = tmp_path / "ease2_n25.json.gz"
+    cells = {f"{c},{r}": list(cell) for r in (293, 294, 295) for c in (580, 581, 582)}
+    path = tmp_path / "z10.json.gz"
     with gzip.open(path, "wt", encoding="utf-8") as handle:
-        json.dump({"grid": "ease2_n25", "cells": cells}, handle)
-    return {"ease2_n25": HabitatGrid.load(path, "ease2_n25")}  # type: ignore[dict-item]
+        json.dump({"grid": "z10", "cells": cells}, handle)
+    return HabitatGrid.load(path)
 
 
 def _response(answer: dict[str, Any]) -> Any:
@@ -167,10 +167,9 @@ def test_lab_recordings_decode_and_match_their_cells() -> None:
     trees = [t["id"] for t in list_library(world, "trees")]
     homes = available_homes(world)
     grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
-    grids = {
-        name: HabitatGrid.load(grid_dir / f"{name}.json.gz", name)
-        for name in ("ease2_n25", "ease2_s25")
-    }
+    from builder.habitats import load_grid
+
+    habitat_grid = load_grid(grid_dir)
     for spot in SPOTS:
         fix = json.loads((FIXTURES / f"{spot}.json").read_text())
         answer = check_answer(
@@ -192,27 +191,27 @@ def test_lab_recordings_decode_and_match_their_cells() -> None:
         assert answer["plants"] == []
         assert answer["name_en"] == fix["name_en"]
         assert answer["name_fi"] == fix["name_fi"]
-        grid, col, row = parse_tile(fix["tile"])
-        habitat = grids[grid].habitat(col, row)
+        col, row = parse_tile(fix["tile"])
+        habitat = habitat_grid.habitat(col, row)
         lat, lon = center(fix["tile"])
         assert check_place(answer["place"], habitat, lat, lon) is None, spot
-        eco1 = grids[grid].cell_data(col, row)[0]
+        eco1 = habitat_grid.cell_data(col, row)[0]
         home = home_for_cell(eco1, habitat, homes)
         if home is None:
             from builder.plan import nearest_home
 
-            home = nearest_home(fix["tile"], grids, homes, habitat)  # type: ignore[arg-type]
+            home = nearest_home(fix["tile"], habitat_grid, homes, habitat)  # type: ignore[arg-type]
             adapt = True
         else:
             adapt = False
-        facts = tile_facts(fix["tile"], grids, world, home, adapt)  # type: ignore[arg-type]
+        facts = tile_facts(fix["tile"], habitat_grid, world, home, adapt)  # type: ignore[arg-type]
         assert check_survey(answer, habitat, lat, lon, facts, animals) is None, spot
 
 
 def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
     """#131.2: a twice-misread cell blocks with `species_place`."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path)
     client = _StubClient(
         [
             {
@@ -235,8 +234,8 @@ def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
     )
     source = Source(client=client, cache_dir=tmp_path / "cache")
     made, blocked = make_tile(
-        "n_413_478",
-        grids,  # type: ignore[arg-type]
+        "z10_0581_0294",
+        habitat_grid,
         world,
         builder_root=tmp_path,
         species_source=source,
@@ -249,7 +248,7 @@ def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
 def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
     """#131.2: a retry that reads right makes the tile."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path)
     client = _StubClient(
         [
             {
@@ -272,8 +271,8 @@ def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
     )
     source = Source(client=client, cache_dir=tmp_path / "cache")
     made, blocked = make_tile(
-        "n_413_478",
-        grids,  # type: ignore[arg-type]
+        "z10_0581_0294",
+        habitat_grid,
         world,
         builder_root=tmp_path,
         species_source=source,
@@ -287,11 +286,11 @@ def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
 def test_unknown_species_id_is_refused(tmp_path: Path) -> None:
     """#131.6: an id off the list fails the schema, live or recorded."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path)
     with pytest.raises(ValueError, match="refused"):
         make_tile(
-            "n_413_478",
-            grids,  # type: ignore[arg-type]
+            "z10_0581_0294",
+            habitat_grid,
             world,
             builder_root=tmp_path,
             species={
@@ -326,9 +325,9 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
         ]
     )
     source = Source(client=client, cache_dir=tmp_path / "cache")
-    lat, lon = tile_center("n_413_478")
+    lat, lon = tile_center("z10_0581_0294")
     first = fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -343,7 +342,7 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
     assert client.calls == 1
     assert first["name_en"] == "Nuuksio forest"
     second = fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -359,7 +358,7 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
     assert second == first
     assert second["name_fi"] == "Nuuksion metsä"
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -405,11 +404,11 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
     )
     cache = tmp_path / "cache"
     cache.mkdir()
-    (cache / "n_413_478.json").write_text("not json")
+    (cache / "z10_0581_0294.json").write_text("not json")
     source = Source(client=client, cache_dir=cache)
-    lat, lon = tile_center("n_413_478")
+    lat, lon = tile_center("z10_0581_0294")
     answer = fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -431,10 +430,10 @@ def test_species_without_key_or_cache_fails_clearly(tmp_path: Path) -> None:
 
     animals = [{"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"}]
     source = Source(client=None, cache_dir=tmp_path / "cache")
-    lat, lon = tile_center("n_413_478")
+    lat, lon = tile_center("z10_0581_0294")
     with pytest.raises(ValueError, match="MODEL_API_KEY is not set"):
         fetch_species(
-            "n_413_478",
+            "z10_0581_0294",
             animals,
             _GREENS,
             _TREES,
@@ -597,7 +596,7 @@ def test_empty_parts_are_refused() -> None:
 def test_survey_part_mismatch_blocks_after_retry(tmp_path: Path) -> None:
     """#141.1: a twice-waterless sea part blocks with `species_place`."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path)
     sea = {
         "place": "Boreal forest by the sea in southern Finland",
         "parts": [{"kind": "sea", "species": ["fox"]}],
@@ -609,8 +608,8 @@ def test_survey_part_mismatch_blocks_after_retry(tmp_path: Path) -> None:
     client = _StubClient([sea, dict(sea)])
     source = Source(client=client, cache_dir=tmp_path / "cache")
     made, blocked = make_tile(
-        "n_413_478",
-        grids,  # type: ignore[arg-type]
+        "z10_0581_0294",
+        habitat_grid,
         world,
         builder_root=tmp_path,
         species_source=source,
@@ -653,9 +652,9 @@ def test_retry_carries_the_refusal_back(tmp_path: Path) -> None:
         ]
     )
     source = Source(client=client, cache_dir=tmp_path / "cache")
-    lat, lon = tile_center("n_413_478")
+    lat, lon = tile_center("z10_0581_0294")
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -693,9 +692,9 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
         ]
     )
     source = Source(client=client, cache_dir=tmp_path / "cache")
-    lat, lon = tile_center("n_413_478")
+    lat, lon = tile_center("z10_0581_0294")
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -709,7 +708,7 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
     )
     assert client.calls == 1
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -724,7 +723,7 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
     assert client.calls == 1
     moved = {**_facts(), "level": 12, "edge_hi": 14}
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -740,7 +739,7 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
     # A changed plants fingerprint alone reuses the cache while
     # every cached pick is still listed (#153.4).
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -775,9 +774,9 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
     }
     client = _StubClient([answer, {**answer, "plants": []}])
     source = Source(client=client, cache_dir=tmp_path / "cache")
-    lat, lon = tile_center("n_413_478")
+    lat, lon = tile_center("z10_0581_0294")
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         _GREENS,
         _TREES,
@@ -795,7 +794,7 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
         {"id": "cloudberry", "name": "Cloudberry", "latin": "Rubus chamaemorus"},
     ]
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         grown,
         _TREES,
@@ -809,7 +808,7 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
     )
     assert client.calls == 1
     fetch_species(
-        "n_413_478",
+        "z10_0581_0294",
         animals,
         [],
         _TREES,
@@ -827,10 +826,10 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
 def test_model_order_ranks_species(tmp_path: Path) -> None:
     """#131.3: with no counts, the model's order ranks, then the id."""
     world = _world(tmp_path)
-    grids = _grids(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path)
     made, blocked = make_tile(
-        "n_413_478",
-        grids,  # type: ignore[arg-type]
+        "z10_0581_0294",
+        habitat_grid,
         world,
         builder_root=tmp_path,
         species={

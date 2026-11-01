@@ -1,21 +1,34 @@
-{"find": "Victoria water lily",
+{
+ "find": "Victoria water lily",
  "name_en": "Amazon rainforest",
- "name_fi": "Amazonin sademetsä",
- "parts": [{"kind": "forest",
-            "species": ["anaconda",
-                        "capybara",
-                        "giant_anteater",
-                        "green_iguana",
-                        "harpy_eagle",
-                        "jaguar",
-                        "osprey",
-                        "peregrine",
-                        "scarlet_macaw",
-                        "sloth",
-                        "swallow",
-                        "tapir",
-                        "toucan"]},
-           {"kind": "river", "species": ["piranha"]}],
+ "name_fi": "Amazonin sademets\u00e4",
+ "parts": [
+  {
+   "kind": "forest",
+   "species": [
+    "anaconda",
+    "capybara",
+    "giant_anteater",
+    "green_iguana",
+    "harpy_eagle",
+    "jaguar",
+    "osprey",
+    "peregrine",
+    "scarlet_macaw",
+    "sloth",
+    "swallow",
+    "tapir",
+    "toucan"
+   ]
+  },
+  {
+   "kind": "river",
+   "species": [
+    "piranha"
+   ]
+  }
+ ],
  "place": "Amazon rainforest in Amazonas, Brazil",
  "spot": "amazon-interior",
- "tile": "s_050_202"}
+ "tile": "z10_0332_0523"
+}

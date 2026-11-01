@@ -48,7 +48,7 @@ def test_request_continues_after_a_failed_item(
     world = fake_world.make_world(tmp_path)
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
     plan = _plan(
-        "n_413_478",
+        "z10_0581_0294",
         [
             {
                 "id": "animal_aardvark",
@@ -72,7 +72,9 @@ def test_request_continues_after_a_failed_item(
             raise StageFailedError("the model broke the build")
 
     monkeypatch.setattr(build_mod, "run_item_stages", fake_stages)
-    reports = run_request("n_413_478", plan, tmp_path / "out", world, grid_dir, _ctx)
+    reports = run_request(
+        "z10_0581_0294", plan, tmp_path / "out", world, grid_dir, _ctx
+    )
     assert set(reports) == {"animal_aardvark", "animal_zebra"}
     assert all(p.is_file() for p in reports.values())
     err = capsys.readouterr().err
@@ -94,7 +96,7 @@ def test_request_skips_items_needing_a_missing_home(
         home.unlink()
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
     plan = _plan(
-        "n_413_478",
+        "z10_0581_0294",
         [
             {
                 "id": "home_717",
@@ -115,7 +117,9 @@ def test_request_skips_items_needing_a_missing_home(
     monkeypatch.setattr(
         build_mod, "run_item_stages", lambda ctx, item_dir, pipeline: None
     )
-    reports = run_request("n_413_478", plan, tmp_path / "out", world, grid_dir, _ctx)
+    reports = run_request(
+        "z10_0581_0294", plan, tmp_path / "out", world, grid_dir, _ctx
+    )
     assert set(reports) == {"home_717"}
     assert "plant_x skipped: needs home_717" in capsys.readouterr().err
 
@@ -133,7 +137,7 @@ def test_request_raises_when_nothing_built(
     world = fake_world.make_world(tmp_path)
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
     plan = _plan(
-        "n_413_478",
+        "z10_0581_0294",
         [
             {
                 "id": "animal_aardvark",
@@ -151,7 +155,7 @@ def test_request_raises_when_nothing_built(
     monkeypatch.setattr(build_mod, "run_item_stages", fake_stages)
     with pytest.raises(StageFailedError, match="the model broke the build"):
         run_request(
-            "n_413_478",
+            "z10_0581_0294",
             plan,
             tmp_path / "out",
             world,
@@ -167,7 +171,7 @@ def test_food_request_replays_with_no_records(tmp_path: Path) -> None:
     world = fake_world.make_world(tmp_path)
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
     plan = _plan(
-        "n_413_478",
+        "z10_0581_0294",
         [
             {
                 "id": "food_berries",
@@ -180,7 +184,7 @@ def test_food_request_replays_with_no_records(tmp_path: Path) -> None:
     )
     recording = _recording(tmp_path / "recording", plan)
     out = tmp_path / "out"
-    reports = replay_request("n_413_478", recording, out, world, grid_dir)
+    reports = replay_request("z10_0581_0294", recording, out, world, grid_dir)
     assert list(reports) == ["food_berries"]
     assert reports["food_berries"].is_file()
     assert (out / "replay" / "plan.json").is_file()
@@ -193,9 +197,9 @@ def test_replay_refuses_another_tiles_recording(tmp_path: Path) -> None:
 
     world = fake_world.make_world(tmp_path)
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
-    recording = _recording(tmp_path / "recording", _plan("n_413_478", []))
-    with pytest.raises(ValueError, match="not n_413_479"):
-        replay_request("n_413_479", recording, tmp_path / "out", world, grid_dir)
+    recording = _recording(tmp_path / "recording", _plan("z10_0581_0294", []))
+    with pytest.raises(ValueError, match="not z10_0580_0295"):
+        replay_request("z10_0580_0295", recording, tmp_path / "out", world, grid_dir)
 
 
 def test_replay_refuses_a_job_id(tmp_path: Path) -> None:
@@ -204,7 +208,7 @@ def test_replay_refuses_a_job_id(tmp_path: Path) -> None:
 
     world = fake_world.make_world(tmp_path)
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
-    recording = _recording(tmp_path / "recording", _plan("n_413_478", []))
+    recording = _recording(tmp_path / "recording", _plan("z10_0581_0294", []))
     with pytest.raises(ValueError, match="not a tile id"):
         replay_request("j1", recording, tmp_path / "out", world, grid_dir)
 
@@ -216,7 +220,7 @@ def test_replay_needs_answers_for_model_items(tmp_path: Path) -> None:
     world = fake_world.make_world(tmp_path)
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
     plan = _plan(
-        "n_413_478",
+        "z10_0581_0294",
         [
             {
                 "id": "animal_lion",
@@ -229,7 +233,7 @@ def test_replay_needs_answers_for_model_items(tmp_path: Path) -> None:
     )
     recording = _recording(tmp_path / "recording", plan)
     with pytest.raises(ReplayError, match="no answers for this item"):
-        replay_request("n_413_478", recording, tmp_path / "out", world, grid_dir)
+        replay_request("z10_0581_0294", recording, tmp_path / "out", world, grid_dir)
 
 
 def test_replay_runs_out_of_answers_loudly(tmp_path: Path) -> None:
@@ -239,7 +243,7 @@ def test_replay_runs_out_of_answers_loudly(tmp_path: Path) -> None:
     world = fake_world.make_world(tmp_path)
     grid_dir = fake_world.write_grids(tmp_path / "grids", fake_world.boreal_3x3())
     plan = _plan(
-        "n_413_478",
+        "z10_0581_0294",
         [
             {
                 "id": "animal_lion",
@@ -253,7 +257,7 @@ def test_replay_runs_out_of_answers_loudly(tmp_path: Path) -> None:
     recording = _recording(tmp_path / "recording", plan)
     (recording / "items" / "animal_lion" / "records").mkdir(parents=True)
     with pytest.raises(ReplayError, match="out of answers"):
-        replay_request("n_413_478", recording, tmp_path / "out", world, grid_dir)
+        replay_request("z10_0581_0294", recording, tmp_path / "out", world, grid_dir)
 
 
 def test_record_run_ids_are_unique_per_run() -> None:

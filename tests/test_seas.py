@@ -15,8 +15,8 @@ from builder.seas import bake_seas, load_seas, sea_at
 def _grid(tmp_path: Path, cells: dict[str, list]) -> Path:
     grid_dir = tmp_path / "grids"
     grid_dir.mkdir(exist_ok=True)
-    with gzip.open(grid_dir / "ease2_n25.json.gz", "wt", encoding="utf-8") as handle:
-        json.dump({"cells": cells}, handle)
+    with gzip.open(grid_dir / "z10.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump({"grid": "z10", "cells": cells}, handle)
     return grid_dir
 
 
@@ -39,7 +39,7 @@ def _shapes(tmp_path: Path, polys: list[tuple[int, list]]) -> Path:
 def test_bake_names_the_covered_cell(tmp_path: Path) -> None:
     """#177.2: the sea whose area holds the centre names the cell."""
     col, row = 415, 480
-    lat, lon = center(tile_id("ease2_n25", col, row))
+    lat, lon = center(tile_id(col, row))
     ring = [
         (lon - 2, lat - 2),
         (lon + 2, lat - 2),
@@ -57,10 +57,10 @@ def test_bake_names_the_covered_cell(tmp_path: Path) -> None:
     shapes = _shapes(tmp_path, [(7, ring)])
     names = {"test_sea": {"ne_ids": [7]}}
     doc = bake_seas(grid_dir, shapes, names, tmp_path / "seas.json.gz")
-    assert doc["cells"] == {tile_id("ease2_n25", col, row): "test_sea"}
+    assert doc["cells"] == {tile_id(col, row): "test_sea"}
     assert doc["source"].startswith("naturalearth:")
-    assert sea_at(load_seas(tmp_path / "seas.json.gz"), tile_id("ease2_n25", col, row))
-    assert sea_at(doc["cells"], "n_1_1") is None
+    assert sea_at(load_seas(tmp_path / "seas.json.gz"), tile_id(col, row))
+    assert sea_at(doc["cells"], "z10_0001_0001") is None
 
 
 def test_bake_refuses_a_table_id_with_no_shape(tmp_path: Path) -> None:

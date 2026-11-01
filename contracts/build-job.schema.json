@@ -19,7 +19,7 @@
   ],
   "properties": {
     "format": {"const": 1},
-    "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "tile": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
     "kind": {"enum": ["code", "build", "enrich"]},
     "items": {
       "type": "array",
@@ -29,7 +29,7 @@
       "type": "array",
       "description": "For enrich: every tile that lists the thing in wanted, most played first, at most 200.",
       "maxItems": 200,
-      "items": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"}
+      "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
     },
     "enrich": {
       "type": "object",
@@ -45,7 +45,7 @@
     "versions": {
       "type": "object",
       "description": "For enrich, when published: each remade tile's new version.",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {"type": "integer", "minimum": 1}
     },
     "budget_usd": {"type": "number", "minimum": 0},

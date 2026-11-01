@@ -7,22 +7,22 @@
   "required": ["format", "grid", "group", "version", "tiles", "blocked"],
   "properties": {
     "format": {"const": 1},
-    "grid": {"enum": ["ease2_n25", "ease2_s25"]},
+    "grid": {"const": "z10"},
     "group": {
       "type": "array",
       "minItems": 2,
       "maxItems": 2,
-      "items": {"type": "integer", "minimum": 0, "maximum": 89}
+      "items": {"type": "integer", "minimum": 0, "maximum": 127}
     },
     "version": {"type": "integer", "minimum": 1},
     "tiles": {
       "type": "object",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {"type": "object"}
     },
     "blocked": {
       "type": "object",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
@@ -64,7 +64,7 @@
     "places": {
       "type": "object",
       "description": "Hand-made places' wanted lists by tile, filed from their surveys (#170.2). Never under tiles: the tile stays the hand-made region. The game reads these for enrich.",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,

@@ -127,14 +127,14 @@ def test_build_job_takes_an_enrich_job() -> None:
     job.update(
         {
             "kind": "enrich",
-            "tiles": ["n_414_478", "n_414_479"],
+            "tiles": ["z10_0582_0294", "z10_0581_0294"],
             "items": ["enrich_lynx"],
             "enrich": {"kind": "animal", "what": "lynx", "from": "fox"},
             "created_by": "enrich",
         }
     )
     validate("build-job", job)
-    job["versions"] = {"n_414_478": 2, "n_414_479": 3}
+    job["versions"] = {"z10_0582_0294": 2, "z10_0581_0294": 3}
     validate("build-job", job)
     job["version"] = 2
     validate("build-job", job)

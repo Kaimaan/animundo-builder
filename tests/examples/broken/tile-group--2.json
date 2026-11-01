@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "grid": "ease2_n25",
+  "grid": "z10",
   "group": [
     51,
     37
@@ -8,7 +8,7 @@
   "version": 4,
   "tiles": {},
   "blocked": {
-    "n_413_296": {
+    "z10_0582_0294": {
       "reason": "dragons",
       "habitat": "tundra"
     }

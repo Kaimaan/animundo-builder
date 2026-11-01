@@ -7,7 +7,7 @@
   "required": ["format", "tile", "species"],
   "properties": {
     "format": {"const": 1},
-    "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "tile": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
     "species": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
   }
 }

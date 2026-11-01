@@ -1,22 +1,21 @@
 {
   "format": 1,
-  "grid": "ease2_n25",
+  "grid": "z10",
   "group": [
-    51,
-    37
+    72,
+    36
   ],
   "version": 4,
   "tiles": {
-    "n_412_301": {
+    "z10_0581_0295": {
       "format": 1,
-      "id": "n_412_301",
+      "id": "z10_0581_0295",
       "kind": "code",
       "version": 1,
       "center": {
         "lat": 60.41,
         "lon": 24.62
       },
-      "grid_north": -24.6,
       "habitat": "boreal_forest",
       "home": "boreal_forest",
       "seed": 2843117,
@@ -335,11 +334,11 @@
     }
   },
   "blocked": {
-    "n_413_296": {
+    "z10_0582_0294": {
       "reason": "no_home",
       "habitat": "tundra"
     },
-    "n_414_296": {
+    "z10_0581_0294": {
       "reason": "species_place",
       "habitat": "sea"
     }

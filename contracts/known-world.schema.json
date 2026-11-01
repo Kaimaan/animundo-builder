@@ -21,16 +21,16 @@
     "made_at": {"type": "string", "minLength": 1},
     "known": {
       "type": "object",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {"type": "integer", "minimum": 1}
     },
     "explored": {
       "type": "array",
-      "items": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"}
+      "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
     },
     "first": {
       "type": "object",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
@@ -43,12 +43,12 @@
     },
     "border": {
       "type": "object",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {"enum": ["no_home", "no_land", "no_animal", "excluded"]}
     },
     "areas": {
       "type": "object",
-      "propertyNames": {"pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {
         "enum": [
           "waiting",

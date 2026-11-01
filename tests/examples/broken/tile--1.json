@@ -1,13 +1,12 @@
 {
   "format": 1,
-  "id": "n_412_301",
+  "id": "z10_0581_0295",
   "kind": "code",
   "version": 1,
   "center": {
     "lat": 60.41,
     "lon": 24.62
   },
-  "grid_north": -24.6,
   "habitat": "boreal_forest",
   "home": "boreal_forest",
   "seed": 2843117,

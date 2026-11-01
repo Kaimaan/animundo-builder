@@ -10,7 +10,6 @@
     "kind",
     "version",
     "center",
-    "grid_north",
     "level",
     "height",
     "edges",
@@ -18,7 +17,7 @@
   ],
   "properties": {
     "format": {"const": 1},
-    "id": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "id": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
     "kind": {"enum": ["code", "place"]},
     "version": {"type": "integer", "minimum": 1},
     "center": {
@@ -30,7 +29,7 @@
         "lon": {"type": "number", "minimum": -180, "maximum": 180}
       }
     },
-    "grid_north": {"type": "number", "minimum": -180, "maximum": 180},
+    "grid_north": {"const": 0, "description": "Left out on z10 tiles; only 0 is ever accepted."},
     "level": {"type": "integer", "minimum": 1},
     "height": {"enum": [32, 64]},
     "habitat": {

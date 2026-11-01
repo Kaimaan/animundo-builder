@@ -18,7 +18,7 @@
   ],
   "properties": {
     "format": {"const": 1},
-    "tile": {"type": "string", "pattern": "^[ns]_[0-9]{3}_[0-9]{3}$"},
+    "tile": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
     "reason": {"enum": ["no_home", "no_land", "no_animal", "excluded", "unmade"]},
     "habitat": {
       "enum": [

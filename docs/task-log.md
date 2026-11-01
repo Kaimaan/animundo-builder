@@ -3,6 +3,60 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #196.1
+  (wanted measure, $0;
+  builder 2fb44cd)
+
+- Storage `tiles/v2/z10`
+  (4 group files): 19
+  ready tiles, 18 with
+  wanted, 15 at exactly
+  12. The cap binds on
+  four in five tiles.
+- Cached answers (13
+  z10), each remade
+  through the real
+  `make_tile` with the
+  cap lifted ($0 cache
+  hits, real habitat
+  filter, today's 30
+  animal files): full
+  drops total 397, so
+  the 12 cut hides 253
+  still-missing species.
+- 10 worst (tile:
+  full / cut):
+  0580_0295: 57 / 45,
+  0580_0296: 56 / 44,
+  0581_0297: 44 / 32,
+  0583_0296: 42 / 30,
+  0581_0294: 35 / 23,
+  0583_0295: 35 / 23,
+  0582_0294: 34 / 22,
+  0592_0284: 21 / 9,
+  0594_0284: 21 / 9,
+  0593_0283 and
+  0593_0285: 20 / 8
+  each (tie). The reef
+  tiles cut 0 (full 5
+  and 7).
+- No cached answer
+  names a plant the
+  library lacks (0 of
+  13): picks validate
+  against the library
+  enum, so a missing
+  plant can't survive
+  in the answer. The
+  gap is upstream —
+  the survey can't
+  nominate outside
+  plants — which .3
+  fixes.
+- Building 2 to 5
+  next; nothing here
+  spends.
+
 ## 2026-11-01: inbox #194
   (WAITING: report, no
   spend; mussel needs a

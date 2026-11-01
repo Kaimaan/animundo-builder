@@ -6,11 +6,12 @@ Each maps `"col,row"` to
 `[eco1, share1, eco2, share2, biome, land, water, elevation_m, coast]`:
 the two most common RESOLVE ecoregion ids on land with their shares
 of the land points, the biome of the first, the share of sample
-points on land, the share of land points in a lake, the mean
-elevation in metres over the cell's land points, and the 25 land
-samples as a string in coast order (`1` land, `0` sea): row 0 runs
-along the `n` side, character 0 is west. Lakes count as land in the
-mask; `coast` is only land against sea.
+points on land, the share of the cell's land area under any
+HydroLAKES lake, the mean elevation in metres over the cell's land
+points, and the 25 samples as a string in coast order (`1` dry
+land, `0` sea or 1:10m lake): row 0 runs along the `n` side,
+character 0 is west. Lakes count as land for every field but the
+mask; `coast` is land against water, sea or lake.
 
 ## Sources and licence
 
@@ -35,25 +36,33 @@ mask; `coast` is only land against sea.
   Information. 2022: ETOPO 2022 15 Arc-Second Global Relief Model.
   NOAA National Centers for Environmental Information.
   https://doi.org/10.25921/fd45-gt74".
+- **HydroLAKES** v1.0 (Messager et al., *Nature Communications*
+  2016), polygons of every lake of 10 ha or more, via
+  [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes).
+  Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+  Attribution: "HydroLAKES v1.0 (Messager et al. 2016), CC BY 4.0".
 
 Kai confirms each source and licence before any tile is published
 (T57). Status: RESOLVE, Natural Earth and ETOPO 2022 all confirmed
-by Kai on Oct 28, 2026.
+by Kai on Oct 28, 2026; HydroLAKES ordered for #202 on Nov 1, 2026.
 
 ## How it is baked
 
-`builder habitats bake` reads the three shapefiles and the elevation
+`builder habitats bake` reads the four shapefiles and the elevation
 GeoTIFF from staging paths (passed as flags; the raw downloads live
 outside the repo and are never committed), samples 5 by 5 points per
 cell of both 720 by 720 grids, and writes these two files. Rock and
 Ice is RESOLVE ecoregion id 0. The biome-to-habitat table lives in
-`builder/habitats.py`.
+`builder/habitats.py`. The water share is HydroLAKES lake area over
+land area per cell, exact ellipsoidal areas; the mask's zeroes are
+sea points and 1:10m lake points.
 
 ```sh
 uv run builder habitats bake \
   --resolve /tmp/habitat-staging/resolve/Ecoregions2017.shp \
   --land /tmp/habitat-staging/ne_land/ne_10m_land.shp \
   --lakes /tmp/habitat-staging/ne_lakes/ne_10m_lakes.shp \
+  --hydrolakes /tmp/habitat-staging/hydrolakes/HydroLAKES_polys_v10.shp \
   --dem /tmp/habitat-staging/ETOPO_2022_surface.tif \
   --out data/habitat-grid
 ```

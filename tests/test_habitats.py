@@ -51,6 +51,7 @@ def test_bake_writes_cells_from_fixtures(tmp_path: Path) -> None:
         None,
         tmp_path,
         bbox=(580, 294, 581, 295),
+        hydrolakes_path=FIXTURES / "hydrolakes.geojson",
     )
     assert counts == {"z10": 4}
     grid = HabitatGrid.load(tmp_path / "z10.json.gz")
@@ -82,6 +83,7 @@ def test_bake_keeps_two_ecoregions_with_shares(tmp_path: Path) -> None:
         None,
         tmp_path,
         bbox=(581, 294, 581, 294),
+        hydrolakes_path=FIXTURES / "hydrolakes.geojson",
     )
     grid = HabitatGrid.load(tmp_path / "z10.json.gz")
     eco1, share1, eco2, share2 = grid.ecoregions_at("z10_0581_0294")
@@ -102,7 +104,7 @@ def test_coast_mask_runs_rows_north_to_south() -> None:
 
 
 def test_bake_keeps_the_mask_with_the_land_share(tmp_path: Path) -> None:
-    """#142: every baked cell carries 25 samples; ones are the land."""
+    """#142, #202.2: 25 samples; ones are dry land, lake points are zeroes."""
     bake(
         FIXTURES / "resolve.geojson",
         FIXTURES / "land.geojson",
@@ -110,6 +112,7 @@ def test_bake_keeps_the_mask_with_the_land_share(tmp_path: Path) -> None:
         None,
         tmp_path,
         bbox=(580, 294, 581, 295),
+        hydrolakes_path=FIXTURES / "hydrolakes.geojson",
     )
     grid = HabitatGrid.load(tmp_path / "z10.json.gz")
     for col in (580, 581):
@@ -119,7 +122,9 @@ def test_bake_keeps_the_mask_with_the_land_share(tmp_path: Path) -> None:
             assert len(mask) == 25
             assert set(mask) <= {"0", "1"}
             land = grid.cell_data(col, row)[5]
-            assert mask.count("1") / 25 == land
+            assert mask.count("1") / 25 <= land
+    assert set(grid.coast(580, 295) or "") == {"0", "1"}
+    assert grid.coast(581, 294) == "1" * 25
 
 
 def test_habitat_grid_reads_tiles(tmp_path: Path) -> None:
@@ -156,3 +161,20 @@ def test_committed_grid_covers_the_lab_spots() -> None:
         return
     grid = HabitatGrid.load(path)
     assert grid.habitat_at("z10_0581_0295") in ("boreal_forest", "boreal_lake")
+
+
+def test_bake_water_counts_lakes_only_hydrolakes_sees(tmp_path: Path) -> None:
+    """#202.1: a cell with only small lakes gets water above zero."""
+    bake(
+        FIXTURES / "resolve.geojson",
+        FIXTURES / "land.geojson",
+        FIXTURES / "lakes.geojson",
+        None,
+        tmp_path,
+        bbox=(580, 294, 581, 295),
+        hydrolakes_path=FIXTURES / "hydrolakes.geojson",
+    )
+    grid = HabitatGrid.load(tmp_path / "z10.json.gz")
+    assert grid.coast(581, 295) == "1" * 25
+    assert grid.cell_data(581, 295)[6] > 0
+    assert grid.cell_data(581, 294)[6] == 0

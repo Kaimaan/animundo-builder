@@ -1,24 +1,27 @@
 """The world habitat grid: which habitat each tile cell holds, with no AI.
 
 RESOLVE Ecoregions 2017 gives the ecoregions and biome; Natural Earth
-gives land and lakes; ETOPO 2022 gives elevation. `bake()` samples
-5 by 5 points per cell and writes one compact file: each cell keeps
-`[eco1, share1, eco2, share2, biome, land, water, elevation_m,
-coast]`, the last the 25 land samples in coast order (`1` land, `0`
-sea). `HabitatGrid` reads it back and `habitat_for()` maps one cell
-to a habitat id.
+gives land and 1:10m lake shores; HydroLAKES gives every lake of 10
+ha or more for the water share; ETOPO 2022 gives elevation. `bake()`
+samples 5 by 5 points per cell and writes one compact file: each
+cell keeps `[eco1, share1, eco2, share2, biome, land, water,
+elevation_m, coast]`, the last the 25 samples in coast order (`1`
+land, `0` sea or 1:10m lake). `HabitatGrid` reads it back and
+`habitat_for()` maps one cell to a habitat id.
 """
 
 from __future__ import annotations
 
 import gzip
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 import fiona
 import numpy as np
 import shapely
+from pyproj import Geod
 from shapely.geometry import shape
 from shapely.strtree import STRtree
 
@@ -215,16 +218,22 @@ def bake(
     dem_path: Path | None,
     out_dir: Path,
     bbox: tuple[int, int, int, int] | None = None,
+    hydrolakes_path: Path | None = None,
 ) -> dict[str, int]:
     """Bake the habitat grid from the sources and the DEM.
 
     `bbox` is (x0, y0, x1, y1), baked instead of the whole
     grid, for tests. Without a DEM every cell's elevation is 0.
     Returns the cell count. The raw downloads are read from
-    their staging paths and never committed.
+    their staging paths and never committed. `hydrolakes_path`
+    is required: the water share comes from HydroLAKES areas
+    (#202.1), and 1:10m lake points read `0` in the mask like
+    the sea (#202.2).
     """
     import rasterio
 
+    if hydrolakes_path is None:
+        raise ValueError("baking needs HydroLAKES for the water share")
     resolve_geoms, resolve_props = _load_shapes(resolve_path, simplify=0.02)
     land_geoms, _ = _load_shapes(land_path, simplify=0.02)
     lakes_geoms, _ = _load_shapes(lakes_path, simplify=0.005)
@@ -246,6 +255,7 @@ def bake(
             bbox,
             masks,
             dem,
+            hydrolakes_path,
         )
         out_path = out_dir / BAKED_GRID_FILE
         with gzip.open(out_path, "wt", encoding="utf-8") as handle:
@@ -347,8 +357,10 @@ def _bake_grid(
     bbox: tuple[int, int, int, int] | None,
     masks: tuple[Any, Any, Any] | None,
     dem: Any | None,
+    hydrolakes_path: Path,
 ) -> dict[str, list[Any]]:
     cells: dict[str, list[Any]] = {}
+    land_by_cell: dict[tuple[int, int], float] = {}
     for cols, rows in _batches(bbox):
         points, owners = _sample_points(cols, rows)
         lons = shapely.get_x(points)
@@ -380,18 +392,14 @@ def _bake_grid(
         by_cell: dict[tuple[int, int], dict[str, Any]] = {}
         land_points: dict[tuple[int, int], list[tuple[float, float]]] = {}
         for idx, owner in enumerate(owners):
-            slot = by_cell.setdefault(
-                owner, {"land": 0, "lake": 0, "ecos": [], "n": 0, "pts": []}
-            )
+            slot = by_cell.setdefault(owner, {"land": 0, "ecos": [], "n": 0, "pts": []})
             slot["n"] += 1
             if idx in coarse:
                 land, eco, biome = coarse[idx]
-                slot["pts"].append(bool(land))
+                slot["pts"].append(bool(land) and not lake_by_point.get(idx))
                 if not land:
                     continue
                 slot["land"] += 1
-                if lake_by_point.get(idx):
-                    slot["lake"] += 1
                 slot["ecos"].append((eco, biome))
                 land_points.setdefault(owner, []).append(
                     (float(lons[idx]), float(lats[idx]))
@@ -400,10 +408,8 @@ def _bake_grid(
             if not land_hits[exact_pos[idx]]:
                 slot["pts"].append(False)
                 continue
-            slot["pts"].append(True)
+            slot["pts"].append(not lake_by_point.get(idx, []))
             slot["land"] += 1
-            if lake_by_point.get(idx):
-                slot["lake"] += 1
             for hit in eco_by_point.get(idx, []):
                 props = resolve_props[hit]
                 eco = props.get("ECO_ID")
@@ -417,7 +423,7 @@ def _bake_grid(
         for (col, row), slot in by_cell.items():
             n = slot["n"]
             land = slot["land"] / n if n else 0.0
-            water = slot["lake"] / slot["land"] if slot["land"] else 0.0
+            land_by_cell[(col, row)] = land
             (eco1, biome1, share1), (eco2, _biome2, share2) = _top_two(slot["ecos"])
             biome = int(biome1) if biome1 is not None else None
             eco1 = int(eco1) if eco1 is not None else None
@@ -429,20 +435,100 @@ def _bake_grid(
                 round(share2, 4),
                 biome,
                 round(land, 4),
-                round(water, 4),
+                0.0,
                 round(elevations.get((col, row), 0.0), 1),
                 coast_mask(slot["pts"]),
             ]
+    wet = hydrolakes_water(land_by_cell, hydrolakes_path)
+    for (col, row), water in wet.items():
+        cells[f"{col},{row}"][6] = round(water, 4)
     return cells
 
 
+def row_of(lat: float) -> int:
+    """The grid row holding this latitude (the inverse of `lat_of`)."""
+    y = N * (0.5 - math.asinh(math.tan(math.radians(lat))) / (2.0 * math.pi))
+    return min(max(int(y), 0), N - 1)
+
+
+def _poly_area_m2(geod: Geod, geom: Any) -> float:
+    """The ellipsoidal area in m²; stray non-polygons count none."""
+    if geom.is_empty:
+        return 0.0
+    if geom.geom_type == "Polygon":
+        area, _perimeter = geod.geometry_area_perimeter(geom)
+        return abs(area)
+    if geom.geom_type == "MultiPolygon":
+        return sum(_poly_area_m2(geod, part) for part in geom.geoms)
+    if geom.geom_type == "GeometryCollection":
+        return sum(
+            _poly_area_m2(geod, part)
+            for part in geom.geoms
+            if part.geom_type in ("Polygon", "MultiPolygon")
+        )
+    return 0.0
+
+
+def cell_box(col: int, row: int) -> Any:
+    """The cell's lon/lat box as a polygon."""
+    return shapely.box(lon_of(col), lat_of(row + 1), lon_of(col + 1), lat_of(row))
+
+
+def hydrolakes_water(
+    land_by_cell: dict[tuple[int, int], float], path: Path
+) -> dict[tuple[int, int], float]:
+    """Each cell's lake-water share from HydroLAKES polygons (#202.1).
+
+    The share of the cell's land area under any lake: clipped
+    lake areas over land share times cell area, both exact
+    ellipsoidal areas. Streams the shapefile, so the 1.4
+    million lakes never sit in memory; only cells with land
+    are visited.
+    """
+    geod = Geod(ellps="WGS84")
+    lake_m2: dict[tuple[int, int], float] = {}
+    with fiona.open(path) as src:
+        for feature in src:
+            geom = feature["geometry"]
+            if geom is None:
+                continue
+            poly = shape(geom)
+            minlon, minlat, maxlon, maxlat = poly.bounds
+            c0 = max(0, int((minlon + 180.0) / 360.0 * N))
+            c1 = min(N - 1, int((maxlon + 180.0) / 360.0 * N))
+            r0 = row_of(max(minlat, -85.0))
+            r1 = row_of(min(maxlat, 85.0))
+            top, bottom = min(r0, r1), max(r0, r1)
+            for col in range(c0, c1 + 1):
+                for row in range(top, bottom + 1):
+                    if land_by_cell.get((col, row), 0.0) <= 0.0:
+                        continue
+                    area = _poly_area_m2(geod, poly.intersection(cell_box(col, row)))
+                    if area > 0.0:
+                        key = (col, row)
+                        lake_m2[key] = lake_m2.get(key, 0.0) + area
+    out: dict[tuple[int, int], float] = {}
+    for cell, land in land_by_cell.items():
+        if land <= 0.0:
+            out[cell] = 0.0
+            continue
+        col, row = cell
+        cell_m2 = _poly_area_m2(geod, cell_box(col, row))
+        if cell_m2 <= 0.0:
+            out[cell] = 0.0
+            continue
+        out[cell] = min(1.0, lake_m2.get(cell, 0.0) / (land * cell_m2))
+    return out
+
+
 def coast_mask(pts: list[bool]) -> str:
-    """The cell's 25 land samples as coast rows (#142).
+    """The cell's 25 samples as coast rows (#142, #202.2).
 
     `pts` runs the bake's point order (west to east, north to
     south within each column); the mask runs the tile's coast
     order (row 0 along the `n` side to row 4 along `s`, west to
-    east within each row). `1` is land, `0` sea.
+    east within each row). `1` is dry land, `0` sea or a 1:10m
+    lake, so the mask and the game's drawn shores agree.
     """
     if len(pts) != SAMPLES * SAMPLES:
         raise ValueError(f"a coast mask needs 25 samples, not {len(pts)}")

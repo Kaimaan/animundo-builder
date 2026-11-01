@@ -106,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     bake.add_argument("--resolve", required=True, help="RESOLVE shapefile path.")
     bake.add_argument("--land", required=True, help="Natural Earth land path.")
     bake.add_argument("--lakes", required=True, help="Natural Earth lakes path.")
+    bake.add_argument("--hydrolakes", required=True, help="HydroLAKES polygons path.")
     bake.add_argument(
         "--dem",
         default=None,
@@ -653,7 +654,12 @@ def cmd_habitats_bake(args: argparse.Namespace) -> int:
 
     dem = Path(args.dem) if args.dem else None
     counts = bake(
-        Path(args.resolve), Path(args.land), Path(args.lakes), dem, Path(args.out)
+        Path(args.resolve),
+        Path(args.land),
+        Path(args.lakes),
+        dem,
+        Path(args.out),
+        hydrolakes_path=Path(args.hydrolakes),
     )
     for grid, count in sorted(counts.items()):
         print(f"{grid}: {count} cells")

@@ -1394,9 +1394,12 @@ def make_tile(
             "share": round(share2, 2),
         }
     coast: list[str] | None = None
-    if 0.0 < land < 1.0 and habitat != "open_ocean":
+    if land > 0.0 and habitat != "open_ocean":
+        # Lake water reads 0 in the mask like the sea (#202.2):
+        # a cell part land and part lake gets a coast, and a
+        # cell all under a lake gets all 0s, even at land 1.0.
         mask = habitat_grid.coast(col, row)
-        if mask is not None:
+        if mask is not None and "0" in mask:
             coast = [mask[r * 5 : (r + 1) * 5] for r in range(5)]
     lat, lon = center(tile)
     animals = list_animals(world)

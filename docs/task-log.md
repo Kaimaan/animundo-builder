@@ -3,6 +3,32 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-01: inbox #187
+  (builder 7009782)
+
+- `LICENSE` is gone; the
+  README's Licence section
+  carries the all-rights-
+  reserved wording, back to
+  2026-11-01.
+- Data credits stay in the
+  README and
+  `data/habitat-grid/
+  README.md`, as their own
+  licences require.
+- `pyproject.toml` loses its
+  `license` field and the
+  open-source description;
+  AGENTS.md drops
+  open-source too. No other
+  licence or DCO wording in
+  the tree (task-log history
+  aside).
+- #174.3 needed no change:
+  no `git commit -s` in code
+  or docs, and commits carry
+  no sign-off trailer.
+
 ## 2026-11-01: inbox #186
   pre-report, waiting on
   $0.60 (builder 048cce1)

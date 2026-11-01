@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,18 @@ from .records import ReplayError
 #: The local job id. One replay per `--out`: a second run starts
 #: from its own clean state, never from the last run's.
 JOB_ID = "replay"
+
+
+def run_job_id(item_id: str) -> str:
+    """A ledger id unique to this run, under the item's replay id (#180.1).
+
+    A stable `replay/<item>` id lets old runs eat a fresh run's
+    job cap (the ledger keeps a week of spend); a stamp per run
+    means the cap compares this run's real spend plus the one
+    reservation in flight, nothing older.
+    """
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+    return f"{JOB_ID}/{item_id}/{stamp}-{uuid.uuid4().hex[:6]}"
 
 
 def _worker(out_dir: Path, world: Path, grid_dir: Path | None) -> Any:
@@ -236,7 +250,7 @@ def record_request(
 
     def make_ctx(item: dict[str, Any], item_dir: Path) -> Any:
         records = recording / "items" / item["id"] / "records"
-        ctx = make_context(config, f"{JOB_ID}/{item['id']}", item_dir, world)
+        ctx = make_context(config, run_job_id(item["id"]), item_dir, world)
         ctx.client = RecordingClient(ctx.client, records)
         if ctx.open_client is not None:
             ctx.open_client = RecordingClient(ctx.open_client, records)

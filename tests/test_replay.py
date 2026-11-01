@@ -254,3 +254,31 @@ def test_replay_runs_out_of_answers_loudly(tmp_path: Path) -> None:
     (recording / "items" / "animal_lion" / "records").mkdir(parents=True)
     with pytest.raises(ReplayError, match="out of answers"):
         replay_request("n_413_478", recording, tmp_path / "out", world, grid_dir)
+
+
+def test_record_run_ids_are_unique_per_run() -> None:
+    """#180.1: each record run caps only its own spend, never an old run's."""
+    from builder.replay import JOB_ID, run_job_id
+
+    first = run_job_id("animal_humpback_whale")
+    second = run_job_id("animal_humpback_whale")
+    assert first != second
+    assert first.startswith(f"{JOB_ID}/animal_humpback_whale/")
+    assert second.startswith(f"{JOB_ID}/animal_humpback_whale/")
+
+
+def test_recorded_job_spends_against_a_clean_cap(tmp_path: Path) -> None:
+    """#180.1: $0.29 spent still allows the next $0.20 under a $1.50 cap."""
+    from builder.ledger import Caps, FileLedger
+    from builder.replay import run_job_id
+
+    ledger = FileLedger(tmp_path / "ledger.json")
+    caps = Caps(job_usd=1.50, day_usd=20.0, total_usd=80.0)
+    stale = ledger.reserve("replay/animal_humpback_whale", 0.61, caps)
+    ledger.settle(stale, 0.61)
+    run = run_job_id("animal_humpback_whale")
+    spent = ledger.reserve(run, 0.29, caps)
+    ledger.settle(spent, 0.29)
+    receipt = ledger.reserve(run, 0.20, caps)
+    ledger.settle(receipt, 0.20)
+    assert ledger.job_spent(run) == pytest.approx(0.49)

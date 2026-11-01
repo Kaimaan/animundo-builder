@@ -996,7 +996,7 @@ def record_place(
     from .jobs import make_context
     from .meta import MetaAuthError
     from .records import RecordingClient
-    from .replay import JOB_ID, run_request
+    from .replay import JOB_ID, run_job_id, run_request
 
     if not config.model_api_key:
         raise MetaAuthError("MODEL_API_KEY is not set")
@@ -1011,7 +1011,7 @@ def record_place(
 
     def make_ctx(item: dict[str, Any], item_dir: Path) -> Any:
         records = place_dir / "items" / item["id"] / "records"
-        ctx = make_context(config, f"{JOB_ID}/{item['id']}", item_dir, world)
+        ctx = make_context(config, run_job_id(item["id"]), item_dir, world)
         ctx.client = RecordingClient(ctx.client, records)
         if ctx.open_client is not None:
             ctx.open_client = RecordingClient(ctx.open_client, records)

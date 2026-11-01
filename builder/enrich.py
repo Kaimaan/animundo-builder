@@ -38,8 +38,8 @@ region.update({k: v for k, v in made.items() if k not in __game_only__})
 if what:
     if kind == "plant":
         spec = layers.spec("plants", what) or {}
-        seabed = "seabed" in (spec.get("grows", {}).get("on") or [])
-        side = "water" if seabed else "cover"
+        on = spec.get("grows", {}).get("on") or []
+        side = "water" if "seabed" in on or "reef" in on else "cover"
         plants = copy.deepcopy(tile.get("plants") or {})
         grown = plants.get(side)
         if not isinstance(grown, list):
@@ -130,7 +130,7 @@ def region_place(
         return region
     biome_id = region.get("biome") if isinstance(region, dict) else None
     if kind == "plant":
-        side = "water" if _seabed_plant(world, what) else "cover"
+        side = "water" if _water_plant(world, what) else "cover"
         if biome_id is not None and not isinstance(
             (region.get("plants") or {}).get(side), list
         ):
@@ -352,13 +352,18 @@ def _added_fish(before: Any, after: Any, animal_id: str) -> list[str]:
     return []
 
 
-def _seabed_plant(world: Path, what: str) -> bool:
-    """Whether the plant file grows on the seabed (#173.1)."""
+def _water_plant(world: Path, what: str) -> bool:
+    """Whether the plant file grows under the water (#173.1, #184.1).
+
+    Seabed and reef rock both grow in water; everything else
+    grows in cover.
+    """
     try:
         spec = json.loads((world / "models" / "plants" / f"{what}.json").read_text())
     except (OSError, ValueError):
         return False
-    return "seabed" in ((spec.get("grows") or {}).get("on") or [])
+    on = (spec.get("grows") or {}).get("on") or []
+    return "seabed" in on or "reef" in on
 
 
 MANIFEST = "enrich_places.json"

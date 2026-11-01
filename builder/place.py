@@ -775,8 +775,8 @@ def _region_plants(
     """The home's plants as the region's parts (game 0043).
 
     Each entry keeps its model as the id and takes its part
-    and density from the plant file's grows: seabed grows in
-    water, everything else in cover. A plant with no file
+    and density from the plant file's grows: seabed and reef
+    grow in water, everything else in cover. A plant with no file
     follows its entry's grounds; one with no density takes a
     modest default. Trees stay out: the old home names
     shapes, never species. A home already in parts passes
@@ -795,7 +795,7 @@ def _region_plants(
         if not isinstance(grows, dict):
             grows = {}
         ons = grows.get("on") or ([entry.get("on")] if entry.get("on") else [])
-        part = water if "seabed" in ons else cover
+        part = water if "seabed" in ons or "reef" in ons else cover
         density = grows.get("density")
         if not isinstance(density, (int, float)) or not 0 < density <= 1:
             density = DRAFT_PLANT_DENSITY

@@ -524,8 +524,15 @@ def _tile_ground_plants(
         for p in ground.get("plants", []) or []
         if isinstance(p, dict)
         and (
-            ("seabed" in (p.get("on") or []) and not isinstance(water, list))
-            or ("seabed" not in (p.get("on") or []) and not isinstance(cover, list))
+            (
+                ("seabed" in (p.get("on") or []) or "reef" in (p.get("on") or []))
+                and not isinstance(water, list)
+            )
+            or (
+                "seabed" not in (p.get("on") or [])
+                and "reef" not in (p.get("on") or [])
+                and not isinstance(cover, list)
+            )
         )
     ]
     sides = [
@@ -750,7 +757,7 @@ def tile_plants(
 ) -> tuple[dict[str, Any] | None, list[str], list[str]]:
     """The survey's picks as the tile's plants (#147.3).
 
-    Cover or water by the spec's grows (seabed grows in water);
+    Cover or water by the spec's grows (seabed and reef grow in water);
     density is the spec's own scaled by the pick's count against
     the part's highest; tree shares split the picks' counts. The
     phone's limits cap each list in the survey's order. Returns
@@ -765,7 +772,8 @@ def tile_plants(
             continue
         seen.add(pick["id"])
         grows = _grows(world, "plants", pick["id"])
-        part = water if "seabed" in (grows.get("on") or []) else cover
+        on = grows.get("on") or []
+        part = water if "seabed" in on or "reef" in on else cover
         part.append(pick)
         if len(cover) + len(water) >= MAX_GROUND_PLANTS:
             break

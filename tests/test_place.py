@@ -940,6 +940,46 @@ def test_plant_from_prefers_words_then_grounds_then_first() -> None:
     assert closest_plant("neptune_cup", [], {}, have) == have[0]
 
 
+def test_closest_plant_matches_reef_and_seabed_grounds() -> None:
+    """#184.1: reef rock counts as seabed when matching grounds."""
+    from builder.plan import closest_plant
+
+    home = {
+        "plants": [
+            {"model": "dugong_grass", "on": ["seabed"]},
+            {"model": "table_coral", "on": ["reef"]},
+        ]
+    }
+    have = ["beach_naupaka", "dugong_grass", "table_coral"]
+    assert closest_plant("neptune_cup", ["reef"], home, have) == "table_coral"
+    assert closest_plant("neptune_cup", ["seabed"], home, have) == "dugong_grass"
+    assert closest_plant("neptune_cup", ["sand"], home, have) == have[0]
+    grass_only = {"plants": [{"model": "dugong_grass", "on": ["seabed"]}]}
+    assert closest_plant("neptune_cup", ["reef"], grass_only, have) == "dugong_grass"
+
+
+def test_region_plants_seat_reef_in_water(tmp_path: Path) -> None:
+    """#184.1: a home plant whose file grows reef lands in water."""
+    import json
+
+    from builder.place import _region_plants
+
+    world = tmp_path / "world"
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True)
+    (greens / "table_coral.json").write_text(
+        json.dumps({"grows": {"on": ["reef"], "density": 0.2}})
+    )
+    (greens / "beach_naupaka.json").write_text(
+        json.dumps({"grows": {"on": ["sand"], "density": 0.3}})
+    )
+    home = {"plants": [{"model": "table_coral"}, {"model": "beach_naupaka"}]}
+    parts = _region_plants(home, tmp_path, world)
+    assert parts is not None
+    assert [p["id"] for p in parts["water"]] == ["table_coral"]
+    assert [p["id"] for p in parts["cover"]] == ["beach_naupaka"]
+
+
 def test_unmakeable_animals_are_blocked_not_built(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

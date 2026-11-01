@@ -508,6 +508,43 @@ def test_picked_plants_land_on_the_tile(tmp_path: Path) -> None:
     assert tree_ids == ["pine"]
 
 
+def test_picked_reef_plants_land_in_water(tmp_path: Path) -> None:
+    """#184.1: a survey pick whose spec grows reef lands in water."""
+    import json
+
+    from builder.tiles import tile_plants
+
+    world = _world(tmp_path)
+    greens = world / "models" / "plants"
+    greens.mkdir(parents=True)
+    (greens / "table_coral.json").write_text(
+        json.dumps({"grows": {"on": ["reef"], "density": 0.2}})
+    )
+    answer = {"plants": [{"id": "table_coral", "count": 4}], "trees": []}
+    plants, requires, _tree_ids = tile_plants(world, answer)
+    assert plants is not None
+    assert [c["id"] for c in plants["water"]] == ["table_coral"]
+    assert "cover" not in plants
+    assert requires == ["table_coral"]
+
+
+def test_ground_keep_treats_reef_as_water() -> None:
+    """#184.1: a reef home plant keeps only where the tile lists no water."""
+    from builder.tiles import _tile_ground_plants
+
+    ground = {
+        "plants": [
+            {"model": "table_coral", "on": ["reef"]},
+            {"model": "dugong_grass", "on": ["seabed"]},
+            {"model": "beach_naupaka", "on": ["sand"]},
+        ]
+    }
+    kept = _tile_ground_plants(ground, {"water": []})
+    assert [p["model"] for p in kept] == ["beach_naupaka"]
+    kept = _tile_ground_plants(ground, {"cover": []})
+    assert [p["model"] for p in kept] == ["table_coral", "dugong_grass"]
+
+
 def test_wanted_skips_filed_and_unfed_filed_animals(tmp_path: Path) -> None:
     """#143.1: rebuilding a hungry animal helps nothing."""
     import json

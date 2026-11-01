@@ -166,6 +166,47 @@ def test_region_place_seats_a_plant_where_it_grows(tmp_path: Path) -> None:
     ]
 
 
+def test_region_place_seats_a_reef_plant_in_water(tmp_path: Path) -> None:
+    """#184.1: an enrich plant whose spec grows reef lands in plants.water."""
+    import fake_world
+
+    world = fake_world.make_world(tmp_path)
+    fake_world.write_converter_tools(world)
+    greens = world / "models" / "plants"
+    (greens / "table_coral.json").write_text(
+        json.dumps({"grows": {"on": ["reef"], "density": 0.2}})
+    )
+    (greens / "dugong_grass.json").write_text(
+        json.dumps({"grows": {"on": ["seabed"], "density": 0.85}})
+    )
+    (greens / "beach_naupaka.json").write_text(
+        json.dumps({"grows": {"on": ["sand"], "density": 0.3}})
+    )
+    regions = world / "regions"
+    regions.mkdir(parents=True, exist_ok=True)
+    (regions / "xx_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test_reef",
+                "plants": {
+                    "cover": [{"id": "beach_naupaka", "density": 0.3}],
+                    "water": [
+                        {"id": "branching_staghorn_coral", "density": 0.08},
+                        {"id": "dugong_grass", "density": 0.25},
+                    ],
+                },
+            }
+        )
+    )
+    place = region_place("xx_test_reef", world, "table_coral", "plant")
+    assert [p["id"] for p in place["plants"]["water"]] == [
+        "branching_staghorn_coral",
+        "dugong_grass",
+        "table_coral",
+    ]
+    assert [p["id"] for p in place["plants"]["cover"]] == ["beach_naupaka"]
+
+
 def _biome_place(world: Path) -> None:
     regions = world / "regions"
     regions.mkdir(parents=True, exist_ok=True)

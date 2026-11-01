@@ -370,14 +370,18 @@ def home_plant_entries(home: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+#: Grounds under the water: reef rock counts as seabed (#184.1).
+WATER_GROUNDS = {"seabed", "reef"}
+
+
 def closest_plant(
     slug: str, grounds: list[str], home: dict[str, Any], have: list[str]
 ) -> str:
     """A filed plant of the same kind to start from (#144.2).
 
     The name's words first (a coral from a coral); then a filed
-    plant off the same grounds (seabed grows corals); then the
-    first file, when nothing says what it is like.
+    plant off the same grounds (reef and seabed grow corals);
+    then the first file, when nothing says what it is like.
     """
     words = set(slug.split("_"))
     shared = [
@@ -388,13 +392,22 @@ def closest_plant(
     if shared:
         best = max(count for count, _ in shared)
         return min(filed for count, filed in shared if count == best)
-    for entry in home_plant_entries(home):
-        model = entry.get("model") or ""
-        if model not in have:
-            continue
-        on = entry.get("on", [])
+    filed_entries = [
+        (entry.get("model") or "", entry.get("on", []))
+        for entry in home_plant_entries(home)
+        if (entry.get("model") or "") in have
+    ]
+    for model, on in filed_entries:
         grounds_here = [on] if isinstance(on, str) else [g for g in on if g]
         if grounds and set(grounds) & set(grounds_here):
+            return model
+    for model, on in filed_entries:
+        grounds_here = [on] if isinstance(on, str) else [g for g in on if g]
+        if (
+            grounds
+            and WATER_GROUNDS & set(grounds)
+            and WATER_GROUNDS & set(grounds_here)
+        ):
             return model
     return have[0]
 

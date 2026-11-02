@@ -1631,7 +1631,7 @@ def test_make_tile_blends_a_part_reef_cell(tmp_path: Path) -> None:
     assert blocked is None
     assert made is not None
     assert made["habitat"] == "sea"
-    assert made["blend"] == {"home": "coral_reef", "biome": "coral_reef", "share": 0.1}
+    assert made["blend"] == {"home": "coral_reef", "share": 0.1}
 
 
 def test_make_tile_skips_a_trace_reef_blend(tmp_path: Path) -> None:
@@ -1760,7 +1760,7 @@ def test_make_tile_blends_second_home(tmp_path: Path) -> None:
     )
     assert blocked is None
     assert made is not None
-    assert made["blend"] == {"home": "taiga", "biome": "taiga", "share": 0.15}
+    assert made["blend"] == {"home": "taiga", "share": 0.15}
     assert made["requires"]["homes"] == ["boreal_forest", "taiga"]
     assert made["requires"]["biomes"] == ["boreal_forest", "taiga"]
 
@@ -2671,6 +2671,78 @@ def test_remade_reef_tile_plays_its_corals_and_clownfish() -> None:
     finally:
         sys.path.remove(tools)
     assert tile_region.place(made)["terrain"]["reef"] > 0
+
+
+def test_reef_map_places_coral_reef_when_region_names_no_biome() -> None:
+    """#233: C builds coral_reef from the reef map without its region biome."""
+    from unittest import mock
+
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    place = json.loads((world / "places" / "au_great_barrier_reef.json").read_text())
+    presence = {
+        species: 1.0
+        for key in ("playable", "prey", "predators")
+        for species in place["species"].get(key, [])
+    }
+    presence["common_tern"] = 5.0
+    with mock.patch("builder.tiles._place_biome", return_value=None):
+        made, blocked = make_tile(
+            "z10_0927_0560",
+            load_grid(grid_dir),
+            world,
+            presence=presence,
+            builder_root=ROOT,
+        )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "coral_reef"
+    assert made["habitat"] == "sea"
+
+
+def test_nuuksio_place_cell_stays_boreal_taiga() -> None:
+    """#233: a Nuuksio place cell still builds taiga with no reef blend."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0581_0295",
+        load_grid(grid_dir),
+        world,
+        builder_root=ROOT,
+        presence={"fox": 5.0, "vole": 5.0, "frog": 5.0},
+        species={
+            "place": "Boreal forest in Nuuksio with spruce and pine",
+            "parts": [{"kind": "forest", "species": ["fox", "vole", "frog"]}],
+            "plants": [
+                {"id": "bilberry", "count": 3},
+                {"id": "red_clover", "count": 2},
+            ],
+            "trees": [],
+            "outside_animals": [],
+            "outside_plants": [],
+            "name_en": "Nuuksio Forest",
+            "name_fi": "Nuuksion metsä",
+        },
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "boreal_taiga"
+    assert made["habitat"] == "boreal_forest"
+    assert "blend" not in made
 
 
 def test_place_cells_come_out_as_code_tiles() -> None:

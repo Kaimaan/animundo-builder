@@ -1535,7 +1535,18 @@ def make_tile(
         if place is not None:
             placed = _place_biome(place, world, homes, biomes)
             if placed is None:
-                if not _all_open_sea(place, world):
+                reef_claims = (
+                    home in ("open_sea", "coral_reef")
+                    and habitat_grid.reef_share(col, row) >= REEF_TRACT_SHARE
+                    and "coral_reef" in biomes
+                    and not biomes["coral_reef"].get("retired")
+                )
+                # The reef map decides a mostly-reef cell even under
+                # a live place whose region names no biome (#233):
+                # the flip below builds coral_reef, so the mixed
+                # species need no person. Any other open-sea tile
+                # without a biome still raises.
+                if not _all_open_sea(place, world) and not reef_claims:
                     pid = place.get("id")
                     raise ValueError(
                         f"{tile}: live place {pid} names no biome for "
@@ -1594,18 +1605,15 @@ def make_tile(
     blend: dict[str, Any] | None = None
     blend_home = home_for_cell(eco2, habitat, biomes) if eco2 is not None else None
     if blend_home is not None and blend_home != home and share2 >= 0.1:
-        blend = {
-            "home": blend_home,
-            "biome": blend_home,
-            "share": round(share2, 2),
-        }
+        # Two keys only: the world's tile check takes no third (#233).
+        blend = {"home": blend_home, "share": round(share2, 2)}
     if blend is None:
         reef = habitat_grid.reef_share(col, row)
         reef_home = home_for_cell(None, "coral_reef", biomes) if reef >= 0.1 else None
         if reef_home is not None and reef_home != home:
             # Blends ship at 0.1 and up like eco blends (#230):
             # tinier shares ride no tile.
-            blend = {"home": reef_home, "biome": reef_home, "share": round(reef, 2)}
+            blend = {"home": reef_home, "share": round(reef, 2)}
     coast: list[str] | None = None
     if land > 0.0 and habitat != "open_ocean":
         # Lake water reads 0 in the mask like the sea (#202.2):

@@ -388,6 +388,49 @@ def test_reef_cell_without_a_place_plans_code_only(tmp_path: Path) -> None:
     assert "blocked" not in plan
 
 
+def test_reef_place_plans_code_only_when_region_names_no_biome() -> None:
+    """#233: C plans code-only from the reef map without its region biome."""
+    from unittest import mock
+
+    import pytest
+
+    world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs an animundo-world checkout")
+    grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    from builder.habitats import load_grid
+
+    habitat_grid = load_grid(grid_dir)
+    answer = {
+        "place": "Coral Sea reef waters with coral reef",
+        "parts": [{"kind": "sea", "species": ["clownfish"]}],
+        "plants": [],
+        "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
+        "name_en": "Reef Waters",
+        "name_fi": "Riuttavedet",
+    }
+    with mock.patch("builder.tiles._place_biome", return_value=None):
+        plan = plan_tile(
+            "z10_0927_0560",
+            None,
+            habitat_grid,
+            world,
+            "abc123",
+            presence={"clownfish": 5.0},
+            unfiled_presence={},
+            builder_root=grid_dir.parent.parent,
+            species=answer,
+        )
+    validate("plan", plan)
+    assert plan["code_only"] is True
+    assert plan["items"] == []
+    assert "blocked" not in plan
+
+
 def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
     """#169.1: z10_0926_0560 never plans with home: sea."""
     import gzip

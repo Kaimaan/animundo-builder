@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #239 (Mamirauá stage C — held by #240, not started)
+
+- Held before any work started: no stage-C code, no Mamirauá build, nothing deployed. The waiting research job is untouched. See the #240 reply below. (Logged while #238's land-cover bake runs; the items are independent.)
+
+## 2026-11-02: inbox #240 (hold #239 — acked, nothing built)
+
+- Stage C is not started per #240: 0059 work lands first, and the inbox will say when to start. #238 goes on as allowed.
+
 ## 2026-11-02: inbox #236 (looks-guard plan — no code until Kai says go)
 
 - Step 1, templates not free building (plants). Today the draft prompt builds any structure and the start plant only lends its grounds (`_keep_grows_on`). Change: the draft prompt takes the start plant's full spec (or one of six template specs: plate/branching/fan coral, sea grass, bush, tuft, picked by the research's shape words) and may change only knobs — size, colours, count, spread, within per-template ranges. A code check diffs draft vs start-or-template and blocks new structure (new part names, shapes, part counts outside the template's); a genuinely new structure stops the job for a person with the draft attached, and the person adds a template. Covers #234.1's detail point as template detail floors (a plate is detail ≥ 1.0, 8+ sides). Size: medium, ~350 lines plus six small template files and prompt edits. Cost: $0.

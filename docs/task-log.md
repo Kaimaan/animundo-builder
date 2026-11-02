@@ -3,6 +3,78 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #217
+  (builder 285564b;
+  CI green run
+  41441133144)
+
+- The $1.01
+  was the
+  plants review
+  call: two
+  ~1MB previews
+  counted as
+  text at four
+  chars a token
+  (285564b).
+  Image parts
+  now count
+  flat, 2048
+  tokens each
+  (a 1280px
+  image bills
+  ~1,300-1,500);
+  the settle
+  still charges
+  real usage.
+  The review
+  now reserves
+  ~$0.08, and
+  no single
+  call can pass
+  $1, so no cap
+  change was
+  needed.
+- A money stop
+  records its
+  stage; the
+  checks list
+  says not run
+  on a stopped
+  job, recorded
+  when finished;
+  verdict files
+  still pass or
+  fail. Enrich
+  areas in a
+  live place
+  take the
+  place's name
+  (the reef,
+  not open
+  ocean).
+- Tests: image
+  bytes never
+  text, money
+  stop names
+  its stage,
+  unrun checks
+  marked both
+  ways, place
+  area label,
+  and the $1
+  capped replay:
+  past plants,
+  table_coral
+  growing reef,
+  filed total
+  1.0. Suite:
+  1124 passed.
+  Ruff and
+  gitleaks
+  clean. No
+  deploy yet.
+
 ## 2026-11-02: inbox #216
   (builder 5c4319b;
   CI green run

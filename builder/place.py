@@ -450,6 +450,7 @@ def job_survey_format() -> dict[str, Any]:
             "required": [
                 "centre",
                 "tiles",
+                "tiles_why",
                 "biome",
                 "name",
                 "wikidata",

@@ -24,6 +24,38 @@ def test_looks_schema_meets_the_strict_subset() -> None:
     assert_strict_subset(strict_schema(ThingLooks))
 
 
+def test_every_strict_send_meets_the_subset() -> None:
+    """#230: every schema sent strict names every key required, closed.
+
+    The Responses `text_format` sends and the chat
+    `response_format` sends flagged strict: one walk each, so
+    a new key in properties without its required fails here
+    instead of a live 400. Non-strict sends (survey, plans,
+    reviews, safety) stay out: their optionals are legal.
+    """
+    from builder import place as place_mod
+    from builder import species as species_mod
+    from builder.stages import looks as looks_mod
+    from builder.stages import maker as maker_mod
+    from builder.stages import research as research_mod
+
+    strict_sends = {
+        "place survey": place_mod.survey_format(["lion"])["schema"],
+        "place job survey": place_mod.job_survey_format()["schema"],
+        "research": research_mod.RESEARCH_FORMAT["schema"],
+        "habitat research": research_mod.HABITAT_FORMAT["schema"],
+        "looks": looks_mod.LOOKS_FORMAT["schema"],
+        "species": species_mod.species_schema(["lion"], ["pine"], ["spruce"]),
+        "model edits": maker_mod._edits_schema(
+            {"colors": {"red": {}}, "parts": [{"name": "wing"}]}
+        ),
+        "marks review": maker_mod._marks_schema(),
+        "home choices": maker_mod._home_choices_schema(["pine"], ["spruce"]),
+    }
+    for name, schema in strict_sends.items():
+        assert_strict_subset(schema, name)
+
+
 def _strict_answer() -> dict[str, Any]:
     """What constrained decoding returns: every key, unknowns null."""
     return {

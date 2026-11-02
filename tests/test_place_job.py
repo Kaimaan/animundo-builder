@@ -146,6 +146,20 @@ def test_place_one_tile_passes(tmp_path: Path) -> None:
     assert job["price"] == 0.50
 
 
+def test_place_crashed_before_its_survey_runs_it_again(tmp_path: Path) -> None:
+    """#230: a `building` place job with no survey re-surveys cleanly."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    worker.chat = _ScriptRespond([json.dumps(_survey(tiles=[A]))])
+    store.build_jobs["j1"] = _place_job(status="building")
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["research"]["tiles"] == [A]
+    assert job["spent_usd"] == 0.0
+    assert worker.chat.calls == 1
+
+
 def test_place_two_tiles_without_why_fail(tmp_path: Path) -> None:
     """#228.2: two tiles with no reason fail the survey check."""
     store = FakeStore()

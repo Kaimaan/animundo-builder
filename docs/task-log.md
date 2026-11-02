@@ -3,6 +3,17 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #225 (#216 live, no action)
+
+- Noted: #216 verified live per the item (worker v23, builder c9d0584): single-generation group writes, gap-tolerant index, gzip + plain tiles read. No action taken.
+
+## 2026-11-02: inbox #223 (worker v24 deployed with #220)
+
+- Deployed worker v24 (modal, 17:35 EET): builder main at 3eac129, which carries #220 with green CI. Deployed #220 only — #221/#222A have no deploy go, so main's tip stayed out. The rollover stopped v23; one container serves (ta-01M6EEWCS), verified alive across checks and processing jobs (my extra run-container removed).
+- #223.1 needs nothing: #216 went live earlier (v23) and passes its checks per #225, so no new verification job — nothing further is made or published live, per #223.3.
+- First live spread / first overlay pack: still pending. Kai's test0059 spreads fail judging on genuine drift ("enrichment moved shore/plants": the remake differs from the published tile in shores and plants, unrelated to the species), and the worker correctly refuses loud instead of publishing. A passing spread needs undrifted tiles; no overlay pack exists yet.
+- Finding, not mine to fix: GBIF is down (HTTP 503), so plan requests fail to plan. Unrelated to the deploy.
+
 ## 2026-11-02: inbox #222A + #224 (place job kind, stop, yes; d20442c green)
 
 - Stage A ($0, no deploy): the worker runs `kind: "place"` jobs with no tile. One grounded survey draws a covered rectangle (at most 2x2), names the biome, species with sources, names and Wikidata id; the check enforces shape, list membership and sources. The job stops at `waiting_yes` with research, price and spent_usd. Missing biome fails `no_biome` naming its land (research kept, for the hand-made Amazon biome). `place_no` fails `turned_down`; `place_yes` ($0.01-$10, else it waits) is consumed and parks the job approved under its cap — stage C builds it. Claims accept `waiting_yes`; the contract takes the #224.1 request shape.

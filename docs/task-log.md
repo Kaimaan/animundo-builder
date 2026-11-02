@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #230 (W/S decision c; 82be3c7 green — ready to deploy)
+
+- Kai picked (c): reef blends ship at share 0.1 and up like eco blends, and W/S keep building from the eco-150 listed `coral_reef` home until the world has a 150-listing sea home. Below 0.1 the share stays in the grid (and the ring table) but rides no tile.
+- Correction to the #226 ring table: N (0.070) and E (0.063) now plan plain `open_sea` with no reef blend; SE (0.164) keeps its 0.16 blend; NW still flips to `coral_reef`; C stays on its live place; W/S stay listed-`coral_reef`.
+- Tests: 0.07 reef share blends nothing (unit); the ring's N tile plans `open_sea` with no blend (committed). Full suite 1171 passed, 12 skipped; ruff clean.
+- Ready to deploy: builder `82be3c7` with green CI (cumulative tip: crash fix, coverage, #231, blend floor). Kai deploys.
+
 ## 2026-11-02: inbox #231 (overlay food on the published tile; 894828b green — ready to deploy)
 
 - #231.1: overlays judge food on the published tile now. The remake still decides belonging (survey/habitat as now); then `overlay_fed_on` checks every diet kind against the published tile's food kinds plus the overlay, and every hunts tag against the published living — the maker's pre-check for the game's `drop_unfed`. Unpublished tiles keep the remake's verdict (the remake is all there is).

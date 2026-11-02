@@ -163,6 +163,33 @@ def test_committed_grid_covers_the_lab_spots() -> None:
     assert grid.habitat_at("z10_0581_0295") in ("boreal_forest", "boreal_lake")
 
 
+def _committed_grid() -> HabitatGrid | None:
+    path = (
+        Path(__file__).resolve().parent.parent / "data" / "habitat-grid" / "z10.json.gz"
+    )
+    if not path.is_file():
+        return None
+    return HabitatGrid.load(path)
+
+
+def test_committed_grid_paijanne_shore_has_lake_zeros() -> None:
+    """#202.5: a cell across Päijänne's shore mixes land and lake 0s."""
+    grid = _committed_grid()
+    if grid is None:
+        return
+    mask = grid.coast(585, 285)
+    assert mask is not None
+    assert "0" in mask and "1" in mask
+
+
+def test_committed_grid_wide_lake_middle_is_all_zeros() -> None:
+    """#202.5: a cell inside a wide lake gets all 0s (Ladoga)."""
+    grid = _committed_grid()
+    if grid is None:
+        return
+    assert grid.coast(600, 288) == "0" * 25
+
+
 def test_bake_water_counts_lakes_only_hydrolakes_sees(tmp_path: Path) -> None:
     """#202.1: a cell with only small lakes gets water above zero."""
     bake(

@@ -2292,3 +2292,44 @@ def test_retired_biomes_are_never_picked() -> None:
     assert biomes["boreal_lake"].get("retired") is True
     assert home_for_cell(717, "boreal_lake", biomes, 6) == "boreal_lakeland"
     assert home_for_cell(717, "boreal_forest", biomes, 6) == "boreal_forest"
+
+
+def test_place_cells_come_out_as_code_tiles() -> None:
+    """#202.5: the six cells under the places make ordinary code tiles."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    grid = load_grid(grid_dir)
+    cells = {
+        "z10_0581_0295": "fi_nuuksio",
+        "z10_0582_0295": "fi_nuuksio",
+        "z10_0581_0296": "fi_nuuksio",
+        "z10_0582_0296": "fi_nuuksio",
+        "z10_0593_0284": "fi_saimaa",
+        "z10_0927_0560": "au_great_barrier_reef",
+    }
+    for tile, pid in cells.items():
+        place = json.loads((world / "places" / f"{pid}.json").read_text())
+        presence = {
+            species: 1.0
+            for key in ("playable", "prey", "predators")
+            for species in place["species"].get(key, [])
+        }
+        if tile == "z10_0927_0560":
+            # Open sea: the place's reef fish are not open-sea
+            # candidates; the tern is, as the live tile shows.
+            presence["common_tern"] = 5.0
+        made, blocked = make_tile(
+            tile, grid, world, presence=presence, builder_root=ROOT
+        )
+        assert blocked is None, (tile, blocked)
+        assert made is not None, tile
+        assert made["kind"] == "code", tile
+        assert made["sources"]["water"] == "hydrolakes:v1", tile
+        assert made["name"]["en"] and made["name"]["fi"], tile

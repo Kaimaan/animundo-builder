@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #235 (carry from the biome — held by #237, not built)
+
+- Held before any work started: `overlay_carry_for` still looks only at the remake's own picks, and the hare replay still goes `no_food` on the two tiles. See the #237 reply below.
+
+## 2026-11-02: inbox #237 (hold #235 — acked, nothing built)
+
+- #235 (carry from the biome) is not built per #237: no code touched, nothing merged, #231 stays as it is. Waiting on the decision-0061 item for the new food rule.
+
 ## 2026-11-02: inbox #234.3 (table coral job _5 hand-fixed; 046653c green — Kai looks in the game)
 
 - #234.1 (round sides) and #234.2 (underwater colours) are absorbed by #236's looks guard, which is plan-only until Kai says go — no code here. #234.3 went ahead as #236 allows.

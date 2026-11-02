@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #238 (wild-land check + WorldCover bake — done, ready to deploy)
+
+- Done. Place surveys now check wild land: a tile is wild when built-up < 2% and built+crop < 25% of its non-water pixels; a non-wild tile moves to the nearest wild tile within 3 keeping habitat+biome, each move recorded as {from, to, why} in the research, and nothing wild nearby fails the job as `no_wild_tile`. The start point drops to the nearest wild mask cell (`wild_spot`). Tiles without land-cover data (sea, polar) pass through as surveyed. Wild shares and the 5×5 wild mask come from the baked `data/habitat-grid/landcover.json.gz`.
+- The bake: ESA WorldCover v200 2021 at div2 (the div16 first pass was biased ±20pp against div1 ground truth, scrapped; div2 verified ±0.2pp), 417,589 land cells, 3,231 source tiles of which 793 have no data (polar + open ocean, no land cells affected). Spot checks: Manaus `z10_0341_0520` reads 12% built (non-wild), Mamirauá `z10_0325_0518` all wild, Helsinki coast 22% built, open-sea cells absent. Licence note is in `data/habitat-grid/README.md` (WorldCover CC BY 4.0).
+- Commits bf7e150 (code) + 7506824 (bake file, 2.1 MB, + a replay-fixture name seeding the real-data tests exposed), CI green. Tests: 39 passed in habitats+place suites, including the Manaus replay (moves off the city with `moved` citing built-up) and the Mamirauá replay (passes unchanged).
+- Open: Kai to confirm the CC BY 4.0 licence before anything built on this publishes. Ready to deploy: builder `7506824` with green CI.
+- Note: `place_20261102_amazon` (Manaus) and the Mamirauá research job predate this check and are untouched by it.
+
 ## 2026-11-02: inbox #243 (remake command — a job of kind `remake`; ready to deploy)
 
 - Item 1, the document: `node admin.mjs remake <tile>` writes one `build_jobs` doc — kind `remake`, the tile in `tiles` (one tile; the contract already requires `tiles` for this kind), optional `budget_usd`. No new collection, no contract change: the border policy already knows kind `remake` and moves areas from the published doc's `tiles`+`versions`. The worker claims non-terminal remake docs and runs them; deploy the worker before the command's first use (an old worker just leaves the kind queued, #199.3).

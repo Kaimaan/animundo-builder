@@ -114,10 +114,12 @@ class HabitatGrid:
         cells: dict[str, list[Any]],
         grid_dir: Path | None = None,
         reef: dict[str, float] | None = None,
+        extent: dict[str, list[int]] | None = None,
     ) -> None:
         self._cells = cells
         self.grid_dir = grid_dir
         self._reef = reef or {}
+        self._extent = extent
 
     @classmethod
     def load(cls, path: Path) -> HabitatGrid:
@@ -128,10 +130,12 @@ class HabitatGrid:
             raise ValueError(f"{path} is a {data.get('grid')} grid, not {NAME}")
         reef_path = path.parent / REEF_FILE
         reef: dict[str, float] = {}
+        extent: dict[str, list[int]] | None = None
         if reef_path.is_file():
             reef_data = json.loads(gzip.open(reef_path, "rt", encoding="utf-8").read())
             reef = {k: float(v) for k, v in reef_data.get("cells", {}).items()}
-        return cls(data["cells"], grid_dir=path.parent, reef=reef)
+            extent = reef_data.get("extent")
+        return cls(data["cells"], grid_dir=path.parent, reef=reef, extent=extent)
 
     def cells(self) -> list[str]:
         """Every baked cell key (`"x,y"`)."""
@@ -173,6 +177,20 @@ class HabitatGrid:
     def reef_share(self, col: int, row: int) -> float:
         """The cell's reef-covered share, 0 without the reef file (#226.1)."""
         return self._reef.get(f"{col},{row}", 0.0)
+
+    def reef_covered(self, col: int, row: int) -> bool:
+        """Whether the reef map looked at this cell (#230.2).
+
+        Inside the map's extent a missing share means no reef;
+        outside it means no data, and the older rules decide.
+        """
+        if self._extent is None:
+            return False
+        try:
+            (x0, x1), (y0, y1) = self._extent["x"], self._extent["y"]
+        except (KeyError, TypeError, ValueError):
+            return False
+        return x0 <= col < x1 and y0 <= row < y1
 
     def reef_at(self, tile: str) -> float:
         """The reef-covered share for one tile id."""

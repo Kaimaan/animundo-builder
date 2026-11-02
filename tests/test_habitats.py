@@ -186,6 +186,18 @@ def test_committed_grid_ring_reef_shares() -> None:
     assert grid.habitat_at("z10_0927_0560") == "open_ocean"
 
 
+def test_committed_grid_reef_coverage() -> None:
+    """#230.2: the map's extent says looked-at, not the shares."""
+    grid = _committed_grid()
+    if grid is None:
+        return
+    assert grid.reef_covered(927, 560)
+    assert grid.reef_covered(926, 560)
+    assert grid.reef_covered(928, 559)
+    assert not grid.reef_covered(581, 294)
+    assert not grid.reef_covered(100, 100)
+
+
 def test_committed_grid_deep_coral_sea_has_no_reef() -> None:
     """#226.5: a deep Coral Sea cell reads no reef."""
     grid = _committed_grid()

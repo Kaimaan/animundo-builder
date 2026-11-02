@@ -64,8 +64,9 @@ Kai confirms each source and licence before any tile is published
 (T57). Status: RESOLVE, Natural Earth and ETOPO 2022 all confirmed
 by Kai on Oct 28, 2026; HydroLAKES ordered for #202 on Nov 1, 2026;
 Wikidata labels (CC0) ordered for #204 on Nov 1, 2026; the GBR reef
-features (CC BY 3.0 AU) baked for #226 on Nov 2, 2026, awaiting
-Kai's confirmation before anything ships with it.
+features (CC BY 3.0 AU) baked for #226 on Nov 2, 2026, confirmed
+by Kai on Nov 2, 2026 (#230). The game credits it by "Our story"
+and in the game repo's `CREDITS.md` (game-side).
 
 ## How it is baked
 
@@ -92,7 +93,9 @@ uv run builder habitats bake \
 committed): the shapefile's `LEVEL_1 == "Reef"` polygons clipped
 exactly against each candidate z10 cell box (Sutherland–Hodgman,
 signed ring areas), the share being reef area over cell-box area;
-cells under 0.0005 share were dropped. A cell at or above
+cells under 0.0005 share were dropped. `extent` names the looked-at
+columns and rows (`x` 890–960, `y` 530–600, upper end exclusive):
+inside it a missing cell means no reef (#230.2). A cell at or above
 `REEF_TRACT_SHARE` (0.2, calibrated on the live Green Island
 tile's 0.211) builds from the `coral_reef` home; below that the
 reef blends in. The grid habitat stays the sea it is, so live

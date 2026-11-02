@@ -29,6 +29,10 @@ SEARCH_TOOL = [{"type": "web_search"}]
 MIN_DOMAINS = 3
 MAX_CONTINUATIONS = 2
 MAX_INPUT_PER_CALL = 500_000
+# Same per-call search cap as the research stage (#218: one uncapped call
+# ran 19 searches and half the survey's cost).
+SEARCHES = 5
+SEARCH_SLACK = 5
 
 
 def domain_of(url: str) -> str:
@@ -109,6 +113,7 @@ class SurveyStage:
             tools=SEARCH_TOOL,
             timeout=180,
             max_tokens=DEFAULT_MAX_TOKENS,
+            max_tool_calls=SEARCHES + SEARCH_SLACK,
         )
         text = response_text(response)
         found = _citation_urls(response)
@@ -122,6 +127,7 @@ class SurveyStage:
                 tools=SEARCH_TOOL,
                 timeout=180,
                 max_tokens=DEFAULT_MAX_TOKENS,
+                max_tool_calls=SEARCHES + SEARCH_SLACK,
             )
             text += "\n" + response_text(response)
             found |= _citation_urls(response)
@@ -173,7 +179,7 @@ class SurveyStage:
             )
             text = (response.choices[0].message.content or "").strip()
             previous = text
-            problems, draft = self._check_write(text, cited)
+            problems, draft = self._check_write(text, cited, species_text)
             if not problems:
                 return draft
 
@@ -198,7 +204,9 @@ class SurveyStage:
         if self.input_tokens > self.max_input_tokens:
             raise _Stopped(f"survey spent its {self.max_input_tokens} input tokens")
 
-    def _check_write(self, text: str, cited: set[str]) -> tuple[str, dict[str, Any]]:
+    def _check_write(
+        self, text: str, cited: set[str], species_text: str = ""
+    ) -> tuple[str, dict[str, Any]]:
         try:
             draft = json.loads(text)
         except json.JSONDecodeError as error:
@@ -207,6 +215,17 @@ class SurveyStage:
             validate("survey", draft)
         except jsonschema.ValidationError as error:
             return f"PREVIOUS TRY broke the schema: {error.message}", {}
+        found = sum(
+            1 for line in species_text.splitlines() if line.startswith("SPECIES:")
+        )
+        if found and not draft.get("species"):
+            # The research named species but the draft keeps none:
+            # a retry that drops them all is not a fix (#218).
+            return (
+                "PREVIOUS TRY dropped every species the research found. "
+                "Keep them with their research URLs.",
+                {},
+            )
         cited_domains = {domain_of(url) for url in cited}
         used = self._survey_urls(draft)
         invented = sorted({url for url in used if domain_of(url) not in cited_domains})

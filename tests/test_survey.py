@@ -62,6 +62,7 @@ class ScriptClient:
     def __init__(self, answers: list[SimpleNamespace]) -> None:
         self.answers = list(answers)
         self.prompts: list[str] = []
+        self.calls: list[dict[str, Any]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         content = messages[-1]["content"]
@@ -70,6 +71,7 @@ class ScriptClient:
 
     def responses_create(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
         self.prompts.append(str(args[0]))
+        self.calls.append(kwargs)
         return self.answers.pop(0)
 
 
@@ -201,6 +203,41 @@ def test_invented_source_sent_back_for_fix(tmp_path: Path) -> None:
     assert result["facts"] == 2
     assert len(client.prompts) == 4
     assert "invented.example/lie" in client.prompts[3]
+
+
+def test_research_calls_cap_tool_calls(tmp_path: Path) -> None:
+    """#218: every grounded research call carries a search cap."""
+    client = ScriptClient(
+        [
+            _research_response("LAND ...", LAND_URLS),
+            _research_response("SPECIES ...", SPECIES_URLS),
+            _chat_response(json.dumps(_good_survey())),
+        ]
+    )
+    SurveyStage().run(_ctx(tmp_path, client))
+    assert len(client.calls) == 2
+    assert all(call["max_tool_calls"] == 10 for call in client.calls)
+
+
+def test_dropped_species_sent_back_for_fix(tmp_path: Path) -> None:
+    """#218: a write that drops researched species is not a fix."""
+    thin = _good_survey()
+    thin["species"] = []
+    client = ScriptClient(
+        [
+            _research_response("LAND ...", LAND_URLS),
+            _research_response(
+                "SPECIES: Red deer (Cervus elaphus)\nROLE: playable\n...",
+                SPECIES_URLS,
+            ),
+            _chat_response(json.dumps(thin)),
+            _chat_response(json.dumps(_good_survey())),
+        ]
+    )
+    result = SurveyStage().run(_ctx(tmp_path, client))
+    assert result["species"] == 1
+    assert len(client.prompts) == 4
+    assert "dropped every species" in client.prompts[3]
 
 
 def test_schema_break_sent_back_for_fix(tmp_path: Path) -> None:

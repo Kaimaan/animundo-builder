@@ -8,6 +8,10 @@
   "lon": 24.43
  },
  "habitat": "boreal_forest",
+ "name": {
+  "en": "Boreal forest east of Nuuksio",
+  "fi": "Havumetsä Nuuksion itäpuolella"
+ },
  "home": "boreal_forest",
  "seed": 2843117,
  "water": 0.18,

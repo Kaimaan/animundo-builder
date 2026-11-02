@@ -919,6 +919,107 @@ def test_plan_names_from_the_nearest_place(tmp_path: Path) -> None:
     )
 
 
+def _named_world(tmp_path: Path) -> Path:
+    """A world with the three filed places and their genitives."""
+    world = tmp_path / "world"
+    places = world / "places"
+    places.mkdir(parents=True)
+    for pid, en, fi, gen, lat, lon in (
+        (
+            "fi_nuuksio",
+            "Nuuksio National Park",
+            "Nuuksion kansallispuisto",
+            "Nuuksion kansallispuiston",
+            60.2398,
+            24.6094,
+        ),
+        (
+            "fi_saimaa",
+            "Lake Saimaa – Linnansaari",
+            "Saimaa – Linnansaari",
+            "Saimaan – Linnansaaren",
+            62.186,
+            28.6523,
+        ),
+        (
+            "au_great_barrier_reef",
+            "Great Barrier Reef – Green Island",
+            "Iso valliriutta – Vihreä saari",
+            "Ison Valliriutan – Green Islandin",
+            -16.8045,
+            146.0742,
+        ),
+    ):
+        (places / f"{pid}.json").write_text(
+            json.dumps(
+                {
+                    "id": pid,
+                    "name": {"en": en, "fi": fi, "fi_gen": gen},
+                    "center": {"lat": lat, "lon": lon},
+                }
+            )
+        )
+    return world
+
+
+def test_plan_name_cases_filed_finnish_names(tmp_path: Path) -> None:
+    """#209.3: the compass uses each place's filed genitive."""
+    world = _named_world(tmp_path)
+    assert plan_name("boreal_forest", 60.2398, 24.7094, world) == {
+        "en": "Boreal forest east of Nuuksio National Park",
+        "fi": "Havumetsä Nuuksion kansallispuiston itäpuolella",
+    }
+    assert plan_name("boreal_lake", 62.286, 28.6523, world) == {
+        "en": "Boreal lake north of Lake Saimaa – Linnansaari",
+        "fi": "Erämaajärvi Saimaan – Linnansaaren pohjoispuolella",
+    }
+    assert plan_name("sea", -16.8045, 145.9742, world) == {
+        "en": "Sea west of Great Barrier Reef – Green Island",
+        "fi": "Meri Ison Valliriutan – Green Islandin länsipuolella",
+    }
+
+
+def test_plan_name_finnish_carries_no_english_place_name(tmp_path: Path) -> None:
+    """#209.4: no English place name inside a Finnish one."""
+    world = _named_world(tmp_path)
+    fi = plan_name("boreal_forest", 60.2398, 24.7094, world)["fi"]
+    assert "National Park" not in fi
+    fi = plan_name("boreal_lake", 62.286, 28.6523, world)["fi"]
+    assert "Lake Saimaa" not in fi
+    fi = plan_name("sea", -16.8045, 145.9742, world)["fi"]
+    assert "Great Barrier Reef" not in fi
+
+
+def test_named_places_skips_a_place_without_finnish(tmp_path: Path) -> None:
+    """#209.3: a name dict without fi is left out, not Englished."""
+    from builder.plan import named_places
+
+    world = tmp_path / "world"
+    places = world / "places"
+    places.mkdir(parents=True)
+    (places / "a.json").write_text(
+        json.dumps(
+            {
+                "id": "a",
+                "name": {"en": "English Only"},
+                "center": {"lat": 60.0, "lon": 24.0},
+            }
+        )
+    )
+    (places / "b.json").write_text(
+        json.dumps(
+            {
+                "id": "b",
+                "name": {"en": "Aho", "fi": "Aho"},
+                "center": {"lat": 61.0, "lon": 25.0},
+            }
+        )
+    )
+    found = {pid: gen for pid, _en, gen, _lat, _lon in named_places(world)}
+    assert "a" not in found
+    assert found["b"] == "Ahon"
+
+
 def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
     """#169.2: where a curated name exists, the place doesn't rename it."""
     world = _world(tmp_path)

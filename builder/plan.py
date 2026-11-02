@@ -65,10 +65,10 @@ _FI_VOWELS = frozenset("aeiouyäöåAEIOUYÄÖÅ")
 def _fi_genitive(base: str) -> str:
     """The Finnish genitive of a place name, by rule (#169.2).
 
-    The world's place files carry no genitive field yet, so
-    a compass fallback derives it: `Nuuksio` → `Nuuksion`,
-    `Green Island` → `Green Islandin`. A surveyed name always
-    wins over this guess.
+    A compass fallback for places whose file carries no
+    `fi_gen`: `Nuuksio` → `Nuuksion`, `Green Island` →
+    `Green Islandin`. Gradation and stem changes need the
+    filed form; a surveyed name always wins over this guess.
     """
     word = base.strip()
     if not word:
@@ -83,7 +83,10 @@ def named_places(world: Path) -> list[tuple[str, str, str, float, float]]:
 
     Id, English and genitive Finnish names, and the centre, as
     `PLACES`. A place without a centre or a name is skipped;
-    a name dict takes its `en`/`fi`, else the name is both.
+    a name dict takes its `en`/`fi` and its filed `fi_gen`
+    when it has one, else the rule cases the `fi`. A name
+    dict without `fi` is skipped, never fallen back to
+    English (#209.3); a plain name string is both.
     """
     out: list[tuple[str, str, str, float, float]] = []
     folder = world / "places"
@@ -104,19 +107,25 @@ def named_places(world: Path) -> list[tuple[str, str, str, float, float]]:
         name = place.get("name")
         if isinstance(name, dict):
             en = name.get("en")
-            fi = name.get("fi") or en
+            fi = name.get("fi")
+            gen = name.get("fi_gen")
         else:
             en = fi = name
+            gen = None
         if not isinstance(en, str) or not en.strip():
             continue
         if not isinstance(fi, str) or not fi.strip():
-            fi = en
+            continue
+        if not isinstance(gen, str) or not gen.strip():
+            gen = _fi_genitive(fi)
+        else:
+            gen = gen.strip()
         pid = place.get("id")
         out.append(
             (
                 str(pid) if isinstance(pid, str) and pid else path.stem,
                 en.strip(),
-                _fi_genitive(fi),
+                gen,
                 float(lat),
                 float(lon),
             )

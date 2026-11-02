@@ -184,3 +184,25 @@ def test_tile_needs_level() -> None:
     del tile["level"]
     with pytest.raises(jsonschema.ValidationError):
         validate("tile", tile)
+
+
+def test_tile_needs_a_name_in_both_languages() -> None:
+    tile = _valid("tile")
+    del tile["name"]
+    with pytest.raises(jsonschema.ValidationError):
+        validate("tile", tile)
+    tile = _valid("tile")
+    del tile["name"]["fi"]
+    with pytest.raises(jsonschema.ValidationError):
+        validate("tile", tile)
+
+
+def test_open_ocean_tile_keeps_an_english_only_sea_name() -> None:
+    tile = _valid("tile")
+    tile["habitat"] = "open_ocean"
+    tile["sea"] = "lake_superior"
+    tile["land"] = "boreal_forest"
+    tile["land_share"] = 0.05
+    del tile["ecoregion"]
+    del tile["name"]["fi"]
+    validate("tile", tile)

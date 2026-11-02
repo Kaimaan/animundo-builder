@@ -581,6 +581,25 @@ def _old_tile(**over: Any) -> dict[str, Any]:
     return tile
 
 
+def test_remake_decision_backfills_a_missing_name(tmp_path: Path) -> None:
+    """#209.2: an old tile without a name republishes with one."""
+    old = _old_tile()
+    assert "name" not in old
+    made = _old_tile(
+        name={
+            "en": "Boreal forest east of Nuuksio",
+            "fi": "Havumetsä Nuuksion itäpuolella",
+        }
+    )
+    verdict, _no_food = build_mod.remake_decision(
+        "z10_0581_0294", old, None, made, None, tmp_path, "lynx"
+    )
+    assert verdict[0] == "tile"
+    assert verdict[1] is not None
+    assert verdict[1]["version"] == 4
+    assert verdict[1]["name"]["fi"] == "Havumetsä Nuuksion itäpuolella"
+
+
 def test_remake_decision_skips_an_identical_tile(tmp_path: Path) -> None:
     """#143.4: provenance alone never bumps a version."""
     old = _old_tile()

@@ -323,7 +323,8 @@
     {
       "if": {"properties": {"kind": {"const": "code"}, "habitat": {"not": {"const": "open_ocean"}}}, "required": ["kind", "habitat"]},
       "then": {
-        "required": ["ecoregion"]
+        "required": ["ecoregion", "name"],
+        "properties": {"name": {"required": ["en", "fi"]}}
       }
     },
     {

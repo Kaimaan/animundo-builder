@@ -3,6 +3,110 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #212
+  (builder 131b4ff;
+  live publish)
+
+- A live place's
+  open-sea tile
+  builds on the
+  old region's
+  biome now
+  (131b4ff),
+  never open_sea:
+  habitat, eco
+  and corals
+  from the biome,
+  filed species
+  from the place
+  file, unfiled
+  wanted. No
+  region biome
+  and a non-sea
+  cast refuses
+  loudly.
+- z10_0927_0560
+  republished v2:
+  sea/coral_reef,
+  seven reef
+  fish playable
+  (clownfish
+  first),
+  hammerhead
+  wanted (live
+  pack plays
+  it), corals at
+  biome density,
+  rock 0.35.
+  check_tile
+  passes; the
+  area reads
+  ready v2. Play
+  the reef.
+- Tests: the
+  remade tile
+  has rock,
+  corals and a
+  playable
+  clownfish; a
+  biomeless
+  place tile
+  refuses.
+
+## 2026-11-02: inbox #211
+  (world db77b7d;
+  builder: blocked)
+
+- adapt_home
+  keeps reef
+  ground
+  (db77b7d): on
+  seabed or reef
+  stays as filed.
+  The reef
+  example
+  chooses reef;
+  the selftest
+  fails a kept
+  plant that
+  loses its
+  ground. Passes
+  11 of 11.
+- .1, .2 and
+  their tests
+  are blocked:
+  biome_add_plant
+  and the ship's
+  biome diff
+  rule went out
+  in conv2
+  (3cc4bc7):
+  packs carry
+  the model, no
+  seating, and
+  take files no
+  biomes. Nothing
+  on main adds
+  a plant to a
+  biome, so there
+  is nowhere to
+  scale the reef
+  densities. Say
+  whether to
+  resurrect the
+  biome add with
+  the scale-down,
+  or seating
+  lives with the
+  game now.
+- Worker: live
+  v17 and v18
+  predate every
+  fix here; the
+  next deploy
+  takes builder
+  main 131b4ff.
+
 ## 2026-11-02: inbox #203
   (builder ef65c78)
 

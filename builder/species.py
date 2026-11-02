@@ -816,6 +816,63 @@ def resolve_outside(
     return resolved
 
 
+def cached_answer(
+    cache_dir: Path,
+    tile: str,
+    animals: list[dict[str, Any]],
+    plants: list[dict[str, str]],
+    trees: list[dict[str, str]],
+    habitat: str,
+    lat: float,
+    lon: float,
+    list_round: int,
+    facts: dict[str, Any],
+) -> dict[str, Any] | None:
+    """The cached survey when the maker would still use it, else None.
+
+    The same checks the fetch runs before a call (#196.4): the
+    resurvey round and the facts are unchanged, the library
+    still holds every cached plant pick, and the answer still
+    fits the tile with both names. Cheap and keyless, so the
+    remake gate prices a survey without spending (#243.1).
+    """
+    facts_print = facts_fingerprint(facts)
+    cached = read_cache(cache_dir, tile)
+    if (
+        cached is None
+        or cached.get("survey_round", 0) != list_round
+        or not _library_covers(cached, plants, trees)
+        or cached.get("facts") != facts_print
+    ):
+        return None
+    try:
+        answer = {
+            "place": cached["place"],
+            "parts": cached["parts"],
+            "plants": cached.get("plants", []),
+            "trees": cached.get("trees", []),
+            "name_en": cached.get("name_en"),
+            "name_fi": cached.get("name_fi"),
+            "outside_animals": cached.get("outside_animals", []),
+            "outside_plants": cached.get("outside_plants", []),
+            "surveyed_ids": cached.get("surveyed_ids", []),
+            "resurveyed": cached.get("resurveyed", []),
+        }
+        answer["present"] = list(
+            dict.fromkeys(s for p in answer["parts"] for s in p["species"])
+        )
+        usable = (
+            check_survey(answer, habitat, lat, lon, facts, animals) is None
+            and answer["name_en"]
+            and answer["name_fi"]
+        )
+    except (KeyError, TypeError, AttributeError):
+        return None
+    if not usable:
+        return None
+    return {**answer, "date": cached.get("date", "unknown")}
+
+
 def fetch_species(
     tile: str,
     animals: list[dict[str, Any]],
@@ -840,57 +897,36 @@ def fetch_species(
     """
     facts_print = facts_fingerprint(facts)
     cached = read_cache(source.cache_dir, tile)
-    if (
-        cached is not None
-        and cached.get("survey_round", 0) == list_round
-        and _library_covers(cached, plants, trees)
-        and cached.get("facts") == facts_print
-    ):
-        try:
-            answer = {
-                "place": cached["place"],
-                "parts": cached["parts"],
-                "plants": cached.get("plants", []),
-                "trees": cached.get("trees", []),
-                "name_en": cached.get("name_en"),
-                "name_fi": cached.get("name_fi"),
-                "outside_animals": cached.get("outside_animals", []),
-                "outside_plants": cached.get("outside_plants", []),
-                "surveyed_ids": cached.get("surveyed_ids", []),
-                "resurveyed": cached.get("resurveyed", []),
-            }
-            answer["present"] = list(
-                dict.fromkeys(s for p in answer["parts"] for s in p["species"])
-            )
-            usable = (
-                check_survey(answer, habitat, lat, lon, facts, animals) is None
-                and answer["name_en"]
-                and answer["name_fi"]
-            )
-        except (KeyError, TypeError, AttributeError):
-            usable = False
-        if usable:
-            keys = resolve_outside(
+    answer = cached_answer(
+        source.cache_dir,
+        tile,
+        animals,
+        plants,
+        trees,
+        habitat,
+        lat,
+        lon,
+        list_round,
+        facts,
+    )
+    if answer is not None:
+        keys = resolve_outside(
+            tile,
+            answer["outside_animals"],
+            answer["outside_plants"],
+            (cached or {}).get("outside_keys", {}),
+        )
+        if keys != (cached or {}).get("outside_keys", {}):
+            write_cache(
+                source.cache_dir,
                 tile,
-                answer["outside_animals"],
-                answer["outside_plants"],
-                cached.get("outside_keys", {}),
+                {**answer, "outside_keys": keys},
+                list_round,
+                plants_print,
+                facts_print,
+                answer["date"],
             )
-            if keys != cached.get("outside_keys", {}):
-                write_cache(
-                    source.cache_dir,
-                    tile,
-                    {**answer, "outside_keys": keys},
-                    list_round,
-                    plants_print,
-                    facts_print,
-                    cached.get("date", "unknown"),
-                )
-            return {
-                **answer,
-                "date": cached.get("date", "unknown"),
-                "outside_keys": keys,
-            }
+        return {**answer, "outside_keys": keys}
     if source.client is None:
         raise ValueError(
             f"no usable cached species for {tile} and MODEL_API_KEY is not set"

@@ -400,7 +400,7 @@ class Worker:
             raise StaleOwner(f"build job {job_id}: owned by another worker")
 
     #: Job kinds the worker runs; anything else stays queued (#199.3).
-    JOB_KINDS = ("code", "build", "enrich", "spread", "place")
+    JOB_KINDS = ("code", "build", "enrich", "spread", "place", "remake")
 
     def build_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Claim the job and build it: code directly, items each alone."""
@@ -422,6 +422,9 @@ class Worker:
             return
         if job.get("kind") == "place":
             self.place_job(job_id, job)
+            return
+        if job.get("kind") == "remake":
+            self.remake_job(job_id, job)
             return
         tile = self._job_tile(job_id, job)
         if tile is None:
@@ -462,8 +465,7 @@ class Worker:
                 self._history_context(job_id, "code", tile),
             )
             print(f"build job {job_id}: published {path}")
-            # The published copy's own version, so areas/{tile} shows it (#143.5).
-            self._set_status(job_id, "published", {"version": made["version"]})
+            self._set_published(job_id, job, tile, made)
             return
         self.build_items(job_id, job, tile)
 
@@ -947,6 +949,205 @@ class Worker:
         )
         print(f"build job {job_id}: yes accepted at ${cap:.2f}; stage C builds it")
 
+    def remake_job(self, job_id: str, job: dict[str, Any]) -> None:
+        """One ready tile again, exactly as a new border request (#243).
+
+        `admin.mjs remake` writes the job (kind remake, the one
+        tile in `tiles`); the worker surveys, plans fresh, runs
+        the world's checks, and publishes a code tile at once or
+        builds the plan's items after approval. The old version
+        stays live until the publish: nothing before it touches
+        the group file or the areas. Anything that would spend
+        stops for a price first.
+        """
+        import json
+
+        from .build import publish_group
+        from .grid import group_path
+        from .prices import SURVEY_ESTIMATE_USD
+        from .tiles import make_tile, survey_needs_call
+
+        assert self.world is not None
+        tiles = job.get("tiles")
+        if (
+            not isinstance(tiles, list)
+            or len(tiles) != 1
+            or not isinstance(tiles[0], str)
+        ):
+            self._fail(job_id, "bad_remake")
+            return
+        tile = tiles[0]
+        try:
+            blob_path = group_path(tile)
+        except ValueError:
+            self._fail(job_id, "bad_remake")
+            return
+        raw, _ = self.store.read_blob(blob_path)
+        try:
+            old = json.loads(raw.decode("utf-8")) if raw else {}
+        except ValueError:
+            old = {}
+        if not isinstance((old.get("tiles") or {}).get(tile), dict):
+            self._fail(job_id, "not_ready")
+            return
+        if (job.get("status") or "queued") == "waiting_yes":
+            self._remake_answer(job_id, job)
+            return
+        source = self._species_source(tile)
+        if self.species is None and survey_needs_call(
+            tile,
+            self._habitat_grid(),
+            self.world,
+            Path(source.cache_dir),
+            self.builder_root,
+        ):
+            if not self._remake_covers(job, SURVEY_ESTIMATE_USD):
+                self._update(
+                    job_id,
+                    {"price_usd": SURVEY_ESTIMATE_USD, "status": "waiting_yes"},
+                )
+                print(f"build job {job_id}: the survey would spend; waiting for yes")
+                return
+        try:
+            plan = plan_tile(
+                tile,
+                self.store.get_request(tile),
+                self._habitat_grid(),
+                self.world,
+                self.world_commit or "unknown",
+                builder_root=self.builder_root,
+                species=self.species,
+                species_source=source,
+            )
+        except (ValueError, RuntimeError, FileNotFoundError, ConnectionError) as error:
+            print(f"build job {job_id}: cannot plan: {error}", file=sys.stderr)
+            self._fail(job_id, "no_plan")
+            return
+        self.store.set_plan(tile, plan)
+        if plan.get("blocked"):
+            self._fail(job_id, str(plan["blocked"]))
+            return
+        if plan.get("code_only"):
+            try:
+                made, blocked = make_tile(
+                    tile,
+                    self._habitat_grid(),
+                    self.world,
+                    builder_root=self.builder_root,
+                    species=self.species,
+                    species_source=source,
+                )
+            except ValueError as error:
+                print(f"build job {job_id}: cannot make: {error}", file=sys.stderr)
+                self._fail(job_id, "no_plan")
+                return
+            if made is None:
+                reason = (blocked or {}).get("reason", "no_home")
+                self._history_blocked(job_id, tile, "remake", reason)
+                self._fail(job_id, reason)
+                return
+            self._require_lease(job_id)
+            path = publish_group(
+                tile,
+                made,
+                self.store,
+                self.world_commit or "unknown",
+                self._history_context(job_id, "remake", tile),
+            )
+            print(f"build job {job_id}: published {path}")
+            self._set_published(job_id, job, tile, made)
+            return
+        self._remake_build(job_id, job, tile, plan)
+
+    def _remake_build(
+        self, job_id: str, job: dict[str, Any], tile: str, plan: dict[str, Any]
+    ) -> None:
+        """A remake that needs items: priced, approved, then built."""
+        from .build import order_items
+        from .ledger import FileLedger
+
+        expand = order_items(plan.get("items", []))
+        improve = plan.get("improve", [])
+        wanted = [i["id"] for i in [*expand, *improve]]
+        if "items" not in job:
+            self._update(job_id, {"items": wanted})
+        spent = 0.0
+        try:
+            spent = FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
+        except OSError:
+            pass
+        price = round(
+            spent + sum(float(i.get("estimate_usd", 0.0)) for i in [*expand, *improve]),
+            2,
+        )
+        if not self._remake_covers(job, price):
+            self._update(job_id, {"price_usd": price, "status": "waiting_yes"})
+            print(f"build job {job_id}: the build would spend ${price:.2f}; waiting")
+            return
+        job = self.store.get_build_job(job_id) or job
+        self._snapshot_plan(job_id, job, tile)
+        self.build_items(job_id, job, tile)
+
+    @staticmethod
+    def _remake_cap(job: dict[str, Any]) -> float:
+        """The remake's approved spend: its budget or its yes cap."""
+        cap = 0.0
+        for key in ("budget_usd", "cap_usd"):
+            value = job.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)) and value > cap:
+                cap = float(value)
+        return cap
+
+    def _remake_covers(self, job: dict[str, Any], amount: float) -> bool:
+        """The cap covers this step's price, or there is no price."""
+        return amount <= 0 or self._remake_cap(job) >= amount
+
+    def _remake_answer(self, job_id: str, job: dict[str, Any]) -> None:
+        """The yes or no to a priced remake, consumed once (#243.2)."""
+        if job.get("remake_no") is not None:
+            self._update(job_id, {"remake_no": DELETE, "remake_yes": DELETE})
+            self._fail(job_id, "turned_down")
+            return
+        yes = job.get("remake_yes")
+        if yes is None:
+            print(f"build job {job_id}: waiting for yes")
+            return
+        cap = yes.get("cap") if isinstance(yes, dict) else None
+        if (
+            not isinstance(cap, (int, float))
+            or isinstance(cap, bool)
+            or not 0.01 <= cap <= 10
+        ):
+            print(f"build job {job_id}: remake_yes needs a cap from $0.01 to $10")
+            return
+        self._require_lease(job_id)
+        self._update(
+            job_id,
+            {"remake_yes": DELETE, "cap_usd": float(cap), "status": "building"},
+        )
+        print(f"build job {job_id}: yes accepted at ${cap:.2f}")
+
+    def _set_published(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        tile: str,
+        made: dict[str, Any],
+    ) -> None:
+        """Mark the job published: its version, and a remake's tiles.
+
+        The policy moves a remake's areas from `tiles` and
+        `versions` (#209.1); other kinds keep the version the
+        areas show today (#143.5).
+        """
+        extra: dict[str, Any] = {"version": made["version"]}
+        if job.get("kind") == "remake":
+            extra["tiles"] = [tile]
+            extra["versions"] = {tile: made["version"]}
+        self._set_status(job_id, "published", extra)
+
     def _snapshot_plan(self, job_id: str, job: dict[str, Any], tile: str) -> None:
         """Freeze the plan's approved items into the job folder.
 
@@ -1366,8 +1567,7 @@ class Worker:
             self._history_context(job_id, "build", tile),
         )
         print(f"build job {job_id}: published {path}")
-        # The published copy's own version, so areas/{tile} shows it (#143.5).
-        self._set_status(job_id, "published", {"version": made["version"]})
+        self._set_published(job_id, job, tile, made)
 
     def review_enrich_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Overlay a shipped enrich item's passing tiles, then publish (#220).

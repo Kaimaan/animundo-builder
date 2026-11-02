@@ -600,6 +600,185 @@ def test_second_publish_carries_the_newer_version(tmp_path: Path) -> None:
     assert "lion" in data["tiles"]["z10_0581_0294"]["species"]["playable"]
 
 
+def _remake_job() -> dict[str, Any]:
+    return {
+        "format": 1,
+        "tiles": ["z10_0581_0294"],
+        "budget_usd": 0.0,
+        "kind": "remake",
+        "status": "queued",
+        "visibility": "public",
+        "created_by": "admin",
+        "progress": [],
+        "cost_usd": 0.0,
+    }
+
+
+def _seed_ready_tile(store: FakeStore, version: int = 1) -> None:
+    store.blobs["tiles/v2/z10/072_036.json"] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": version,
+            "tiles": {
+                "z10_0581_0294": {
+                    "id": "z10_0581_0294",
+                    "version": version,
+                    "biome": "boreal_taiga",
+                }
+            },
+            "blocked": {},
+        }
+    ).encode("utf-8")
+
+
+def _empty_cache(worker: Worker, tmp_path: Path) -> Worker:
+    import dataclasses
+
+    cache = tmp_path / "species"
+    cache.mkdir(exist_ok=True)
+    worker.config = dataclasses.replace(worker.config, species_cache_dir=str(cache))
+    return worker
+
+
+def _group_version(store: FakeStore) -> int:
+    data = json.loads(store.read_blob("tiles/v2/z10/072_036.json")[0].decode("utf-8"))
+    return int(data["tiles"]["z10_0581_0294"]["version"])
+
+
+def test_remake_that_would_spend_stops_for_a_price(tmp_path: Path) -> None:
+    """#243.3: a remake with no cached survey waits priced, living on v1."""
+    from builder.prices import SURVEY_ESTIMATE_USD
+
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    _seed_ready_tile(store)
+    worker = _empty_cache(_flow_worker(tmp_path, store, boreal_3x3()), tmp_path)
+    worker.species = None
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["price_usd"] == SURVEY_ESTIMATE_USD
+    assert _group_version(store) == 1
+    assert store.plans == {}
+
+
+def test_remake_keeps_old_live_then_publishes_next_version(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#243.3: v1 readable through the waits, v2 with tiles+versions."""
+    monkeypatch.setattr(
+        "builder.plan.fetch_smoothed", lambda tile, candidates: {"fox": 5.0}
+    )
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    _seed_ready_tile(store)
+    worker = _empty_cache(_flow_worker(tmp_path, store, boreal_3x3()), tmp_path)
+    worker.species = None
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "waiting_yes"
+    assert _group_version(store) == 1
+    store.build_jobs["j1"]["remake_yes"] = {"cap": 1.0}
+    worker.species = _forest_survey("fox", "vole")
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "building"
+    assert _group_version(store) == 1
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert _group_version(store) == 2
+    assert job["tiles"] == ["z10_0581_0294"]
+    assert job["versions"] == {"z10_0581_0294": 2}
+
+
+def test_remake_refuses_a_tile_that_is_not_ready(tmp_path: Path) -> None:
+    """#243: only a ready tile can be asked for again."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "not_ready"
+
+
+def test_remake_refuses_bad_tiles(tmp_path: Path) -> None:
+    """#243: a remake names exactly one tile."""
+    store = FakeStore()
+    first = _remake_job()
+    del first["tiles"]
+    store.build_jobs["j1"] = first
+    second = _remake_job()
+    second["tiles"] = ["z10_0581_0294", "z10_0582_0294"]
+    store.build_jobs["j2"] = second
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    worker.handle_build_job("j2")
+    assert store.build_jobs["j1"]["error"] == "bad_remake"
+    assert store.build_jobs["j2"]["error"] == "bad_remake"
+
+
+def test_remake_no_turns_the_job_down(tmp_path: Path) -> None:
+    """#243.2: a no ends the priced remake."""
+    store = FakeStore()
+    job = _remake_job()
+    job["status"] = "waiting_yes"
+    job["remake_no"] = True
+    store.build_jobs["j1"] = job
+    _seed_ready_tile(store)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "turned_down"
+    assert _group_version(store) == 1
+
+
+def test_set_published_carries_tiles_for_a_remake(tmp_path: Path) -> None:
+    """#243: the policy moves a remake's areas from tiles+versions."""
+    store = FakeStore()
+    store.build_jobs["j1"] = {"kind": "remake", "status": "building"}
+    store.build_jobs["j2"] = {"kind": "code", "status": "building"}
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert store.claim_build_job("j1", worker.worker_id) is True
+    assert store.claim_build_job("j2", worker.worker_id) is True
+    worker._set_published("j1", {"kind": "remake"}, "z10_0581_0294", {"version": 4})
+    assert store.build_jobs["j1"]["status"] == "published"
+    assert store.build_jobs["j1"]["tiles"] == ["z10_0581_0294"]
+    assert store.build_jobs["j1"]["versions"] == {"z10_0581_0294": 4}
+    worker._set_published("j2", {"kind": "code"}, "z10_0581_0294", {"version": 5})
+    assert store.build_jobs["j2"]["version"] == 5
+    assert "tiles" not in store.build_jobs["j2"]
+
+
+def test_remake_build_path_prices_its_items(tmp_path: Path) -> None:
+    """#243.3: a remake that needs making waits with the build price."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    _seed_ready_tile(store)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert store.claim_build_job("j1", worker.worker_id) is True
+    plan = {
+        "tile": "z10_0581_0294",
+        "code_only": False,
+        "items": [
+            {
+                "id": "animal_lion",
+                "kind": "animal",
+                "what": "lion",
+                "from": "fox",
+                "estimate_usd": 0.4,
+            }
+        ],
+        "improve": [],
+    }
+    worker._remake_build("j1", store.build_jobs["j1"], "z10_0581_0294", plan)
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["price_usd"] == 0.4
+    assert job["items"] == ["animal_lion"]
+    assert _group_version(store) == 1
+
+
 def test_code_job_fails_when_tile_blocks(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
     store.plans["z10_0581_0294"] = _code_plan("z10_0581_0294")

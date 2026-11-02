@@ -1473,31 +1473,27 @@ def _make_place_tile(
     raise RuntimeError(f"tile {tile} failed the world's check: {detail}")
 
 
-def make_tile(
+def _resolve_home(
     tile: str,
     habitat_grid: HabitatGrid,
     world: Path,
-    presence: dict[str, float] | None = None,
-    builder_root: Path | None = None,
-    species: dict[str, Any] | None = None,
-    species_source: SpeciesSource | None = None,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Make one tile, or the blocked reason when it can't be made.
+    builder_root: Path | None,
+) -> dict[str, Any]:
+    """The tile's habitat and home, shared by the maker and the probe.
 
-    Returns (tile, None) or (None, {"reason": ..., "habitat": ...}).
-    `presence` overrides with GBIF-style counts (tests and replays);
-    `species` overrides with a recorded Muse Spark answer. Otherwise
-    the answer comes from the cache or one model call.
+    Returns the resolved cell, habitat, home, house, the homes and
+    biomes tables, and the reef flip; or `blocked` when the tile
+    stops before any species work, or `place` with the live
+    place and its biome when the place lays the tile (#243.1).
+    The open-sea place without a biome still raises.
     """
-    from .schemas import ROOT as BUILDER_ROOT
-
     col, row = parse_tile(tile)
     eco1, _share1, eco2, share2, biome, land, water, elev = habitat_grid.cell_data(
         col, row
     )
     habitat = habitat_grid.habitat(col, row)
     if tile in excluded_tiles(builder_root):
-        return None, {"reason": "excluded", "habitat": habitat}
+        return {"blocked": {"reason": "excluded", "habitat": habitat}, "place": None}
     homes = available_homes(world)
     biomes = available_biomes(world)
     habitat = coast_habitat(eco1, habitat, land, biomes, biome)
@@ -1511,13 +1507,13 @@ def make_tile(
     home = home_for_cell(eco1, habitat, biomes, biome)
     if home is None:
         if eco1 is None or not (world / "lands" / "index.json").is_file():
-            return None, {"reason": "no_home", "habitat": habitat}
+            return {"blocked": {"reason": "no_home", "habitat": habitat}, "place": None}
         style = land_style_for(world, biome)
         if style is None:
-            return None, {"reason": "no_land", "habitat": habitat}
+            return {"blocked": {"reason": "no_land", "habitat": habitat}, "place": None}
         home = default_bundle(tile, habitat_grid, biomes, habitat, style, eco1)
         if home is None:
-            return None, {"reason": "no_home", "habitat": habitat}
+            return {"blocked": {"reason": "no_home", "habitat": habitat}, "place": None}
     house = homes.get(home, biomes[home])
     if habitat == "open_ocean":
         place = live_place_for_tile(tile, world)
@@ -1543,16 +1539,12 @@ def make_tile(
                         "all open-sea animals; a person decides"
                     )
             else:
-                return _make_place_tile(
-                    tile,
-                    habitat_grid,
-                    world,
-                    place,
-                    placed,
-                    homes.get(placed, biomes[placed]),
-                    biomes.get(placed, {}),
-                    builder_root or BUILDER_ROOT,
-                )
+                return {
+                    "blocked": None,
+                    "place": (place, placed),
+                    "homes": homes,
+                    "biomes": biomes,
+                }
     if (
         habitat == "open_ocean"
         and home in ("open_sea", "coral_reef")
@@ -1574,6 +1566,105 @@ def make_tile(
         reef_flipped = True
     else:
         reef_flipped = False
+    return {
+        "blocked": None,
+        "place": None,
+        "cell": (eco1, eco2, share2, biome, land, water, elev),
+        "habitat": habitat,
+        "home": home,
+        "house": house,
+        "homes": homes,
+        "biomes": biomes,
+        "reef_flipped": reef_flipped,
+    }
+
+
+def survey_needs_call(
+    tile: str,
+    habitat_grid: HabitatGrid,
+    world: Path,
+    cache_dir: Path,
+    builder_root: Path | None = None,
+) -> bool:
+    """True when making the tile would call the model for its survey.
+
+    Keyless: blocked and live-place tiles never survey, open sea
+    reads GBIF by code, and anything else reuses its cached
+    survey when the maker still would (#243.1).
+    """
+    from .species import cached_answer
+
+    resolved = _resolve_home(tile, habitat_grid, world, builder_root)
+    if resolved["blocked"] is not None or resolved["place"] is not None:
+        return False
+    habitat = resolved["habitat"]
+    if habitat == "open_ocean":
+        return False
+    lat, lon = center(tile)
+    animals = list_animals(world)
+    greens = list_library(world, "plants")
+    trees = list_library(world, "trees")
+    facts = tile_facts(tile, habitat_grid, world, resolved["home"], False)
+    return (
+        cached_answer(
+            cache_dir,
+            tile,
+            animals,
+            greens,
+            trees,
+            habitat,
+            lat,
+            lon,
+            survey_round(world),
+            facts,
+        )
+        is None
+    )
+
+
+def make_tile(
+    tile: str,
+    habitat_grid: HabitatGrid,
+    world: Path,
+    presence: dict[str, float] | None = None,
+    builder_root: Path | None = None,
+    species: dict[str, Any] | None = None,
+    species_source: SpeciesSource | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Make one tile, or the blocked reason when it can't be made.
+
+    Returns (tile, None) or (None, {"reason": ..., "habitat": ...}).
+    `presence` overrides with GBIF-style counts (tests and replays);
+    `species` overrides with a recorded Muse Spark answer. Otherwise
+    the answer comes from the cache or one model call.
+    """
+    from .schemas import ROOT as BUILDER_ROOT
+
+    col, row = parse_tile(tile)
+    resolved = _resolve_home(tile, habitat_grid, world, builder_root)
+    if resolved["blocked"] is not None:
+        return None, resolved["blocked"]
+    if resolved["place"] is not None:
+        place, placed = resolved["place"]
+        homes = resolved["homes"]
+        biomes = resolved["biomes"]
+        return _make_place_tile(
+            tile,
+            habitat_grid,
+            world,
+            place,
+            placed,
+            homes.get(placed, biomes[placed]),
+            biomes.get(placed, {}),
+            builder_root or BUILDER_ROOT,
+        )
+    eco1, eco2, share2, biome, land, water, elev = resolved["cell"]
+    habitat = resolved["habitat"]
+    home = resolved["home"]
+    house = resolved["house"]
+    homes = resolved["homes"]
+    biomes = resolved["biomes"]
+    reef_flipped = resolved["reef_flipped"]
     sea: dict[str, Any] | None = None
     land_style: str | None = None
     land_eco: int | None = None

@@ -1143,6 +1143,36 @@ def test_make_tile_blocks_without_animals(tmp_path: Path) -> None:
     assert blocked == {"reason": "no_animal", "habitat": "boreal_forest"}
 
 
+def test_survey_needs_call_without_a_cached_survey(tmp_path: Path) -> None:
+    """#243.1: no cached survey means the remake prices a call."""
+    from builder.tiles import survey_needs_call
+
+    world = _world(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    cache = tmp_path / "species"
+    cache.mkdir()
+    assert (
+        survey_needs_call("z10_0581_0294", habitat_grid, world, cache, tmp_path) is True
+    )
+
+
+def test_survey_needs_no_call_for_excluded_cells(tmp_path: Path) -> None:
+    """#243.1: a tile that stops before species work prices nothing."""
+    import json
+
+    from builder.tiles import survey_needs_call
+
+    world = _world(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    (tmp_path / "exclusions.json").write_text(json.dumps({"tiles": ["z10_0581_0294"]}))
+    cache = tmp_path / "species"
+    cache.mkdir()
+    assert (
+        survey_needs_call("z10_0581_0294", habitat_grid, world, cache, tmp_path)
+        is False
+    )
+
+
 def test_make_tile_blocks_excluded_cells(tmp_path: Path) -> None:
     """#133.7: a cell in exclusions.json blocks with `excluded`."""
     import json

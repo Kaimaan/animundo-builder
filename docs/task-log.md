@@ -3,6 +3,21 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #219 round report (6 surveys research-only, $3.32 total)
+
+- Ran the approved 6 surveys at $0.30/job (N, E, SW, NW, NE, SE). All six stopped the same way: $0.27-0.29 spent, then the write's $0.08 reservation refused. Research is complete and saved for every tile (12-15 species each); no survey.json except W from survey 1.
+- The pattern, from the receipts: research $0.18 (5/5/5 searches) + write try 1 ($0.03) + write try 2 ($0.07, 14-16k output tokens, ballooned) -> try 3 refused at the cap. The write loop never converges in 2 tries: the fix retry re-sends the whole draft and balloons near max tokens. A full survey costs ~$0.35+, not the $0.25-0.27 I estimated. My estimate was wrong again; sorry.
+- Coral signals (land-research mentions, not verdicts): N 19, E 18, SW 6, NW 23, NE 22, SE 15. All 8 tiles' research is on disk under jobs/ring218/ (local only); W also has its 11-fact survey.json.
+- Spend: round total $3.32 (survey 1 $1.01 + survey 2 $0.46 + probe $0.18 + 6x~$0.28), inside the approved $3.55 ($1.50 + $0.25 + 6x$0.30). Nothing further spent.
+- Question for Kai: (1) I build a write-resume that finishes the 8 survey.json from the saved research, after fixing the retry ballooning ($0 to build, ~$0.50-0.80 to run, needs approval); (2) accept research-only and publish from the research files; (3) re-run full surveys at $0.40 (~$2.80, wasteful since research repeats). I recommend (1).
+
+## 2026-11-02: inbox #220 (overlay packs, commit 7cef1f6, CI green)
+
+- Enrich and spread jobs publish `additions/tiles.json` per decision 0059 instead of remaking groups. remake_decision still judges each tile (in -> overlay, no_food -> out and flagged); no group or index file is written. Spread packs take the job id with only the overlay + manifest; enrich packs gain the overlay as a new version next to the ship's files (v1 files carried from the job folder, else the published prefix), manifest min_game 2. Jobs carry pack/overlay/no_food, never versions. The 200-tile cap is lifted (contract + schema). A job with no passing tile publishes an empty overlay and no pack. Folding on land remakes is later, per the item.
+- Judgments Kai should know (all flagged, all changeable): fish count reuses #178.3 (5 if small else 2, archetype or tags); a plant's overlay seating is its first passing tile's (densities vary per tile, one file holds one); empty overlay publishes instead of failing (routine no-op, reasons recorded, server-safe); old-way enrich (no ship pack) gets an overlay-only v1; spread pack manifests keep kind "enrich" (the pack shape §8b validates).
+- Tests: new #220.7 replays (spread lynx on 3 tiles -> 2-tile overlay, min_game 2, no group/index writes, game-checks pass; enrich lynx -> pack v2 = v1 files + overlay) plus overlay builder/checker, fish, plant, min_game and pack-files tests. Six old tests asserted the remake contract the item replaces (versions, rewritten groups); updated to the new contract, scenarios kept. One shared-fixture leak (lynx on the fake animal list broke two resurvey tests) fixed with a contained prepare hook; fake_world.py untouched.
+- Full suite 1134 passed, 12 skipped; ruff check + format clean; CI run for 7cef1f6 green. $0 spent, nothing deployed (deploy is #223).
+
 ## 2026-11-02: inbox #219 probe result ($0.18, research saved, write stopped)
 
 - Ran the approved probe: S tile re-run as fresh job probe-z10_0927_0561 (fresh id because the ledger keys spend per job and the old id carries $0.46), hard $0.25 job cap, same ring ledger.

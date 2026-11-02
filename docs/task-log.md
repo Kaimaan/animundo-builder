@@ -3,6 +3,40 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #210
+  (builder 64234b1)
+
+- The probe cut
+  the survey to
+  six keys, so
+  check_answer
+  refused it after
+  a paid survey.
+  The probe keeps
+  both outside
+  lists now, empty
+  when missing;
+  recorded species=
+  answers and
+  resurvey merges
+  do the same.
+- Tests: plan_tile
+  end to end with
+  a fake survey
+  source produces a
+  plan (fails
+  without the fix);
+  a recording
+  without the lists
+  still makes.
+- Deploy 64234b1;
+  then one survey
+  should end in a
+  plan, z10_0927_0563
+  final, compass
+  names by the reef
+  and Nuuksio.
+
 ## 2026-11-02: inbox #207
   (world e03464c;
   builder 0eaf726)

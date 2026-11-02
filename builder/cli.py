@@ -301,6 +301,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="The Storage bucket (default: the project's default bucket).",
     )
+    file_plant = sub.add_parser(
+        "file-plant", help="Seat a shipped plant in its biome, remake its tiles."
+    )
+    file_plant.add_argument("biome", help="The biome id, e.g. coral_reef.")
+    file_plant.add_argument("plant", help="The shipped plant id.")
+    file_plant.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    file_plant.add_argument("--project", default=None, help="The Firebase project.")
+    file_plant.add_argument(
+        "--storage-bucket",
+        default=None,
+        help="The Storage bucket (default: the project's default bucket).",
+    )
     place = sub.add_parser("place", help="Place requests as files (D20).")
     place_sub = place.add_subparsers(dest="place_command", required=True)
     survey = place_sub.add_parser("survey", help="Survey one place, write survey.json.")
@@ -1097,6 +1111,44 @@ def cmd_place_build(args: argparse.Namespace, world: Path) -> int:
     return 0
 
 
+def cmd_file_plant(args: argparse.Namespace) -> int:
+    from .biome import join_plant, remake_biome_tiles
+    from .worker import git_commit
+    from .worker_store import FirebaseStore, StoreError
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    try:
+        report = join_plant(world, args.biome, args.plant)
+    except ValueError as error:
+        print(f"error: cannot seat {args.plant}: {error}", file=sys.stderr)
+        return 1
+    print(
+        f"seated {args.plant} in {args.biome} "
+        f"({report['ground']}, share {report['share']:.3f}, "
+        f"total {report['total']:.3f})"
+    )
+    for pid, density in sorted(report["scaled"].items()):
+        print(f"  scaled {pid} to {density:.3f}")
+    try:
+        store = FirebaseStore(args.project, args.storage_bucket)
+    except StoreError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        out = remake_biome_tiles(
+            store, world, args.biome, args.plant, git_commit(world)
+        )
+    except ValueError as error:
+        print(f"error: cannot remake: {error}", file=sys.stderr)
+        return 1
+    print(f"remade {len(out['versions'])} tiles")
+    for tile in out["held"]:
+        print(f"held {tile}")
+    return 0
+
+
 def cmd_take(args: argparse.Namespace) -> int:
     from .build import check_draft, take_bundle, take_report
     from .worker_store import FirebaseStore, StoreError
@@ -1180,6 +1232,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_request_build(args)
     if args.command == "take":
         return cmd_take(args)
+    if args.command == "file-plant":
+        return cmd_file_plant(args)
     return cmd_not_built_yet(args.command)
 
 

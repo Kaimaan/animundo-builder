@@ -3,6 +3,36 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #213
+  (world db77b7d;
+  live publish)
+
+- z10_0583_0295
+  remade and
+  published v13
+  on world
+  db77b7d (has
+  19260b9): taiga,
+  water 0.0, its
+  roach and perch
+  fed. No
+  builder change;
+  the converter
+  was the fix.
+- check_tile
+  passes; remake
+  record remake-
+  db77b7df7b5f-
+  2026-11-02
+  (merged with
+  the reef v2
+  from #212);
+  the area reads
+  ready v13 with
+  its Finnish
+  name. 30 of 30
+  now.
+
 ## 2026-11-02: inbox #212
   (builder 131b4ff;
   live publish)

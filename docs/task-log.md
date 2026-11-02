@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #230 (place-survey 400 crash; f14862f green — ready to deploy)
+
+- Cause: #228 added `tiles_why` to the survey schema's `properties` but not to `required`; strict structured output rejects that with a 400, crashing `place_20261102_amazon` on its first model call. The replay fakes never send a schema, so they couldn't catch it.
+- Fix: `tiles_why` listed in `required` (empty string for one tile, as #228 said). Checked the other place schema (`survey_format`) — clean — and every other strict send: research ×2, looks, species survey, maker ×3. All 9 strict sends now run through `assert_strict_subset` in `test_every_strict_send_meets_the_subset`, so a new key without its `required` fails here instead of live. Non-strict sends (survey write, plans, reviews, safety) stay out by design: their optionals are legal.
+- The crashed job: no code change needed — start nothing new. It is still `building` with nothing spent and no survey file, and the next worker start re-queues it (reconcile picks up `building` jobs; the claim takes it immediately on a same-host restart, else within the 30-minute lease expiry) and it re-surveys cleanly. Pinned by `test_place_crashed_before_its_survey_runs_it_again`.
+- Ready to deploy: builder `f14862f` with green CI. Kai deploys, and the Amazon reruns (the crashed job retries itself; no new job needed).
+- Full suite 1162 passed, 12 skipped; ruff clean.
+
 ## 2026-11-02: inbox #229 (stage B readiness — ready to deploy)
 
 - Ready to deploy: builder `cef6d2a` (main tip, CI green), carrying #227 (overlay judging) and #228 (one-tile survey). Kai runs `modal deploy` and restarts the container; no worker deploy of my own.

@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #227 (overlay judging; 66afaf0 green — ready to deploy)
+
+- #227.1: enrich and spread judge only the species now (`overlay_decision` in `builder/build.py`). The remake is made as before, then: `what` in its `playable`/`prey`/`predators`/`fish` (or its plants for a plant) → overlay; wanted by the published tile but missing → `no_food` (unchanged rule); otherwise skipped with the reason. Seed, home, edges, coast, plants and `wanted` are never compared with the published tile. `remake_decision` is untouched for whole remakes.
+- #227.2: a tile whose remake raises, blocks or comes back empty skips with the reason and the job carries on; enrich jobs carry `skipped` like spread. Truly fatal errors (missing world files, store/lease) still propagate and fail loud. No-cache tiles now skip instead of failing the job as `no_cache`.
+- Tests: replay where the published shore+plants drifted and the remake holds the species → overlay + published (spread and enrich); 3-tile spread with one raising remake → that tile skipped, the other two overlaid; `overlay_decision` units (drift, fish, plants, no_food, blocked/empty). Full suite 1157 passed, 12 skipped; ruff clean. Two old tests updated to the new contract (drift overlays instead of `remake_failed`; no-cache skips instead of failing).
+- Ready to deploy: builder `66afaf0` with green CI. Kai runs `modal deploy` and restarts the container, then reruns the test0059 mountain_hare spreads on `z10_0582_0291`+`z10_0582_0293`.
+- Pike question: yes, the grid's `boreal_forest` is the pre-0056 name, deliberately. Grid habitat ids are the builder's stable vocabulary (RESOLVE biome 6 → `boreal_forest`); 0056 renamed the world's home to `boreal_taiga` but the home's habitat is still `boreal_forest`, so tile home/biome say `boreal_taiga` while habitat says `boreal_forest`. No change. The pike skips are correct on top of that: pike is filed under `boreal_lake`/`river`, and those two cells are forest, so it doesn't live there — only the message shows the grid name.
+
 ## 2026-11-02: inbox #226 (reef map + ring table; 54fe9c9 green)
 
 Ring reef shares from the map (tile, share, largest named reefs):

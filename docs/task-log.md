@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #221 (round ochre coral, commit b9e59a2, worker v23)
+
+- Hand-fixed the spec with no model calls: a round cylinder plate (detail 1.0) on a short stalk with a lighter rim, ochre plate #a86f35 / rim #d9b77c / stalk #6e4a2a, keeping the job's names, sources, seating and on: [reef]. The triangle was a 3-sided cone at detail 0.4.
+- The looks check now gets the surveyed shape ("wide, flat, round or oval plates on a short stalk") and fails a mismatch as blocking. The replay: triangle -> blocking shape issue -> fixed round plate -> clean -> final, 2 rounds.
+- remake_biome_tiles seats tiles with the biome's own numbers instead of append-and-thin: tile water == biome water, reef ≤ 1.0. docs/worker.md says how a person ships (review shipped -> overlay + publish) or turns down (not_accepted -> dropped) a checking plant job.
+- Tests: test_replay_table_coral_round_plate_and_seating (round cylinder plate, exact colours, names/sources/on kept, shape text in the review prompt, tile==biome, reef ≤ 1.0) + test_remake_matches_the_biome_numbers; plants+biome suites green, ruff clean, CI green.
+- Worker version: v23 runs builder c9d0584, WITHOUT this fix; it rides the next deploy after #223's. Nothing live, nothing shipped; soft/blue corals still wait.
+- Ask Kai (rule 8): the preview sheet's sea scene is world-side — tools/blender/build_plant.py renders grass + squirrel + land seasons unconditionally, with no spec-driven branch, and I never write animundo-world. The world side needs a sea scene (reef rock under water) for sea plants. Everything else in #221 is done.
+
 ## 2026-11-02: inbox #219 round report (6 surveys research-only, $3.32 total)
 
 - Ran the approved 6 surveys at $0.30/job (N, E, SW, NW, NE, SE). All six stopped the same way: $0.27-0.29 spent, then the write's $0.08 reservation refused. Research is complete and saved for every tile (12-15 species each); no survey.json except W from survey 1.

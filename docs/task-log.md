@@ -3,6 +3,118 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #218 (survey round: price, waiting Kai's yes)
+
+- The ring
+  around the
+  reef tile,
+  from the
+  grid ($0):
+  W 0926_0560
+  sea, land
+  0.48; S
+  0927_0561
+  sea, land
+  0.12; SW
+  0926_0561
+  rainforest,
+  land 1.0
+  (mainland);
+  N, NW, NE,
+  SE open
+  ocean. E
+  0928_0560
+  (open ocean)
+  is not in
+  the seven.
+- Planned
+  lists start
+  global: sea
+  42 (seals,
+  gulls, terns,
+  salmon...),
+  reef 13
+  (turtle,
+  clownfish,
+  tang,
+  butterflyfish,
+  shark...),
+  rainforest
+  25 (all
+  nonAustralian),
+  open sea
+  none. The
+  surveys
+  narrow each
+  to Queensland
+  waters and
+  forest.
+- Each survey
+  walks its
+  tile centre
+  (W -16.805,
+  145.723; S
+  -17.141,
+  146.074; SW
+  -17.141,
+  145.723; N
+  -16.468,
+  146.074; NW
+  -16.468,
+  145.723; NE
+  -16.468,
+  146.426; SE
+  -17.141,
+  146.426)
+  and settles:
+  reef extent
+  on W and S,
+  island or
+  flat on W
+  (land 0.48),
+  forest type
+  and
+  Australian
+  species on
+  SW, open
+  water plus
+  pelagic
+  species on
+  the four
+  ocean tiles.
+  Each keeps
+  its own
+  answers; the
+  coast walk
+  stays a
+  survey.
+- Price: a
+  live survey
+  runs about
+  $0.11 (6
+  searches, per
+  #170), so
+  the round of
+  seven should
+  cost about
+  $0.80. Ask:
+  Kai's yes
+  for the
+  survey round
+  with a $1.50
+  round cap
+  ($0.25 per
+  survey job).
+  Nothing
+  spent, nothing
+  built, no
+  deploy. Builds
+  and packs
+  get their
+  own price
+  and yes
+  later.
+
 ## 2026-11-02: inbox #217
   (builder 285564b;
   CI green run

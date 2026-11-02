@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #231 (overlay food on the published tile; 894828b green — ready to deploy)
+
+- #231.1: overlays judge food on the published tile now. The remake still decides belonging (survey/habitat as now); then `overlay_fed_on` checks every diet kind against the published tile's food kinds plus the overlay, and every hunts tag against the published living — the maker's pre-check for the game's `drop_unfed`. Unpublished tiles keep the remake's verdict (the remake is all there is).
+- #231.2: when the published tile misses a diet kind the remake grows, the overlay carries that plant (`{id, density}` with the remake's density, greedy in diet order). Every carried plant fits every passing tile's 24 (new plants only; a tile that already has one doesn't count it), so the one overlay doc feeds each tile it lands on; the verdict rechecks every tile against the merged plants. Plant-kind overlays unchanged (nothing eats them).
+- #231.3: no giving plant in the remake, or no room under 24 → `no_food`, as now.
+- Tests: replay with cloverless published tile + red-clover remake → overlay holds the hare and the clover; remake without the kind → `no_food`; 24-plant published tile → `no_food`; units for fed/hunts/carry/merge. Full suite 1169 passed, 12 skipped; ruff clean. Same-content replays (lion/lynx) unaffected.
+- Ready to deploy: builder `894828b` with green CI. Kai deploys, then reruns the mountain_hare spread on the two tiles and checks the hare in the game.
+- The double claim: the atomic claim and the owner guard are sound for distinct worker ids — `_claim_lease` refuses terminal statuses inside the transaction, and `_update_if_owner` refuses non-owners — so the stale app's write landing over `published` required both apps to share one worker id (`host:pid`, equal hostnames and pids across the two Modal apps/containers). To confirm, compare the job's `worker_id` history with the two apps' hostnames; if they collide, the fix is unique worker ids (e.g. a random suffix), done carefully — `_takeover_if_dead` parses `host:pid` today, so the takeover must learn the new shape or same-host restarts wait out the 30-minute lease. Say the word and I implement it.
+
 ## 2026-11-02: inbox #230 (reef map licence yes + coverage; 44f296e green)
 
 - #230.1: licence confirmed (CC BY 3.0 AU, Lawrey & Stewart 2016, © GBRMPA 2014); README status updated, attribution kept as written. Game-side credits are Kai's side.

@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #241 (decision 0061 food rule — food never filters, gaps instead)
+
+- Done. `check_draft.py` (world rev a0717b6) is the food rule: `builder/tiles.py` calls `tools/food.py` (`batch_eats_here` / `batch_food_gaps`) for one tile at a time, batching all diets × grounds; `compat.py` requires the rule and exits loud (exit 2) on a pre-0061 world; CI's world pin is now a0717b6.
+- Food never filters: `pick_species` keeps every diet/hunts animal; `_spread_tiles` keeps them on every tile and reports `gaps` (animal → gap food items: `kind/name/count/biome/ground`) instead of `no_food`, with `foods` per tile whose ground is eaten and counts by biome. After build, `worker.py` moves each gap animal's foods onto wild tiles of the animal's own biome (lists only, under `survey/tiles/overlay`); gap foods can appear only on tiles that were made, and animals without a `diet`/`hunts` still ride following, unreported. Plan files carry the same gaps, built by probing each placed animal's foods.
+- Answers to the asks: (1) blob kept following (harmless; still reported) — done; (2) hare/diet-less animal ends with foods — done via gaps (patch 1: hare eats → biome carry; patch 2: the same gap machinery, foods may reduce to nothing — decide while coding: nothing rideable stays unreported, so no separate yield needed); (3) make_tile.py/be_briefed have no `no_food` or selection uses left — done, builder diffs are selection-only; (4) check_place still declines to eat — nothing in the builder calls the world's `check_place.py` (the game runs it on place files); the world bump keeps the checkout consistent — done.
+- Commits b950b73 (#241) + bf7e150 (#238 code, fix-forward: b950b73's run failed because committed `worker.py` calls `place.ensure_wild_tiles`, which landed only in bf7e150; HEAD is green). Tests: full suite green in CI (1089 passed, 97 skipped); new tests pin `world_eats` (incl. bad-input guard and `eats-cases.json` replay), keep-all pick/spread, gap contents, the `eats nothing` → selection-fault wiring, and the loud pre-0061 failure. The two maker drift failures seen locally are pre-existing (world drift, reproduce on the clean tree).
+- Open: licence-free — no new data. #238 bake still running; #234.3's year.notes wording and #233's 183-home edge unchanged.
+
 ## 2026-11-02: inbox #239 (Mamirauá stage C — held by #240, not started)
 
 - Held before any work started: no stage-C code, no Mamirauá build, nothing deployed. The waiting research job is untouched. See the #240 reply below. (Logged while #238's land-cover bake runs; the items are independent.)

@@ -222,6 +222,50 @@ def test_report_flags_failing_checks_at_the_top(tmp_path: Path) -> None:
     assert "enrich_places" not in text.split("Checks failing")[1].split("</p>")[0]
 
 
+def test_report_marks_unrun_checks_on_a_stopped_job(tmp_path: Path) -> None:
+    """#217.3: verdictless checks say not run, never failing with no why."""
+    (tmp_path / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research"],
+                "results": {},
+                "failed": {"stage": "plants", "error": "job cap refuses $1.01"},
+            }
+        )
+    )
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    (checks / "enrich_places.json").write_text(json.dumps({"places": ["tl_x"]}))
+    (checks / "places.json").write_text(
+        json.dumps(
+            {
+                "ok": False,
+                "results": [
+                    {"check": "place x", "status": "fail", "problems": ["no food"]}
+                ],
+            }
+        )
+    )
+    text = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "enrich_places (not run)" in text
+    assert "enrich_places (failing)" not in text
+    assert "places (failing)" in text
+    assert "Failed:" in text and "plants: job cap refuses $1.01" in text
+
+
+def test_report_marks_verdictless_checks_recorded(tmp_path: Path) -> None:
+    """#217.3: a finished job's records are not failures either."""
+    (tmp_path / "state.json").write_text(
+        json.dumps({"completed": ["research"], "results": {}, "failed": None})
+    )
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    (checks / "enrich_places.json").write_text(json.dumps({"places": ["tl_x"]}))
+    text = build_report(tmp_path).read_text(encoding="utf-8")
+    assert "enrich_places (recorded)" in text
+    assert "(failing)" not in text
+
+
 def test_report_names_the_failing_stage(tmp_path: Path) -> None:
     """#168.3: a failed item's report says the stage and its message."""
     (tmp_path / "state.json").write_text(

@@ -160,6 +160,26 @@ def test_ledger_error_passes_through_unwrapped(tmp_path: Path) -> None:
         pipeline.run(ctx)
 
 
+def test_money_stop_names_its_stage(tmp_path: Path) -> None:
+    """#217.3: a stopped job's state says which stage stopped it."""
+
+    class CappedStage(FakeStage):
+        def run(self, ctx: JobContext) -> dict[str, Any]:
+            raise CapExceeded("job cap $1.00 refuses $1.01")
+
+    pipeline = Pipeline(
+        [FakeStage("one", tmp_path), CappedStage("two", tmp_path)],
+        tmp_path / "state.json",
+    )
+    ctx, _ = make_ctx(tmp_path)
+    with pytest.raises(CapExceeded, match="refuses"):
+        pipeline.run(ctx)
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert state["completed"] == ["one"]
+    assert state["failed"]["stage"] == "two"
+    assert "refuses" in state["failed"]["error"]
+
+
 def test_runs_stages_in_order_and_saves_state(tmp_path: Path) -> None:
     stages = [FakeStage(name, tmp_path) for name in ("one", "two", "three")]
     pipeline = Pipeline(stages, tmp_path / "state.json")

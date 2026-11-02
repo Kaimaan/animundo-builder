@@ -382,9 +382,20 @@ def _checks(job_dir: Path) -> str:
     files = sorted((job_dir / "checks").glob("*.json"))
     if not files:
         return '<h2>Checks</h2>\n<p class="muted">No draft checks recorded yet.</p>'
+    stopped = bool(_read_json(job_dir / "state.json").get("failed"))
     sections = []
     for path in files:
         data = _read_json(path)
+        if data.get("results") is None:
+            # A record with no verdicts: a stopped job never ran
+            # this check, a finished one just kept no verdicts
+            # (#217.3). Neither is "failing" with an empty why.
+            verdict = "not run" if stopped else "recorded"
+            sections.append(
+                f"<h3>{html.escape(path.stem)} ({verdict})</h3>\n"
+                '<p class="muted">No check verdicts in this file.</p>'
+            )
+            continue
         rows = []
         for entry in data.get("results", []):
             found = "".join(

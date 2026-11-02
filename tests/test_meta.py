@@ -482,6 +482,39 @@ def test_too_many_images_refused_before_send(tmp_path: Path) -> None:
     assert script.requests == []
 
 
+def test_image_bytes_never_count_as_text(tmp_path: Path) -> None:
+    """#217.1: a two-preview review reserves cents, not $1.01."""
+    import base64
+
+    script = Script([(200, chat_body())])
+    ledger = FakeLedger(Caps(1.0, 20.0, 120.0))
+    client, _ = make_client(
+        script, tmp_path, ledger=ledger, job_id="job-1", caps=ledger.caps
+    )
+    png = base64.b64encode(b"\x89PNG" + bytes(1_300_000)).decode()
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "review this coral"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{png}"},
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{png}"},
+                },
+            ],
+        }
+    ]
+    naive = len(json.dumps(messages)) // 4 * 1.25 / 1_000_000
+    assert naive > 1.0
+    client.chat(messages)
+    (reserved,) = ledger.reserved
+    assert reserved < 0.50
+
+
 def test_reserve_then_settle(tmp_path: Path) -> None:
     script = Script([(200, chat_body())])
     ledger = FakeLedger(Caps(8.0, 20.0, 120.0))

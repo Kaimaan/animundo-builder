@@ -68,7 +68,7 @@ class ConvertError(RuntimeError):
     """The world's converter refused the tile."""
 
 
-def _place_name(tile: str, world: Path) -> str:
+def place_name(tile: str, world: Path) -> str:
     """The live place's English name for this tile, or "" (#215.1)."""
     from .tiles import live_place_for_tile
 
@@ -122,7 +122,7 @@ def tile_place(
                 what,
                 kind,
                 start,
-                _place_name(str(tile.get("id", "")), world),
+                place_name(str(tile.get("id", "")), world),
             ],
             capture_output=True,
             text=True,

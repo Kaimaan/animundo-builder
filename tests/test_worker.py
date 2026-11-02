@@ -3521,3 +3521,26 @@ def test_spread_fits_a_listed_sea_home_on_a_coast_tile(
     listed["animals"] = [e for e in listed["animals"] if e["id"] != "lion"]
     (worker.world / "animal-list.json").write_text(json.dumps(listed))
     assert worker._spread_fits("j1", "animal", "lion", T) is not None
+
+
+def test_enrich_label_takes_the_live_place_name(tmp_path: Path) -> None:
+    """#217.3: the report area names the reef, not open ocean."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    places = worker.world / "places"
+    places.mkdir(parents=True)
+    (places / "au_test_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "au_test_reef",
+                "name": {"en": "Test Reef", "fi": "Testiriutta"},
+                "tiles": [[927, 560]],
+                "live": True,
+            }
+        )
+    )
+    item_dir = tmp_path / "jobs" / "j1" / "plant_1"
+    item_dir.mkdir(parents=True)
+    worker._label_enrich_item(item_dir, "z10_0927_0560")
+    state = json.loads((item_dir / "state.json").read_text())
+    assert state["params"]["area"] == "z10_0927_0560 (Test Reef)"

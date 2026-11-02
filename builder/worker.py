@@ -1526,17 +1526,24 @@ class Worker:
     def _label_enrich_item(self, item_dir: Path, tile: str) -> None:
         """An enrich item's report labels: its tile and kind (#150.2).
 
-        The tile's compass name points from the nearest place, the
-        way a plan would name it; no survey answer is spent.
+        A tile in a live place takes the place's name; otherwise
+        the tile's compass name points from the nearest place,
+        the way a plan would name it (#217.3). No survey answer
+        is spent either way.
         """
         from . import build as build_mod
+        from .enrich import place_name
         from .grid import center, parse_tile
         from .plan import plan_name
 
-        col, row = parse_tile(tile)
-        habitat = self._habitat_grid().habitat(col, row)
-        lat, lon = center(tile)
-        name = plan_name(habitat, lat, lon, self.world)["en"]
+        name = ""
+        if self.world is not None:
+            name = place_name(tile, self.world)
+        if not name:
+            col, row = parse_tile(tile)
+            habitat = self._habitat_grid().habitat(col, row)
+            lat, lon = center(tile)
+            name = plan_name(habitat, lat, lon, self.world)["en"]
         build_mod.write_state_params(
             item_dir, {"area": f"{tile} ({name})", "kind": "enrich"}
         )

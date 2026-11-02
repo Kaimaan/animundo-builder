@@ -67,6 +67,12 @@ DEFAULT_MAX_TOKENS = 16384
 # Muse Spark Open reasons first and the reasoning counts against the
 # cap: a two-image review burns past 2000 tokens before answering.
 OPEN_DEFAULT_MAX_TOKENS = 8000
+#: Input tokens one image part counts in a reservation (#217.1).
+#: The model bills images by resolution, not bytes: a ~1280px
+#: image adds roughly 1,300-1,500 input tokens. Every preview
+#: the reviews send is 1280x960, so 2048 covers each with room;
+#: the settle still charges the real usage the answer reports.
+IMAGE_INPUT_TOKENS = 2048
 MAX_IMAGES_PER_CALL = 4
 MAX_SEARCHES_PER_CALL = 5
 
@@ -709,8 +715,38 @@ class MetaClient:
 
 
 def _estimate_input_tokens(payload: Any) -> int:
-    """Rough input size for the reservation: four characters a token."""
-    return max(1, len(json.dumps(payload, default=str)) // 4)
+    """Rough input size for the reservation: four characters a token.
+
+    Image parts count flat, never their base64: counting a
+    megabyte of PNG as text over-reserved a two-preview review
+    at $1.01 and stopped the job (#217.1).
+    """
+    cleaned, images = _without_image_bytes(payload)
+    text = max(1, len(json.dumps(cleaned, default=str)) // 4)
+    return text + images * IMAGE_INPUT_TOKENS
+
+
+def _without_image_bytes(node: Any) -> tuple[Any, int]:
+    """The payload with image bytes blanked, and how many images."""
+    if isinstance(node, dict):
+        if node.get("type") in ("image_url", "input_image"):
+            return {"type": node["type"]}, 1
+        images = 0
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            value, count = _without_image_bytes(value)
+            out[key] = value
+            images += count
+        return out, images
+    if isinstance(node, list):
+        images = 0
+        out_list: list[Any] = []
+        for value in node:
+            value, count = _without_image_bytes(value)
+            out_list.append(value)
+            images += count
+        return out_list, images
+    return node, 0
 
 
 def _is_grounded(tools: list[dict[str, Any]] | None) -> bool:

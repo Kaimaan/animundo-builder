@@ -625,16 +625,22 @@ def _reef_tile() -> dict[str, Any]:
     }
 
 
-def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
-    """#215.3: convert, build from a coral, file; the reef stays in budget."""
+_CORAL_SPECS = (
+    "branching_staghorn_coral",
+    "closed_brain_coral",
+    "giant_sea_fan",
+    "halimeda",
+    "dugong_grass",
+    "paddle_grass",
+)
+
+
+def _write_reef_job(tmp_path: Path, checkout: Path) -> Path:
+    """The table_coral enrich item's inputs, converted for real."""
     import shutil
 
-    from builder.biome import join_plant, plant_ground
     from builder.enrich import tile_place
 
-    checkout = Path(__file__).resolve().parent.parent.parent / "animundo-world"
-    if not (checkout / "tools" / "tile_region.py").is_file():
-        pytest.skip("needs a world checkout beside the builder")
     region = tile_place(
         _reef_tile(),
         checkout,
@@ -666,19 +672,16 @@ def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
     schema = json.loads(schema_path.read_text())
     schema["$defs"]["plant_model"]["properties"]["grows"] = {}
     schema_path.write_text(json.dumps(schema))
-    for stem in (
-        "branching_staghorn_coral",
-        "closed_brain_coral",
-        "giant_sea_fan",
-        "halimeda",
-        "dugong_grass",
-        "paddle_grass",
-    ):
+    for stem in _CORAL_SPECS:
         shutil.copy(
             checkout / "models" / "plants" / f"{stem}.json",
             world / "models" / "plants" / f"{stem}.json",
         )
-    draft = dict(
+    return world
+
+
+def _coral_draft() -> dict[str, Any]:
+    return dict(
         SPEC,
         id="table_coral",
         name="Table coral",
@@ -686,21 +689,19 @@ def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
         kind="bush",
         grows={"on": ["seabed"], "density": 0.2},
     )
-    review = {"species": "table_coral", "round": 1, "issues": []}
-    chat = ScriptChat([json.dumps(draft), json.dumps(review)])
 
-    def match(world: Path, latin: str) -> dict[str, Any]:
-        assert latin == "Acropora hyacinthus"
-        return {"taxon": TAXON, "files": []}
 
-    result = PlantsStage(match=match, chat=chat, build=_build_ok).run(
-        _ctx(tmp_path, world)
-    )
-    assert result["plant_files"] == ["models/plants/table_coral.json"]
-    final = json.loads(
-        (tmp_path / "models" / "plants" / "table_coral.json").read_text()
-    )
-    assert final["grows"]["on"] == ["reef"]
+def _match_coral(world: Path, latin: str) -> dict[str, Any]:
+    assert latin == "Acropora hyacinthus"
+    return {"taxon": TAXON, "files": []}
+
+
+def _file_into_reef(tmp_path: Path, checkout: Path, final: dict[str, Any]) -> None:
+    """File the built coral; the reef ground stays within budget."""
+    import shutil
+
+    from builder.biome import join_plant, plant_ground
+
     filed = tmp_path / "fileworld"
     (filed / "tools").mkdir(parents=True)
     for tool in ("biomes.py", "layers.py", "food.py"):
@@ -714,14 +715,7 @@ def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
         checkout / "lands" / "tropical_moist.json",
         filed / "lands" / "tropical_moist.json",
     )
-    for stem in (
-        "branching_staghorn_coral",
-        "closed_brain_coral",
-        "giant_sea_fan",
-        "halimeda",
-        "dugong_grass",
-        "paddle_grass",
-    ):
+    for stem in _CORAL_SPECS:
         shutil.copy(
             checkout / "models" / "plants" / f"{stem}.json",
             filed / "models" / "plants" / f"{stem}.json",
@@ -738,15 +732,7 @@ def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
     biome = json.loads((filed / "biomes" / "coral_reef.json").read_text())
     specs = {
         stem: json.loads((filed / "models" / "plants" / f"{stem}.json").read_text())
-        for stem in (
-            "branching_staghorn_coral",
-            "closed_brain_coral",
-            "giant_sea_fan",
-            "halimeda",
-            "dugong_grass",
-            "paddle_grass",
-            "table_coral",
-        )
+        for stem in (*_CORAL_SPECS, "table_coral")
     }
     reef = sum(
         entry["density"]
@@ -755,3 +741,127 @@ def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
     )
     assert reef <= 1.0
     assert "table_coral" in {entry["id"] for entry in biome["plants"]["water"]}
+
+
+def _checkout() -> Path:
+    """The world checkout beside the builder, or skip the replay."""
+    checkout = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (checkout / "tools" / "tile_region.py").is_file():
+        pytest.skip("needs a world checkout beside the builder")
+    return checkout
+
+
+def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
+    """#215.3: convert, build from a coral, file; the reef stays in budget."""
+    checkout = _checkout()
+    world = _write_reef_job(tmp_path, checkout)
+    draft = _coral_draft()
+    review = {"species": "table_coral", "round": 1, "issues": []}
+    chat = ScriptChat([json.dumps(draft), json.dumps(review)])
+    result = PlantsStage(match=_match_coral, chat=chat, build=_build_ok).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/table_coral.json"]
+    final = json.loads(
+        (tmp_path / "models" / "plants" / "table_coral.json").read_text()
+    )
+    assert final["grows"]["on"] == ["reef"]
+    _file_into_reef(tmp_path, checkout, final)
+
+
+def _big_png() -> bytes:
+    """A 1280x960 PNG the size of a real preview, incompressible."""
+    import os
+
+    shot = Image.new("RGB", (1280, 960))
+    shot.frombytes(os.urandom(1280 * 960 * 3))
+    buf = io.BytesIO()
+    shot.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _build_big(sandbox: Path, plant_id: str) -> dict[str, Any]:
+    """The build, leaving a full-size preview like the real one."""
+    previews = sandbox / "models" / "previews" / "plants"
+    previews.mkdir(parents=True, exist_ok=True)
+    (previews / f"{plant_id}.png").write_bytes(_big_png())
+    assets = sandbox / "assets" / "plants"
+    assets.mkdir(parents=True, exist_ok=True)
+    (assets / f"{plant_id}.glb").write_bytes(b"glb-bytes")
+    return {"ok": True, "summary": f"{plant_id}: 40 triangles", "log": "BUILT"}
+
+
+class _Script:
+    """Canned HTTP answers for the real client, recording requests."""
+
+    def __init__(self, answers: list[tuple[int, dict[str, Any]]]) -> None:
+        import httpx
+
+        self.answers = list(answers)
+        self.requests: list[httpx.Request] = []
+
+    def __call__(self, request: Any) -> Any:
+        import httpx
+
+        self.requests.append(request)
+        status, body = self.answers.pop(0)
+        return httpx.Response(status, json=body)
+
+
+def _chat_body(content: str) -> dict[str, Any]:
+    return {
+        "id": "chatcmpl-test",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "muse-spark-1.3",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 50, "completion_tokens": 60, "total_tokens": 110},
+    }
+
+
+def test_replay_table_coral_under_penny_cap(tmp_path: Path) -> None:
+    """#217.4: the capped replay gets past plants and ships on the reef."""
+    import httpx
+
+    from builder.ledger import Caps, FileLedger
+    from builder.meta import CostLogger, MetaClient
+
+    checkout = _checkout()
+    world = _write_reef_job(tmp_path, checkout)
+    (world / "models" / "previews" / "plants" / "bilberry.png").write_bytes(_big_png())
+    draft = _coral_draft()
+    review = {"species": "table_coral", "round": 1, "issues": []}
+    naive = (
+        (len(json.dumps(draft)) + 2 * len(_big_png()) * 4 // 3) // 4 * 1.25 / 1_000_000
+    )
+    assert naive > 1.0
+    script = _Script(
+        [(200, _chat_body(json.dumps(draft))), (200, _chat_body(json.dumps(review)))]
+    )
+    ledger = FileLedger(tmp_path / "ledger.json")
+    client = MetaClient(
+        api_key="fake-test-key",
+        model="muse-spark-1.3",
+        logger=CostLogger(tmp_path / "cost.jsonl"),
+        ledger=ledger,
+        job_id="replay/plant_table_coral",
+        caps=Caps(1.0, 20.0, 120.0),
+        http_client=httpx.Client(transport=httpx.MockTransport(script)),
+        sleeper=lambda seconds: None,
+    )
+    result = PlantsStage(match=_match_coral, chat=client.chat, build=_build_big).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/table_coral.json"]
+    final = json.loads(
+        (tmp_path / "models" / "plants" / "table_coral.json").read_text()
+    )
+    assert final["grows"]["on"] == ["reef"]
+    assert ledger.job_spent("replay/plant_table_coral") < 0.01
+    _file_into_reef(tmp_path, checkout, final)

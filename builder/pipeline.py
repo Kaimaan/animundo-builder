@@ -177,10 +177,14 @@ class Pipeline:
             _set_stage(ctx, stage.name)
             try:
                 result = stage.run(ctx)
+            except (BudgetExceeded, CapExceeded, LedgerError) as error:
+                # A money stop names its stage like any failure, so
+                # the report says what stopped and where (#217.3);
+                # the error itself still passes through unwrapped.
+                state["failed"] = {"stage": stage.name, "error": str(error)}
+                self._save(state)
+                raise
             except (
-                BudgetExceeded,
-                CapExceeded,
-                LedgerError,
                 MetaAuthError,
                 OffSwitch,
                 SpendUncertain,

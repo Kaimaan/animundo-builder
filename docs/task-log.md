@@ -3,6 +3,46 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #207
+  (world e03464c;
+  builder 0eaf726)
+
+- The place file
+  stays the
+  record. New
+  `builder place
+  file-pack`
+  merges a
+  shipped pack's
+  species: old
+  packs read
+  their
+  additions, new
+  packs recompute
+  (playable,
+  tag-rule
+  predators/prey;
+  featured stays
+  hand-done). The
+  ship writes
+  nothing new: a
+  delta file
+  needs a game
+  change first.
+- Backfill: reef
+  gains
+  hammerhead
+  (playable +
+  predator, live
+  stays false).
+- Test:
+  missing-pack-
+  species covers
+  old and new
+  packs; the
+  reef checks
+  clean live.
+
 ## 2026-11-02: inbox #208
   (builder f47fd37)
 

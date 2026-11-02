@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #230 (reef map licence yes + coverage; 44f296e green)
+
+- #230.1: licence confirmed (CC BY 3.0 AU, Lawrey & Stewart 2016, © GBRMPA 2014); README status updated, attribution kept as written. Game-side credits are Kai's side.
+- Coverage plumbing for #230.2 (no behavior change yet): `reef.json.gz` carries `extent` (looked-at z10 columns 890–960, rows 530–600), and `HabitatGrid.reef_covered` tells "map says no reef" apart from "no data". NW still flips to `coral_reef`; the #198.2 marine-coast path is untouched outside the map.
+- NOT YET DONE — the W/S flip. Question for Kai (my recommendation is c): inside-coverage below-threshold sea cells still build from the eco-150 listed `coral_reef` home, because every non-coral outcome fails the world's tile check or the blend contract: (1) the only home listing ecoregion 150 is `coral_reef`, so a generic-sea W/S tile fails `check_tile.py` ("home doesn't list the tile's ecoregion"); (2) a 0.002/0.057 reef blend fails both the builder schema and the world check (`blend.share` must be 0.1–0.5). Options: (a) I ship generic-sea W/S + tiny blends and the game side relaxes the check to accept them; (b) W/S block `no_home` until the world has a 150-listing sea home (ring gets holes until then); (c) RECOMMENDED: reef blends only ship at share ≥ 0.1 like eco blends, and W/S keep building from `coral_reef` until the world has a 150-listing sea home — shippable today, with the reef shares already recorded in the grid for the remake. The flip (or the blend floor) lands right after the answer.
+- Full suite 1163 passed, 12 skipped; ruff clean.
+
 ## 2026-11-02: inbox #230 (place-survey 400 crash; f14862f green — ready to deploy)
 
 - Cause: #228 added `tiles_why` to the survey schema's `properties` but not to `required`; strict structured output rejects that with a 400, crashing `place_20261102_amazon` on its first model call. The replay fakes never send a schema, so they couldn't catch it.

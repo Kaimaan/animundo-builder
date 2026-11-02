@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #232 (coast land builds taiga; 2bdbf2c green — ready to deploy)
+
+- Where the two cells became sea: the grid's own habitat (land 0.16/0.12 < 0.5 → `sea`), not the flip.
+- #232.1: a `sea` cell with land now builds from its land habitat's home when one lists the ecoregion (maker and planner); the coast mask carries the sea. Land under 0.1 is open ocean by definition, so exception 1 is the untouched open-sea path; without a land home it stays sea (#198.2), which keeps the GBR ring on the reef-map rule (no rainforest home for eco 150) — #230's tests all still pass.
+- #232.2: sea animals stay through the unchanged candidate path (a coast `boreal_forest` tile takes sea animals exactly as `z10_0582_0296` does); the replay keeps its gull next to the fox.
+- Tests: `z10_0583_0296` replay plans `boreal_taiga` with a coast, fox and gull; `z10_0581_0297` and the Helsinki plan updated to the same; a sea cell with no land home stays `sea`. Full suite 1170 passed locally; 3 failures (`test_replacing_plants`, 2× `test_maker`) are pre-existing world drift — they fail identically on clean HEAD because the checkout moved to the new 0061 food rule mid-session, and CI (pinned world) is green.
+- #232.4: run `node admin.mjs remake` on the two tiles after deploying (game-side command, Kai's side). Price first: both need fresh paid surveys — the cached surveys describe sea, and the habitat flip changes the facts fingerprint, so the cache misses. ≈$0.40 per tile (≈$0.80 the pair) from the #219 round measurements.
+- Ready to deploy: builder `2bdbf2c` with green CI. Kai deploys, then remakes.
+
 ## 2026-11-02: inbox #230 (W/S decision c; 82be3c7 green — ready to deploy)
 
 - Kai picked (c): reef blends ship at share 0.1 and up like eco blends, and W/S keep building from the eco-150 listed `coral_reef` home until the world has a 150-listing sea home. Below 0.1 the share stays in the grid (and the ring table) but rides no tile.

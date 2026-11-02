@@ -3,6 +3,12 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #229 (stage B readiness — ready to deploy)
+
+- Ready to deploy: builder `cef6d2a` (main tip, CI green), carrying #227 (overlay judging) and #228 (one-tile survey). Kai runs `modal deploy` and restarts the container; no worker deploy of my own.
+- Next: Kai starts `node admin.mjs place "Amazon" --want capybara,anaconda` (budget $1.50, research only). Nothing else is needed from me before it runs. After it runs I take the first real survey's spend and replace the $0.50-per-tile placeholder with a measured price (#229.2, #226.4), stated in the log.
+- Expected: `no_biome` or a thin `rainforest`; either way the research is kept for the hand-made Amazon biome, and stage C waits for Kai's yes on the shown price. The #222A judgments stand confirmed (#229.4).
+
 ## 2026-11-02: inbox #228 (one tile default; cef6d2a green)
 
 - #228.1: the place survey prompt picks one z10 tile by default — the start spot's tile (1,024 m across, enough to start in).

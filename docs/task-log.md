@@ -3,6 +3,77 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #209
+  (world 105aee5;
+  builder 946a442,
+  05d514d)
+
+- A publish with
+  no job of its
+  own records its
+  pass (946a442):
+  one build_jobs
+  remake doc,
+  published, the
+  changed tiles
+  with versions,
+  the world, cost
+  0, plus its
+  history rows.
+  Jobbed publishes
+  write nothing.
+  The contract
+  takes kind
+  remake (tiles,
+  no single tile;
+  enrich keeps
+  its 200 cap).
+- Code tiles
+  require
+  name{en,fi}
+  (05d514d); open
+  ocean keeps an
+  English-only sea
+  name where the
+  table has no
+  fi. A remake
+  backfills a
+  missing name,
+  so z10_0927_0562
+  gains one on
+  the next pass.
+- The compass
+  uses each
+  place's filed
+  fi_gen, cases
+  fi by rule
+  without it,
+  and skips a
+  place with no
+  fi, never
+  Englishing it.
+  World 105aee5
+  files the three
+  genitives word
+  for word from
+  the inbox; the
+  three compass
+  lines read
+  exactly as
+  specified.
+- Tests: the
+  remake record
+  with exactly
+  its tiles and
+  versions, the
+  backfill, the
+  filed genitives,
+  no English
+  place name
+  inside fi, the
+  schema both
+  ways.
+
 ## 2026-11-02: inbox #210
   (builder 64234b1)
 

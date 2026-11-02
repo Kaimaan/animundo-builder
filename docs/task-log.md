@@ -3,6 +3,75 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #214
+  (builder 2a7fe0b)
+
+- Filing seats a
+  shipped plant
+  in its biome
+  (2a7fe0b): the
+  newcomer takes
+  about the
+  average share
+  of its ground,
+  the plants
+  already there
+  scale down in
+  proportion so
+  the ground
+  stays ≤ 1.0,
+  then flatten.
+  Reef, bog and
+  open ground
+  share the rule.
+  builder
+  file-plant runs
+  the whole
+  step, then
+  remakes the
+  biome's tiles
+  by code ($0)
+  and publishes.
+  Packs still
+  carry only the
+  model; the
+  worker needs
+  no changes.
+- The reef with
+  table_coral
+  (dry run on
+  the real
+  biome): before
+  staghorn 0.34,
+  brain 0.30,
+  fan 0.26,
+  halimeda 0.08
+  (0.98); after
+  0.262, 0.231,
+  0.200, 0.062
+  plus table
+  coral 0.245
+  (1.000).
+  Grasses stay
+  0.25/0.25.
+- Tests: the
+  full-reef
+  scale, another
+  ground
+  untouched,
+  room without
+  scaling, twice
+  and unknown
+  refused, the
+  tile remake
+  with its job
+  record. No
+  live changes:
+  table_coral
+  awaits the $1
+  enrich session,
+  then filing.
+
 ## 2026-11-02: inbox #213
   (world db77b7d;
   live publish)

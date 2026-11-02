@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #228 (one tile default; cef6d2a green)
+
+- #228.1: the place survey prompt picks one z10 tile by default — the start spot's tile (1,024 m across, enough to start in).
+- #228.2: more tiles only across a tile side, up to the same 2×2 rectangle; the answer carries `tiles_why` (one sentence: which side, why) and the check refuses 2+ tiles without it. `research.tiles_why` carries the sentence (blank for one tile); reused pre-#228 survey files read back-compatibly.
+- #228.3: judgment for Kai — the price is now per picked tile ($0.50 × tiles), so a 1-tile Amazon quotes $0.50 and a 2-tile place $1.00. The missing-items list stays in the research for information, but the quote no longer multiplies by it. Still a placeholder until #229.2 measures the real stage-B run.
+- #228.4: no change — `check_place.py` and the game still allow 1–4 tiles (game-side, untouched).
+- Tests: replay with 1 tile passes (quoted $0.50); 2 tiles without `tiles_why` fails `bad_survey`; 2 tiles with a reason passes (quoted $1.00). Full suite 1160 passed, 12 skipped; ruff clean. No deploy needed before stage B's go.
+
 ## 2026-11-02: inbox #227 (overlay judging; 66afaf0 green — ready to deploy)
 
 - #227.1: enrich and spread judge only the species now (`overlay_decision` in `builder/build.py`). The remake is made as before, then: `what` in its `playable`/`prey`/`predators`/`fish` (or its plants for a plant) → overlay; wanted by the published tile but missing → `no_food` (unchanged rule); otherwise skipped with the reason. Seed, home, edges, coast, plants and `wanted` are never compared with the published tile. `remake_decision` is untouched for whole remakes.

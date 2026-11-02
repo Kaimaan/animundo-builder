@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #243 (remake command — a job of kind `remake`; ready to deploy)
+
+- Item 1, the document: `node admin.mjs remake <tile>` writes one `build_jobs` doc — kind `remake`, the tile in `tiles` (one tile; the contract already requires `tiles` for this kind), optional `budget_usd`. No new collection, no contract change: the border policy already knows kind `remake` and moves areas from the published doc's `tiles`+`versions`. The worker claims non-terminal remake docs and runs them; deploy the worker before the command's first use (an old worker just leaves the kind queued, #199.3).
+- The worker runs it exactly as a new border request: readiness first (the tile must be live, else `not_ready` — no `too_far` refusal, a ready tile earned its place); a survey gate (a keyless probe, `survey_needs_call`, sharing the maker's own home resolution and cache checks, so a gate can never miss a spend); a fresh plan into `plans/{tile}`; the world's checks inside the make; a code tile published at once, or the plan's items priced and built after approval through the existing checking/review/ship path. Anything that would spend stops at `waiting_yes` with `price_usd` first (`remake_yes {cap}` / `remake_no`, caps $0.01–$10 like places); the survey estimate is $0.05. The old version stays live until the publish — nothing before it touches the group file or the areas — and the published write carries `tiles`+`versions` so areas follow, with a `remade` history row carrying the cost. Names stay the survey's en+fi.
+- The area's "remake in progress" display is game-side: key it off a non-terminal kind-`remake` job naming the tile; the builder never writes the area. First real use stays the reef ring per #243.2, with its price first and Kai's yes — not run here.
+- Commit 437c3fb, CI green. Tests: a remake with no cached survey waits priced on v1 with no plan and no call; yes → v1 still live → published v2 with `tiles`+`versions`; build path waits with the items' price; unready/bad tiles and a no fail loud; `_set_published` unit pins the remake fields. Full suite 1194 passed; the 2 maker failures are pre-existing world drift (fail identically on the clean tree).
+- Ready to deploy: builder `437c3fb` with green CI. Kai deploys, the reviewer adds the command to that doc.
+
 ## 2026-11-02: inbox #242 (Helsinki coast remake — both tiles live as taiga)
 
 - Done by hand the way #213 did (`admin.mjs remake` still doesn't exist): builder 7ac3db0 (past 2bdbf2c), world main f18175405dd1. Fresh model surveys (the cached ones describe sea), made by code, the world's `check_tile` passes on both (tile/animals/region), published with one `remake` job record so areas follow.

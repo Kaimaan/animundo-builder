@@ -61,10 +61,18 @@
       "description": "For enrich and spread, when published: the tiles in the overlay pack.",
       "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
     },
-    "no_food": {
-      "type": "array",
-      "description": "For enrich and spread, when published: the listed tiles left out of the overlay for food.",
-      "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
+    "gaps": {
+      "type": "object",
+      "description": "For enrich and spread, when published: per-tile food gaps {tile: {diet, hunts}}.",
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "diet": {"type": "array", "items": {"type": "string"}},
+          "hunts": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["diet", "hunts"]
+      }
     },
     "budget_usd": {"type": "number", "minimum": 0},
     "version": {

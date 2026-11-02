@@ -1087,6 +1087,37 @@ def _file_lion(world: Path, diet: list[str]) -> None:
     (world / "animal-list.json").write_text(json.dumps(listed))
 
 
+def _link_food_rule(world: Path) -> None:
+    """The checkout's food rule into the fake world, or skip without it (#241.3).
+
+    A symlink, not a copy: the rule always runs from the world
+    checkout beside the builder.
+    """
+    from builder.schemas import ROOT
+
+    real = ROOT.parent / "animundo-world" / "tools" / "food.py"
+    if not real.is_file():
+        pytest.skip("needs a 0061 world checkout next to the builder")
+    tools = world / "tools"
+    tools.mkdir(exist_ok=True)
+    link = tools / "food.py"
+    if not link.exists():
+        link.symlink_to(real)
+    food_dir = world / "food"
+    food_dir.mkdir(exist_ok=True)
+    rules = food_dir / "rules.json"
+    if not rules.is_file():
+        rules.write_text(json.dumps({"kinds": {"grass": {"from": "grass"}}}))
+    for home_path in (world / "homes").glob("*.json"):
+        try:
+            home = json.loads(home_path.read_text())
+        except ValueError:
+            continue
+        if isinstance(home, dict) and "ground_cover" not in home:
+            home["ground_cover"] = {"grass": 0.15, "plants": []}
+            home_path.write_text(json.dumps(home))
+
+
 def test_enrich_review_overlays_only_the_tiles_that_list_it(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -1193,7 +1224,7 @@ def test_enrich_review_overlays_only_the_tiles_that_list_it(
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["overlay"] == [A, B]
-    assert job["no_food"] == []
+    assert job["gaps"] == {}
     assert "versions" not in job
     assert job["pack"] == "packs/animal_lion/1/"
     tiles_doc, manifest = _pack_files(store, job["pack"])
@@ -1281,7 +1312,7 @@ def test_enrich_review_overlays_drifted_tiles(tmp_path: Path, monkeypatch: Any) 
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["overlay"] == [A, B]
-    assert job["no_food"] == []
+    assert job["gaps"] == {}
     assert job["skipped"] == {}
 
 
@@ -1915,8 +1946,8 @@ def test_enrich_review_overlays_a_blocked_tile(
     assert store.blobs[blob] == before
 
 
-def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
-    """#220: the unfed lion stays out; the report says no_food, no pack."""
+def test_enrich_review_flags_gaps(tmp_path: Path, monkeypatch: Any) -> None:
+    """#241.2: the half-fed lion stays, with gaps in the report."""
     import json
 
     from builder.grid import group_path
@@ -1954,7 +1985,8 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
         }
     ).encode("utf-8")
     assert worker.world is not None
-    _file_lion(worker.world, ["honey"])
+    _file_lion(worker.world, ["grass", "honey"])
+    _link_food_rule(worker.world)
     item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
     item_dir.mkdir(parents=True)
     (item_dir / "report.html").write_text("<html></html>", encoding="utf-8")
@@ -1979,13 +2011,14 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["overlay"] == []
-    assert job["no_food"] == [A]
-    assert "pack" not in job
+    assert job["overlay"] == [A]
+    assert job["gaps"] == {A: {"diet": ["honey"], "hunts": []}}
+    assert job["pack"] == "packs/animal_lion/1/"
     assert "versions" not in job
     assert store.blobs[blob] == before
     report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
-    assert "no_food z10_0581_0294" in report
+    assert f"gaps {A}" in report
+    assert "honey" in report
 
 
 def _two_tile_lab(
@@ -2106,7 +2139,7 @@ def test_enrich_review_ships_only_tiles_that_passed_their_places(
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["overlay"] == [A]
-    assert job["no_food"] == []
+    assert job["gaps"] == {}
     assert "versions" not in job
     tiles_doc, _manifest = _pack_files(store, job["pack"])
     assert tiles_doc["tiles"] == [A]
@@ -3477,6 +3510,9 @@ def _spread_world(
     block = boreal_3x3()
     edge = {f"{c},{r}": list(block["581,294"]) for r in (294, 295, 296) for c in (579,)}
     edge.update({f"{c},296": list(block["581,294"]) for c in (580, 581)})
+    edge.update(
+        {f"{c},{r}": list(block["581,294"]) for r in (293, 294, 295) for c in (583,)}
+    )
     worker = _flow_worker(tmp_path, store, {**block, **edge, **boreal_3x3(590, 298)})
     assert worker.world is not None
     if prepare is not None:
@@ -3551,7 +3587,7 @@ def test_spread_runs_keyless_and_skips_the_tile_without_it(
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["overlay"] == [A]
-    assert job["no_food"] == []
+    assert job["gaps"] == {}
     assert job["skipped"] == {C: "lion is not in the tile's survey"}
     assert job["cost_usd"] == 0.0
     assert "versions" not in job
@@ -3715,15 +3751,17 @@ def _clover_drift(monkeypatch: Any) -> None:
     monkeypatch.setattr(tiles_mod, "make_tile", drifted)
 
 
-def test_spread_carries_the_plant_the_published_tile_lacks(
+def test_spread_hare_stays_with_clover_gaps_and_no_plants(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#231.2: the remake's red clover feeds the hare on its old tile."""
+    """#241.2: the remake's clover rides no doc; gaps list clover."""
     from builder.species import Source as SpeciesSource
 
     A = "z10_0581_0294"
     store = FakeStore()
     worker, cache = _hare_world(tmp_path, store, {A: ("fox", "mountain_hare", "vole")})
+    assert worker.world is not None
+    _link_food_rule(worker.world)
     store.build_jobs["j1"] = _spread_job(
         tiles=[A], spread={"kind": "animal", "what": "mountain_hare"}
     )
@@ -3737,21 +3775,63 @@ def test_spread_carries_the_plant_the_published_tile_lacks(
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["overlay"] == [A]
-    assert job["no_food"] == []
+    assert job["gaps"] == {A: {"diet": ["clover"], "hunts": []}}
     tiles_doc, _manifest = _pack_files(store, job["pack"])
     assert tiles_doc["playable"] == ["mountain_hare"]
-    assert tiles_doc["plants"]["cover"] == [{"id": "red_clover", "density": 0.2}]
+    assert "plants" not in tiles_doc
 
 
-def test_spread_no_food_when_the_remake_lacks_the_kind_too(
+def test_spread_hare_replay_covers_both_tiles_with_gaps(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#231.3: no clover anywhere feeds nothing; the tile is no_food."""
+    """#241.2: the #231 hare replay: both tiles overlaid, gaps list clover."""
+    from builder.species import Source as SpeciesSource
+
+    A = "z10_0581_0294"
+    B = "z10_0582_0294"
+    store = FakeStore()
+    worker, cache = _hare_world(
+        tmp_path,
+        store,
+        {
+            A: ("fox", "mountain_hare", "vole"),
+            B: ("fox", "mountain_hare", "vole"),
+        },
+    )
+    assert worker.world is not None
+    _link_food_rule(worker.world)
+    store.build_jobs["j1"] = _spread_job(
+        tiles=[A, B], spread={"kind": "animal", "what": "mountain_hare"}
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A, B]
+    assert job["gaps"] == {
+        A: {"diet": ["clover"], "hunts": []},
+        B: {"diet": ["clover"], "hunts": []},
+    }
+    tiles_doc, _manifest = _pack_files(store, job["pack"])
+    assert tiles_doc["tiles"] == [A, B]
+    assert "plants" not in tiles_doc
+
+
+def test_spread_hare_stays_when_no_clover_grows_anywhere(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#241.2: no clover anywhere still overlays, with gaps."""
     from builder.species import Source as SpeciesSource
 
     A = "z10_0581_0294"
     store = FakeStore()
     worker, cache = _hare_world(tmp_path, store, {A: ("fox", "mountain_hare", "vole")})
+    assert worker.world is not None
+    _link_food_rule(worker.world)
     store.build_jobs["j1"] = _spread_job(
         tiles=[A], spread={"kind": "animal", "what": "mountain_hare"}
     )
@@ -3763,19 +3843,23 @@ def test_spread_no_food_when_the_remake_lacks_the_kind_too(
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["overlay"] == []
-    assert job["no_food"] == [A]
-    assert "pack" not in job
+    assert job["overlay"] == [A]
+    assert job["gaps"] == {A: {"diet": ["clover"], "hunts": []}}
+    assert "pack" in job
 
 
-def test_spread_no_food_when_the_tile_is_full(tmp_path: Path, monkeypatch: Any) -> None:
-    """#231.2: 24 published plants leave no room for the clover."""
+def test_spread_hare_stays_when_the_tile_is_full(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#241.2: 24 published plants change nothing; gaps list clover."""
     from builder.grid import group_path
     from builder.species import Source as SpeciesSource
 
     A = "z10_0581_0294"
     store = FakeStore()
     worker, cache = _hare_world(tmp_path, store, {A: ("fox", "mountain_hare", "vole")})
+    assert worker.world is not None
+    _link_food_rule(worker.world)
     blob_path = group_path(A)
     published = json.loads(store.blobs[blob_path].decode("utf-8"))
     published["tiles"][A]["plants"] = {
@@ -3794,9 +3878,9 @@ def test_spread_no_food_when_the_tile_is_full(tmp_path: Path, monkeypatch: Any) 
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["overlay"] == []
-    assert job["no_food"] == [A]
-    assert "pack" not in job
+    assert job["overlay"] == [A]
+    assert job["gaps"] == {A: {"diet": ["clover"], "hunts": []}}
+    assert "pack" in job
 
 
 def test_spread_fits_a_listed_sea_home_on_a_coast_tile(
@@ -3848,7 +3932,7 @@ def test_spread_fits_a_listed_sea_home_on_a_coast_tile(
 def test_spread_lynx_publishes_an_overlay_pack(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#220.7: lynx spreads to two fed tiles; the third is no_food."""
+    """#241.2: lynx spreads to all three tiles; the third gaps voles."""
     from builder.grid import group_path
     from builder.packs import check_pack, check_tiles_overlay
     from builder.species import Source as SpeciesSource
@@ -3867,6 +3951,7 @@ def test_spread_lynx_publishes_an_overlay_pack(
     )
     assert worker.world is not None
     _file_lynx(worker.world)
+    _link_food_rule(worker.world)
     before = dict(store.blobs)
     store.build_jobs["j1"] = _spread_job(
         tiles=[A, B, C], spread={"kind": "animal", "what": "lynx"}
@@ -3879,8 +3964,8 @@ def test_spread_lynx_publishes_an_overlay_pack(
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["overlay"] == [A, B]
-    assert job["no_food"] == [C]
+    assert job["overlay"] == [A, B, C]
+    assert job["gaps"] == {C: {"diet": [], "hunts": ["vole"]}}
     assert job["skipped"] == {}
     assert "versions" not in job
     assert job["pack"] == "packs/j1/1/"
@@ -3889,7 +3974,7 @@ def test_spread_lynx_publishes_an_overlay_pack(
         "format": 1,
         "playable": ["lynx"],
         "predators": ["lynx"],
-        "tiles": [A, B],
+        "tiles": [A, B, C],
     }
     assert manifest["min_game"] == 2
     assert check_tiles_overlay(tiles_doc) == []
@@ -3907,7 +3992,7 @@ def test_spread_lynx_publishes_an_overlay_pack(
 def test_enrich_review_publishes_the_overlay_next_to_its_animal(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#220.7: the shipped lynx overlays two tiles in its pack's v2."""
+    """#241.2: the shipped lynx overlays three tiles in its pack's v2."""
     from builder.species import Source as SpeciesSource
 
     A, B, C = "z10_0581_0294", "z10_0580_0295", "z10_0590_0298"
@@ -3924,6 +4009,7 @@ def test_enrich_review_publishes_the_overlay_next_to_its_animal(
     )
     assert worker.world is not None
     _file_lynx(worker.world)
+    _link_food_rule(worker.world)
     v1 = {
         "animals/lynx.json": b"{}",
         "models/lynx.glb": b"glb-bytes",
@@ -3977,18 +4063,18 @@ def test_enrich_review_publishes_the_overlay_next_to_its_animal(
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["overlay"] == [A, B]
-    assert job["no_food"] == [C]
+    assert job["overlay"] == [A, B, C]
+    assert job["gaps"] == {C: {"diet": [], "hunts": ["vole"]}}
     assert "versions" not in job
     assert job["pack"] == "packs/animal_lynx/2/"
     tiles_doc, manifest = _pack_files(store, job["pack"])
-    assert tiles_doc["tiles"] == [A, B]
+    assert tiles_doc["tiles"] == [A, B, C]
     assert manifest["min_game"] == 2
     assert {e["path"] for e in manifest["files"]} == set(v1) | {"additions/tiles.json"}
     for path, data in before.items():
         assert store.blobs[path] == data
     report = store.blobs["review/j1/enrich_lynx/report.html"].decode("utf-8")
-    assert f"no_food {C}" in report
+    assert f"gaps {C}" in report
 
 
 def test_overlay_pack_files_prefers_the_job_folder(tmp_path: Path) -> None:

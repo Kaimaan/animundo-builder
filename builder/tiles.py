@@ -749,100 +749,109 @@ def home_food_kinds(home: dict[str, Any]) -> set[str]:
     return kinds
 
 
-def overlay_fed_on(
+_EATS_ROUND = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import food
+if not callable(getattr(food, "eats_here", None)) or not callable(
+    getattr(food, "food_gaps", None)
+):
+    print("the food rule predates decision 0061", file=sys.stderr)
+    sys.exit(2)
+queries = json.load(sys.stdin)
+out = []
+for q in queries:
+    diet = q.get("diet") or []
+    hunts = q.get("hunts") or []
+    kinds = q.get("food") or []
+    tags = q.get("prey_tags") or []
+    out.append(
+        {
+            "eats": food.eats_here(diet, hunts, kinds, tags),
+            "gaps": food.food_gaps(diet, hunts, kinds, tags),
+        }
+    )
+print(json.dumps(out))
+"""
+
+
+def world_eats(
+    world: Path, queries: list[dict[str, Any]]
+) -> list[dict[str, Any]] | None:
+    """Eats and gaps per query from the world's own food rule (#241.3).
+
+    One subprocess for the batch, like the tile check: the world
+    owns the rule (decision 0061), the builder only reads its
+    verdicts. None when the checkout has no food rule, so tests
+    with fake worlds keep every animal and report no gaps.
+    """
+    tools = world / "tools"
+    if not (tools / "food.py").is_file():
+        return None
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _EATS_ROUND, str(tools)],
+            input=json.dumps(queries),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode == 2:
+        raise RuntimeError(
+            "the world's food rule predates decision 0061 "
+            "(tools/food.py has no eats_here/food_gaps); update the checkout"
+        )
+    if proc.returncode != 0:
+        return None
+    try:
+        out = json.loads(proc.stdout)
+    except ValueError:
+        return None
+    return out if isinstance(out, list) else None
+
+
+def tile_gaps_for(
     world: Path,
+    diet: list[str],
+    hunts: list[str],
     home: dict[str, Any],
     greens: dict[str, Any] | None,
     living: list[str],
-    what: str,
-) -> tuple[bool, list[str]]:
-    """Whether `what` eats here as the game's guard judges it (#231.1).
+) -> dict[str, list[str]]:
+    """What the diet/hunts can't find on this tile: gaps, never a filter (#241.2).
 
-    Every `diet` kind in the tile's food kinds, and every `hunts`
-    tag on another living animal: the maker's pre-check for the
-    game's `drop_unfed`, run against the published tile merged
-    with the overlay. Returns fed and the missing diet kinds (a
-    plant can only ever cover those, never `hunts`). The living
-    read leniently; `what` itself must be filed.
+    The tile's worked-out food kinds and the other living
+    animals' tags, judged by the world's rule. Empty gaps when
+    the checkout has no food rule.
     """
-    data = _animal(world / "animals" / f"{what}.json")
     kinds = tile_food_kinds(world, home, greens)
-    missing = [kind for kind in (data.get("diet") or []) if kind not in kinds]
     tags: set[str] = set()
     for other in living:
-        if other == what:
-            continue
         try:
             tags.update(_animal(world / "animals" / f"{other}.json").get("tags") or [])
         except (OSError, ValueError):
             continue
-    hunts_ok = all(tag in tags for tag in (data.get("hunts") or []))
-    return (not missing and hunts_ok), missing
-
-
-def overlay_carry_for(
-    world: Path,
-    remake_greens: dict[str, Any] | None,
-    missing: list[str],
-) -> dict[str, list[dict[str, Any]]]:
-    """Remake cover/water plants covering the missing kinds (#231.2).
-
-    Greedy in diet order, stable by plant id, with the remake's
-    densities; a plant without a shippable density covers
-    nothing. Sides the remake doesn't list stay unlisted.
-    """
-    by_kind: dict[str, list[tuple[str, str, float]]] = {}
-    for side in ("cover", "water"):
-        picks = (remake_greens or {}).get(side) or []
-        for entry in picks:
-            if not isinstance(entry, dict) or not entry.get("id"):
-                continue
-            density = entry.get("density", entry.get("share"))
-            if (
-                not isinstance(density, (int, float))
-                or isinstance(density, bool)
-                or not 0.0 < density <= 1.0
-            ):
-                continue
-            kind = _food_kind(_grows(world, "plants", entry["id"]).get("food"))
-            if kind:
-                by_kind.setdefault(kind, []).append((side, entry["id"], float(density)))
-    for plants in by_kind.values():
-        plants.sort(key=lambda plant: plant[1])
-    carried: dict[str, list[dict[str, Any]]] = {}
-    used: set[str] = set()
-    for kind in missing:
-        for side, pid, density in by_kind.get(kind, []):
-            if pid in used:
-                continue
-            used.add(pid)
-            carried.setdefault(side, []).append({"id": pid, "density": density})
-            break
-    return carried
-
-
-def overlay_merged_greens(
-    published_greens: dict[str, Any] | None,
-    carried: dict[str, list[dict[str, Any]]] | None,
-) -> dict[str, Any] | None:
-    """Published plants plus carried ones, as the game merges them (#231.2).
-
-    Plants the tile already has stay single; sides neither lists
-    stay unlisted, so the home's plants still count there.
-    """
-    merged: dict[str, Any] = {}
-    for side in ("cover", "water"):
-        base = (published_greens or {}).get(side)
-        have = {p.get("id") for p in base or [] if isinstance(p, dict)}
-        adds = [
-            entry
-            for entry in (carried or {}).get(side, [])
-            if entry.get("id") not in have
-        ]
-        if base is None and not adds:
-            continue
-        merged[side] = list(base or []) + adds
-    return merged or None
+    verdicts = world_eats(
+        world,
+        [
+            {
+                "diet": list(diet),
+                "hunts": list(hunts),
+                "food": sorted(kinds),
+                "prey_tags": sorted(tags),
+            }
+        ],
+    )
+    if not verdicts:
+        return {"diet": [], "hunts": []}
+    gaps = verdicts[0].get("gaps") or {}
+    return {
+        "diet": [str(kind) for kind in gaps.get("diet", [])],
+        "hunts": [str(tag) for tag in gaps.get("hunts", [])],
+    }
 
 
 def home_fish(world: Path, home: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -861,14 +870,6 @@ def home_fish(world: Path, home: dict[str, Any]) -> dict[str, dict[str, Any]]:
         if path.is_file():
             fish[kind] = _animal(path)
     return fish
-
-
-def _tag_covered(tag: str, hunter: str, pool: dict[str, dict[str, Any]]) -> bool:
-    """Another animal in the pool carries this hunt tag."""
-    return any(
-        other != hunter and tag in (data.get("tags") or [])
-        for other, data in pool.items()
-    )
 
 
 #: Wanted entries per tile: ids the game ranks by play (#143.1).
@@ -1157,21 +1158,20 @@ def pick_species(
     home: dict[str, Any],
     greens: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Playable, prey and predators, most present first, food first.
+    """Playable, prey and predators, most present first (#241.1).
 
-    An animal stays only if the worked-out food has every kind it needs,
-    and a hunter only if at least one of its prey stays too. The
-    food is worked out from the tile's own plants when it has them
-    (#152), else the home's. The home's fish hunt in the region as
-    well, so their prey must stay too. Playable is every kept animal
-    whose file is playable;
+    Food never removes an animal (decision 0061): every filed
+    survey species with a `diet` or `hunts` stays, and only an
+    animal with neither is left out. The home's fish hunt in the
+    region as well, so they join the prey pool whatever they
+    find. Playable is every kept animal whose file is playable;
     predators every kept hunter; prey every kept animal someone
     hunts, plus every kept animal in neither other list, so an
-    animal can be both playable and someone's prey. When nothing
-    can live here with its food, all three lists are empty and the
-    tile is blocked with `no_animal`. The fallback when the
-    checkout has no converter; make_tile otherwise selects with
-    the world's own food-web check (#154).
+    animal can be both playable and someone's prey. With no kept
+    animal all three lists are empty and the tile is blocked with
+    `no_animal`. The fallback when the checkout has no converter;
+    make_tile otherwise selects with the world's own food-web
+    check (#154), which keeps the same animals since 0061.
     """
     animals_dir = world / "animals"
     ranked = sorted(counts, key=lambda s: (-counts[s], s))
@@ -1180,35 +1180,12 @@ def pick_species(
         path = animals_dir / f"{species}.json"
         if path.is_file():
             candidates[species] = _animal(path)
-    food = tile_food_kinds(world, home, greens)
     fish = home_fish(world, home)
-    for data in fish.values():
-        if not (data.get("diet") or data.get("hunts")):
-            return [], [], []
-        if not set(data.get("diet") or []) <= food:
-            return [], [], []
     kept = {
         species
         for species, data in candidates.items()
         if (data.get("diet") or data.get("hunts"))
-        and set(data.get("diet") or []) <= food
     }
-    changed = True
-    while changed:
-        changed = False
-        pool = {**fish, **{s: candidates[s] for s in kept}}
-        for species in sorted(kept):
-            hunts = candidates[species].get("hunts") or []
-            if any(not _tag_covered(tag, species, pool) for tag in hunts):
-                kept.discard(species)
-                changed = True
-    pool = {**fish, **{s: candidates[s] for s in kept}}
-    if any(
-        not _tag_covered(tag, kind, pool)
-        for kind, data in fish.items()
-        for tag in data.get("hunts") or []
-    ):
-        return [], [], []
     return _split_species(
         ranked,
         kept,
@@ -1400,9 +1377,21 @@ def _make_place_tile(
     def filed(ids: list[str]) -> list[str]:
         return [s for s in ids if (animals_dir / f"{s}.json").is_file()]
 
-    playable = filed(species.get("playable") or [])
-    prey = filed(species.get("prey") or [])
-    predators = filed(species.get("predators") or [])
+    def eats(ids: list[str]) -> list[str]:
+        """Filed species with a diet or hunts; the rest stay out (#241.1)."""
+        out = []
+        for sid in filed(ids):
+            try:
+                data = _animal(animals_dir / f"{sid}.json")
+            except (OSError, ValueError):
+                continue
+            if data.get("diet") or data.get("hunts"):
+                out.append(sid)
+        return out
+
+    playable = eats(species.get("playable") or [])
+    prey = eats(species.get("prey") or [])
+    predators = eats(species.get("predators") or [])
     if not playable:
         return None, _blocked("no_animal", habitat, None)
     wanted = [
@@ -1803,8 +1792,6 @@ def make_tile(
         failures = check_with_world(made_tile, world)
         if not failures:
             return made_tile, None
-        if all(check == "food" for check, _ in failures):
-            return None, _blocked("no_animal", habitat, wanted)
         if not _budget_failure(failures):
             break
         _thin_densities(made_tile)

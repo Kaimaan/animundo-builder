@@ -492,13 +492,13 @@ class Worker:
             self._fail(job_id, str(error))
             return
         try:
-            passing, made_by_tile, skipped, no_food, carried = self._spread_tiles(
+            passing, made_by_tile, skipped, gaps = self._spread_tiles(
                 job_id, job, kind, str(what)
             )
             update: dict[str, Any] = {
                 "overlay": passing,
                 "skipped": skipped,
-                "no_food": no_food,
+                "gaps": gaps,
                 "cost_usd": 0.0,
             }
             if passing:
@@ -509,7 +509,6 @@ class Worker:
                         self.world,
                         [made_by_tile[tile] for tile in passing],
                         passing,
-                        plants=carried,
                     )
                     version = packs_mod.next_pack_version(self.store, job_id)
                     pack = packs_mod.assemble_enrich_pack(
@@ -660,10 +659,9 @@ class Worker:
         list[str],
         dict[str, dict[str, Any]],
         dict[str, str],
-        list[str],
-        dict[str, list[dict[str, Any]]],
+        dict[str, dict[str, list[str]]],
     ]:
-        """The listed tiles judged keyless: passing, remade, skipped, unfed, carried.
+        """The listed tiles judged keyless: passing, remade, skipped, gaps (#241.2).
 
         A tile whose remake raises, blocks or comes back empty
         skips with the reason; the job carries on (#227.2).
@@ -682,7 +680,6 @@ class Worker:
         made_by_tile: dict[str, dict[str, Any]] = {}
         old_by_tile: dict[str, dict[str, Any] | None] = {}
         skipped: dict[str, str] = {}
-        no_food: list[str] = []
         for tile in job.get("tiles", []):
             try:
                 blob_path = group_path(tile)
@@ -725,118 +722,72 @@ class Worker:
                 assert made is not None
                 made_by_tile[tile] = made
                 old_by_tile[tile] = (old.get("tiles") or {}).get(tile)
-            elif verdict == "no_food":
-                no_food.append(tile)
             else:
                 assert why is not None
                 skipped[tile] = why
-        passing, fed_no_food, carried = self._overlay_feeding(
-            kind, what, passing, made_by_tile, old_by_tile
-        )
-        no_food.extend(fed_no_food)
-        return passing, made_by_tile, skipped, no_food, carried
+        gaps = self._overlay_gaps(kind, what, passing, made_by_tile, old_by_tile)
+        return passing, made_by_tile, skipped, gaps
 
-    def _overlay_feeding(
+    def _overlay_gaps(
         self,
         kind: str,
         what: str,
         passing: list[str],
         made_by_tile: dict[str, dict[str, Any]],
         old_by_tile: dict[str, dict[str, Any] | None],
-    ) -> tuple[list[str], list[str], dict[str, list[dict[str, Any]]]]:
-        """Passing tiles fed on their published tiles: overlay, no_food, carried (#231).
+    ) -> dict[str, dict[str, list[str]]]:
+        """What `what` can't find on each passing tile: gaps, never a filter (#241.2).
 
-        Plants stay as judged (nothing eats them). An unpublished
-        tile keeps its remake's verdict, counted by its remake's
-        plants. Every carried plant fits every passing tile's 24,
-        so the one overlay doc feeds each tile it lands on.
+        Plants have no diet, so no gaps. An unpublished tile
+        judges its remake, the published one its published tile.
+        Only tiles with gaps are listed.
         """
-        from .packs import MAX_TILE_PLANTS
-        from .tiles import (
-            available_biomes,
-            overlay_carry_for,
-            overlay_fed_on,
-            overlay_merged_greens,
-        )
+        import json
+
+        from .tiles import available_biomes, tile_gaps_for
 
         assert self.world is not None
         if kind == "plant":
-            return passing, [], {}
+            return {}
+        try:
+            data = json.loads(
+                (self.world / "animals" / f"{what}.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        diet = [str(k) for k in data.get("diet") or []]
+        hunts = [str(t) for t in data.get("hunts") or []]
         biomes = available_biomes(self.world)
-        judged: dict[str, tuple[dict[str, Any], dict[str, Any] | None, list[str]]] = {}
-        need: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        gaps: dict[str, dict[str, list[str]]] = {}
         for tile in passing:
             old = old_by_tile[tile]
             if old is None:
-                continue
-            house = biomes.get(old.get("home") or "", {})
-            greens = old.get("plants")
+                made = made_by_tile[tile]
+                house = biomes.get(made.get("home") or "", {})
+                greens = made.get("plants")
+                species = made.get("species") or {}
+                fish = made.get("fish") or []
+            else:
+                house = biomes.get(old.get("home") or "", {})
+                greens = old.get("plants")
+                species = old.get("species") or {}
+                fish = old.get("fish") or []
             living = [
-                species
+                s
                 for name in ("playable", "prey", "predators")
-                for species in (old.get("species") or {}).get(name, [])
+                for s in species.get(name, [])
+                if s != what
             ]
-            for entry in old.get("fish", []) or []:
+            for entry in fish:
                 fished = entry.get("kind") if isinstance(entry, dict) else entry
-                if fished:
+                if fished and fished != what:
                     living.append(fished)
-            judged[tile] = (house, greens, living)
-            fed, missing = overlay_fed_on(self.world, house, greens, living, what)
-            if not fed:
-                need[tile] = overlay_carry_for(
-                    self.world, made_by_tile[tile].get("plants"), missing
-                )
-        union: list[tuple[str, str, float]] = []
-        seen: set[tuple[str, str]] = set()
-        for tile in passing:
-            for side, entries in (need.get(tile) or {}).items():
-                for entry in entries:
-                    key = (side, entry["id"])
-                    if key not in seen:
-                        seen.add(key)
-                        union.append((side, entry["id"], entry["density"]))
-        counts: dict[str, int] = {}
-        have: dict[str, set[str]] = {}
-        for tile in passing:
-            old = old_by_tile[tile]
-            if old is None:
-                greens = made_by_tile[tile].get("plants") or {}
-            else:
-                greens = old.get("plants") or {}
-            counts[tile] = 0
-            ids: set[str] = set()
-            for side in ("cover", "water"):
-                for entry in greens.get(side, []) or []:
-                    if isinstance(entry, dict) and entry.get("id"):
-                        counts[tile] += 1
-                        ids.add(entry["id"])
-            have[tile] = ids
-        kept: list[tuple[str, str, float]] = []
-        for side, pid, density in union:
-            trial = kept + [(side, pid, density)]
-            if all(
-                counts[t] + sum(1 for _, i, _ in trial if i not in have[t])
-                <= MAX_TILE_PLANTS
-                for t in passing
-            ):
-                kept = trial
-        carried: dict[str, list[dict[str, Any]]] = {}
-        for side, pid, density in kept:
-            carried.setdefault(side, []).append({"id": pid, "density": density})
-        overlay: list[str] = []
-        no_food: list[str] = []
-        for tile in passing:
-            if tile not in judged:
-                overlay.append(tile)
-                continue
-            house, greens, living = judged[tile]
-            merged = overlay_merged_greens(greens, carried)
-            fed, _missing = overlay_fed_on(self.world, house, merged, living, what)
-            if fed:
-                overlay.append(tile)
-            else:
-                no_food.append(tile)
-        return overlay, no_food, carried
+            tile_gaps = tile_gaps_for(self.world, diet, hunts, house, greens, living)
+            if tile_gaps["diet"] or tile_gaps["hunts"]:
+                gaps[tile] = tile_gaps
+        return gaps
 
     def place_job(self, job_id: str, job: dict[str, Any]) -> None:
         """A place from one request: research, one stop, Kai's yes (#222).
@@ -935,6 +886,31 @@ class Worker:
             self._update(job_id, update)
             self._fail(job_id, "no_biome")
             return
+        try:
+            wild_tiles, moved = place_mod.ensure_wild_tiles(
+                survey["tiles"], self._habitat_grid()
+            )
+        except place_mod.NoWildTile as error:
+            print(f"build job {job_id}: no wild tile near {error}", file=sys.stderr)
+            self._update(job_id, update)
+            self._fail(job_id, "no_wild_tile")
+            return
+        research["tiles"] = wild_tiles
+        if moved:
+            research["moved"] = moved
+        centre = research["centre"]
+        spot = next(
+            (
+                t
+                for t in wild_tiles
+                if place_mod.tile_at(centre["lat"], centre["lon"]) == t
+            ),
+            wild_tiles[0],
+        )
+        lat, lon = place_mod.wild_spot(
+            spot, centre["lat"], centre["lon"], self._habitat_grid()
+        )
+        research["centre"] = {"lat": lat, "lon": lon}
         self._update(job_id, {**update, "status": "waiting_yes"})
         print(
             f"build job {job_id}: surveyed {len(survey['tiles'])} tiles, "
@@ -1405,9 +1381,10 @@ class Worker:
         is judged by code from its cached survey (never a new
         call), the passing tiles go in the pack's overlay as a
         new pack version next to the ship's files, and the job
-        carries `pack`, `overlay` and `no_food`, never `versions`.
-        Tiles the thing missed for food are flagged `no_food` in
-        the item's report. With per-tile place verdicts (#161.2),
+        carries `pack`, `overlay` and `gaps`, never `versions`.
+        Tiles where the thing misses food are flagged with their
+        gaps in the item's report (#241.2). With per-tile place
+        verdicts (#161.2),
         only the tiles that passed judge; the rest are listed
         with their reasons instead of failing the whole job, and
         no passed tile fails the job as `place`. A tile whose
@@ -1448,17 +1425,17 @@ class Worker:
             self._fail(job_id, "place")
             return
         self._require_lease(job_id)
-        passing, made_by_tile, no_food, skipped, carried = self._remake_enrich_tiles(
+        passing, made_by_tile, gaps, skipped = self._remake_enrich_tiles(
             job_id, job, item, ship
         )
         enrich = job.get("enrich") or {}
         kind, what = str(enrich["kind"]), str(enrich.get("what", ""))
-        self._flag_no_food(job_id, item, no_food, what)
+        self._flag_gaps(job_id, item, gaps, what)
         self._flag_place(job_id, item, failed, missing, [])
         self._history_left_out(job_id, job, ship, failed, missing)
         update: dict[str, Any] = {
             "overlay": passing,
-            "no_food": no_food,
+            "gaps": gaps,
             "skipped": skipped,
         }
         if passing:
@@ -1469,7 +1446,6 @@ class Worker:
                     self.world,
                     [made_by_tile[tile] for tile in passing],
                     passing,
-                    plants=carried,
                 )
                 pack_id = f"{kind}_{what}"
                 files = self._overlay_pack_files(job_id, item_id or "", pack)
@@ -1682,11 +1658,10 @@ class Worker:
     ) -> tuple[
         list[str],
         dict[str, dict[str, Any]],
-        list[str],
+        dict[str, dict[str, list[str]]],
         dict[str, str],
-        dict[str, list[dict[str, Any]]],
     ]:
-        """The listed tiles judged keyless: passing, remade, unfed, skipped, carried.
+        """The listed tiles judged keyless: passing, remade, gaps, skipped (#241.2).
 
         With per-tile place verdicts only the passed tiles judge.
         A tile whose remake raises, blocks or comes back empty
@@ -1705,7 +1680,6 @@ class Worker:
         passing: list[str] = []
         made_by_tile: dict[str, dict[str, Any]] = {}
         old_by_tile: dict[str, dict[str, Any] | None] = {}
-        no_food: list[str] = []
         skipped: dict[str, str] = {}
         kind = str((job.get("enrich") or {})["kind"])
         what = str(item["what"])
@@ -1746,34 +1720,35 @@ class Worker:
                 assert made is not None
                 made_by_tile[tile] = made
                 old_by_tile[tile] = (old.get("tiles") or {}).get(tile)
-            elif verdict == "no_food":
-                no_food.append(tile)
             else:
                 assert why is not None
                 skipped[tile] = why
-        passing, fed_no_food, carried = self._overlay_feeding(
-            kind, what, passing, made_by_tile, old_by_tile
-        )
-        no_food.extend(fed_no_food)
-        return passing, made_by_tile, no_food, skipped, carried
+        gaps = self._overlay_gaps(kind, what, passing, made_by_tile, old_by_tile)
+        return passing, made_by_tile, gaps, skipped
 
-    def _flag_no_food(
-        self, job_id: str, item: dict[str, Any], tiles: list[str], what: str
+    def _flag_gaps(
+        self,
+        job_id: str,
+        item: dict[str, Any],
+        gaps: dict[str, dict[str, list[str]]],
+        what: str,
     ) -> None:
-        """The unfed tiles into the item's report, re-uploaded."""
-        self._flag_entries(
-            job_id,
-            item,
-            [
+        """The gappy tiles into the item's report, re-uploaded (#241.2)."""
+        entries = []
+        for tile in sorted(gaps):
+            missing = list(gaps[tile].get("diet", [])) + [
+                f"prey {tag}" for tag in gaps[tile].get("hunts", [])
+            ]
+            entries.append(
                 {
-                    "check": f"no_food {tile}",
-                    "status": "skip",
-                    "reason": f"{what}'s food is not in this tile",
+                    "check": f"gaps {tile}",
+                    "status": "pass",
+                    "reason": f"{what} misses {', '.join(missing)} here",
                     "problems": [],
+                    "gaps": gaps[tile],
                 }
-                for tile in tiles
-            ],
-        )
+            )
+        self._flag_entries(job_id, item, entries)
 
     def _flag_entries(
         self, job_id: str, item: dict[str, Any], entries: list[dict[str, Any]]

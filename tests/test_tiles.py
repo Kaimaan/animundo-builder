@@ -18,15 +18,14 @@ from builder.tiles import (
     make_tile,
     near_made_or_noted,
     open_sea_entries,
-    overlay_carry_for,
-    overlay_fed_on,
-    overlay_merged_greens,
     pick_species,
     tile_edges,
     tile_facts,
     tile_food_kinds,
+    tile_gaps_for,
     tile_height,
     tile_seed,
+    world_eats,
     write_group,
 )
 
@@ -211,8 +210,8 @@ def test_tile_food_kinds_falls_back_without_rules(tmp_path: Path) -> None:
     )
 
 
-def test_pick_species_uses_worked_out_food(tmp_path: Path) -> None:
-    """#147.4: a layered home feeds from grows, not its list."""
+def test_pick_species_keeps_every_filed_survey_species(tmp_path: Path) -> None:
+    """#241.1: food never removes an animal; only diet-less stays out."""
     world = _world(tmp_path)
     home = _layered(world)
     playable, prey, predators = pick_species(
@@ -222,10 +221,13 @@ def test_pick_species_uses_worked_out_food(tmp_path: Path) -> None:
     assert predators == ["fox"]
     assert prey == ["vole", "mountain_hare"]
     bare = dict(home, ground_cover={"grass": 0.0, "plants": []})
-    assert pick_species({"fox": 5.0}, world, bare) == ([], [], [])
+    assert pick_species({"fox": 5.0}, world, bare) == (["fox"], [], ["fox"])
+    (world / "animals" / "blob.json").write_text(json.dumps({"playable": True}))
+    assert pick_species({"blob": 5.0}, world, home) == ([], [], [])
 
 
-def test_pick_species_orders_food_first(tmp_path: Path) -> None:
+def test_pick_species_orders_most_present_first(tmp_path: Path) -> None:
+    """#241.1: kept animals rank by presence, not food."""
     world = _world(tmp_path)
     playable, prey, predators = pick_species(
         {"fox": 5.0, "mountain_hare": 9.0, "vole": 20.0},
@@ -274,17 +276,24 @@ def test_pick_species_lists_every_playable_file(tmp_path: Path) -> None:
     ]
 
 
-def test_pick_species_drops_hunter_without_prey(tmp_path: Path) -> None:
+def test_pick_species_keeps_hunter_without_prey(tmp_path: Path) -> None:
+    """#241.1: a hunter with no prey here stays, with gaps, not out."""
     world = _world(tmp_path)
-    assert pick_species({"fox": 5.0}, world, _home(world)) == ([], [], [])
+    assert pick_species({"fox": 5.0}, world, _home(world)) == (["fox"], [], ["fox"])
 
 
-def test_pick_species_drops_animal_without_food(tmp_path: Path) -> None:
+def test_pick_species_keeps_animal_without_food(tmp_path: Path) -> None:
+    """#241.1: an animal whose food is missing here stays."""
     world = _world(tmp_path)
-    assert pick_species({"mountain_hare": 9.0}, world, {"food": []}) == ([], [], [])
+    assert pick_species({"mountain_hare": 9.0}, world, {"food": []}) == (
+        ["mountain_hare"],
+        [],
+        [],
+    )
 
 
-def test_pick_species_feeds_home_fish(tmp_path: Path) -> None:
+def test_pick_species_home_fish_join_the_pool_unfed(tmp_path: Path) -> None:
+    """#241.1: home fish join the prey pool whatever they find."""
     world = _world(tmp_path)
     (world / "animals" / "pike.json").write_text(
         json.dumps(
@@ -303,9 +312,17 @@ def test_pick_species_feeds_home_fish(tmp_path: Path) -> None:
         "food": [{"kind": "water_bugs"}, {"kind": "insects"}],
         "fish": [{"kind": "pike", "count": 2}],
     }
-    playable, _prey, predators = pick_species({"pike": 9.0, "frog": 5.0}, world, home)
-    assert playable == ["frog"]
-    assert predators == ["pike"]
+    assert pick_species({"pike": 9.0, "frog": 5.0}, world, home) == (
+        ["frog"],
+        ["frog"],
+        ["pike"],
+    )
+    hungry = {"food": [], "fish": [{"kind": "pike", "count": 2}]}
+    assert pick_species({"pike": 9.0, "frog": 5.0}, world, hungry) == (
+        ["frog"],
+        ["frog"],
+        ["pike"],
+    )
     assert pick_species({"pike": 9.0}, world, home) == ([], [], [])
 
 
@@ -1562,45 +1579,64 @@ def _fed_world(tmp_path: Path) -> Path:
     return world
 
 
-def test_overlay_fed_on_judges_diet_and_hunts(tmp_path: Path) -> None:
-    """#231.1: every diet kind present, every hunt tag living."""
+def test_web_failures_drops_what_eats_nothing() -> None:
+    """#241.1: the 0061 wording still faults its animal for selection."""
+    import builder.tiles as tiles_mod
+
+    assert tiles_mod._web_failures(
+        ["blob in tl_z10_0581_0294 eats nothing: give it a diet or hunts"]
+    ) == {"blob"}
+
+
+def test_world_eats_without_a_food_rule_keeps_all(tmp_path: Path) -> None:
+    """#241.3: a checkout without the rule reports nothing; all stay."""
     world = _fed_world(tmp_path)
-    home = _home(world)
-    greens = {"cover": [{"id": "red_clover"}]}
-    assert overlay_fed_on(world, home, greens, [], "hare") == (True, [])
-    assert overlay_fed_on(world, home, None, [], "hare") == (False, ["clover"])
-    assert overlay_fed_on(world, home, None, ["vole"], "stoat") == (True, [])
-    assert overlay_fed_on(world, home, None, ["fox"], "stoat") == (False, [])
-    assert overlay_fed_on(world, home, None, ["stoat"], "stoat") == (False, [])
-
-
-def test_overlay_carry_for_covers_missing_kinds(tmp_path: Path) -> None:
-    """#231.2: greedy in diet order; unshippable densities cover nothing."""
-    world = _fed_world(tmp_path)
-    greens = {
-        "cover": [
-            {"id": "red_clover", "density": 0.2},
-            {"id": "thyme", "density": 0.3},
-            {"id": "flat_weed", "density": 0},
-            {"id": "tall_weed", "density": 2.0},
-        ]
+    assert (
+        world_eats(
+            world,
+            [{"diet": ["clover"], "hunts": [], "food": ["grass"], "prey_tags": []}],
+        )
+        is None
+    )
+    assert tile_gaps_for(world, ["clover"], [], _home(world), None, []) == {
+        "diet": [],
+        "hunts": [],
     }
-    assert overlay_carry_for(world, greens, ["clover", "thyme"]) == {
-        "cover": [{"id": "red_clover", "density": 0.2}, {"id": "thyme", "density": 0.3}]
+
+
+def test_world_eats_runs_the_worlds_own_cases() -> None:
+    """#241.3: food/eats-cases.json through the checkout's rule."""
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    cases_path = world / "food" / "eats-cases.json"
+    if not cases_path.is_file() or not (world / "tools" / "food.py").is_file():
+        pytest.skip("needs a 0061 world checkout next to the builder")
+    cases = json.loads(cases_path.read_text(encoding="utf-8"))["cases"]
+    verdicts = world_eats(world, cases)
+    assert verdicts is not None
+    assert len(verdicts) == len(cases)
+    for case, verdict in zip(cases, verdicts):
+        assert verdict["eats"] == case["eats"], case["name"]
+        assert verdict["gaps"] == case["gaps"], case["name"]
+
+
+def test_tile_gaps_for_reports_what_the_tile_lacks() -> None:
+    """#241.2: gaps name the missing kinds, judged by the world's rule."""
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "tools" / "food.py").is_file():
+        pytest.skip("needs a 0061 world checkout next to the builder")
+    hare = json.loads((world / "animals" / "mountain_hare.json").read_text())
+    taiga = json.loads((world / "homes" / "boreal_taiga.json").read_text())
+    assert tile_gaps_for(
+        world, hare["diet"], hare.get("hunts") or [], taiga, None, []
+    ) == {"diet": [], "hunts": []}
+    assert tile_gaps_for(world, ["honey"], ["vole"], taiga, None, []) == {
+        "diet": ["honey"],
+        "hunts": ["vole"],
     }
-    assert overlay_carry_for(world, greens, ["bark"]) == {}
-    assert overlay_carry_for(world, None, ["clover"]) == {}
-
-
-def test_overlay_merged_greens_dedups_and_keeps_sides(tmp_path: Path) -> None:
-    """#231.2: carried plants join; unlisted sides stay home-grown."""
-    _fed_world(tmp_path)
-    carried = {"cover": [{"id": "red_clover", "density": 0.2}]}
-    assert overlay_merged_greens(None, carried) == carried
-    published = {"cover": [{"id": "red_clover", "density": 0.5}]}
-    assert overlay_merged_greens(published, carried) == published
-    assert overlay_merged_greens(None, None) is None
-    assert overlay_merged_greens({"cover": []}, None) == {"cover": []}
 
 
 def test_make_tile_blends_a_part_reef_cell(tmp_path: Path) -> None:
@@ -1810,7 +1846,8 @@ def test_make_tile_refuses_a_check_that_predates_the_converter(
         )
 
 
-def test_make_tile_blocks_when_world_check_fails_food(tmp_path: Path) -> None:
+def test_make_tile_raises_when_world_check_fails_food(tmp_path: Path) -> None:
+    """#241.1: a food failure is a loud maker bug, never no_animal."""
     world = _world(tmp_path)
     _checker(
         world,
@@ -1820,22 +1857,21 @@ def test_make_tile_blocks_when_world_check_fails_food(tmp_path: Path) -> None:
                 {
                     "check": "food",
                     "status": "fail",
-                    "problems": ["fox hunts nothing here"],
+                    "problems": ["blob eats nothing: give it a diet or hunts"],
                 }
             ],
         },
         1,
     )
     habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
-    made, blocked = make_tile(
-        "z10_0581_0294",
-        habitat_grid,
-        world,
-        presence={"fox": 5.0, "vole": 20.0},
-        builder_root=tmp_path,
-    )
-    assert made is None
-    assert blocked == {"reason": "no_animal", "habitat": "boreal_forest"}
+    with pytest.raises(RuntimeError, match="failed the world's check"):
+        make_tile(
+            "z10_0581_0294",
+            habitat_grid,
+            world,
+            presence={"fox": 5.0, "vole": 20.0},
+            builder_root=tmp_path,
+        )
 
 
 def test_make_tile_raises_when_world_check_fails_land(tmp_path: Path) -> None:
@@ -2054,8 +2090,8 @@ def test_surveyed_plants_keep_the_hare_on_the_tundra(tmp_path: Path) -> None:
     assert check_with_world(made, world) == []
 
 
-def test_replacing_plants_drops_animals_the_biome_fed(tmp_path: Path) -> None:
-    """#154: a grass-only cover starves the squirrel, vole and hare."""
+def test_replacing_plants_keeps_animals_the_survey_named(tmp_path: Path) -> None:
+    """#241.1: a grass-only cover starves nobody; the survey stays."""
     from builder.schemas import ROOT
     from builder.tiles import check_with_world
 
@@ -2081,11 +2117,11 @@ def test_replacing_plants_drops_animals_the_biome_fed(tmp_path: Path) -> None:
     assert made is not None
     species = made["species"]
     kept = set(species["playable"]) | set(species["prey"]) | set(species["predators"])
-    assert "squirrel" not in kept
-    assert "vole" not in kept
-    assert "mountain_hare" not in kept
-    # The kestrel follows its vole out; the fox stays on what is left.
-    assert "kestrel" not in kept
+    assert "squirrel" in kept
+    assert "vole" in kept
+    assert "mountain_hare" in kept
+    # The kestrel stays with its vole, the fox on what is left.
+    assert "kestrel" in kept
     assert "fox" in kept
     assert species["playable"]
     assert check_with_world(made, world) == []

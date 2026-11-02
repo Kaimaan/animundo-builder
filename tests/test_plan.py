@@ -388,8 +388,12 @@ def test_reef_cell_without_a_place_plans_code_only(tmp_path: Path) -> None:
     assert "blocked" not in plan
 
 
-def test_reef_place_plans_code_only_when_region_names_no_biome() -> None:
-    """#233: C plans code-only from the reef map without its region biome."""
+def test_reef_place_plans_from_coral_reef_when_region_names_no_biome() -> None:
+    """#233: C plans from the reef map without its region biome.
+
+    #241.1: the plantless probe still plans its food gap, from
+    the coral home it was made with.
+    """
     from unittest import mock
 
     import pytest
@@ -426,8 +430,16 @@ def test_reef_place_plans_code_only_when_region_names_no_biome() -> None:
             species=answer,
         )
     validate("plan", plan)
-    assert plan["code_only"] is True
-    assert plan["items"] == []
+    assert plan["code_only"] is False
+    assert plan["items"] == [
+        {
+            "id": "food_water_plants",
+            "kind": "food",
+            "what": "water_plants",
+            "from": "coral_reef",
+            "estimate_usd": 0.0,
+        }
+    ]
     assert "blocked" not in plan
 
 
@@ -639,8 +651,34 @@ def test_plan_skips_animals_it_cannot_make(tmp_path: Path) -> None:
     assert plan["improve"] == []
 
 
+def _link_food_rule(world: Path) -> None:
+    """The checkout's food rule into the fake world, or skip without it (#241.3).
+
+    Rules only, no ground cover: the test homes keep missing
+    their kinds, so gaps show.
+    """
+    import pytest
+
+    from builder.schemas import ROOT
+
+    real = ROOT.parent / "animundo-world" / "tools" / "food.py"
+    if not real.is_file():
+        pytest.skip("needs a 0061 world checkout next to the builder")
+    tools = world / "tools"
+    tools.mkdir(exist_ok=True)
+    link = tools / "food.py"
+    if not link.exists():
+        link.symlink_to(real)
+    food_dir = world / "food"
+    food_dir.mkdir(exist_ok=True)
+    rules = food_dir / "rules.json"
+    if not rules.is_file():
+        rules.write_text(json.dumps({"kinds": {"grass": {"from": "grass"}}}))
+
+
 def test_plan_lists_missing_food_for_filed_animals(tmp_path: Path) -> None:
     world = _world(tmp_path)
+    _link_food_rule(world)
     (world / "homes" / "boreal_forest.json").write_text(
         json.dumps(
             {
@@ -672,9 +710,10 @@ def test_plan_lists_missing_food_for_filed_animals(tmp_path: Path) -> None:
     ]
 
 
-def test_plan_lists_food_and_animal_together(tmp_path: Path) -> None:
-    """A hungry tile with recorded newcomers needs both (spec 04, minimum)."""
+def test_plan_lists_food_and_holds_newcomers_in_improve(tmp_path: Path) -> None:
+    """A hungry tile plans its gaps; the serving hare holds the lion (#241.1)."""
     world = _world(tmp_path)
+    _link_food_rule(world)
     (world / "homes" / "boreal_forest.json").write_text(
         json.dumps(
             {
@@ -694,17 +733,19 @@ def test_plan_lists_food_and_animal_together(tmp_path: Path) -> None:
         presence={"mountain_hare": 9.0},
         unfiled_presence={"lion": 5.0},
     )
-    assert [i["id"] for i in plan["items"]] == ["food_grass", "animal_lion"]
+    assert [i["id"] for i in plan["items"]] == ["food_grass"]
+    assert [i["id"] for i in plan["improve"]] == ["improve_lion"]
 
 
 def test_plan_skips_animal_when_one_serves(tmp_path: Path) -> None:
     """A fed playable on the tile means no new animal, only the food.
 
-    The world's food check disagrees with the picker here (the stub
-    fails it), so the tile blocks with the fox serving: the plan
-    lists the missing food, never a redundant animal.
+    The probe keeps its animals since 0061, so the serving fox
+    holds the newcomer lion in improve: the plan lists the
+    missing food, never a redundant animal.
     """
     world = _world(tmp_path)
+    _link_food_rule(world)
     (world / "homes" / "boreal_forest.json").write_text(
         json.dumps(
             {
@@ -714,16 +755,6 @@ def test_plan_skips_animal_when_one_serves(tmp_path: Path) -> None:
             }
         )
     )
-    tools = world / "tools"
-    tools.mkdir()
-    (tools / "check_tile.py").write_text(
-        "import json, sys\n"
-        "json.load(open(sys.argv[1]))\n"
-        "print(json.dumps({'results': ["
-        "{'check': 'food', 'status': 'fail', 'problems': ['hungry']}"
-        "]}))\n"
-    )
-    (tools / "tile_region.py").write_text('"""A converter new enough.\n"""\n')
     habitat_grid = _habitat_grid(tmp_path, _boreal())
     plan = plan_tile(
         "z10_0581_0294",

@@ -299,6 +299,57 @@ def _pick_animal(
     return next(e for e in buildable if e["id"] == winner)
 
 
+def _probe_gap_foods(world: Path, made: dict[str, Any]) -> list[str]:
+    """The probe tile's missing food kinds, in species order (#241.1).
+
+    Every surveyed animal stays since 0061, so a made probe
+    still plans its gaps as food to build; without the world's
+    food rule there are no gaps to plan. Hunts never need a
+    food item: prey is animals, not kinds.
+    """
+    import json
+
+    from .tiles import available_biomes, tile_gaps_for
+
+    try:
+        homes = available_biomes(world)
+    except (OSError, ValueError):
+        return []
+    house = homes.get(made.get("home") or "", {})
+    species = made.get("species") or {}
+    living: list[str] = []
+    for name in ("playable", "prey", "predators"):
+        living.extend(s for s in species.get(name, []) if s not in living)
+    for entry in made.get("fish", []) or []:
+        fished = entry.get("kind") if isinstance(entry, dict) else entry
+        if fished and fished not in living:
+            living.append(fished)
+    out: list[str] = []
+    for sid in living:
+        path = world / "animals" / f"{sid}.json"
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        others = [s for s in living if s != sid]
+        gaps = tile_gaps_for(
+            world,
+            [str(k) for k in data.get("diet") or []],
+            [str(t) for t in data.get("hunts") or []],
+            house,
+            made.get("plants"),
+            others,
+        )
+        for kind in gaps.get("diet", []):
+            if kind not in out:
+                out.append(kind)
+    return out
+
+
 def _missing_food(
     present: dict[str, float],
     world: Path,
@@ -638,10 +689,22 @@ def plan_tile(
                     world,
                 )
         if made is not None:
+            gap_foods = _probe_gap_foods(world, made)
+            gap_items = []
+            if gap_foods:
+                gap_items.append(
+                    {
+                        "id": f"food_{gap_foods[0]}",
+                        "kind": "food",
+                        "what": gap_foods[0],
+                        "from": made.get("home") or home_id,
+                        "estimate_usd": ITEM_ESTIMATES["food"],
+                    }
+                )
             return _finish(
                 tile,
-                True,
-                [],
+                not gap_items,
+                gap_items,
                 unfiled,
                 unfiled_counts,
                 request,

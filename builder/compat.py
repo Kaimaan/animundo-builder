@@ -27,6 +27,7 @@ REQUIRED_TOOLS = (
     "validate_region.py",
     "adapt_home.py",
     "adapt_model.py",
+    "food.py",
 )
 OPTIONAL_TOOLS = (
     # taxa.py missing: taxon lookups fall back to English names.
@@ -71,6 +72,13 @@ _CONTRACTS = {
         "assert hasattr(check_animals, 'Content'), 'no Content';"
         "assert hasattr(check_animals, 'Checker'), 'no Checker';"
         "print('Content and Checker present')"
+    ),
+    "contract food rule": (
+        "import sys; sys.path.insert(0, sys.argv[1]);"
+        "import food;"
+        "assert callable(food.eats_here), 'eats_here is not callable';"
+        "assert callable(food.food_gaps), 'food_gaps is not callable';"
+        "print('eats_here and food_gaps callable')"
     ),
 }
 

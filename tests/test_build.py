@@ -602,7 +602,7 @@ def test_overlay_decision_judges_only_the_species() -> None:
     hungry = _old_tile(wanted=[{"kind": "animal", "what": "pike", "part": "lake"}])
     assert build_mod.overlay_decision(
         "z10_0581_0294", hungry, None, drifted, None, "animal", "pike"
-    ) == ("no_food", None)
+    ) == ("skipped", "pike is not in the remake")
     fished = _old_tile(
         species={"playable": [], "prey": [], "predators": [], "fish": ["pike"]}
     )

@@ -150,7 +150,7 @@ def test_build_job_takes_a_remake_pass_without_a_single_tile() -> None:
     big.update(
         {
             "overlay": ["z10_0581_0294"],
-            "no_food": [],
+            "gaps": {"z10_0581_0294": {"diet": ["clover"], "hunts": []}},
             "pack": "packs/animal_lynx/1/",
         }
     )

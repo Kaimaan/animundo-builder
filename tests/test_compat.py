@@ -29,8 +29,14 @@ def make_world(
         else "PLACEHOLDER = True\n"
     )
     (tools / "check_animals.py").write_text("class Content: ...\nclass Checker: ...\n")
+    (tools / "food.py").write_text(
+        "def eats_here(diet, hunts, food, prey_tags):\n"
+        "    return True\n"
+        "def food_gaps(diet, hunts, food, prey_tags):\n"
+        "    return {'diet': [], 'hunts': []}\n"
+    )
     for name in REQUIRED_TOOLS:
-        if name in ("tile_region.py", "check_animals.py"):
+        if name in ("tile_region.py", "check_animals.py", "food.py"):
             continue
         (tools / name).write_text("# stub\n")
     (tools / "taxon.py").write_text("# stub\n")

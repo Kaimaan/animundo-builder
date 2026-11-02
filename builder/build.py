@@ -744,15 +744,16 @@ def overlay_decision(
     kind: str,
     what: str,
 ) -> tuple[str, str | None]:
-    """One overlay tile's verdict from its remake alone (#227.1).
+    """One overlay tile's verdict from its remake alone (#227.1, #241.2).
 
     The species decides: `what` in the remake's species, fish or
-    (for a plant) plants joins the overlay; wanted by the
-    published tile but missing is `no_food`; anything else skips
-    with the reason. Seed, home, edges, coast, plants and `wanted`
-    are never compared with the published tile: an overlay
-    publishes no land. Returns the verdict ("overlay", "no_food"
-    or "skipped") and the skip reason.
+    (for a plant) plants joins the overlay; anything else skips
+    with the reason. The remake keeps every surveyed animal
+    since 0061, so this is the survey-and-habitat verdict; food
+    never leaves a tile out. Seed, home, edges, coast, plants
+    and `wanted` are never compared with the published tile: an
+    overlay publishes no land. Returns the verdict ("overlay" or
+    "skipped") and the skip reason.
     """
     if made is None:
         reason = (blocked or {}).get("reason") or "blocked"
@@ -774,10 +775,6 @@ def overlay_decision(
             for name in ("playable", "prey", "predators", "fish")
         ):
             return "overlay", None
-    wanted_before = [e.get("what") for e in (old_tile or {}).get("wanted", [])]
-    wanted_before += [e.get("what") for e in (old_blocked or {}).get("wanted", [])]
-    if what in wanted_before:
-        return "no_food", None
     return "skipped", f"{what} is not in the remake"
 
 

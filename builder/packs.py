@@ -213,16 +213,16 @@ def build_tiles_overlay(
     world: Any,
     made_tiles: list[dict[str, Any]],
     tiles: list[str],
-    plants: dict[str, list[dict[str, Any]]] | None = None,
 ) -> bytes:
     """`additions/tiles.json`: one species onto its passing tiles (#220).
 
     The species sits in the same lists the remakes put it in (their
     union over the tiles); a fish also swims with its count (#178.3:
-    5 small, else 2), a plant with its first tile's seating. Carried
-    food plants ride along for an animal (#231.2). The game merges
-    it into each listed tile on load. Refuses loud when no tile
-    passed or the file breaks the game's rules.
+    5 small, else 2), a plant with its first tile's seating. Food
+    never leaves a tile out since 0061, so no plants ride along
+    for an animal. The game merges it into each listed tile on
+    load. Refuses loud when no tile passed or the file breaks the
+    game's rules.
     """
     if not tiles:
         raise ValueError("an overlay needs at least one tile")
@@ -242,8 +242,6 @@ def build_tiles_overlay(
         fish = _overlay_fish(world, what)
         if fish is not None:
             doc["fish"] = [fish]
-        if plants:
-            doc["plants"] = plants
     doc["tiles"] = list(tiles)
     problems = check_tiles_overlay(doc)
     if problems:

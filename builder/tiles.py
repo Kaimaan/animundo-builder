@@ -1594,8 +1594,10 @@ def make_tile(
         }
     if blend is None:
         reef = habitat_grid.reef_share(col, row)
-        reef_home = home_for_cell(None, "coral_reef", biomes) if reef > 0 else None
+        reef_home = home_for_cell(None, "coral_reef", biomes) if reef >= 0.1 else None
         if reef_home is not None and reef_home != home:
+            # Blends ship at 0.1 and up like eco blends (#230):
+            # tinier shares ride no tile.
             blend = {"home": reef_home, "biome": reef_home, "share": round(reef, 2)}
     coast: list[str] | None = None
     if land > 0.0 and habitat != "open_ocean":

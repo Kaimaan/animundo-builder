@@ -1282,6 +1282,30 @@ def test_reef_cell_without_a_place_plans_coral_reef() -> None:
     assert tile_region.place(made)["terrain"]["reef"] > 0
 
 
+def test_trace_reef_open_sea_has_no_blend() -> None:
+    """#230: the ring's N tile stays plain open_sea under the 0.1 floor."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0927_0559",
+        load_grid(grid_dir),
+        world,
+        presence={"common_tern": 30.0},
+        builder_root=ROOT,
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "open_sea"
+    assert made.get("blend") is None
+
+
 def test_deep_coral_sea_cell_still_plans_open_sea() -> None:
     """#226.1: a deep Coral Sea cell still builds open_sea."""
     from builder.habitats import load_grid
@@ -1531,6 +1555,36 @@ def test_make_tile_blends_a_part_reef_cell(tmp_path: Path) -> None:
     assert made is not None
     assert made["habitat"] == "sea"
     assert made["blend"] == {"home": "coral_reef", "biome": "coral_reef", "share": 0.1}
+
+
+def test_make_tile_skips_a_trace_reef_blend(tmp_path: Path) -> None:
+    """#230: a 0.07 reef share rides no tile, like no eco blend would."""
+    from builder.habitats import HabitatGrid
+
+    world = _world(tmp_path)
+    (world / "animals" / "herring.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    (world / "homes" / "coral_reef.json").write_text(
+        json.dumps(
+            {
+                "habitat": "sea",
+                "ecoregions": [150],
+                "food": [{"kind": "water_bugs"}],
+            }
+        )
+    )
+    habitat_grid = HabitatGrid(_sea_3x3(336, 455), reef={"336,455": 0.07})
+    made, blocked = make_tile(
+        "z10_0336_0455",
+        habitat_grid,
+        world,  # type: ignore[arg-type]
+        presence={"herring": 30.0},
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made.get("blend") is None
 
 
 def test_make_tile_uses_sea_home_for_sea(tmp_path: Path) -> None:

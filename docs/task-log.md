@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #219 follow-up (survey cost cuts, $0 spent)
+
+- Kai picked "cut costs first": commit 37910a8 (CI green). Survey research now allows 5 grounded searches per call instead of 10 (20 per survey max). Price math from survey 2's receipts: input $1.25/M dominates, a search fetches ~8k input tokens (~$0.013), so land + species + write should land near $0.20 — inside the $0.25 job cap when no gaps call or continuation is needed. Gaps/continuations can still stop a job at the cap.
+- Robustness in the same commit: research notes save as they land, so a cap-stopped job keeps its research files (survey 2's $0.46 bought zero files). No survey re-run yet — see question below.
+- Tests: tests/test_survey.py 14 passed (cap-is-5, stopped-write-keeps-research); full suite green via CI; ruff clean.
+- Question for Kai: approve one ~$0.25 probe survey (S tile re-run, hard-capped at $0.25) to verify the new price before committing the round? Nothing spent on this turn; round total still $1.47 of $1.50.
+
 ## 2026-11-02: inbox #219 (survey round yes: conflicts, survey 1 research)
 
 - #219 conflicts with the #218 cap math and with measured survey cost, so per the inbox rules I ran no further surveys and ask Kai before spending. Three facts: (a) eight surveys at $0.25 each is $2.00, already over the $1.50 round cap; (b) no survey can finish under $0.25 today — capped research alone costs ~$0.46 (survey 2 stopped at $0.46 with nothing saved), a full survey ~$0.55; (c) $1.47 of the $1.50 is already spent on surveys 1-2 (run under the earlier approval, before #219 appeared in my reads), leaving ~$0.03.

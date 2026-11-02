@@ -137,12 +137,14 @@ def remake_biome_tiles(
 ) -> dict[str, Any]:
     """The biome's published tiles grow the newcomer, by code ($0, #214.2).
 
-    Every published tile on the biome gains the plant at its
-    biome density, validated and world-checked like any tile;
-    tiles that fail for food stay published as they are and
-    are reported held, never forced. Publishes as new
-    versions with the pass's remake record. Returns versions
-    and held tiles.
+    Every published tile on the biome takes the biome's own
+    seated numbers for the plants it grows, plus the newcomer
+    at its biome density (#221.4); the tile and the biome
+    agree instead of the tile thinning its old densities.
+    Validated and world-checked like any tile; tiles that
+    fail for food stay published as they are and are reported
+    held, never forced. Publishes as new versions with the
+    pass's remake record. Returns versions and held tiles.
     """
     import copy
 
@@ -155,6 +157,11 @@ def remake_biome_tiles(
     grows = _spec(world, plant_id)
     side = plant_side(grows)
     seated = _seated(biome, side, plant_id)
+    numbers = {
+        entry["id"]: entry["density"]
+        for entry in (biome.get("plants") or {}).get(side, []) or []
+        if isinstance(entry, dict) and entry.get("id")
+    }
     raw, _ = store.read_blob("tiles/v2/index.json")
     if raw is None:
         raise ValueError("no published tile index to remake")
@@ -172,7 +179,15 @@ def remake_biome_tiles(
             if any(p.get("id") == plant_id for p in grown if isinstance(p, dict)):
                 continue
             made = copy.deepcopy(old)
-            seating = [dict(p) for p in grown] + [{"id": plant_id, "density": seated}]
+            if any(not isinstance(p, dict) for p in grown):
+                raise ValueError(f"{tile}: its {side} plants are no entries")
+            seating = [
+                {"id": pid, "density": numbers[pid]}
+                for pid in (p.get("id") for p in grown)
+                if pid in numbers
+            ]
+            seating += [dict(p) for p in grown if p.get("id") not in numbers]
+            seating.append({"id": plant_id, "density": seated})
             made.setdefault("plants", {})[side] = seating
             needs = list((made.get("requires") or {}).get("plants", []))
             if plant_id not in needs:

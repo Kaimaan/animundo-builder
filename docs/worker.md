@@ -37,9 +37,10 @@ child-safety review, gates the world's checks, the render
 review, the reef file rules and the additions-only region
 change, then publishes its content pack to
 `packs/<item>/<version>/`. The job goes `published` carrying
-`pack` and the remade tiles' `versions`. A failed check fails
+`pack`, `overlay` and `no_food` (#220). A failed check fails
 the item with the check and its message, in the report and
-the progress entry. Plant items still ship by hand.
+the progress entry. Plant items ship packs like animals
+(#188.3).
 
 Crashes and restarts are safe: every status is a guard, so only
 events still waiting are replayed.
@@ -60,6 +61,29 @@ for an operator. To move it, write `operator_action` on its
 
 The worker clears the field once obeyed. Anything else with
 nothing paused is ignored and cleared.
+
+## Shipping a checking enrich item (#221)
+
+A plant (or animal) whose `ship` stage passed waits in
+`checking`: nothing is live yet. To ship it, look at its
+build report (`review/<job>/<item>/report.html` in Storage,
+laid out locally by `builder take <job>`) and at the item in
+the game, then write the verdict on its `build_jobs/{id}`
+document (the admin console):
+
+- `review: {<item>: {result: "shipped", ...}}` — the worker
+  overlays the item onto its passing tiles in a new pack
+  version and publishes the job with `pack`, `overlay` and
+  `no_food`.
+- `result: "not_accepted"` — the worker drops the item; the
+  ship's pack files stay in Storage but never go live.
+
+Shipping a plant to the reef also seats it: `join_plant`
+writes it into `biomes/coral_reef.json`, scaling the reef
+plants already there down in proportion, and
+`remake_biome_tiles` gives the reef's published tiles those
+same seated numbers, so the tile and the biome agree and the
+reef adds up to at most 1.0.
 
 ## Model hosts
 

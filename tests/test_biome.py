@@ -171,3 +171,60 @@ def test_remake_seats_the_newcomer_on_its_biome_tiles(
     assert "table_coral" in data["tiles"]["z10_0927_0560"]["requires"]["plants"]
     assert data["tiles"]["z10_0927_0561"]["version"] == 5
     assert len(store.build_jobs) == 1
+
+
+def test_remake_matches_the_biome_numbers(tmp_path: Path) -> None:
+    """#221.4: the tile's grown side equals the joined biome's, reef ≤ 1.0."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from fake_store import FakeStore
+
+    from builder.biome import plant_ground
+
+    world = _world(tmp_path)
+    old = [{"id": pid, "density": density} for pid, density, _ in REEF]
+    join_plant(world, "coral_reef", "table_coral", run_flatten=False)
+    tile = _tile("z10_0927_0560", "coral_reef", 2)
+    tile["plants"] = {"water": [dict(entry) for entry in old]}
+    store = FakeStore()
+    store.blobs["tiles/v2/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "2026-11-02",
+            "world": "abc",
+            "groups": {"z10/115_070": 7},
+            "counts": {"ready": 1, "blocked": {}},
+        }
+    ).encode("utf-8")
+    store.blobs["tiles/v2/z10/115_070.json"] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [115, 70],
+            "version": 7,
+            "tiles": {"z10_0927_0560": tile},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    out = remake_biome_tiles(store, world, "coral_reef", "table_coral", "abc123")
+    assert out["held"] == []
+    data = json.loads(store.read_blob("tiles/v2/z10/115_070.json")[0].decode("utf-8"))
+    grown = data["tiles"]["z10_0927_0560"]["plants"]["water"]
+    joined = json.loads((world / "biomes" / "coral_reef.json").read_text())["plants"][
+        "water"
+    ]
+    assert grown == joined
+    specs = {
+        pid: json.loads((world / "models" / "plants" / f"{pid}.json").read_text())
+        for pid, _, _ in REEF
+    }
+    specs["table_coral"] = json.loads(
+        (world / "models" / "plants" / "table_coral.json").read_text()
+    )
+    reef = sum(
+        entry["density"]
+        for entry in grown
+        if plant_ground(specs[entry["id"]]["grows"]) == "reef"
+    )
+    assert reef <= 1.0

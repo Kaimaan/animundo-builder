@@ -24,11 +24,17 @@ What the real plant looks like and does through the year:
 $YEAR_JSON
 ```
 
-Check the render against it, in this order; a part that falls
-short is an issue naming that part:
+The survey describes this plant's shape as: $SHAPE.
 
-- Shape: the same shape as the real plant (bush, tuft, mat,
-  single stem); every part present in every view.
+Check the render against both, in this order; a part that
+falls short is an issue naming that part:
+
+- Shape: the same shape as the surveyed plant (bush, tuft,
+  mat, single stem, round flat plate); every part present in
+  every view. A render whose shape mismatches the surveyed
+  shape — a plate coral drawn as a triangle, a round mat
+  drawn tall — is a `blocking` issue on that part, however
+  well it is drawn.
 - Size: right against the squirrel; the build prints the height.
 - Leaves, flowers, fruit: present when the year says so, in the
   right colours; nothing floating or detached.
@@ -50,7 +56,8 @@ None. Judge from the images only.
 ## Hard rules
 
 - `blocking` means only what breaks a child's recognition: a
-  missing or wrong-sized part, a wrong main colour, a broken
+  missing or wrong-sized part, a shape that mismatches the
+  surveyed shape, a wrong main colour, a broken
   season (flowers in winter, leaves that should have fallen).
   Small parts — petals, berries, leaf tips — are fine when
   roughly the right shape and place. Detail short of realism is

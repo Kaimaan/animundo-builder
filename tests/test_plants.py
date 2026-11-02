@@ -691,12 +691,76 @@ def _coral_draft() -> dict[str, Any]:
     )
 
 
+#: What job _4 drew: a triangular plate in beige-grey (#221.1).
+_TRIANGLE_PARTS = [
+    {
+        "name": "plate",
+        "shape": "cone",
+        "size": [0.5, 0.1, 0.5],
+        "at": [0, 0.2, 0],
+        "color": "plate",
+        "detail": 0.4,
+    },
+    {
+        "name": "stalk",
+        "shape": "cylinder",
+        "size": [0.09, 0.18, 0.09],
+        "at": [0, 0.09, 0],
+        "color": "stalk",
+        "detail": 0.5,
+    },
+]
+_TRIANGLE_COLORS = {"plate": "#a8a49c", "stalk": "#8a8578"}
+
+#: The hand fix: a round plate in ochre with a lighter rim (#221.1-2).
+_FIXED_PARTS = [
+    {
+        "name": "stalk",
+        "shape": "cylinder",
+        "size": [0.09, 0.18, 0.09],
+        "at": [0, 0.09, 0],
+        "color": "stalk",
+        "detail": 0.5,
+    },
+    {
+        "name": "plate",
+        "shape": "cylinder",
+        "size": [0.62, 0.06, 0.62],
+        "at": [0, 0.21, 0],
+        "color": "plate",
+        "detail": 1.0,
+    },
+    {
+        "name": "rim",
+        "shape": "cylinder",
+        "size": [0.66, 0.025, 0.66],
+        "at": [0, 0.21, 0],
+        "color": "rim",
+        "detail": 1.0,
+    },
+]
+_FIXED_COLORS = {"plate": "#a86f35", "rim": "#d9b77c", "stalk": "#6e4a2a"}
+
+#: The surveyed shape the looks check holds the render to (#221.3).
+_CORAL_LOOKS = "wide, flat, round or oval plates on a short stalk"
+
+
+def _coral_triangle() -> dict[str, Any]:
+    """The job's spec as made: names, sources and seating kept (#221.1)."""
+    return dict(_coral_draft(), parts=_TRIANGLE_PARTS, colors=_TRIANGLE_COLORS)
+
+
+def _coral_fixed() -> dict[str, Any]:
+    """The hand fix: only parts and colors change (#221.1-2)."""
+    return dict(_coral_draft(), parts=_FIXED_PARTS, colors=_FIXED_COLORS)
+
+
 def _match_coral(world: Path, latin: str) -> dict[str, Any]:
     assert latin == "Acropora hyacinthus"
     return {"taxon": TAXON, "files": []}
 
 
-def _file_into_reef(tmp_path: Path, checkout: Path, final: dict[str, Any]) -> None:
+def _file_into_reef(tmp_path: Path, checkout: Path, final: dict[str, Any]) -> Path:
     """File the built coral; the reef ground stays within budget."""
     import shutil
 
@@ -741,6 +805,7 @@ def _file_into_reef(tmp_path: Path, checkout: Path, final: dict[str, Any]) -> No
     )
     assert reef <= 1.0
     assert "table_coral" in {entry["id"] for entry in biome["plants"]["water"]}
+    return filed
 
 
 def _checkout() -> Path:
@@ -767,6 +832,115 @@ def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
     )
     assert final["grows"]["on"] == ["reef"]
     _file_into_reef(tmp_path, checkout, final)
+
+
+def test_replay_table_coral_round_plate_and_seating(tmp_path: Path) -> None:
+    """#221.5: the triangle fails looks; the fixed round plate ships seated."""
+    from fake_store import FakeStore
+
+    from builder.biome import plant_ground, remake_biome_tiles
+
+    checkout = _checkout()
+    world = _write_reef_job(tmp_path, checkout)
+    (tmp_path / "survey.json").write_text(
+        json.dumps(
+            {
+                "facts": [],
+                "species": [
+                    {"species": "table_coral", "description": _CORAL_LOOKS},
+                ],
+            }
+        )
+    )
+    shape_issue = {
+        "species": "table_coral",
+        "round": 1,
+        "issues": [
+            {
+                "part": "plate",
+                "problem": (
+                    "drawn as a triangle; the survey describes round, flat plates"
+                ),
+                "severity": "blocking",
+                "fix": "rebuild the plate as a wide flat round cylinder",
+            }
+        ],
+    }
+    clean = {"species": "table_coral", "round": 2, "issues": []}
+    chat = ScriptChat(
+        [
+            json.dumps(_coral_triangle()),
+            json.dumps(shape_issue),
+            json.dumps(_coral_fixed()),
+            json.dumps(clean),
+        ]
+    )
+    result = PlantsStage(match=_match_coral, chat=chat, build=_build_ok).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/table_coral.json"]
+    assert result["rounds"] == {"table_coral": 2}
+    assert _CORAL_LOOKS in chat.prompts[1]
+    final = json.loads(
+        (tmp_path / "models" / "plants" / "table_coral.json").read_text()
+    )
+    by_part = {part["name"]: part for part in final["parts"]}
+    assert by_part["plate"]["shape"] == "cylinder"
+    assert final["colors"] == _FIXED_COLORS
+    assert final["name"] == "Table coral"
+    assert final["sources"] == SPEC["sources"]
+    assert final["grows"]["on"] == ["reef"]
+    filed = _file_into_reef(tmp_path, checkout, final)
+    store = FakeStore()
+    tile = json.loads(
+        (
+            Path(__file__).resolve().parent / "examples" / "valid" / "tile.json"
+        ).read_text()
+    )
+    tile["id"] = "z10_0927_0560"
+    tile["home"] = "coral_reef"
+    tile["biome"] = "coral_reef"
+    pre = json.loads((checkout / "biomes" / "coral_reef.json").read_text())["plants"][
+        "water"
+    ]
+    tile["plants"] = {"water": [dict(entry) for entry in pre]}
+    store.blobs["tiles/v2/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "2026-11-02",
+            "world": "abc",
+            "groups": {"z10/115_070": 7},
+            "counts": {"ready": 1, "blocked": {}},
+        }
+    ).encode("utf-8")
+    store.blobs["tiles/v2/z10/115_070.json"] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [115, 70],
+            "version": 7,
+            "tiles": {"z10_0927_0560": tile},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    out = remake_biome_tiles(store, filed, "coral_reef", "table_coral", "abc123")
+    assert out["held"] == []
+    data = json.loads(store.read_blob("tiles/v2/z10/115_070.json")[0].decode("utf-8"))
+    grown = data["tiles"]["z10_0927_0560"]["plants"]["water"]
+    joined = json.loads((filed / "biomes" / "coral_reef.json").read_text())["plants"][
+        "water"
+    ]
+    assert grown == joined
+    specs = {
+        stem: json.loads((filed / "models" / "plants" / f"{stem}.json").read_text())
+        for stem in (*_CORAL_SPECS, "table_coral")
+    }
+    reef = sum(
+        entry["density"]
+        for entry in grown
+        if plant_ground(specs[entry["id"]]["grows"]) == "reef"
+    )
+    assert reef <= 1.0
 
 
 def _big_png() -> bytes:

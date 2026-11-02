@@ -114,6 +114,11 @@ class PlantsStage:
         sandbox = _ensure_sandbox(ctx.job_dir, world)
         start = brief.get("from") if isinstance(brief, dict) else None
         facts = _flora_facts(survey)
+        looks = {
+            str(entry.get("species", "")): str(entry.get("description", ""))
+            for entry in survey.get("species", [])
+            if isinstance(entry, dict)
+        }
         progress = _load_progress(ctx.job_dir)
         rounds: dict[str, int] = dict(progress.get("rounds", {}))
         passed = set(progress.get("passed", [])) & set(new_ids)
@@ -131,6 +136,7 @@ class PlantsStage:
                 region,
                 entries[plant_id],
                 facts,
+                looks.get(plant_id, ""),
                 plant_id,
                 start,
             )
@@ -166,6 +172,7 @@ class PlantsStage:
         region: dict[str, Any],
         entry: dict[str, Any],
         facts: str,
+        looks: str,
         plant_id: str,
         start: str | None = None,
     ) -> tuple[str, int]:
@@ -218,9 +225,9 @@ class PlantsStage:
             self._save_round(ctx, plant_id, round_no, spec, sandbox, built)
             preview = sandbox / "models" / "previews" / "plants" / f"{plant_id}.png"
             if preview.is_file():
-                issues = self._review(ctx, plant_id, round_no, spec, preview, built)[
-                    "issues"
-                ]
+                issues = self._review(
+                    ctx, plant_id, round_no, spec, preview, built, looks
+                )["issues"]
             else:
                 issues = []
             errors = problems
@@ -401,6 +408,7 @@ class PlantsStage:
         spec: dict[str, Any],
         preview: Path,
         built: dict[str, Any],
+        looks: str,
     ) -> dict[str, Any]:
         bar_id = "bilberry" if spec.get("kind") == "bush" else "wood_anemone"
         bar = _bar_preview(ctx, plant_id, bar_id)
@@ -412,6 +420,7 @@ class PlantsStage:
                 "SPECIES": plant_id,
                 "ROUND": str(round_no),
                 "BUILT": built["summary"],
+                "SHAPE": looks or "(the survey describes no shape)",
                 "YEAR_JSON": json.dumps(
                     {
                         "latin": spec.get("latin"),

@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #219 probe result ($0.18, research saved, write stopped)
+
+- Ran the approved probe: S tile re-run as fresh job probe-z10_0927_0561 (fresh id because the ledger keys spend per job and the old id carries $0.46), hard $0.25 job cap, same ring ledger.
+- Verdict: the cuts work but $0.25 is knife-edge. Three research calls at 5/5/5 searches cost $0.054/$0.079/$0.050 = $0.18 (was $0.46 for 10/10/9); the write's $0.08 reservation was then refused at $0.18 spent. A gaps call triggered (fewer searches cite fewer domains), which is what tipped it over. Full-survey price is now ~$0.25-0.27 with gaps, ~$0.18-0.20 without. So $1.01 -> ~$0.25, a 4x cut, but the $0.25 cap only holds for gapless surveys.
+- The incremental saves worked in production: research_land/species/gaps.md are all on disk (jobs/ring218/probe-z10_0927_0561/), 13 SPECIES entries, no survey.json. A stopped job now keeps its research.
+- S tile findings for #218: reef + coral confirmed south too (13 reef / 15+ coral mentions in land research). 13 species: dugong, humpback whale, spinner dolphin, osprey, woodswallow, imperial-pigeon, brown booby, black-naped tern, orange clownfish, parrotfish, blacktip reef shark, green + hawksbill turtles. Reef fauna again, no coral species surveyed.
+- Spend: probe $0.18; round total now $1.66 ($1.01 survey 1 + $0.46 survey 2 + $0.18 probe), $0.16 over the $1.50 round cap on the approved probe.
+- Question for Kai: (1) set $0.30/job and run the remaining 6 surveys (~$1.50-1.80 more, full survey.json each); or (2) keep $0.25/job and accept research-only output whenever gaps trigger (the research files still land for the log, just no survey.json). I recommend (1).
+
 ## 2026-11-02: inbox #219 follow-up (survey cost cuts, $0 spent)
 
 - Kai picked "cut costs first": commit 37910a8 (CI green). Survey research now allows 5 grounded searches per call instead of 10 (20 per survey max). Price math from survey 2's receipts: input $1.25/M dominates, a search fetches ~8k input tokens (~$0.013), so land + species + write should land near $0.20 — inside the $0.25 job cap when no gaps call or continuation is needed. Gaps/continuations can still stop a job at the cap.

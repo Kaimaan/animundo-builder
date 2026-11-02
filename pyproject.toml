@@ -40,6 +40,9 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 88
+# CI clones animundo-world inside the workspace; it is a separate
+# repository with its own style, never linted from here (#215).
+exclude = ["animundo-world"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

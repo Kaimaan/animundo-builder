@@ -3,6 +3,16 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #218 (survey round, interim: 1 saved, cap reached)
+
+- Ran the approved survey round (user yes, $1.50 cap for 3-4 ocean tiles). Result: 1 of 4 surveys saved; the cap is spent.
+- Survey 1, W tile (z10_0926_0560, $1.0099): 11 facts, 0 species in survey.json. The species research found 12 species (dugong, bottlenose dolphin, flying-fox, osprey, reef egret, stone-curlew, green/hawksbill/loggerhead turtles, blacktip reef shark, clownfish, parrotfish) but the write retry dropped them all to dodge an invented-source complaint. Land research confirms reef + coral at the W tile (15 reef / 13 coral mentions); no coral species were surveyed, only reef fauna. Evidence: jobs/ring218/survey-z10_0926_0560/ (local only).
+- Survey 2, S tile (z10_0927_0561, $0.4628): stopped by the $0.45 job budget during research, nothing saved. Total round spend $1.47 of $1.50; ~$0.03 left, no further surveys possible on this approval.
+- My $0.11/survey estimate was wrong ~5x: search grounding bills fetched pages as input (~8k tokens/search), and survey research was uncapped (19 searches in one call).
+- Fix, commit c9d0584 (CI run 41451406900 green): _check_write rejects a draft that drops every researched species (retry, not accept); research calls pass max_tool_calls=10, the research stage's 5+5 cap. Survey 2 confirmed the cap (10/10/9 searches) but research alone still costs ~$0.46.
+- Tests: tests/test_survey.py 13 passed; full suite 1125 passed, 12 skipped; ruff check + format clean.
+- Open question for Kai: approve ~$1.50 more to finish the round (S re-run + 2 ocean tiles, ~$0.55 each with the cap), or accept the partial result (reef confirmed W, S + others unsurveyed)? No publishing done; nothing deployed.
+
 ## 2026-11-02: inbox #218 (survey round: price, waiting Kai's yes)
 
 - The ring

@@ -4,8 +4,41 @@ What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
 ## 2026-11-02: inbox #215
-  (builder 9c4aebe)
+  (builder 9c4aebe,
+  d6a38e8,
+  42963b6; CI
+  green run
+  41424775513)
 
+- CI green
+  (d6a38e8,
+  42963b6): the
+  red was the
+  world's .glb
+  files, which
+  are
+  git-ignored,
+  so its model
+  self-tests
+  fail on a
+  fresh clone.
+  Builder check
+  now names the
+  unbuilt models
+  and skips a
+  model
+  self-test only
+  when models
+  are missing,
+  the test reads
+  them, and its
+  output carries
+  the signature;
+  else it fails.
+  Ruff skips the
+  CI-nested
+  world
+  checkout.
 - Why ship
   failed: the
   converted tile
@@ -80,17 +113,17 @@ Job folders live under `jobs/` (local only, never committed).
   clean tree).
   Ruff and
   gitleaks clean.
-- CI is red only
-  on that same
+- CI was red
+  only on that
   world selftest
   (run
-  41422958303, 1
-  failed, 1044
-  passed), as on
-  the #214 runs.
-  Open: the
-  world's side
-  owns that red.
+  41422958303),
+  as on the #214
+  runs; fixed
+  builder-side
+  above, green
+  on run
+  41424775513.
   The next worker
   deploy takes
   builder main

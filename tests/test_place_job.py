@@ -71,6 +71,7 @@ def _survey(**over: Any) -> dict[str, Any]:
     data: dict[str, Any] = {
         "centre": {"lat": 60.5, "lon": 24.5},
         "tiles": [A, B],
+        "tiles_why": "The start clearing sits across the A/B tile side.",
         "biome": "boreal_forest",
         "name": {"en": "Nuuksio", "fi": "Nuuksio", "fi_gen": "Nuuksion"},
         "wikidata": "Q1",
@@ -98,7 +99,7 @@ def test_place_research_stops_at_waiting_yes(tmp_path: Path) -> None:
     assert job["research"]["missing"] == [
         {"kind": "animal", "what": "lion", "part": "boreal_forest"}
     ]
-    assert job["price"] == 0.50
+    assert job["price"] == 1.00
     assert job["spent_usd"] == 0.0
     assert "tile" not in job
     saved = json.loads((tmp_path / "jobs" / "j1" / "survey.json").read_text())
@@ -129,6 +130,51 @@ def test_place_bad_rectangle_fails_loud(tmp_path: Path) -> None:
     job = store.build_jobs["j1"]
     assert job["status"] == "failed"
     assert job["error"] == "bad_survey"
+
+
+def test_place_one_tile_passes(tmp_path: Path) -> None:
+    """#228.1: a survey on one tile passes, priced as one tile."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    worker.chat = _ScriptRespond([json.dumps(_survey(tiles=[A]))])
+    store.build_jobs["j1"] = _place_job()
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["research"]["tiles"] == [A]
+    assert job["research"]["tiles_why"] == ""
+    assert job["price"] == 0.50
+
+
+def test_place_two_tiles_without_why_fail(tmp_path: Path) -> None:
+    """#228.2: two tiles with no reason fail the survey check."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    data = _survey()
+    del data["tiles_why"]
+    worker.chat = _ScriptRespond([json.dumps(data)])
+    store.build_jobs["j1"] = _place_job()
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "bad_survey"
+
+
+def test_place_two_tiles_with_why_pass(tmp_path: Path) -> None:
+    """#228.2: two tiles with a reason pass, priced as two tiles."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    worker.chat = _ScriptRespond([json.dumps(_survey())])
+    store.build_jobs["j1"] = _place_job()
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["research"]["tiles"] == [A, B]
+    assert (
+        job["research"]["tiles_why"]
+        == "The start clearing sits across the A/B tile side."
+    )
+    assert job["price"] == 1.00
 
 
 def test_place_no_turns_down(tmp_path: Path) -> None:
@@ -217,7 +263,8 @@ def test_place_reuses_its_survey_json(tmp_path: Path) -> None:
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "waiting_yes"
-    assert job["price"] == 0.0
+    assert job["price"] == 0.50
+    assert job["research"]["tiles_why"] == ""
     assert worker.chat.calls == 0
 
 

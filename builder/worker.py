@@ -33,7 +33,7 @@ DELETE = object()
 
 #: Stage-A build estimate per unfiled animal or plant (#222.2);
 #: stage C calibrates it from real runs.
-PLACE_BUILD_USD_PER_ITEM = 0.50
+PLACE_BUILD_USD_PER_TILE = 0.50
 
 
 class Store(Protocol):
@@ -800,6 +800,7 @@ class Worker:
             spent = ctx.tracker.spent_usd
         research = {
             "tiles": survey["tiles"],
+            "tiles_why": survey.get("tiles_why", ""),
             "biome": survey["biome"],
             "centre": survey["centre"],
             "name": survey["name"],
@@ -808,7 +809,7 @@ class Worker:
             "plants": survey["plants"],
             "missing": survey["missing"],
         }
-        price = round(len(survey["missing"]) * PLACE_BUILD_USD_PER_ITEM, 2)
+        price = round(len(survey["tiles"]) * PLACE_BUILD_USD_PER_TILE, 2)
         update: dict[str, Any] = {
             "research": research,
             "price": price,

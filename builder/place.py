@@ -431,6 +431,7 @@ def job_survey_format() -> dict[str, Any]:
                     "additionalProperties": False,
                 },
                 "tiles": {"type": "array", "items": {"type": "string"}},
+                "tiles_why": {"type": "string"},
                 "biome": {"type": "string"},
                 "name": {
                     "type": "object",
@@ -520,10 +521,12 @@ def check_job_survey(
 ) -> dict[str, Any]:
     """A checked place-job survey, or why not (#222.2).
 
-    The tiles form a covered rectangle of at most 2 by 2;
-    every animal is on the list with a source; plants and
-    names as answered. Whether the biome fits is the
-    worker's call: a miss stops the job naming its land.
+    The tiles form a covered rectangle of at most 2 by 2,
+    one tile by default; more than one needs its reason in
+    a sentence (#228.2). Every animal is on the list with a
+    source; plants and names as answered. Whether the biome
+    fits is the worker's call: a miss stops the job naming
+    its land.
     """
     if not isinstance(data, dict):
         raise SurveyError("the survey is not an object")
@@ -538,6 +541,13 @@ def check_job_survey(
     ):
         raise SurveyError("the survey centres on nothing")
     tiles = _survey_rectangle(data["tiles"])
+    why = data.get("tiles_why")
+    if why is None:
+        why = ""
+    if not isinstance(why, str):
+        raise SurveyError("the survey's tiles_why is no sentence")
+    if len(tiles) > 1 and not why.strip():
+        raise SurveyError(f"the survey covers {len(tiles)} tiles with no tiles_why")
     name = data["name"]
     if (
         not isinstance(name, dict)
@@ -566,6 +576,7 @@ def check_job_survey(
         "place": place,
         "centre": {"lat": centre["lat"], "lon": centre["lon"]},
         "tiles": tiles,
+        "tiles_why": why.strip() if len(tiles) > 1 else "",
         "biome": data["biome"],
         "name": {"en": name["en"], "fi": name["fi"], "fi_gen": name["fi_gen"]},
         "wikidata": data["wikidata"].strip(),

@@ -9,11 +9,16 @@ $WANT_LINE
 
 ## Tiles
 
-The rectangle of z10 grid tiles the place covers: 1 tile, 2
-side by side, or a 2 by 2 block. Tile ids look like
-`z10_0581_0294` (z10, four digits, four digits). The
-rectangle is fully covered: never 3 tiles, never a scattered
-four.
+The place starts on one z10 grid tile: the tile holding its
+start spot and the habitat it is for. A tile is 1,024 m
+across, enough to start in. Tile ids look like
+`z10_0581_0294` (z10, four digits, four digits).
+
+Only when the start spot or that habitat sits across a tile
+side, cover the rectangle: 2 side by side, or a 2 by 2
+block, fully covered (never 3 tiles, never a scattered
+four). Then `tiles_why` says in one sentence which side the
+place crosses and why.
 
 ## Biome
 
@@ -40,6 +45,7 @@ and its Wikidata id (like `Q123`).
 ## Output
 
 Strict JSON only, exactly these keys: `centre` with `lat`
-and `lon`, `tiles`, `biome`, `name` with `en`, `fi` and
-`fi_gen`, `wikidata`, `animals` with `id` and `source`,
-`plants` with `name` and `source`.
+and `lon`, `tiles`, `tiles_why` (one sentence when `tiles`
+holds more than one, else blank), `biome`, `name` with `en`,
+`fi` and `fi_gen`, `wikidata`, `animals` with `id` and
+`source`, `plants` with `name` and `source`.

@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #219 (survey round yes: conflicts, survey 1 research)
+
+- #219 conflicts with the #218 cap math and with measured survey cost, so per the inbox rules I ran no further surveys and ask Kai before spending. Three facts: (a) eight surveys at $0.25 each is $2.00, already over the $1.50 round cap; (b) no survey can finish under $0.25 today — capped research alone costs ~$0.46 (survey 2 stopped at $0.46 with nothing saved), a full survey ~$0.55; (c) $1.47 of the $1.50 is already spent on surveys 1-2 (run under the earlier approval, before #219 appeared in my reads), leaving ~$0.03.
+- Staged the eighth survey dir Kai named, east tile z10_0928_0560 ($0, local only): jobs/ring218/survey-z10_0928_0560/. Kai is right that my seven left it out.
+- Survey 1 research for Kai (W tile z10_0926_0560, $1.01): 11 facts — sea west of Green Island; Green Island is a 12ha coral cay on a mid-shelf reef; reef flat + seagrass beds with turtles and stingrays; no freshwater springs; closed vine forest; widespread seagrass meadows; Cairns tropical seasons; island colours; GBRMPA Green Island zoning; AVH occurrence record; IUCN assessment. 12 species researched (dugong, bottlenose dolphin, spectacled flying-fox, eastern osprey, eastern reef egret, beach stone-curlew, green/hawksbill/loggerhead turtles, blacktip reef shark, clownfish, parrotfish) — in research_species.md only; survey.json has 0 due to the write bug fixed in c9d0584. Reef + coral confirmed at the W tile. Sources: parks.desi.qld.gov.au green-island-guide pdf, parks.qld.gov.au green-island culture, wetlandinfo.detsi.qld.gov.au, reg.bom.gov.au, elibrary.gbrmpa.gov.au Green Island locality file, avh.ala.org.au occurrence 1a7a2a66, iucnredlist.org species 4615/11037468. Full text: jobs/ring218/survey-z10_0926_0560/research_*.md (local only).
+- Noted worker v23 runs builder c9d0584. Surveys only, nothing built or published.
+- Question for Kai: how to proceed? Options I see: (1) raise the round cap to ~$4.50 for all 8 at ~$0.55 each; (2) survey fewer tiles (e.g. just N + E, ~$1.10 fresh spend); (3) have me cut survey cost first (tighter search caps, smaller write context) and re-price before running. I recommend (3) then (2) or (1).
+
 ## 2026-11-02: inbox #218 (survey round, interim: 1 saved, cap reached)
 
 - Ran the approved survey round (user yes, $1.50 cap for 3-4 ocean tiles). Result: 1 of 4 surveys saved; the cap is spent.

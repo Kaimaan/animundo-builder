@@ -3,6 +3,12 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #222A + #224 (place job kind, stop, yes; d20442c green)
+
+- Stage A ($0, no deploy): the worker runs `kind: "place"` jobs with no tile. One grounded survey draws a covered rectangle (at most 2x2), names the biome, species with sources, names and Wikidata id; the check enforces shape, list membership and sources. The job stops at `waiting_yes` with research, price and spent_usd. Missing biome fails `no_biome` naming its land (research kept, for the hand-made Amazon biome). `place_no` fails `turned_down`; `place_yes` ($0.01-$10, else it waits) is consumed and parks the job approved under its cap — stage C builds it. Claims accept `waiting_yes`; the contract takes the #224.1 request shape.
+- Judgments for Kai: price is $0.50 per unfiled animal/plant (stage-A placeholder; the B live run calibrates it); a reused survey.json after a crash reports the job's last spent_usd (the ledger stays the source of truth); no GBIF check in stage A (#222 doesn't ask for one).
+- Tests: 9 new replay/fake tests (stop, no_biome, bad rectangle, no, yes+park, bad cap, bad request, survey reuse, contract shape); full suite 1145 passed, 12 skipped; ruff clean; CI green. B (live reef survey, Kai's spend) and C (build to publish) wait for go.
+
 ## 2026-11-02: inbox #221 (round ochre coral, commit b9e59a2, worker v23)
 
 - Hand-fixed the spec with no model calls: a round cylinder plate (detail 1.0) on a short stalk with a lighter rim, ochre plate #a86f35 / rim #d9b77c / stalk #6e4a2a, keeping the job's names, sources, seating and on: [reef]. The triangle was a 3-sided cone at detail 0.4.

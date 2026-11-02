@@ -14,6 +14,9 @@ def make_world(
     missing: tuple[str, ...] = (),
     broken_contract: bool = False,
     failing_selftest: str | None = None,
+    failing_output: str | None = None,
+    unbuilt_model: str | None = None,
+    built_model: str | None = None,
     bad_list: bool = False,
     bad_schema: bool = False,
 ) -> Path:
@@ -33,9 +36,25 @@ def make_world(
     (tools / "taxon.py").write_text("# stub\n")
     for name in SELFTESTS:
         if name == failing_selftest:
-            (tools / name).write_text("raise SystemExit('stub blew up')\n")
+            if failing_output is None:
+                (tools / name).write_text("raise SystemExit('stub blew up')\n")
+            else:
+                (tools / name).write_text(
+                    f"print({failing_output!r})\nraise SystemExit(1)\n"
+                )
         else:
             (tools / name).write_text("print('stub ok')\n")
+    if unbuilt_model is not None:
+        models = path / "models"
+        models.mkdir(exist_ok=True)
+        (models / f"{unbuilt_model}.json").write_text(json.dumps({"id": unbuilt_model}))
+    if built_model is not None:
+        models = path / "models"
+        models.mkdir(exist_ok=True)
+        (models / f"{built_model}.json").write_text(json.dumps({"id": built_model}))
+        built = path / "assets" / "animals"
+        built.mkdir(parents=True, exist_ok=True)
+        (built / f"{built_model}.glb").write_bytes(b"glb")
     (path / "animal-list.json").write_text(
         json.dumps({} if bad_list else {"homes": [], "not_yet": [], "animals": []})
     )
@@ -127,3 +146,67 @@ def test_missing_checkout_fails_alone(tmp_path: Path) -> None:
     report = check_world(tmp_path / "nope")
     assert report.ok is False
     assert [probe.name for probe in report.probes] == ["checkout"]
+
+
+def test_unbuilt_models_skip_model_selftests(tmp_path: Path) -> None:
+    """#160.4: unbuilt .glb is unknown, never a failure (#173.3)."""
+    report = check_world(
+        make_world(
+            tmp_path / "world",
+            failing_selftest="test_broken.py",
+            failing_output="ERROR: whale: assets/animals/whale.glb is missing. "
+            "Run tools/build_model.sh models/whale.json",
+            unbuilt_model="whale",
+        )
+    )
+    assert report.ok is True
+    probes = by_name(report)
+    assert probes["data models built"].status == "skip"
+    assert "animals/whale" in probes["data models built"].detail
+    skipped = probes["selftest test_broken.py"]
+    assert skipped.status == "skip"
+    assert "cannot verify" in skipped.detail
+    assert report.counts()["failed"] == 0
+
+
+def test_built_models_keep_marked_failures(tmp_path: Path) -> None:
+    """#160.4: with every .glb built, a marked failure still fails."""
+    report = check_world(
+        make_world(
+            tmp_path / "world",
+            failing_selftest="test_broken.py",
+            failing_output="build it first with tools/build_model.sh x",
+            built_model="whale",
+        )
+    )
+    assert report.ok is False
+    probes = by_name(report)
+    assert probes["data models built"].status == "pass"
+    assert probes["selftest test_broken.py"].status == "fail"
+
+
+def test_unbuilt_models_keep_unmarked_failures(tmp_path: Path) -> None:
+    """#160.4: without the missing-model signature, a failure stands."""
+    report = check_world(
+        make_world(
+            tmp_path / "world",
+            failing_selftest="test_broken.py",
+            unbuilt_model="whale",
+        )
+    )
+    assert report.ok is False
+    assert by_name(report)["selftest test_broken.py"].status == "fail"
+
+
+def test_unbuilt_models_keep_other_selftests(tmp_path: Path) -> None:
+    """#160.4: only the self-tests that read models can skip."""
+    report = check_world(
+        make_world(
+            tmp_path / "world",
+            failing_selftest="test_food.py",
+            failing_output="build it first with tools/build_model.sh x",
+            unbuilt_model="whale",
+        )
+    )
+    assert report.ok is False
+    assert by_name(report)["selftest test_food.py"].status == "fail"

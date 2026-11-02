@@ -4,7 +4,10 @@
 present, the required data parses, the import contracts the builder
 relies on hold, and the world's own offline self-tests pass. A
 missing or misbehaving required probe fails the command; pieces the
-builder only uses opportunistically skip with a reason. No model,
+builder only uses opportunistically skip with a reason. Self-tests
+that read built models skip, visibly, when the checkout's models
+were never built: the .glb files are git-ignored build output, so
+unbuilt models are unknown, never failures (#173.3). No model,
 no network, no deploy, no publish.
 """
 
@@ -40,6 +43,20 @@ SELFTESTS = (
 )
 SELFTEST_TIMEOUT = 300
 PROBE_TIMEOUT = 120
+
+#: Self-tests that read built models (.glb). On a fresh clone they
+#: fail with "build it first" (test_check_tile, test_adapt_home);
+#: on a partial build test_broken fails with missing-.glb errors.
+#: A failure elsewhere, or without the missing-model signature,
+#: still fails, so a real regression never hides behind this list.
+MODEL_SELFTESTS = ("test_check_tile.py", "test_broken.py", "test_adapt_home.py")
+
+#: The world's own missing-model signatures in self-test output.
+UNBUILT_MARKERS = (
+    "build it first with tools/build_model.sh",
+    ".glb is missing. Run tools/build_model.sh",
+    "model file not found: res://assets/",
+)
 
 _CONTRACTS = {
     "contract tile_region.place": (
@@ -131,8 +148,46 @@ def check_world(world: Path) -> CompatReport:
             report.probes.append(Probe(f"tool {name}", "skip", f"absent ({fallback})"))
     report.probes.extend(_data_probes(world))
     report.probes.extend(_contract_probes(tools))
-    report.probes.extend(_selftest_probes(world, tools))
+    unbuilt = missing_models(world)
+    report.probes.append(_models_probe(unbuilt))
+    report.probes.extend(_selftest_probes(world, tools, unbuilt))
     return report
+
+
+def missing_models(world: Path) -> list[str]:
+    """Library model specs with no built .glb, sorted (#160.4).
+
+    Mirrors the world's model checker: every `models/*.json`
+    animal needs `assets/animals/<id>.glb`, every
+    `models/plants/*.json` needs `assets/plants/<id>.glb`.
+    """
+    missing: list[str] = []
+    pairs = (
+        (world / "models", world / "assets" / "animals"),
+        (world / "models" / "plants", world / "assets" / "plants"),
+    )
+    for specs, built in pairs:
+        if not specs.is_dir():
+            continue
+        for path in sorted(specs.glob("*.json")):
+            if not (built / f"{path.stem}.glb").is_file():
+                missing.append(f"{built.name}/{path.stem}")
+    return missing
+
+
+def _models_probe(unbuilt: list[str]) -> Probe:
+    """Whether the checkout's library models are built (#160.4)."""
+    if not unbuilt:
+        return Probe("data models built", "pass", "every library model built")
+    shown = ", ".join(unbuilt[:5])
+    if len(unbuilt) > 5:
+        shown += ", ..."
+    return Probe(
+        "data models built",
+        "skip",
+        f"{len(unbuilt)} without .glb ({shown}): git-ignored build "
+        "output; run tools/build_model.sh in the world to verify",
+    )
 
 
 def _data_probes(world: Path) -> list[Probe]:
@@ -225,7 +280,7 @@ def _contract_probes(tools: Path) -> list[Probe]:
     return probes
 
 
-def _selftest_probes(world: Path, tools: Path) -> list[Probe]:
+def _selftest_probes(world: Path, tools: Path, unbuilt: list[str]) -> list[Probe]:
     probes: list[Probe] = []
     for name in SELFTESTS:
         script = tools / name
@@ -256,11 +311,35 @@ def _selftest_probes(world: Path, tools: Path) -> list[Probe]:
                     _last_line(proc.stdout + proc.stderr),
                 )
             )
+        elif _unbuilt_failure(name, proc.stdout + proc.stderr, unbuilt):
+            probes.append(
+                Probe(
+                    f"selftest {name}",
+                    "skip",
+                    f"{_last_line(proc.stdout + proc.stderr)}; "
+                    f"{len(unbuilt)} models unbuilt here, cannot verify",
+                )
+            )
         else:
             probes.append(
                 Probe(f"selftest {name}", "fail", _last_line(proc.stdout + proc.stderr))
             )
     return probes
+
+
+def _unbuilt_failure(name: str, output: str, unbuilt: list[str]) -> bool:
+    """A model self-test failure explained by unbuilt models (#160.4).
+
+    All three hold, or the failure stands: the checkout really
+    lacks built models, the failing test is one that reads
+    them, and its output carries the world's missing-model
+    signature. Anything else is a real regression, never a skip.
+    """
+    return (
+        bool(unbuilt)
+        and name in MODEL_SELFTESTS
+        and any(mark in output for mark in UNBUILT_MARKERS)
+    )
 
 
 def _last_line(text: str) -> str:

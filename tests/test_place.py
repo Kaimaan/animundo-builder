@@ -1106,11 +1106,12 @@ def test_reef_improve_replay_plans_only_what_it_lacks(
     assert set(plan["looked_for"]) >= {
         "parrotfish",
         "moray_eel",
-        "hammerhead",
         "manta_ray",
     }
     assert "clownfish" not in plan["looked_for"]
     assert "lionfish" not in plan["looked_for"]
+    # #207.2 backfilled the shipped hammerhead: a resident now.
+    assert "hammerhead" not in plan["looked_for"]
     assert "lion" not in plan["looked_for"]
 
 
@@ -1169,6 +1170,119 @@ def test_place_residents_read_the_cast(tmp_path: Path) -> None:
     )
     assert place_residents(world, "xx_place") == {"fox", "perch"}
     assert place_residents(world, "xx_nowhere") == set()
+
+
+def _pack_world(tmp_path: Path) -> Path:
+    """A world with one place and the files the tag rule reads."""
+    world = tmp_path / "world"
+    (world / "places").mkdir(parents=True)
+    (world / "animals").mkdir(parents=True)
+    (world / "schemas").mkdir(parents=True)
+    (world / "places" / "xx_reef.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_reef",
+                "name": {"en": "Test Reef", "fi": "Testiriutta"},
+                "tiles": [[927, 560]],
+                "species": {
+                    "playable": ["clownfish"],
+                    "predators": [],
+                    "prey": ["clownfish"],
+                },
+                "points": [
+                    {
+                        "kind": "start",
+                        "id": "default",
+                        "lat": 0.0,
+                        "lon": 0.0,
+                        "facing": "north",
+                    }
+                ],
+                "live": False,
+            }
+        )
+    )
+    (world / "animals" / "clownfish.json").write_text(
+        json.dumps({"id": "clownfish", "tags": ["fish", "small_fish"], "hunts": []})
+    )
+    (world / "schemas" / "place.schema.json").write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "required": ["id", "name", "tiles", "species", "points", "live"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "name": {"type": "object"},
+                    "tiles": {"type": "array"},
+                    "species": {"type": "object"},
+                    "points": {"type": "array"},
+                    "live": {"type": "boolean"},
+                },
+            }
+        )
+    )
+    return world
+
+
+def _pack_new(tmp_path: Path) -> Path:
+    """A conversion-2 pack: the animal, no additions."""
+    pack = tmp_path / "pack-new"
+    (pack / "animals").mkdir(parents=True)
+    (pack / "animals" / "hammerhead.json").write_text(
+        json.dumps(
+            {"id": "hammerhead", "tags": ["fish", "big_fish"], "hunts": ["small_fish"]}
+        )
+    )
+    return pack
+
+
+def _pack_old(tmp_path: Path) -> Path:
+    """A pre-conversion pack: additions name the place."""
+    pack = tmp_path / "pack-old"
+    (pack / "animals").mkdir(parents=True)
+    (pack / "animals" / "hammerhead.json").write_text(
+        json.dumps(
+            {"id": "hammerhead", "tags": ["fish", "big_fish"], "hunts": ["small_fish"]}
+        )
+    )
+    (pack / "additions").mkdir(parents=True)
+    (pack / "additions" / "xx_reef.json").write_text(
+        json.dumps(
+            {
+                "format": 1,
+                "fish": [{"kind": "hammerhead", "count": 2}],
+                "playable": ["hammerhead"],
+                "predators": ["hammerhead"],
+            }
+        )
+    )
+    return pack
+
+
+def test_missing_pack_species_covers_old_and_new_packs(tmp_path: Path) -> None:
+    """#207.3: a place file lacks what its packs added until filed."""
+    from builder.place import file_pack_places, missing_pack_species
+
+    world = _pack_world(tmp_path)
+    new = _pack_new(tmp_path)
+    old = _pack_old(tmp_path)
+    # The new pack's shark is playable and hunts small fish, so a
+    # predator; the old pack's additions say the same outright.
+    assert missing_pack_species(world / "places", [(new, ["xx_reef"])], world) == {
+        "xx_reef": {"playable": ["hammerhead"], "predators": ["hammerhead"]}
+    }
+    assert missing_pack_species(world / "places", [(old, [])], world) == {
+        "xx_reef": {"playable": ["hammerhead"], "predators": ["hammerhead"]}
+    }
+    assert file_pack_places(old, [], world) == {
+        "xx_reef": ["playable:hammerhead", "predators:hammerhead"]
+    }
+    assert missing_pack_species(world / "places", [(old, [])], world) == {}
+    assert missing_pack_species(world / "places", [(new, ["xx_reef"])], world) == {}
+    filed = json.loads((world / "places" / "xx_reef.json").read_text())["species"]
+    assert filed["playable"] == ["clownfish", "hammerhead"]
+    assert filed["predators"] == ["hammerhead"]
+    assert filed["prey"] == ["clownfish"]
 
 
 def test_recorded_gbif_counts_keep_replay_offline(

@@ -353,6 +353,24 @@ def build_parser() -> argparse.ArgumentParser:
     filed.add_argument(
         "--storage-bucket", required=True, help="The Storage bucket for tiles."
     )
+    file_pack = place_sub.add_parser(
+        "file-pack", help="File a shipped pack's species into places."
+    )
+    file_pack.add_argument("dir", help="The pack folder (animals/, additions/).")
+    file_pack.add_argument(
+        "--place",
+        action="append",
+        default=[],
+        help="A place id the pack's animals join (repeatable).",
+    )
+    file_pack.add_argument(
+        "--check",
+        action="store_true",
+        help="Only report what each place file still lacks.",
+    )
+    file_pack.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
 
@@ -601,6 +619,36 @@ def cmd_place_file(args: argparse.Namespace) -> int:
         return 1
     for path in paths:
         print(f"filed {path}")
+    return 0
+
+
+def cmd_place_file_pack(args: argparse.Namespace) -> int:
+    from .place import file_pack_places, missing_pack_species
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    pack_dir = Path(args.dir)
+    if not pack_dir.is_dir():
+        print(f"error: not a directory: {args.dir}", file=sys.stderr)
+        return 1
+    if args.check:
+        missing = missing_pack_species(
+            world / "places", [(pack_dir, args.place)], world
+        )
+        for place_id in sorted(missing):
+            for key in ("playable", "predators", "prey"):
+                for animal_id in missing[place_id].get(key, []):
+                    print(f"{place_id} lacks {key}:{animal_id}")
+        return 0
+    try:
+        filed = file_pack_places(pack_dir, args.place, world)
+    except (OSError, ValueError) as error:
+        print(f"error: cannot file this pack: {error}", file=sys.stderr)
+        return 1
+    for place_id in sorted(filed):
+        for entry in filed[place_id]:
+            print(f"filed {place_id} {entry}")
     return 0
 
 
@@ -1124,6 +1172,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_place_plan(args)
     if args.command == "place" and args.place_command == "file":
         return cmd_place_file(args)
+    if args.command == "place" and args.place_command == "file-pack":
+        return cmd_place_file_pack(args)
     if args.command == "request" and args.request_command == "plan":
         return cmd_request_plan(args)
     if args.command == "request" and args.request_command == "build":

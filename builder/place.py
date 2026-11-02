@@ -963,6 +963,186 @@ def place_residents(world: Path, place_id: str) -> set[str]:
     return residents
 
 
+#: A pack's species delta for one place: the lists it adds to.
+#: Fish counts don't ride along: places carry no fish (#207.1).
+PACK_DELTA_LISTS = ("playable", "predators", "prey")
+
+
+def pack_animals(pack_dir: Path) -> dict[str, dict[str, Any]]:
+    """The pack's animal files by id (plants are no place species)."""
+    animals: dict[str, dict[str, Any]] = {}
+    folder = pack_dir / "animals"
+    if not folder.is_dir():
+        return animals
+    for path in sorted(folder.glob("*.json")):
+        try:
+            animal = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if isinstance(animal, dict):
+            animals[path.stem] = animal
+    return animals
+
+
+def pack_additions(pack_dir: Path) -> dict[str, dict[str, list[str]]]:
+    """A pre-conversion pack's additions by place (#207.1).
+
+    Only the species lists; `format` and `fish` don't go into
+    a place file.
+    """
+    out: dict[str, dict[str, list[str]]] = {}
+    folder = pack_dir / "additions"
+    if not folder.is_dir():
+        return out
+    for path in sorted(folder.glob("*.json")):
+        try:
+            additions = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if not isinstance(additions, dict):
+            continue
+        out[path.stem] = {
+            key: [a for a in (additions.get(key) or []) if isinstance(a, str)]
+            for key in PACK_DELTA_LISTS
+        }
+    return out
+
+
+def animal_delta(
+    animal_id: str,
+    animal: dict[str, Any],
+    species: dict[str, Any],
+    world: Path,
+) -> dict[str, list[str]]:
+    """One animal's species delta for a place's cast (#207.1).
+
+    Playable always; a predator when it hunts a resident's
+    tag, prey when a resident hunts one of its tags. Featured
+    never: the research carries no featured signal, so the
+    hand keeps curating it.
+    """
+    residents: set[str] = set()
+    for key in ("playable", "predators", "prey", "featured"):
+        residents.update(s for s in (species.get(key) or []) if isinstance(s, str))
+    tags = set(animal.get("tags", []) or [])
+    hunts = set(animal.get("hunts", []) or [])
+    hunts_tags: set[str] = set()
+    resident_tags: set[str] = set()
+    for resident in residents:
+        try:
+            data = json.loads(
+                (world / "animals" / f"{resident}.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            continue
+        hunts_tags.update(data.get("hunts", []) or [])
+        resident_tags.update(data.get("tags", []) or [])
+    return {
+        "playable": [animal_id],
+        "predators": [animal_id] if hunts & resident_tags else [],
+        "prey": [animal_id] if hunts_tags & tags else [],
+        "featured": [],
+    }
+
+
+def pack_delta(
+    pack_dir: Path, place_ids: list[str], world: Path
+) -> dict[str, dict[str, list[str]]]:
+    """The pack's species delta per place (#207.1).
+
+    Additions win when the pack carries them (packs from
+    before conversion 2 name their own places); otherwise the
+    pack's animals go to the given places by the tag rule.
+    """
+    delta = pack_additions(pack_dir)
+    animals = pack_animals(pack_dir)
+    if not animals:
+        return delta
+    for place_id in place_ids:
+        if place_id in delta:
+            continue
+        try:
+            species = (
+                json.loads(
+                    (world / "places" / f"{place_id}.json").read_text(encoding="utf-8")
+                ).get("species")
+                or {}
+            )
+        except (OSError, ValueError):
+            continue
+        merged: dict[str, list[str]] = {key: [] for key in PACK_DELTA_LISTS}
+        for animal_id, animal in animals.items():
+            one = animal_delta(animal_id, animal, species, world)
+            for key in PACK_DELTA_LISTS:
+                merged[key].extend(a for a in one[key] if a not in merged[key])
+        delta[place_id] = merged
+    return delta
+
+
+def missing_pack_species(
+    places_dir: Path,
+    packs: list[tuple[Path, list[str]]],
+    world: Path,
+) -> dict[str, dict[str, list[str]]]:
+    """Per place, the pack species its file still lacks (#207.3).
+
+    Empty when every place's live species include everything
+    its packs added. A place file missing entirely counts all
+    of the delta missing.
+    """
+    missing: dict[str, dict[str, list[str]]] = {}
+    for pack_dir, place_ids in packs:
+        for place_id, delta in pack_delta(pack_dir, place_ids, world).items():
+            try:
+                species = (
+                    json.loads(
+                        (places_dir / f"{place_id}.json").read_text(encoding="utf-8")
+                    ).get("species")
+                    or {}
+                )
+            except (OSError, ValueError):
+                species = {}
+            for key in PACK_DELTA_LISTS:
+                have = {s for s in (species.get(key) or []) if isinstance(s, str)}
+                lacking = [a for a in delta[key] if a not in have]
+                if lacking:
+                    missing.setdefault(place_id, {}).setdefault(key, []).extend(
+                        a for a in lacking if a not in missing[place_id].get(key, [])
+                    )
+    return missing
+
+
+def file_pack_places(
+    pack_dir: Path, place_ids: list[str], world: Path
+) -> dict[str, list[str]]:
+    """Merge the pack's species delta into the world's places (#207.1).
+
+    New ids append at each list's end; featured and every other
+    key stay untouched. Returns the filed ids per place. The
+    merged files must pass the place schema.
+    """
+    filed: dict[str, list[str]] = {}
+    for place_id, delta in pack_delta(pack_dir, place_ids, world).items():
+        path = world / "places" / f"{place_id}.json"
+        place = json.loads(path.read_text(encoding="utf-8"))
+        species = place.setdefault("species", {})
+        for key in PACK_DELTA_LISTS:
+            listed = species.setdefault(key, [])
+            for animal_id in delta[key]:
+                if animal_id not in listed:
+                    listed.append(animal_id)
+                    filed.setdefault(place_id, []).append(f"{key}:{animal_id}")
+        # The place files' own style: one-space indent, UTF-8
+        # names as written, so a filing only touches its lines.
+        path.write_text(
+            json.dumps(place, indent=1, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        problems = check_place_file(path, world)
+        if problems:
+            raise ValueError(f"{place_id} fails the place schema: {problems[0]}")
+    return filed
+
+
 def improve_habitats(
     animals: list[dict[str, Any]],
     world: Path,

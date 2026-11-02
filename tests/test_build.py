@@ -741,6 +741,65 @@ def test_publish_remakes_writes_once_per_group_and_index_once() -> None:
     assert index["counts"]["ready"] == 0
 
 
+def test_publish_remakes_without_a_job_records_the_pass() -> None:
+    """#209.1: a jobless publish writes one remake record and its rows."""
+    store = FakeStore()
+    group_blob = "tiles/v2/z10/072_036.json"
+    groups = {
+        group_blob: {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": 5,
+            "tiles": {"z10_0581_0294": _old_tile(id="z10_0581_0294", version=3)},
+            "blocked": {},
+        }
+    }
+    versions = build_mod.publish_remakes(
+        store,
+        groups,
+        {"z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=4))},
+        "abc123",
+    )
+    assert versions == {"z10_0581_0294": 4}
+    assert len(store.build_jobs) == 1
+    job_id, doc = next(iter(store.build_jobs.items()))
+    assert job_id.startswith("remake-abc123-")
+    assert doc["kind"] == "remake"
+    assert doc["status"] == "published"
+    assert doc["tiles"] == ["z10_0581_0294"]
+    assert doc["versions"] == {"z10_0581_0294": 4}
+    assert doc["world"] == "abc123"
+    assert doc["cost_usd"] == 0
+    assert [row["job"] for row in store.tile_history] == [job_id]
+    assert store.tile_docs["z10_0581_0294"]["job"] == job_id
+
+
+def test_publish_remakes_with_a_job_writes_no_pass_record() -> None:
+    """#209.1: tiles with a job of their own leave build_jobs alone."""
+    store = FakeStore()
+    group_blob = "tiles/v2/z10/072_036.json"
+    groups = {
+        group_blob: {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": 5,
+            "tiles": {"z10_0581_0294": _old_tile(id="z10_0581_0294", version=3)},
+            "blocked": {},
+        }
+    }
+    build_mod.publish_remakes(
+        store,
+        groups,
+        {"z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=4))},
+        "abc123",
+        {"job": "z10_0581_0294_build_abc", "kind": "build", "cost_usd": 0.11},
+    )
+    assert store.build_jobs == {}
+    assert [row["job"] for row in store.tile_history] == ["z10_0581_0294_build_abc"]
+
+
 def test_publish_remakes_moves_counts_on_an_opener() -> None:
     """#143.4: blocked to ready shifts the index by honest delta."""
     store = FakeStore()

@@ -122,6 +122,33 @@ def test_build_job_needs_private_to_when_private() -> None:
     validate("build-job", job)
 
 
+def test_build_job_takes_a_remake_pass_without_a_single_tile() -> None:
+    job = _valid("build-job")
+    del job["tile"]
+    job.update(
+        {
+            "kind": "remake",
+            "tiles": ["z10_0581_0294", "z10_0580_0295"],
+            "versions": {"z10_0581_0294": 4, "z10_0580_0295": 3},
+            "world": "abc123",
+            "created_by": "builder",
+            "status": "published",
+        }
+    )
+    validate("build-job", job)
+    bare = {k: v for k, v in job.items() if k != "tiles"}
+    with pytest.raises(jsonschema.ValidationError):
+        validate("build-job", bare)
+    build = _valid("build-job")
+    del build["tile"]
+    with pytest.raises(jsonschema.ValidationError):
+        validate("build-job", build)
+    big = _valid("build-job")
+    big.update({"kind": "enrich", "tiles": [f"z10_0581_{i:04d}" for i in range(201)]})
+    with pytest.raises(jsonschema.ValidationError):
+        validate("build-job", big)
+
+
 def test_build_job_takes_an_enrich_job() -> None:
     job = _valid("build-job")
     job.update(

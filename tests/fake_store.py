@@ -65,6 +65,9 @@ class FakeStore:
     def get_build_job(self, job_id: str) -> dict[str, Any] | None:
         return self.build_jobs.get(job_id)
 
+    def set_build_job(self, job_id: str, doc: dict[str, Any]) -> None:
+        self.build_jobs[job_id] = doc
+
     def update_build_job(self, job_id: str, fields: dict[str, Any]) -> None:
         doc = self.build_jobs[job_id]
         for key, value in fields.items():

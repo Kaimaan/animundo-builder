@@ -6,7 +6,6 @@
   "additionalProperties": false,
   "required": [
     "format",
-    "tile",
     "kind",
     "items",
     "budget_usd",
@@ -20,16 +19,20 @@
   "properties": {
     "format": {"const": 1},
     "tile": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
-    "kind": {"enum": ["code", "build", "enrich"]},
+    "kind": {"enum": ["code", "build", "enrich", "remake"]},
     "items": {
       "type": "array",
       "items": {"type": "string", "minLength": 1}
     },
     "tiles": {
       "type": "array",
-      "description": "For enrich: every tile that lists the thing in wanted, most played first, at most 200.",
-      "maxItems": 200,
+      "description": "For enrich: every tile that lists the thing in wanted, most played first, at most 200. For remake: the tiles the pass changed.",
       "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
+    },
+    "world": {
+      "type": "string",
+      "minLength": 1,
+      "description": "For remake: the world commit the pass made its tiles with."
     },
     "enrich": {
       "type": "object",
@@ -44,7 +47,7 @@
     },
     "versions": {
       "type": "object",
-      "description": "For enrich, when published: each remade tile's new version.",
+      "description": "For enrich and remake, when published: each remade tile's new version.",
       "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {"type": "integer", "minimum": 1}
     },
@@ -56,7 +59,7 @@
     },
     "visibility": {"enum": ["public", "private"]},
     "private_to": {"type": "string", "minLength": 1},
-    "created_by": {"enum": ["policy", "admin", "enrich"]},
+    "created_by": {"enum": ["policy", "admin", "enrich", "builder"]},
     "status": {
       "enum": ["queued", "building", "checking", "published", "failed"]
     },
@@ -105,6 +108,15 @@
     {
       "if": {"properties": {"visibility": {"const": "private"}}},
       "then": {"required": ["private_to"]}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "remake"}}},
+      "then": {"required": ["tiles"]},
+      "else": {"required": ["tile"]}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "enrich"}}},
+      "then": {"properties": {"tiles": {"maxItems": 200}}}
     }
   ]
 }

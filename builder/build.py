@@ -639,10 +639,17 @@ def publish_remakes(
     Returns `versions` for the tiles whose content changed. With
     `history` (job, kind, cost_usd), every written tile lands a
     made/remade/blocked row in the tile history (#165), and its
-    latest row at `tile_history/<tile>` (#195.2).
+    latest row at `tile_history/<tile>` (#195.2). Without a job
+    of their own, the pass writes its own history rows plus one
+    `build_jobs` remake record, so areas hear of it (#209.1).
     """
     from . import history as history_mod
     from .grid import NAME, group, group_path
+
+    remake_id: str | None = None
+    if history is None or not history.get("job"):
+        remake_id = _remake_job_id(world_commit)
+        history = {"job": remake_id, "kind": "remake", "cost_usd": 0}
 
     by_blob: dict[str, list[str]] = {}
     for tile, (kind, entry) in decisions.items():
@@ -724,7 +731,40 @@ def publish_remakes(
     index["world"] = world_commit
     validate("tile-index", index)
     store.write_blob("tiles/v2/index.json", json.dumps(index).encode("utf-8"))
+    if remake_id is not None and versions and hasattr(store, "set_build_job"):
+        _record_remake(store, remake_id, versions, world_commit)
     return versions
+
+
+def _remake_job_id(world_commit: str) -> str:
+    """One id per pass: the world, the day, reruns overwrite (#209.1)."""
+    slug = "".join(c for c in world_commit if c.isalnum())[:12] or "0"
+    return f"remake-{slug}-{datetime.now(UTC).date().isoformat()}"
+
+
+def _record_remake(
+    store: Any, job_id: str, versions: dict[str, int], world_commit: str
+) -> None:
+    """The pass as one published remake job: its tiles, versions, world."""
+    now = datetime.now(UTC).isoformat()
+    tiles = sorted(versions)
+    doc = {
+        "format": 1,
+        "kind": "remake",
+        "items": [],
+        "tiles": tiles,
+        "versions": {tile: versions[tile] for tile in tiles},
+        "world": world_commit,
+        "budget_usd": 0,
+        "visibility": "public",
+        "created_by": "builder",
+        "status": "published",
+        "cost_usd": 0,
+        "created_at": now,
+        "updated_at": now,
+    }
+    validate("build-job", doc)
+    store.set_build_job(job_id, doc)
 
 
 def assemble_preview(

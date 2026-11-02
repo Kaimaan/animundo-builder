@@ -96,6 +96,9 @@ class FirebaseStore:
     def update_build_job(self, job_id: str, fields: dict[str, Any]) -> None:
         self._db.collection("build_jobs").document(job_id).update(_translated(fields))
 
+    def set_build_job(self, job_id: str, doc: dict[str, Any]) -> None:
+        self._db.collection("build_jobs").document(job_id).set(doc)
+
     def claim_build_job(self, job_id: str, worker_id: str) -> bool:
         """Claim a job atomically: queued, own, or an expired lease (#155)."""
         from .worker import lease_fresh_iso, now_iso
@@ -195,6 +198,7 @@ STORE_METHODS = (
     "pending_build_jobs",
     "read_blob",
     "renew_build_job",
+    "set_build_job",
     "set_job",
     "set_plan",
     "set_tile_history",

@@ -172,7 +172,16 @@ def species_schema(
                 ),
             },
         },
-        "required": ["place", "parts", "plants", "trees", "name_en", "name_fi"],
+        "required": [
+            "place",
+            "parts",
+            "plants",
+            "trees",
+            "outside_animals",
+            "outside_plants",
+            "name_en",
+            "name_fi",
+        ],
         "additionalProperties": False,
     }
 
@@ -304,7 +313,7 @@ def user_message(
         f"id must come from the lists. Up to 6 real animals and 6 real "
         f"plants living there that are on none of the lists go in "
         f"outside_animals and outside_plants as Latin names; leave "
-        f"out anything unsure.\n\n"
+        f"out anything unsure (an empty list is fine).\n\n"
         f"Animals:\n{listing}\n\n"
         f"Plants:\n{greens or 'none'}\n\n"
         f"Trees:\n{woods or 'none'}"

@@ -178,6 +178,8 @@ def test_lab_recordings_decode_and_match_their_cells() -> None:
                 "parts": fix["parts"],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": fix["name_en"],
                 "name_fi": fix["name_fi"],
             },
@@ -219,6 +221,8 @@ def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
                 "parts": [{"kind": "sea", "species": ["fox"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
@@ -227,6 +231,8 @@ def test_place_mismatch_retries_once_then_blocks(tmp_path: Path) -> None:
                 "parts": [{"kind": "sea", "species": ["fox"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
@@ -256,6 +262,8 @@ def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
                 "parts": [{"kind": "sea", "species": ["fox"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
@@ -264,6 +272,8 @@ def test_place_mismatch_passes_on_retry(tmp_path: Path) -> None:
                 "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -298,6 +308,8 @@ def test_unknown_species_id_is_refused(tmp_path: Path) -> None:
                 "parts": [{"kind": "forest", "species": ["fox", "dragon"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -319,6 +331,8 @@ def test_species_answer_cached_per_tile(tmp_path: Path) -> None:
                 "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -388,6 +402,8 @@ def test_growing_the_list_keeps_the_survey_cache(tmp_path: Path) -> None:
                 "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -451,6 +467,8 @@ def test_corrupt_species_cache_calls_again(tmp_path: Path) -> None:
                 "parts": [{"kind": "forest", "species": ["fox"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -638,6 +656,8 @@ def test_empty_parts_are_refused() -> None:
                 "parts": [],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -656,6 +676,8 @@ def test_survey_part_mismatch_blocks_after_retry(tmp_path: Path) -> None:
         "parts": [{"kind": "sea", "species": ["fox"]}],
         "plants": [],
         "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -692,6 +714,8 @@ def test_retry_carries_the_refusal_back(tmp_path: Path) -> None:
                 "parts": [{"kind": "sea", "species": ["fox"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Open ocean",
                 "name_fi": "Avomeri",
             },
@@ -700,6 +724,8 @@ def test_retry_carries_the_refusal_back(tmp_path: Path) -> None:
                 "parts": [{"kind": "forest", "species": ["fox"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             },
@@ -740,6 +766,8 @@ def test_species_recaches_when_facts_change(tmp_path: Path) -> None:
                 "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
                 "plants": [],
                 "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
                 "name_en": "Nuuksio forest",
                 "name_fi": "Nuuksion metsä",
             }
@@ -823,6 +851,8 @@ def test_species_recaches_when_a_cached_pick_leaves_the_library(
         "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
         "plants": [{"id": "bilberry", "count": 10}],
         "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
         "name_en": "Nuuksio forest",
         "name_fi": "Nuuksion metsä",
     }
@@ -891,6 +921,8 @@ def test_model_order_ranks_species(tmp_path: Path) -> None:
             "parts": [{"kind": "forest", "species": ["mountain_hare", "fox", "vole"]}],
             "plants": [],
             "trees": [],
+            "outside_animals": [],
+            "outside_plants": [],
             "name_en": "Nuuksio forest",
             "name_fi": "Nuuksion metsä",
         },
@@ -903,7 +935,9 @@ def test_model_order_ranks_species(tmp_path: Path) -> None:
 
 
 def test_check_answer_carries_outside_nominations() -> None:
-    """#196.3: outside names pass the schema through, defaulting empty."""
+    """#196.3: outside names pass the schema through; strict needs them."""
+    import pytest
+
     from builder.species import check_answer
 
     ids = ["fox", "vole"]
@@ -912,10 +946,15 @@ def test_check_answer_carries_outside_nominations() -> None:
         "parts": [{"kind": "forest", "species": ["fox"]}],
         "plants": [],
         "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
         "name_en": "Fox woods",
         "name_fi": "Kettujen metsä",
     }
     plain = check_answer({**base}, ids, ["bilberry"], [])
+    bare = {k: v for k, v in base.items() if not k.startswith("outside_")}
+    with pytest.raises(ValueError, match="is refused"):
+        check_answer(bare, ids, ["bilberry"], [])
     assert plain["outside_animals"] == []
     assert plain["outside_plants"] == []
     named = check_answer(
@@ -974,3 +1013,82 @@ def test_resolve_outside_reuses_known_keys_without_gbif(monkeypatch: Any) -> Non
     assert resolve_outside(
         "z10_0581_0294", ["Gulo gulo"], [], {"Gulo gulo": 5219175}
     ) == {"Gulo gulo": 5219175}
+
+
+def test_strict_survey_schemas_require_every_key() -> None:
+    """#208.2: strict mode refuses a property missing from required."""
+    from builder.place import survey_schema
+    from builder.species import species_schema
+    from builder.strict import assert_strict_subset
+
+    assert_strict_subset(species_schema(["fox"], ["bilberry"], ["birch"]))
+    assert_strict_subset(survey_schema(["fox"]))
+
+
+def test_ask_sends_the_survey_schema_strict() -> None:
+    """#208.2: the survey call's format is the survey schema."""
+    from builder.species import ask, species_schema
+
+    seen: dict[str, Any] = {}
+
+    class _Capture:
+        def chat(self, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return _response(
+                {
+                    "place": "Boreal forest",
+                    "parts": [{"kind": "forest", "species": ["fox"]}],
+                    "plants": [],
+                    "trees": [],
+                    "outside_animals": [],
+                    "outside_plants": [],
+                    "name_en": "Fox Forest",
+                    "name_fi": "Ketun metsä",
+                }
+            )
+
+    ask(
+        _Capture(),
+        60.2,
+        24.6,
+        [{"id": "fox", "name": "Red fox", "latin": "Vulpes vulpes"}],
+        [],
+        [],
+        _facts(),
+    )
+    sent = seen["response_format"]["json_schema"]
+    assert sent["strict"] is True
+    assert sent["schema"] == species_schema(["fox"], [], [])
+
+
+def test_resurvey_asks_through_species_ask(tmp_path: Path, monkeypatch: Any) -> None:
+    """#208.2: resurvey rounds ask with the same survey call."""
+    import builder.species as species_mod
+    from builder.resurvey import run_round
+
+    world = _world(tmp_path)
+    grid = _habitat_grid(tmp_path)
+    cache_dir = tmp_path / "species"
+    cache_dir.mkdir()
+    (cache_dir / "z10_0581_0294.json").write_text(
+        json.dumps({"place": "Boreal forest", "parts": []})
+    )
+    calls: list[str] = []
+
+    class _Sentinel(Exception):
+        pass
+
+    def fake_ask(client: Any, lat: float, lon: float, *rest: Any) -> Any:
+        calls.append("ask")
+        raise _Sentinel("caught")
+
+    monkeypatch.setattr(species_mod, "ask", fake_ask)
+    with pytest.raises(_Sentinel):
+        run_round(
+            planned=[{"tile": "z10_0581_0294", "new_ids": ["fox"]}],
+            cache_dir=cache_dir,
+            world=world,
+            habitat_grid=grid,
+            client_for=lambda tile: None,
+        )
+    assert calls == ["ask"]

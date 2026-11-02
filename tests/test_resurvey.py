@@ -34,6 +34,8 @@ def _cached(
         "parts": [{"kind": "forest", "species": species or ["fox", "mountain_hare"]}],
         "plants": [],
         "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
         "name_en": "Fox woods",
         "name_fi": "Kettujen metsä",
         "model": "muse-spark-1.3",
@@ -217,6 +219,8 @@ def test_run_merges_the_delta_and_keeps_the_date(
         "parts": [{"kind": "forest", "species": ["lion"]}],
         "plants": [],
         "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
         "name_en": "Lion woods",
         "name_fi": "Leijonien metsä",
     }

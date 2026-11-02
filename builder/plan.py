@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .grid import center, parse_tile
-from .habitats import REEF_TRACT_SHARE, HabitatGrid
+from .habitats import REEF_TRACT_SHARE, HabitatGrid, habitat_for
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
 from .prices import ITEM_ESTIMATES, SURVEY_ESTIMATE_USD
 from .schemas import ROOT as BUILDER_ROOT
@@ -464,6 +464,12 @@ def plan_tile(
     biomes = available_biomes(world)
     land = habitat_grid.cell_data(col, row)[5]
     habitat = coast_habitat(eco1, habitat, land, biomes, biome_number)
+    if habitat == "sea" and land > 0:
+        land_habitat = habitat_for(eco1, biome_number, 1.0, 0.0)
+        if home_for_cell(eco1, land_habitat, biomes, biome_number) is not None:
+            # A coast tile with land builds from its land habitat's
+            # home, like the maker (#232.1).
+            habitat = land_habitat
     home = home_for_cell(eco1, habitat, biomes, biome_number)
     if (
         habitat == "open_ocean"

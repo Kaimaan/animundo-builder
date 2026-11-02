@@ -1512,6 +1512,13 @@ def make_tile(
     homes = available_homes(world)
     biomes = available_biomes(world)
     habitat = coast_habitat(eco1, habitat, land, biomes, biome)
+    if habitat == "sea" and land > 0:
+        land_habitat = habitat_for(eco1, biome, 1.0, 0.0)
+        if home_for_cell(eco1, land_habitat, biomes, biome) is not None:
+            # A coast tile with land builds from its land habitat's
+            # home (#232.1); the coast mask carries the sea. Without
+            # a land home for the ecoregion it stays sea (#198.2).
+            habitat = land_habitat
     home = home_for_cell(eco1, habitat, biomes, biome)
     if home is None:
         if eco1 is None or not (world / "lands" / "index.json").is_file():

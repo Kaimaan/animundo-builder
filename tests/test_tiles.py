@@ -1282,6 +1282,74 @@ def test_reef_cell_without_a_place_plans_coral_reef() -> None:
     assert tile_region.place(made)["terrain"]["reef"] > 0
 
 
+def test_coast_land_builds_from_its_land_home() -> None:
+    """#232.1: a coast tile with land builds taiga, keeping its gull."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0583_0296",
+        load_grid(grid_dir),
+        world,
+        builder_root=ROOT,
+        presence={"fox": 5.0, "vole": 5.0, "frog": 5.0, "herring_gull": 5.0},
+        species={
+            "place": "Boreal forest coast east of Nuuksio with sea shore",
+            "parts": [
+                {"kind": "forest", "species": ["fox", "vole", "frog"]},
+                {"kind": "sea", "species": ["herring_gull"]},
+            ],
+            "plants": [
+                {"id": "bilberry", "count": 3},
+                {"id": "red_clover", "count": 2},
+            ],
+            "trees": [],
+            "outside_animals": [],
+            "outside_plants": [],
+            "name_en": "Taiga Coast",
+            "name_fi": "Taigarannikko",
+        },
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "boreal_taiga"
+    assert made["habitat"] == "boreal_forest"
+    assert "coast" in made
+    assert "fox" in made["species"]["playable"]
+    assert "herring_gull" in made["species"]["playable"]
+
+
+def test_sea_without_a_land_home_stays_sea(tmp_path: Path) -> None:
+    """#232.1: a sea cell whose land habitat has no home stays sea.
+
+    (Land under 0.1 is open ocean, never sea, so the landless
+    case is the deep-sea test; here eco 651's forest has no
+    home in the checkout.)
+    """
+    world = _world(tmp_path)
+    (world / "animals" / "herring.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    habitat_grid = _habitat_grid(tmp_path, _sea_3x3(336, 455))
+    made, blocked = make_tile(
+        "z10_0336_0455",
+        habitat_grid,
+        world,  # type: ignore[arg-type]
+        presence={"herring": 30.0},
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["home"] == "sea"
+    assert made["habitat"] == "sea"
+
+
 def test_trace_reef_open_sea_has_no_blend() -> None:
     """#230: the ring's N tile stays plain open_sea under the 0.1 floor."""
     from builder.habitats import load_grid
@@ -1332,34 +1400,43 @@ def test_deep_coral_sea_cell_still_plans_open_sea() -> None:
 
 
 def test_make_tile_builds_the_reviewed_sea_border() -> None:
-    """#140.1: with world d009df2, z10_0581_0297 is ready from sea_717."""
+    """#232.1: z10_0581_0297 builds taiga with a coast, keeping its gull."""
     from builder.schemas import ROOT
 
     world = ROOT.parent / "animundo-world"
-    if not (world / "homes" / "sea_717.json").is_file():
-        pytest.skip("needs world d009df2 with the reviewed sea home")
     if not (world / "animals" / "herring_gull.json").is_file():
-        pytest.skip("needs world d009df2 with the reviewed gull")
+        pytest.skip("needs the world checkout next to the builder")
     grid_dir = ROOT / "data" / "habitat-grid"
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
     habitat_grid = HabitatGrid.load(grid_dir / "z10.json.gz")
     made, blocked = make_tile(
         "z10_0581_0297",
         habitat_grid,
         world,
+        presence={"fox": 5.0, "vole": 5.0, "frog": 5.0, "herring_gull": 5.0},
         species={
-            "place": "Gulf of Finland off Helsinki",
-            "parts": [{"kind": "sea", "species": ["herring_gull"]}],
-            "plants": [],
+            "place": "Boreal forest coast south of Nuuksio with sea shore",
+            "parts": [
+                {"kind": "forest", "species": ["fox", "vole", "frog"]},
+                {"kind": "sea", "species": ["herring_gull"]},
+            ],
+            "plants": [
+                {"id": "bilberry", "count": 3},
+                {"id": "red_clover", "count": 2},
+            ],
             "trees": [],
             "outside_animals": [],
             "outside_plants": [],
-            "name_en": "Helsinki coast",
-            "name_fi": "Helsingin ranta",
+            "name_en": "Taiga Coast",
+            "name_fi": "Taigarannikko",
         },
     )
-    assert blocked is None
+    assert blocked is None, blocked
     assert made is not None
-    assert made["home"] == "sea_717"
+    assert made["home"] == "boreal_taiga"
+    assert made["habitat"] == "boreal_forest"
+    assert "coast" in made
     assert "herring_gull" in made["species"]["playable"]
 
 

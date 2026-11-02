@@ -444,8 +444,8 @@ def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
     assert home_for_cell(717, "sea", filed, 6) == "sea_717"
 
 
-def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
-    """#148.3: 717 by the sea plans code-only on sea_717, no home item.
+def test_helsinki_coast_plans_code_only_on_taiga() -> None:
+    """#232.1: 717 coast land plans code-only on boreal_taiga, no home item.
 
     The tile sits just east of Nuuksio's place cells (#182).
     """
@@ -508,7 +508,8 @@ def test_helsinki_sea_plans_code_only_with_its_own_plants() -> None:
     )
     assert blocked is None
     assert made is not None
-    assert made["biome"] == "sea_717"
+    assert made["biome"] == "boreal_taiga"
+    assert "coast" in made
     assert (made.get("plants") or {}).get("cover")
 
 

@@ -2279,7 +2279,7 @@ def test_near_made_or_noted_reaches_three_cells() -> None:
 
 
 def test_retired_biomes_are_never_picked() -> None:
-    """#201.1: a 717 lake cell gets boreal_lakeland; forest unchanged."""
+    """#201.1/#203.1: retired lake and forest cells get their heirs."""
     import pytest
 
     from builder.schemas import ROOT
@@ -2290,8 +2290,9 @@ def test_retired_biomes_are_never_picked() -> None:
         pytest.skip("needs the world checkout next to the builder")
     biomes = available_biomes(world)
     assert biomes["boreal_lake"].get("retired") is True
+    assert biomes["boreal_forest"].get("retired") is True
     assert home_for_cell(717, "boreal_lake", biomes, 6) == "boreal_lakeland"
-    assert home_for_cell(717, "boreal_forest", biomes, 6) == "boreal_forest"
+    assert home_for_cell(717, "boreal_forest", biomes, 6) == "boreal_taiga"
 
 
 def test_place_cells_come_out_as_code_tiles() -> None:

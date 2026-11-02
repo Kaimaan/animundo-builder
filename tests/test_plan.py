@@ -287,7 +287,7 @@ def test_nearest_home_prefers_water_for_the_sea(tmp_path: Path) -> None:
 
 
 def test_tallinn_adapts_from_the_land_home() -> None:
-    """#141.4: z10_0582_0300 adapts from boreal_forest, not sea."""
+    """#141.4: z10_0582_0300 adapts from land, not sea (#203: taiga)."""
     import pytest
 
     from builder.tiles import available_homes
@@ -301,7 +301,7 @@ def test_tallinn_adapts_from_the_land_home() -> None:
     habitat_grid = load_grid(grid_dir)
     homes = available_homes(world)
     assert (
-        nearest_home("z10_0582_0300", habitat_grid, homes, "forest") == "boreal_forest"
+        nearest_home("z10_0582_0300", habitat_grid, homes, "forest") == "boreal_taiga"
     )
 
 

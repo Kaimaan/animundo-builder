@@ -3,6 +3,103 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #215
+  (builder 9c4aebe)
+
+- Why ship
+  failed: the
+  converted tile
+  dropped
+  table_coral.
+  With no spec
+  file yet,
+  use_plants
+  skips it, so
+  the region
+  named nothing
+  new, plants
+  built nothing,
+  and ship saw
+  an empty file.
+- The converted
+  tile keeps its
+  biome and its
+  plants
+  (9c4aebe):
+  biome, the
+  layered plants
+  with the
+  newcomer
+  seated, species
+  not animals,
+  and the live
+  place's name.
+  A newcomer
+  with no spec
+  takes its
+  grounds from
+  the start
+  plant, so the
+  coral lands in
+  water at 0.2.
+- A plant item
+  its region
+  never names
+  stops at the
+  plants stage,
+  saying there
+  is nothing to
+  start from. The
+  cast readers
+  take species
+  on a biome, so
+  animal enrich
+  keeps its
+  roles and food
+  verdicts.
+- Tests: convert
+  keeps biome,
+  layered water
+  with the
+  coral, reef
+  grounds and
+  the reef's
+  name; the loud
+  stop; a replay
+  (convert, build
+  from the
+  staghorn, file)
+  grows reef and
+  files at total
+  1.0. Suite:
+  1107 passed, 1
+  pre-existing
+  fail (world
+  test_broken,
+  also red on a
+  clean tree).
+  Ruff and
+  gitleaks clean.
+- CI is red only
+  on that same
+  world selftest
+  (run
+  41422958303, 1
+  failed, 1044
+  passed), as on
+  the #214 runs.
+  Open: the
+  world's side
+  owns that red.
+  The next worker
+  deploy takes
+  builder main
+  with 9c4aebe;
+  no deploy from
+  me. Table_coral
+  can run again
+  after Kai's yes.
+
 ## 2026-11-02: inbox #214
   (builder 2a7fe0b)
 

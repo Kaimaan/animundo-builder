@@ -3,6 +3,164 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #203
+  (builder ef65c78)
+
+- #201.1's retired
+  skip already
+  heirs forest to
+  taiga: a 717
+  boreal_forest
+  cell gets
+  boreal_taiga.
+  The two tests
+  asserting the
+  old home now
+  assert taiga
+  (ef65c78);
+  Tallinn still
+  adapts from
+  land, not sea.
+  The remake
+  itself went
+  with #202.4.
+- #203.2: nothing
+  of mine reads
+  terrain.water_
+  cover or
+  terrain.bog_
+  cover from
+  converted
+  places. Species
+  selection reads
+  only the
+  converted
+  place's fish
+  and its food-
+  web errors;
+  enrich passes
+  converted
+  places through
+  the world's
+  checks
+  untouched. The
+  old pond share
+  moves nothing
+  builder-side.
+
+## 2026-11-02: inbox #202 (full reply)
+  (builder e18ab9a,
+  aca7091, c56045a,
+  3cc4bc7, 3d5901a,
+  8210cd5, 31bae7d,
+  b3a7258, 3ab0e48,
+  c43fc15; world
+  105aee5; live
+  publish)
+
+- Water is
+  HydroLAKES v1
+  (e18ab9a):
+  Nuuksio's four
+  0.079, 0.027,
+  0.069, 0.007;
+  round them
+  0580_0295
+  0.162,
+  0580_0296
+  0.054,
+  0581_0294
+  0.034,
+  0582_0294
+  0.013,
+  0583_0295
+  0.001,
+  0583_0296 0.0;
+  Pielinen
+  0597_0278
+  0.297. 1:10m
+  lake points
+  read 0 in the
+  mask, like sea.
+- No more place
+  cells (aca7091
+  plus four
+  conversions,
+  each logged):
+  enrich into
+  tiles, packs
+  without
+  additions,
+  names from
+  places, D20
+  files places.
+  The six came
+  out as code
+  tiles v1, $0,
+  GBIF presence
+  seeded with
+  each place's
+  own species:
+  no surveys,
+  so the quoted
+  $0.10 never
+  spent.
+- #204 rides
+  along (31bae7d,
+  b3a7258,
+  3ab0e48): every
+  tile with a
+  real shore
+  near carries
+  its 33x33
+  grid; a typical
+  shore tile
+  carries 4.4KB.
+  Shared sides
+  are equal
+  number for
+  number.
+- Remade groups:
+  tiles/v2/z10/
+  072_036,
+  072_037,
+  074_035,
+  115_069,
+  115_070,
+  116_070, plus
+  the index
+  (ready 30).
+  29 tiles
+  remade or new
+  under remake
+  job remake-
+  105aee55e42b-
+  2026-11-02;
+  check_tile
+  passes 29 of
+  30. z10_0583_
+  0295 stays on
+  v12, held:
+  its roach and
+  perch want
+  water_bugs and
+  bottom_bugs
+  the taiga
+  home has no
+  food for, and
+  a full remake
+  blocks the
+  same way.
+- #206: the six
+  tiles are up
+  (logged with
+  the place-
+  cells publish);
+  play each
+  place with
+  ?places=tiles,
+  reef last.
+
 ## 2026-11-02: inbox #202.4 (place cells first)
   (no code commit;
   live publish)

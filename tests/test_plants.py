@@ -943,6 +943,103 @@ def test_replay_table_coral_round_plate_and_seating(tmp_path: Path) -> None:
     assert reef <= 1.0
 
 
+#: What job _5 drew: a square plate in pale beige (#234.3).
+_SQUARE_PARTS = [
+    {
+        "name": "stalk",
+        "shape": "cylinder",
+        "size": [0.09, 0.18, 0.09],
+        "at": [0, 0.09, 0],
+        "color": "base",
+        "detail": 0.6,
+    },
+    {
+        "name": "plate",
+        "shape": "cylinder",
+        "size": [0.68, 0.04, 0.68],
+        "at": [0, 0.18, 0],
+        "color": "plate",
+        "detail": 0.5,
+    },
+    {
+        "name": "plate_top",
+        "shape": "cylinder",
+        "size": [0.62, 0.028, 0.62],
+        "at": [0, 0.202, 0],
+        "color": "plate_top",
+        "detail": 0.5,
+    },
+]
+_SQUARE_COLORS = {"base": "#9f9180", "plate": "#c8bca6", "plate_top": "#d9ccb3"}
+
+
+def _coral_square() -> dict[str, Any]:
+    """The job's spec as made: names, sources and seating kept (#234.3)."""
+    return dict(_coral_draft(), parts=_SQUARE_PARTS, colors=_SQUARE_COLORS)
+
+
+def test_replay_table_coral_square_plate_gets_the_round_fix(tmp_path: Path) -> None:
+    """#234.3: the square pale plate replays into the round ochre one."""
+    checkout = _checkout()
+    world = _write_reef_job(tmp_path, checkout)
+    (tmp_path / "survey.json").write_text(
+        json.dumps(
+            {
+                "facts": [],
+                "species": [
+                    {"species": "table_coral", "description": _CORAL_LOOKS},
+                ],
+            }
+        )
+    )
+    shape_issue = {
+        "species": "table_coral",
+        "round": 1,
+        "issues": [
+            {
+                "part": "plate",
+                "problem": (
+                    "drawn as a square; the survey describes round, flat plates"
+                ),
+                "severity": "blocking",
+                "fix": "rebuild the plate as a wide flat round cylinder",
+            },
+            {
+                "part": "plate",
+                "problem": "pale beige, too close to the water's tint",
+                "severity": "blocking",
+                "fix": "warm ochre plate with a lighter rim",
+            },
+        ],
+    }
+    clean = {"species": "table_coral", "round": 2, "issues": []}
+    chat = ScriptChat(
+        [
+            json.dumps(_coral_square()),
+            json.dumps(shape_issue),
+            json.dumps(_coral_fixed()),
+            json.dumps(clean),
+        ]
+    )
+    result = PlantsStage(match=_match_coral, chat=chat, build=_build_ok).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/table_coral.json"]
+    assert result["rounds"] == {"table_coral": 2}
+    assert _CORAL_LOOKS in chat.prompts[1]
+    final = json.loads(
+        (tmp_path / "models" / "plants" / "table_coral.json").read_text()
+    )
+    by_part = {part["name"]: part for part in final["parts"]}
+    assert by_part["plate"]["shape"] == "cylinder"
+    assert by_part["plate"]["detail"] == 1.0
+    assert final["colors"] == _FIXED_COLORS
+    assert final["name"] == "Table coral"
+    assert final["sources"] == SPEC["sources"]
+    assert final["grows"]["on"] == ["reef"]
+    _file_into_reef(tmp_path, checkout, final)
+
+
 def _big_png() -> bytes:
     """A 1280x960 PNG the size of a real preview, incompressible."""
     import os

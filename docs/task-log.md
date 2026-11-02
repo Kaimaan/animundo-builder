@@ -129,9 +129,17 @@ Job folders live under `jobs/` (local only, never committed).
   builder main
   with 9c4aebe;
   no deploy from
-  me. Table_coral
-  can run again
-  after Kai's yes.
+  me. Kai's yes
+  (Nov 2):
+  table_coral
+  re-run
+  approved,
+  another $1
+  limit.
+  Reviewer: redeploy
+  the worker on
+  builder main
+  and rerun.
 
 ## 2026-11-02: inbox #214
   (builder 2a7fe0b)

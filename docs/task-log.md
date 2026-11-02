@@ -3,6 +3,28 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #226 (reef map + ring table; 54fe9c9 green)
+
+Ring reef shares from the map (tile, share, largest named reefs):
+
+| tile | z10 | share | reefs (largest first) | plans |
+|---|---|---|---|---|
+| C | 0927_0560 | 0.211 | Arlington, Moore, Green Island, Elford, Sudbury No 1, Upolu, Thetford | coral_reef (live place, as now) |
+| NW | 0926_0559 | 0.229 | Tongue, Batt, Low Islands | coral_reef (new: reef flip) |
+| SE | 0928_0561 | 0.164 | Hedley, Maori, Gibson, McCulloch No 1, Sudbury No 1, Noggin, Flora | open_sea + reef blend 0.16 |
+| N | 0927_0559 | 0.070 | Michaelmas, Hastings, Tongue, Oyster, Arlington, Norman | open_sea + reef blend 0.07 |
+| E | 0928_0560 | 0.063 | Elford, Milln, Channel, North West, Pellowe, Flynn | open_sea + reef blend 0.06 |
+| S | 0927_0561 | 0.057 | Sudbury No 1, Scott, Tobias Spit, Normanby-Mabel | coral_reef (eco-150 listed home, as before) |
+| W | 0926_0560 | 0.002 | Double Island, Haycock | coral_reef (eco-150 listed home, as before) |
+| NE | 0928_0559 | 0.000 | — | open_sea, as before |
+| SW | 0926_0561 | 0.000 | — (trace unnamed) | rainforest land, as before |
+
+- #226.1 ($0): the grid carries `data/habitat-grid/reef.json.gz`: 239 z10 cells with reef-covered shares from the 7,063 `LEVEL_1 == "Reef"` polygons of the Complete GBR Reef and Island Features V1b (Lawrey & Stewart 2016, NESP TWQ 3.13, AIMS/TSRA/GBRMPA), exact polygon-clip area shares, cells under 0.0005 dropped. The planner flips a mostly-reef open-ocean cell (share >= 0.2, calibrated on Green Island's 0.211) with no live place to the `coral_reef` home with habitat `sea` — the same tile shape as the placed Green Island tile (habitat `sea`, ecoregion 150, `sources.habitat` naming the reef map). Below 0.2 the reef blends in; the reef blend never doubles the home. Reef-built tiles take reef-filed animals (clownfish etc.) as candidates. The grid habitat stays the sea it is, so live places keep their tiles; plan mirrors the flip and surveys the reef tile. Works for every reef cell in the file, not only this ring.
+- Licence for Kai to confirm before anything ships with it: CC BY 3.0 Australia (dataset record 10.26274/vhj5-gr60), attribution "Lawrey, E. P., Stewart M. (2016) Complete GBR Reef and Island Feature boundaries including Torres Strait (NESP TWQ 3.13, AIMS, TSRA, GBRMPA) [Dataset]. eAtlas. https://doi.org/10.26274/vhj5-gr60" plus "© Great Barrier Reef Marine Park Authority 2014" for the GBR Features part. Written in `data/habitat-grid/README.md` with the bake method. Note it is 3.0 AU, not 4.0.
+- #226.2: table above. The map names Kai's reefs: Arlington/Upolu/Thetford/Moore on C, Michaelmas on N. Two observations: W and S build fully as `coral_reef` from the pre-existing eco-150 listed-sea-home rule despite 0.002/0.057 shares (unchanged by this item; gating that rule on the map would break #198.2's marine-coast path, so I left it); SW is mainland rainforest, not sea.
+- #226.3: no ring spend; #226.4 noted — future paid runs price from a measured probe. No deploy (Kai's go needed; the worker doesn't need it for #227's reruns either way).
+- Tests: `tests/test_habitats.py` (reef file reads, ring shares, deep cell none), `tests/test_tiles.py` (NW reef cell without a place plans `coral_reef` with clownfish playable and reef terrain game-side; deep Coral Sea cell still plans `open_sea`; reef blend on a part-reef sea tile), `tests/test_plan.py` (reef cell plans code_only, not open water). Full suite 1153 passed, 12 skipped; ruff clean; CI green (run 41488183737).
+
 ## 2026-11-02: inbox #225 (#216 live, no action)
 
 - Noted: #216 verified live per the item (worker v23, builder c9d0584): single-generation group writes, gap-tolerant index, gzip + plain tiles read. No action taken.

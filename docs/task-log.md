@@ -3,6 +3,100 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #202.4 (place cells first)
+  (no code commit;
+  live publish)
+
+- The six place
+  cells are
+  published v1,
+  kind code, $0,
+  no surveys:
+  GBIF presence
+  seeded with
+  each place's
+  own species.
+  z10_0581_0295,
+  z10_0582_0295
+  (072_036 v15),
+  z10_0581_0296,
+  z10_0582_0296
+  (072_037 v9),
+  z10_0593_0284
+  (074_035 v10),
+  z10_0927_0560
+  (115_070 v7).
+  Index ready 30,
+  world 105aee5.
+- Each carries
+  shore, water
+  from hydrolakes
+  v1, and a name
+  in en and fi,
+  read back from
+  the live blobs:
+  Nuuksio's four
+  are taiga (fox,
+  moose, hare
+  playable),
+  Saimaa's is
+  lakeland (the
+  seal playable
+  and predator),
+  the reef's is
+  open sea with
+  the tern, like
+  its neighbours;
+  its eight fish
+  play through
+  the live place
+  layer. check_tile
+  passes all six.
+- The publish
+  wrote remake
+  job remake-
+  105aee55e42b-
+  2026-11-02
+  (6 tiles, $0),
+  and all six
+  areas read
+  ready v1 with
+  names: #209's
+  areas follow
+  by themselves.
+- #206: the six
+  tiles are up;
+  play each place
+  with ?places=
+  tiles, reef
+  last. #184:
+  the coral jobs
+  can land once
+  the worker is
+  redeployed on
+  main (needs
+  #184.1-4 and
+  #210; live v17
+  and v18 cannot
+  plan). admin
+  still resolves
+  the reef id
+  through its
+  old region
+  file, landing
+  on the same
+  tiles. Until
+  the jobs run,
+  the reef tile
+  has no surveyed
+  plants: biome
+  defaults only.
+- The other 22
+  remakes follow;
+  z10_0583_0295
+  stays held
+  (food-blocked).
+
 ## 2026-11-02: inbox #209
   (world 105aee5;
   builder 946a442,

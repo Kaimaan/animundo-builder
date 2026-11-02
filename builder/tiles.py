@@ -1210,6 +1210,171 @@ def tile_facts(
     )
 
 
+def live_place_for_tile(tile: str, world: Path) -> dict[str, Any] | None:
+    """The live place listing this tile in its tiles, if any (#212.1)."""
+    folder = world / "places"
+    if not folder.is_dir():
+        return None
+    col, row = parse_tile(tile)
+    for path in sorted(folder.glob("*.json")):
+        try:
+            place = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(place, dict) or place.get("live") is not True:
+            continue
+        cells = place.get("tiles") or []
+        if [col, row] in [list(cell) for cell in cells if len(list(cell)) == 2]:
+            return place
+    return None
+
+
+def _place_biome(
+    place: dict[str, Any], world: Path, homes: dict[str, Any], biomes: dict[str, Any]
+) -> str | None:
+    """A live place's old region biome, when the world still files it (#212.1)."""
+    pid = place.get("id")
+    if not isinstance(pid, str) or not pid:
+        return None
+    try:
+        region = json.loads((world / "regions" / f"{pid}.json").read_text())
+    except (OSError, ValueError):
+        return None
+    biome = region.get("biome") if isinstance(region, dict) else None
+    if not isinstance(biome, str) or (biome not in homes and biome not in biomes):
+        return None
+    return biome
+
+
+def _all_open_sea(place: dict[str, Any], world: Path) -> bool:
+    """Whether every species the place lays says it lives at sea (#212.2)."""
+    species = place.get("species") or {}
+    ids = set(
+        (species.get("playable") or [])
+        + (species.get("prey") or [])
+        + (species.get("predators") or [])
+    )
+    return bool(ids) and all(_open_sea(world, sid) for sid in ids)
+
+
+def _make_place_tile(
+    tile: str,
+    habitat_grid: HabitatGrid,
+    world: Path,
+    place: dict[str, Any],
+    home: str,
+    house: dict[str, Any],
+    layered: dict[str, Any],
+    builder_root: Path,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """A live place's tile on the place's biome, never open sea (#212.1).
+
+    Habitat, ecoregion and plants come from the biome, the
+    filed species from the place file (#207): the place's
+    cast plays here or the tile blocks, and its unfiled
+    species are wanted, never listed. Food and budgets
+    check like any tile; only the seating is placed.
+    """
+    from .plan import plan_name
+
+    col, row = parse_tile(tile)
+    _eco1, _s1, _eco2, _s2, _biome, land, water, elev = habitat_grid.cell_data(col, row)
+    habitat = str(house.get("habitat") or "sea")
+    regions = house.get("ecoregions") or []
+    eco1 = regions[0] if regions else None
+    lat, lon = center(tile)
+    level = cell_level(habitat, elev)
+    edges = tile_edges(tile, habitat_grid)
+    species = place.get("species") or {}
+    animals_dir = world / "animals"
+
+    def filed(ids: list[str]) -> list[str]:
+        return [s for s in ids if (animals_dir / f"{s}.json").is_file()]
+
+    playable = filed(species.get("playable") or [])
+    prey = filed(species.get("prey") or [])
+    predators = filed(species.get("predators") or [])
+    if not playable:
+        return None, _blocked("no_animal", habitat, None)
+    wanted = [
+        {"kind": "animal", "what": sid, "part": habitat}
+        for sid in dict.fromkeys(
+            list(species.get("playable") or [])
+            + list(species.get("prey") or [])
+            + list(species.get("predators") or [])
+        )
+        if not (animals_dir / f"{sid}.json").is_file()
+    ][:12]
+    maker, commit = _versions(builder_root, world)
+    grown = house.get("plants") or layered.get("plants") or {}
+    waters = [
+        {"id": str(p["id"]), "density": p["density"]}
+        for p in grown.get("water") or []
+        if isinstance(p, dict) and p.get("id")
+    ]
+    made_tile: dict[str, Any] = {
+        "format": 1,
+        "id": tile,
+        "kind": "code",
+        "version": 1,
+        "center": {"lat": round(lat, 2), "lon": round(lon, 2)},
+        "level": level,
+        "height": tile_height(level, edges),
+        "habitat": habitat,
+        "home": home,
+        "biome": home,
+        "seed": tile_seed(tile),
+        "water": round(water, 2),
+        "species": {"playable": playable, "prey": prey, "predators": predators},
+        "edges": edges,
+        "landmarks": [],
+        "requires": {
+            "homes": [home],
+            "biomes": [home],
+            "animals": sorted(set(playable) | set(prey) | set(predators)),
+            "plants": [p["id"] for p in waters],
+            "trees": [],
+        },
+        "sources": {
+            "habitat": f"place:{place.get('id')}",
+            "elevation": "etopo2022:v1_60s_surface",
+            "water": "hydrolakes:v1",
+            "species": f"place:{place.get('id')}",
+        },
+        "made": {
+            "by": "tile_maker",
+            "maker": maker,
+            "world": commit,
+            "at": datetime.now(UTC).isoformat(),
+        },
+    }
+    if eco1 is not None:
+        made_tile["ecoregion"] = eco1
+    if wanted:
+        made_tile["wanted"] = wanted
+    made_tile["name"] = plan_name(habitat, lat, lon, world)
+    if waters:
+        made_tile["plants"] = {"water": waters}
+    shore = shore_for_tile(tile, habitat_grid.grid_dir)
+    if shore is not None:
+        made_tile["shore"] = shore
+    validate("tile", made_tile)
+    failures: list[tuple[str, list[str]]] = []
+    for _ in range(3):
+        failures = check_with_world(made_tile, world)
+        if not failures:
+            return made_tile, None
+        if all(check == "food" for check, _ in failures):
+            return None, _blocked("no_animal", habitat, None)
+        if not _budget_failure(failures):
+            break
+        _thin_densities(made_tile)
+    detail = "; ".join(
+        f"{check}: {', '.join(problems) or 'failed'}" for check, problems in failures
+    )
+    raise RuntimeError(f"tile {tile} failed the world's check: {detail}")
+
+
 def make_tile(
     tile: str,
     habitat_grid: HabitatGrid,
@@ -1249,6 +1414,29 @@ def make_tile(
         if home is None:
             return None, {"reason": "no_home", "habitat": habitat}
     house = homes.get(home, biomes[home])
+    if habitat == "open_ocean":
+        place = live_place_for_tile(tile, world)
+        if place is not None:
+            placed = _place_biome(place, world, homes, biomes)
+            if placed is None:
+                if not _all_open_sea(place, world):
+                    pid = place.get("id")
+                    raise ValueError(
+                        f"{tile}: live place {pid} names no biome for "
+                        "its open-sea tile, and its species are not "
+                        "all open-sea animals; a person decides"
+                    )
+            else:
+                return _make_place_tile(
+                    tile,
+                    habitat_grid,
+                    world,
+                    place,
+                    placed,
+                    homes.get(placed, biomes[placed]),
+                    biomes.get(placed, {}),
+                    builder_root or BUILDER_ROOT,
+                )
     sea: dict[str, Any] | None = None
     land_style: str | None = None
     land_eco: int | None = None

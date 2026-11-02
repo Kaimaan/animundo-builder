@@ -2295,6 +2295,67 @@ def test_retired_biomes_are_never_picked() -> None:
     assert home_for_cell(717, "boreal_forest", biomes, 6) == "boreal_taiga"
 
 
+def test_live_place_open_sea_tile_without_a_biome_refuses(tmp_path: Path) -> None:
+    """#212.2: a live place's sea tile needs its biome for land species."""
+    world = _world(tmp_path)
+    (world / "homes" / "open_sea.json").write_text(
+        json.dumps({"habitat": "sea", "food": [{"kind": "fish"}]})
+    )
+    places = world / "places"
+    places.mkdir(exist_ok=True)
+    (places / "xx_test.json").write_text(
+        json.dumps(
+            {
+                "id": "xx_test",
+                "name": {"en": "Test", "fi": "Testi"},
+                "center": {"lat": 0.0, "lon": 0.0},
+                "tiles": [[581, 294]],
+                "species": {"playable": ["fox"], "prey": [], "predators": []},
+                "live": True,
+            }
+        )
+    )
+    cells = {"581,294": [None, 0.0, None, 0.0, None, 0.0, 0.0, 0.0]}
+    with pytest.raises(ValueError, match="names no biome"):
+        make_tile(
+            "z10_0581_0294",
+            _habitat_grid(tmp_path, cells),
+            world,
+            builder_root=tmp_path,
+        )
+
+
+def test_remade_reef_tile_plays_its_corals_and_clownfish() -> None:
+    """#212.3: the reef's tile is coral_reef with rock, corals, clownfish."""
+    import sys
+
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0927_0560", load_grid(grid_dir), world, builder_root=ROOT
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["biome"] == "coral_reef"
+    assert "clownfish" in made["species"]["playable"]
+    grown = [p["id"] for p in (made.get("plants") or {}).get("water", [])]
+    assert "branching_staghorn_coral" in grown
+    tools = str(world / "tools")
+    sys.path.insert(0, tools)
+    try:
+        import tile_region
+    finally:
+        sys.path.remove(tools)
+    assert tile_region.place(made)["terrain"]["reef"] > 0
+
+
 def test_place_cells_come_out_as_code_tiles() -> None:
     """#202.5: the six cells under the places make ordinary code tiles."""
     from builder.habitats import load_grid

@@ -428,6 +428,11 @@ def _real_worker(tmp_path: Path, store: FakeStore) -> Worker | None:
     world = make_world(tmp_path)
     (world / "biomes").mkdir(parents=True)
     (world / "biomes" / "rainforest.json").write_text(json.dumps({"id": "x"}))
+    listed = json.loads((world / "animal-list.json").read_text())
+    for entry in listed["animals"]:
+        entry.setdefault("name", entry["id"].replace("_", " ").title())
+        entry.setdefault("latin", "Panthera leo")
+    (world / "animal-list.json").write_text(json.dumps(listed))
     return Worker(
         store=store,
         jobs_dir=tmp_path / "jobs",

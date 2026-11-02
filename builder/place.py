@@ -401,6 +401,198 @@ def write_survey(out_dir: Path, survey: dict[str, Any]) -> Path:
     return path
 
 
+def job_survey_format() -> dict[str, Any]:
+    """A place job's survey answer as a Responses strict format (#222.2)."""
+    entry = {
+        "type": "object",
+        "properties": {"id": {"type": "string"}, "source": {"type": "string"}},
+        "required": ["id", "source"],
+        "additionalProperties": False,
+    }
+    named = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "source": {"type": "string"}},
+        "required": ["name", "source"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "json_schema",
+        "name": "PlaceJobSurvey",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "centre": {
+                    "type": "object",
+                    "properties": {
+                        "lat": {"type": "number"},
+                        "lon": {"type": "number"},
+                    },
+                    "required": ["lat", "lon"],
+                    "additionalProperties": False,
+                },
+                "tiles": {"type": "array", "items": {"type": "string"}},
+                "biome": {"type": "string"},
+                "name": {
+                    "type": "object",
+                    "properties": {
+                        "en": {"type": "string"},
+                        "fi": {"type": "string"},
+                        "fi_gen": {"type": "string"},
+                    },
+                    "required": ["en", "fi", "fi_gen"],
+                    "additionalProperties": False,
+                },
+                "wikidata": {"type": "string"},
+                "animals": {"type": "array", "items": entry},
+                "plants": {"type": "array", "items": named},
+            },
+            "required": [
+                "centre",
+                "tiles",
+                "biome",
+                "name",
+                "wikidata",
+                "animals",
+                "plants",
+            ],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+
+
+def job_survey_prompt(
+    place: str, animals: list[dict[str, Any]], biomes: list[str], want: list[str]
+) -> str:
+    """The place-job survey prompt: the place, the wanted, the lists."""
+    if want:
+        want_line = f"Keep {', '.join(want)} first."
+    else:
+        want_line = "No animal is wanted in particular."
+    listing = "\n".join(f"- {a['id']}: {a['name']} ({a['latin']})" for a in animals)
+    return load_prompt(
+        "place_job_survey",
+        {
+            "PLACE": place,
+            "WANT_LINE": want_line,
+            "BIOMES": "\n".join(f"- {b}" for b in biomes),
+            "ANIMALS": listing,
+        },
+    )
+
+
+def ask_job_survey(
+    ctx: Any,
+    place: str,
+    animals: list[dict[str, Any]],
+    biomes: list[str],
+    want: list[str],
+) -> tuple[dict[str, Any], int]:
+    """One surveyed place job: the call, the parsed answer, its searches."""
+    from .meta import count_search_calls, is_cut_off
+    from .stages.survey import SEARCH_TOOL, final_text
+
+    prompt = job_survey_prompt(place, animals, biomes, want)
+    response = ctx.respond(
+        prompt,
+        tools=SEARCH_TOOL,
+        timeout=180,
+        max_tool_calls=SEARCHES + SEARCH_SLACK,
+        text_format=job_survey_format(),
+    )
+    searches = count_search_calls(response)
+    text = final_text(response)
+    if is_cut_off(response, 0) and not text.strip():
+        raise SurveyError("the survey came back empty")
+    try:
+        data = json.loads(text)
+    except ValueError as error:
+        raise SurveyError(f"the survey came back unparsable: {error}") from error
+    return data, searches
+
+
+def check_job_survey(
+    data: Any,
+    place: str,
+    world: Path,
+    animals: list[dict[str, Any]],
+    want: list[str],
+) -> dict[str, Any]:
+    """A checked place-job survey, or why not (#222.2).
+
+    The tiles form a covered rectangle of at most 2 by 2;
+    every animal is on the list with a source; plants and
+    names as answered. Whether the biome fits is the
+    worker's call: a miss stops the job naming its land.
+    """
+    if not isinstance(data, dict):
+        raise SurveyError("the survey is not an object")
+    for key in ("centre", "tiles", "biome", "name", "wikidata", "animals", "plants"):
+        if key not in data:
+            raise SurveyError(f"the survey has no {key}")
+    centre = data["centre"]
+    if (
+        not isinstance(centre, dict)
+        or not isinstance(centre.get("lat"), (int, float))
+        or not isinstance(centre.get("lon"), (int, float))
+    ):
+        raise SurveyError("the survey centres on nothing")
+    tiles = _survey_rectangle(data["tiles"])
+    name = data["name"]
+    if (
+        not isinstance(name, dict)
+        or not name.get("en")
+        or not name.get("fi")
+        or not name.get("fi_gen")
+    ):
+        raise SurveyError("the survey names nothing in English, Finnish and genitive")
+    if not isinstance(data["wikidata"], str) or not data["wikidata"].strip():
+        raise SurveyError("the survey names no Wikidata id")
+    by_id = {a["id"]: a for a in animals}
+    kept: list[dict[str, str]] = []
+    for entry in data["animals"]:
+        if entry.get("id") not in by_id:
+            raise SurveyError(f"{entry.get('id')} is not on the animal list")
+        if not entry.get("source"):
+            raise SurveyError(f"{entry['id']} has no source")
+        kept.append({"id": entry["id"], "source": entry["source"]})
+    kept.sort(key=lambda e: 0 if e["id"] in want else 1)
+    plants: list[dict[str, str]] = []
+    for entry in data["plants"]:
+        if not entry.get("name") or not entry.get("source"):
+            raise SurveyError("a plant entry has no name or source")
+        plants.append({"name": entry["name"], "source": entry["source"]})
+    return {
+        "place": place,
+        "centre": {"lat": centre["lat"], "lon": centre["lon"]},
+        "tiles": tiles,
+        "biome": data["biome"],
+        "name": {"en": name["en"], "fi": name["fi"], "fi_gen": name["fi_gen"]},
+        "wikidata": data["wikidata"].strip(),
+        "animals": kept,
+        "plants": plants,
+        "wanted": [w for w in want if w in by_id],
+        "missing": _survey_missing(kept, plants, world, str(data["biome"])),
+        "surveyed_at": _today(),
+    }
+
+
+def _survey_rectangle(tiles: Any) -> list[str]:
+    """The tiles as a covered rectangle of at most 2 by 2, or why not."""
+    if not isinstance(tiles, list) or not tiles:
+        raise SurveyError("the survey covers no tiles")
+    try:
+        cells = [parse_tile(tile) for tile in tiles]
+    except (ValueError, TypeError) as error:
+        raise SurveyError(f"a surveyed tile is no tile id: {error}") from None
+    cols = [c for c, _ in cells]
+    rows = [r for _, r in cells]
+    wide, high = max(cols) - min(cols) + 1, max(rows) - min(rows) + 1
+    if wide > 2 or high > 2 or len(set(cells)) != wide * high:
+        raise SurveyError("the surveyed tiles are no covered 2 by 2 rectangle")
+    return sorted(set(tiles))
+
+
 def plan_place(
     survey: dict[str, Any], world: Path, world_commit: str
 ) -> dict[str, Any]:

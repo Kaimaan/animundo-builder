@@ -261,7 +261,7 @@ def _claim_lease(
         return False
     data = snap.to_dict() or {}
     status = data.get("status") or "queued"
-    if status not in ("queued", "building", "checking"):
+    if status not in ("queued", "building", "checking", "waiting_yes"):
         return False
     if status != "queued":
         if data.get("worker_id") != worker_id and not lease_expired(

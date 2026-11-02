@@ -84,7 +84,7 @@ class FakeStore:
             if doc is None:
                 return False
             status = doc.get("status") or "queued"
-            if status not in ("queued", "building", "checking"):
+            if status not in ("queued", "building", "checking", "waiting_yes"):
                 return False
             if status != "queued":
                 if doc.get("worker_id") != worker_id and not lease_expired(

@@ -19,7 +19,7 @@
   "properties": {
     "format": {"const": 1},
     "tile": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
-    "kind": {"enum": ["code", "build", "enrich", "remake"]},
+    "kind": {"enum": ["code", "build", "enrich", "remake", "place"]},
     "items": {
       "type": "array",
       "items": {"type": "string", "minLength": 1}
@@ -76,7 +76,54 @@
     "private_to": {"type": "string", "minLength": 1},
     "created_by": {"enum": ["policy", "admin", "enrich", "builder"]},
     "status": {
-      "enum": ["queued", "building", "checking", "published", "failed"]
+      "enum": ["queued", "building", "checking", "waiting_yes", "published", "failed"]
+    },
+    "place": {
+      "type": "string",
+      "minLength": 1,
+      "description": "For place: the place in words."
+    },
+    "want": {
+      "type": "array",
+      "description": "For place: wanted species ids first.",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "research": {
+      "type": "object",
+      "description": "For place at its stop: tiles, biome, species with sources, missing."
+    },
+    "price": {
+      "type": "number",
+      "minimum": 0,
+      "description": "For place at its stop: the build's estimate in USD."
+    },
+    "spent_usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "For place at its stop: the research's spend."
+    },
+    "place_yes": {
+      "type": "object",
+      "description": "Kai's yes: {cap, at}. Consumed once."
+    },
+    "place_no": {
+      "type": "object",
+      "description": "Kai's no: {at}. Fails the job turned_down."
+    },
+    "needed_land": {
+      "type": "string",
+      "minLength": 1,
+      "description": "For place with no biome: the land it needs."
+    },
+    "cap_usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "For place past its yes: the approved build cap."
+    },
+    "phase": {
+      "type": "string",
+      "minLength": 1,
+      "description": "For place past its yes: where the build stands."
     },
     "progress": {
       "type": "array",
@@ -127,7 +174,11 @@
     {
       "if": {"properties": {"kind": {"const": "remake"}}},
       "then": {"required": ["tiles"]},
-      "else": {"required": ["tile"]}
+      "else": {
+        "if": {"properties": {"kind": {"const": "place"}}},
+        "then": {"required": ["place"]},
+        "else": {"required": ["tile"]}
+      }
     }
   ]
 }

@@ -31,6 +31,10 @@ LEASE_TTL_MINUTES = 30
 #: A document update value that deletes the field.
 DELETE = object()
 
+#: Stage-A build estimate per unfiled animal or plant (#222.2);
+#: stage C calibrates it from real runs.
+PLACE_BUILD_USD_PER_ITEM = 0.50
+
 
 class Store(Protocol):
     """The Firestore surface the worker needs."""
@@ -414,7 +418,7 @@ class Worker:
             raise StaleOwner(f"build job {job_id}: owned by another worker")
 
     #: Job kinds the worker runs; anything else stays queued (#199.3).
-    JOB_KINDS = ("code", "build", "enrich", "spread")
+    JOB_KINDS = ("code", "build", "enrich", "spread", "place")
 
     def build_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Claim the job and build it: code directly, items each alone."""
@@ -433,6 +437,9 @@ class Worker:
         job = self.store.get_build_job(job_id) or job
         if job.get("kind") == "spread":
             self.spread_job(job_id, job)
+            return
+        if job.get("kind") == "place":
+            self.place_job(job_id, job)
             return
         tile = self._job_tile(job_id, job)
         if tile is None:
@@ -726,6 +733,138 @@ class Worker:
                 assert made is not None
                 made_by_tile[tile] = made
         return passing, made_by_tile, skipped, no_food
+
+    def place_job(self, job_id: str, job: dict[str, Any]) -> None:
+        """A place from one request: research, one stop, Kai's yes (#222).
+
+        Stage A: survey the place in words, write the research
+        summary with its price, and wait. A biome the world
+        lacks stops the job naming its land; a no turns it
+        down; a yes parks it approved under its cap for stage
+        C's build. No tile: the research draws the rectangle.
+        """
+        status = job.get("status") or "queued"
+        if status == "waiting_yes":
+            self._place_answer(job_id, job)
+            return
+        if status == "building" and job.get("phase") == "approved":
+            print(f"build job {job_id}: yes accepted; stage C builds it")
+            return
+        self._place_research(job_id, job)
+
+    def _place_research(self, job_id: str, job: dict[str, Any]) -> None:
+        """Survey the place, price it, and wait for yes (#222.2)."""
+        import json
+
+        from . import place as place_mod
+        from .animal_list import find_list, load_list
+        from .jobs import make_context
+        from .ledger import CapExceeded, LedgerError
+        from .pipeline import BudgetExceeded, BudgetTracker
+
+        assert self.world is not None
+        words = job.get("place")
+        budget = job.get("budget_usd")
+        want = job.get("want", [])
+        if not isinstance(words, str) or not words.strip():
+            self._fail(job_id, "bad_place")
+            return
+        if (
+            not isinstance(budget, (int, float))
+            or isinstance(budget, bool)
+            or budget <= 0
+        ):
+            self._fail(job_id, "bad_place")
+            return
+        if not isinstance(want, list):
+            self._fail(job_id, "bad_place")
+            return
+        job_dir = self.jobs_dir / job_id
+        survey_path = job_dir / "survey.json"
+        if survey_path.is_file():
+            survey = json.loads(survey_path.read_text(encoding="utf-8"))
+            spent = job.get("spent_usd", 0.0)
+        else:
+            self._require_lease(job_id)
+            ctx = make_context(self.config, job_id, job_dir, self.world)
+            if self.chat is not None:
+                ctx.client = self.chat
+            ctx.tracker = BudgetTracker(budget_usd=float(budget))
+            animals = load_list(find_list(self.world))["animals"]
+            biomes = sorted(p.stem for p in (self.world / "biomes").glob("*.json"))
+            try:
+                data, _searches = place_mod.ask_job_survey(
+                    ctx, words, animals, biomes, [str(w) for w in want]
+                )
+                survey = place_mod.check_job_survey(
+                    data, words, self.world, animals, [str(w) for w in want]
+                )
+            except place_mod.SurveyError as error:
+                print(f"build job {job_id}: survey: {error}", file=sys.stderr)
+                self._fail(job_id, "bad_survey")
+                return
+            except (BudgetExceeded, CapExceeded, LedgerError) as error:
+                print(f"build job {job_id}: research: {error}", file=sys.stderr)
+                self._fail(job_id, "over_budget")
+                return
+            place_mod.write_survey(job_dir, survey)
+            spent = ctx.tracker.spent_usd
+        research = {
+            "tiles": survey["tiles"],
+            "biome": survey["biome"],
+            "centre": survey["centre"],
+            "name": survey["name"],
+            "wikidata": survey["wikidata"],
+            "animals": survey["animals"],
+            "plants": survey["plants"],
+            "missing": survey["missing"],
+        }
+        price = round(len(survey["missing"]) * PLACE_BUILD_USD_PER_ITEM, 2)
+        update: dict[str, Any] = {
+            "research": research,
+            "price": price,
+            "spent_usd": round(float(spent), 4),
+        }
+        if not (self.world / "biomes" / f"{survey['biome']}.json").is_file():
+            update["needed_land"] = str(survey["biome"])
+            self._update(job_id, update)
+            self._fail(job_id, "no_biome")
+            return
+        self._update(job_id, {**update, "status": "waiting_yes"})
+        print(
+            f"build job {job_id}: surveyed {len(survey['tiles'])} tiles, "
+            f"waiting for yes"
+        )
+
+    def _place_answer(self, job_id: str, job: dict[str, Any]) -> None:
+        """Kai's yes or no to a surveyed place, consumed once (#222.3)."""
+        if job.get("place_no") is not None:
+            self._update(job_id, {"place_no": DELETE, "place_yes": DELETE})
+            self._fail(job_id, "turned_down")
+            return
+        yes = job.get("place_yes")
+        if yes is None:
+            print(f"build job {job_id}: waiting for yes")
+            return
+        cap = yes.get("cap") if isinstance(yes, dict) else None
+        if (
+            not isinstance(cap, (int, float))
+            or isinstance(cap, bool)
+            or not 0.01 <= cap <= 10
+        ):
+            print(f"build job {job_id}: place_yes needs a cap from $0.01 to $10")
+            return
+        self._require_lease(job_id)
+        self._update(
+            job_id,
+            {
+                "place_yes": DELETE,
+                "cap_usd": float(cap),
+                "phase": "approved",
+                "status": "building",
+            },
+        )
+        print(f"build job {job_id}: yes accepted at ${cap:.2f}; stage C builds it")
 
     def _snapshot_plan(self, job_id: str, job: dict[str, Any], tile: str) -> None:
         """Freeze the plan's approved items into the job folder.

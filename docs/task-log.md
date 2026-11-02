@@ -3,6 +3,36 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #208
+  (builder f47fd37)
+
+- Surveys failed
+  strict mode since
+  v16: the two
+  outside lists
+  join required,
+  the prompt says
+  empty is fine.
+  Old caches still
+  read. All other
+  strict schemas
+  audited exact.
+- Tests: the
+  strict-subset
+  check over both
+  survey schemas,
+  the sent format
+  equals the
+  schema, resurvey
+  asks through the
+  same call.
+- Redeploy the
+  worker from
+  f47fd37; then
+  z10_0927_0563
+  should plan
+  final.
+
 ## 2026-11-01: inbox #202.3
   conversion 4 of 4
   (builder 8210cd5)

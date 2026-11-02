@@ -41,9 +41,15 @@ class Store(Protocol):
     def list_areas(self) -> list[tuple[str, dict[str, Any]]]: ...
     def list_packs(self) -> list[tuple[str, dict[str, Any]]]: ...
     def get_enabled(self) -> bool: ...
-    def read_blob(self, path: str) -> bytes | None: ...
+    def read_blob(self, path: str) -> tuple[bytes | None, int | None]: ...
     def write_blob(
-        self, path: str, data: bytes, content_type: str = "application/json"
+        self,
+        path: str,
+        data: bytes,
+        content_type: str = "application/json",
+        *,
+        if_generation_match: int | None = None,
+        content_encoding: str | None = None,
     ) -> None: ...
     def list_blobs(self, prefix: str) -> list[str]: ...
     def get_plan(self, tile: str) -> dict[str, Any] | None: ...
@@ -528,7 +534,7 @@ class Worker:
             if doc.get("status") != "live" or what not in (doc.get("animals") or []):
                 continue
             prefix = doc.get("path") or ""
-            raw = self.store.read_blob(f"{prefix}manifest.json")
+            raw, _ = self.store.read_blob(f"{prefix}manifest.json")
             if raw is None:
                 continue
             try:
@@ -540,7 +546,7 @@ class Worker:
                 target = self._spread_target(kind, what, rel)
                 if target is None:
                     continue
-                blob = self.store.read_blob(f"{prefix}{rel}")
+                blob, _ = self.store.read_blob(f"{prefix}{rel}")
                 if blob is None:
                     continue
                 try:
@@ -648,7 +654,7 @@ class Worker:
                 skipped[tile] = reason
                 continue
             if blob_path not in groups:
-                raw = self.store.read_blob(blob_path)
+                raw, _ = self.store.read_blob(blob_path)
                 groups[blob_path] = json.loads(raw.decode("utf-8")) if raw else {}
             old = groups[blob_path]
             made, blocked = make_tile(
@@ -673,7 +679,6 @@ class Worker:
                 no_food.append(tile)
         versions = build_mod.publish_remakes(
             self.store,
-            groups,
             decisions,
             self.world_commit or "unknown",
             self._history_context(job_id, "spread"),
@@ -1348,7 +1353,7 @@ class Worker:
                 continue
             blob_path = group_path(tile)
             if blob_path not in groups:
-                raw = self.store.read_blob(blob_path)
+                raw, _ = self.store.read_blob(blob_path)
                 groups[blob_path] = json.loads(raw.decode("utf-8")) if raw else {}
             old = groups[blob_path]
             made, blocked = make_tile(
@@ -1372,7 +1377,6 @@ class Worker:
                 no_food.append(tile)
         versions = build_mod.publish_remakes(
             self.store,
-            groups,
             decisions,
             self.world_commit or "unknown",
             self._history_context(job_id, "enrich"),
@@ -1621,7 +1625,7 @@ class Worker:
                 if path in seen:
                     continue
                 seen.add(path)
-                raw = self.store.read_blob(path)
+                raw, _ = self.store.read_blob(path)
                 if raw is None:
                     continue
                 try:
@@ -1661,7 +1665,7 @@ class Worker:
         from .tiles import make_tile
 
         assert self.world is not None
-        raw = self.store.read_blob(group_path(tile))
+        raw, _ = self.store.read_blob(group_path(tile))
         if raw is not None:
             try:
                 group = json.loads(raw.decode("utf-8"))
@@ -1954,7 +1958,7 @@ class Worker:
             else:
                 prefix = f"review/{job_id}/{entry['id']}/"
                 for blob in self.store.list_blobs(prefix):
-                    data = self.store.read_blob(blob)
+                    data, _ = self.store.read_blob(blob)
                     if data is not None:
                         bundle[blob.removeprefix(prefix)] = data
             if bundle:

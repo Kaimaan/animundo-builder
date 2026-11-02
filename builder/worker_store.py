@@ -18,6 +18,10 @@ class StoreError(Exception):
     """The worker cannot reach Firebase. A person looks."""
 
 
+class GenerationMismatch(Exception):
+    """A blob changed between read and write. Re-read and retry (#216.1)."""
+
+
 class FirebaseStore:
     """`Worker`'s store on the real Firestore and Storage."""
 
@@ -158,14 +162,48 @@ class FirebaseStore:
 
     # -- Storage blobs: tiles, review bundles, previews ----------------------
 
-    def read_blob(self, path: str) -> bytes | None:
+    def read_blob(self, path: str) -> tuple[bytes | None, int | None]:
+        """The blob's bytes and its generation, unzipped (#216.1, #216.2).
+
+        `download_as_bytes` unzips a gzip-encoded blob by
+        default, so readers see plain JSON either way. A
+        missing blob is (None, None).
+        """
         blob = self._bucket.blob(path)
-        return blob.download_as_bytes() if blob.exists() else None
+        if not blob.exists():
+            return None, None
+        return blob.download_as_bytes(), blob.generation
 
     def write_blob(
-        self, path: str, data: bytes, content_type: str = "application/json"
+        self,
+        path: str,
+        data: bytes,
+        content_type: str = "application/json",
+        *,
+        if_generation_match: int | None = None,
+        content_encoding: str | None = None,
     ) -> None:
-        self._bucket.blob(path).upload_from_string(data, content_type=content_type)
+        """Bytes to the blob, guarded by its generation (#216.1, #216.2).
+
+        `if_generation_match` writes only when the blob still
+        has that generation (0 for a new file); anything else
+        raises GenerationMismatch instead of losing the other
+        writer's bytes. `content_encoding="gzip"` stores
+        compressed bytes every reader unzips.
+        """
+        from google.api_core.exceptions import PreconditionFailed
+
+        blob = self._bucket.blob(path)
+        if content_encoding is not None:
+            blob.content_encoding = content_encoding
+        try:
+            blob.upload_from_string(
+                data,
+                content_type=content_type,
+                if_generation_match=if_generation_match,
+            )
+        except PreconditionFailed as error:
+            raise GenerationMismatch(path) from error
 
     def list_blobs(self, prefix: str) -> list[str]:
         return [blob.name for blob in self._bucket.list_blobs(prefix=prefix)]

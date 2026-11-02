@@ -337,7 +337,7 @@ def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
     ).encode("utf-8")
     paths = file_places(store, world, survey_dir, "abc123")
     assert paths == [blob]
-    data = json.loads(store.blobs[blob].decode("utf-8"))
+    data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
     assert data["version"] == 4
     assert data["tiles"]["z10_0927_0560"]["kind"] == "place"
     assert data["places"] == {
@@ -354,7 +354,7 @@ def test_file_places_writes_missing_under_places(tmp_path: Path) -> None:
             "surveyed_at": "2026-10-30",
         }
     }
-    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
     assert index["counts"] == {"ready": 1, "blocked": {}}
     assert index["groups"] == {"z10/115_070": 4}
 
@@ -385,7 +385,7 @@ def test_file_places_falls_back_to_the_centre_tile(tmp_path: Path) -> None:
     assert place_tiles(world, "xx_missing", "z10_0927_0560") == ["z10_0927_0560"]
     paths = file_places(store, world, survey_dir, "abc123")
     assert len(paths) == 1
-    data = json.loads(store.blobs[paths[0]].decode("utf-8"))
+    data = json.loads(store.read_blob(paths[0])[0].decode("utf-8"))
     assert data["version"] == 1
     assert list(data["places"]) == [tile_at(-16.7, 145.9)]
 
@@ -408,12 +408,12 @@ def test_file_places_dates_an_old_survey_from_its_plan(tmp_path: Path) -> None:
     )
     store = FakeStore()
     (path,) = file_places(store, world, survey_dir, "abc123")
-    data = json.loads(store.blobs[path].decode("utf-8"))
+    data = json.loads(store.read_blob(path)[0].decode("utf-8"))
     assert data["places"]["z10_0927_0560"]["surveyed_at"] == "2026-10-30"
     (survey_dir / "plan.json").unlink()
     store = FakeStore()
     (path,) = file_places(store, world, survey_dir, "abc123")
-    data = json.loads(store.blobs[path].decode("utf-8"))
+    data = json.loads(store.read_blob(path)[0].decode("utf-8"))
     assert data["places"]["z10_0927_0560"]["surveyed_at"] == (
         datetime.now(UTC).date().isoformat()
     )
@@ -1522,7 +1522,7 @@ def test_replayed_place_files_its_missing_on_ship(tmp_path: Path) -> None:
         place_dir, tmp_path / "out", world, _grid_dir(), store, "abc123"
     )
     assert list(reports) == ["home_reef"]
-    data = json.loads(store.blobs[group_path("z10_0927_0560")].decode("utf-8"))
+    data = json.loads(store.read_blob(group_path("z10_0927_0560"))[0].decode("utf-8"))
     assert data["places"] == {
         "z10_0927_0560": {
             "region": "au_great_barrier_reef",

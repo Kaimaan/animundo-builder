@@ -155,17 +155,15 @@ def remake_biome_tiles(
     grows = _spec(world, plant_id)
     side = plant_side(grows)
     seated = _seated(biome, side, plant_id)
-    raw = store.read_blob("tiles/v2/index.json")
+    raw, _ = store.read_blob("tiles/v2/index.json")
     if raw is None:
         raise ValueError("no published tile index to remake")
     index = json.loads(raw.decode("utf-8"))
-    groups: dict[str, dict[str, Any]] = {}
     decisions: dict[str, build_mod.Remake] = {}
     held: list[str] = []
     for key in sorted(index["groups"]):
         blob = f"tiles/v2/{key}.json"
-        data = json.loads(store.read_blob(blob).decode("utf-8"))
-        groups[blob] = data
+        data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
         for tile in sorted((data.get("tiles") or {}).keys()):
             old = data["tiles"][tile]
             if old.get("home") != biome_id:
@@ -200,9 +198,7 @@ def remake_biome_tiles(
             made["version"] = int(old.get("version", 0)) + 1
             decisions[tile] = ("tile", made)
     versions = (
-        build_mod.publish_remakes(store, groups, decisions, world_commit)
-        if decisions
-        else {}
+        build_mod.publish_remakes(store, decisions, world_commit) if decisions else {}
     )
     return {"versions": versions, "held": held}
 

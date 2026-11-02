@@ -274,6 +274,7 @@
       }
     },
     "sources": {
+      "description": "Where each layer came from. The maker writes it; published tiles leave it out (#216.3).",
       "type": "object",
       "additionalProperties": false,
       "required": ["habitat", "water", "species"],
@@ -287,6 +288,7 @@
       }
     },
     "made": {
+      "description": "How this tile was made. The maker writes it; published tiles leave it out (#216.3).",
       "type": "object",
       "additionalProperties": false,
       "required": ["by", "maker", "world", "at"],
@@ -309,7 +311,7 @@
     {
       "if": {"properties": {"kind": {"const": "code"}}},
       "then": {
-        "required": ["habitat", "home", "seed", "water", "species", "sources", "made"],
+        "required": ["habitat", "home", "seed", "water", "species"],
         "properties": {"place": false, "part": false}
       }
     },

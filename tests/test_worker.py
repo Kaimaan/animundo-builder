@@ -595,7 +595,7 @@ def test_second_publish_carries_the_newer_version(tmp_path: Path) -> None:
     store.build_jobs["j2"] = _code_job()
     worker.handle_build_job("j2")
     assert store.build_jobs["j2"]["version"] == 2
-    data = json.loads(store.blobs["tiles/v2/z10/072_036.json"].decode("utf-8"))
+    data = json.loads(store.read_blob("tiles/v2/z10/072_036.json")[0].decode("utf-8"))
     assert data["tiles"]["z10_0581_0294"]["version"] == 2
     assert "lion" in data["tiles"]["z10_0581_0294"]["species"]["playable"]
 
@@ -1178,7 +1178,10 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     monkeypatch.setattr(
         store,
         "write_blob",
-        lambda path, data, *a, **k: (writes.append(path), real_write(path, data)),
+        lambda path, data, *a, **k: (
+            writes.append(path),
+            real_write(path, data, *a, **k),
+        ),
     )
     monkeypatch.setattr(
         worker,
@@ -1189,7 +1192,7 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["versions"] == {A: 2, B: 2}
-    g1data = json.loads(store.blobs[g1].decode("utf-8"))
+    g1data = json.loads(store.read_blob(g1)[0].decode("utf-8"))
     assert g1data["version"] == 2
     assert "lion" in g1data["tiles"][A]["species"]["playable"]
     assert "lion" in g1data["tiles"][B]["species"]["playable"]
@@ -1198,7 +1201,7 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     assert writes.count(g1) == 1
     assert writes.count(g2) == 0
     assert writes.count("tiles/v2/index.json") == 1
-    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
     assert index["counts"]["ready"] == 3
 
 
@@ -1530,7 +1533,7 @@ def test_enrich_review_remakes_a_region_tile(tmp_path: Path, monkeypatch: Any) -
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["versions"] == {P: 2}
-    remade = json.loads(store.blobs[blob].decode("utf-8"))
+    remade = json.loads(store.read_blob(blob)[0].decode("utf-8"))
     assert remade["tiles"][P]["kind"] == "code"
     assert "lion" in remade["tiles"][P]["species"]["playable"]
 
@@ -1818,7 +1821,7 @@ def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) ->
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["versions"] == {D: 1}
-    data = json.loads(store.blobs[blob].decode("utf-8"))
+    data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
     assert "lion" in data["tiles"][D]["species"]["playable"]
     assert data["blocked"] == {}
 
@@ -1887,7 +1890,7 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["versions"] == {A: 2}
-    data = json.loads(store.blobs[blob].decode("utf-8"))
+    data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
     assert "lion" not in data["tiles"][A]["species"]["playable"]
     assert "wanted" not in data["tiles"][A]
     report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
@@ -2011,7 +2014,7 @@ def test_enrich_review_ships_only_tiles_that_passed_their_places(
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
     assert job["versions"] == {A: 2}
-    data = json.loads(store.blobs[blob].decode("utf-8"))
+    data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
     assert "lion" in data["tiles"][A]["species"]["playable"]
     assert data["tiles"][B]["version"] == 1
     assert "wanted" in data["tiles"][B]
@@ -2689,7 +2692,7 @@ def test_review_job_publishes_shipped_items(tmp_path: Path, monkeypatch: Any) ->
     assert "tiles/v2/z10/072_036.json" in store.blobs
     import json
 
-    data = json.loads(store.blobs["tiles/v2/z10/072_036.json"].decode("utf-8"))
+    data = json.loads(store.read_blob("tiles/v2/z10/072_036.json")[0].decode("utf-8"))
     assert job["version"] == data["tiles"]["z10_0581_0294"]["version"] == 1
 
 
@@ -2918,7 +2921,7 @@ def test_no_player_field_anywhere(tmp_path: Path, monkeypatch: Any) -> None:
     written = [
         store.plans["z10_0581_0294"],
         store.build_jobs["j1"],
-        *[json.loads(v.decode("utf-8")) for v in store.blobs.values()],
+        *[json.loads(store.read_blob(path)[0].decode("utf-8")) for path in store.blobs],
     ]
     leaked = keys_below(written) & {
         "uid",
@@ -3401,7 +3404,7 @@ def test_spread_runs_keyless_and_skips_the_tile_without_it(
     assert job["versions"] == {A: 2}
     assert job["skipped"] == {C: "lion is not in the tile's survey"}
     assert job["cost_usd"] == 0.0
-    remade = json.loads(store.blobs[group_path(A)].decode("utf-8"))
+    remade = json.loads(store.read_blob(group_path(A))[0].decode("utf-8"))
     assert "lion" in remade["tiles"][A]["species"]["playable"]
     assert "wanted" not in remade["tiles"][A]
     assert store.blobs[group_path(C)] == before_c

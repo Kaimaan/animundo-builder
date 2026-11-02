@@ -35,6 +35,8 @@ class FakeStore:
         self.watchers: list[tuple[str, Any]] = []
         self.unsubscribed: list[str] = []
         self.blobs: dict[str, bytes] = {}
+        self.generations: dict[str, int] = {}
+        self.encodings: dict[str, str] = {}
         self.enabled = True
         self._lock = threading.Lock()
 
@@ -155,13 +157,38 @@ class FakeStore:
         self.watchers.append(("build_jobs", callback))
         return _Watch(self, "build_jobs")
 
-    def read_blob(self, path: str) -> bytes | None:
-        return self.blobs.get(path)
+    def read_blob(self, path: str) -> tuple[bytes | None, int | None]:
+        """Bytes and generation, gunzipped like Storage (#216.1, #216.2)."""
+        import gzip
+
+        if path not in self.blobs:
+            return None, None
+        data = self.blobs[path]
+        if self.encodings.get(path) == "gzip":
+            data = gzip.decompress(data)
+        return data, self.generations.get(path, 1)
 
     def write_blob(
-        self, path: str, data: bytes, content_type: str = "application/json"
+        self,
+        path: str,
+        data: bytes,
+        content_type: str = "application/json",
+        *,
+        if_generation_match: int | None = None,
+        content_encoding: str | None = None,
     ) -> None:
+        """Bytes to the blob, guarded like Storage (#216.1, #216.2)."""
+        from builder.worker_store import GenerationMismatch
+
+        current = self.generations.get(path, 1 if path in self.blobs else 0)
+        if if_generation_match is not None and if_generation_match != current:
+            raise GenerationMismatch(path)
         self.blobs[path] = data
+        self.generations[path] = current + 1
+        if content_encoding is not None:
+            self.encodings[path] = content_encoding
+        else:
+            self.encodings.pop(path, None)
 
     def list_blobs(self, prefix: str) -> list[str]:
         return sorted(p for p in self.blobs if p.startswith(prefix))

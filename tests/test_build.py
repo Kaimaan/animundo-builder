@@ -14,6 +14,8 @@ from fake_store import FakeStore
 from builder import build as build_mod
 from builder.schemas import validate
 
+EXAMPLES = Path(__file__).parent / "examples"
+
 
 def _plan(tile: str = "z10_0581_0294") -> dict[str, Any]:
     return {
@@ -335,10 +337,10 @@ def test_publish_group_writes_group_and_index() -> None:
     store = FakeStore()
     path = build_mod.publish_group("z10_0581_0294", _made_tile(), store, "abc123")
     assert path == "tiles/v2/z10/072_036.json"
-    group = json.loads(store.blobs[path].decode("utf-8"))
+    group = json.loads(store.read_blob(path)[0].decode("utf-8"))
     assert group["tiles"]["z10_0581_0294"]["home"] == "boreal_forest"
     assert group["version"] == 1
-    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
     validate("tile-index", index)
     assert index["groups"] == {"z10/072_036": 1}
     assert index["counts"] == {"ready": 1, "blocked": {}}
@@ -393,9 +395,9 @@ def test_publish_group_moves_counts_by_delta() -> None:
         ).encode("utf-8"),
     )
     build_mod.publish_group("z10_0581_0294", _made_tile(), store, "abc123")
-    group = json.loads(store.blobs["tiles/v2/z10/072_036.json"].decode("utf-8"))
+    group = json.loads(store.read_blob("tiles/v2/z10/072_036.json")[0].decode("utf-8"))
     assert group["version"] == 2
-    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
     assert index["groups"] == {"z10/072_036": 2}
     assert index["counts"] == {"ready": 5, "blocked": {"no_home": 1}}
 
@@ -709,9 +711,9 @@ def test_publish_remakes_writes_once_per_group_and_index_once() -> None:
     store = FakeStore()
     writes: list[str] = []
     real_write = store.write_blob
-    store.write_blob = lambda path, data, **k: (
+    store.write_blob = lambda path, data, *a, **k: (
         writes.append(path),
-        real_write(path, data, **k),
+        real_write(path, data, *a, **k),
     )  # type: ignore[method-assign]
     group_blob = "tiles/v2/z10/072_036.json"
     groups = {
@@ -740,7 +742,6 @@ def test_publish_remakes_writes_once_per_group_and_index_once() -> None:
     store.blobs[other_blob] = json.dumps(other).encode("utf-8")
     versions = build_mod.publish_remakes(
         store,
-        groups,
         {
             "z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=4)),
             "z10_0580_0295": ("tile", _old_tile(id="z10_0580_0295", version=3)),
@@ -753,9 +754,9 @@ def test_publish_remakes_writes_once_per_group_and_index_once() -> None:
     assert writes.count("tiles/v2/index.json") == 1
     assert writes.count(other_blob) == 0
     assert store.blobs[other_blob] == json.dumps(other).encode("utf-8")
-    data = json.loads(store.blobs[group_blob].decode("utf-8"))
+    data = json.loads(store.read_blob(group_blob)[0].decode("utf-8"))
     assert data["version"] == 6
-    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
     assert index["groups"] == {"z10/072_036": 6}
     assert index["counts"]["ready"] == 0
 
@@ -774,9 +775,9 @@ def test_publish_remakes_without_a_job_records_the_pass() -> None:
             "blocked": {},
         }
     }
+    store.blobs[group_blob] = json.dumps(groups[group_blob]).encode("utf-8")
     versions = build_mod.publish_remakes(
         store,
-        groups,
         {"z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=4))},
         "abc123",
     )
@@ -808,9 +809,9 @@ def test_publish_remakes_with_a_job_writes_no_pass_record() -> None:
             "blocked": {},
         }
     }
+    store.blobs[group_blob] = json.dumps(groups[group_blob]).encode("utf-8")
     build_mod.publish_remakes(
         store,
-        groups,
         {"z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=4))},
         "abc123",
         {"job": "z10_0581_0294_build_abc", "kind": "build", "cost_usd": 0.11},
@@ -850,15 +851,201 @@ def test_publish_remakes_moves_counts_on_an_opener() -> None:
     ).encode("utf-8")
     versions = build_mod.publish_remakes(
         store,
-        groups,
         {"z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=1))},
         "abc",
     )
     assert versions == {"z10_0581_0294": 1}
-    index = json.loads(store.blobs["tiles/v2/index.json"].decode("utf-8"))
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
     assert index["counts"] == {"ready": 1, "blocked": {}}
-    data = json.loads(store.blobs[group_blob].decode("utf-8"))
+    data = json.loads(store.read_blob(group_blob)[0].decode("utf-8"))
     assert data["blocked"] == {}
+
+
+def test_publish_remakes_retries_a_raced_group() -> None:
+    """#216.1: a group changed mid-publish keeps both writers' tiles."""
+    store = FakeStore()
+    group_blob = "tiles/v2/z10/072_036.json"
+    seed = {
+        "format": 1,
+        "grid": "z10",
+        "group": [72, 36],
+        "version": 12,
+        "tiles": {"z10_0581_0294": _old_tile(id="z10_0581_0294", version=3)},
+        "blocked": {},
+    }
+    store.blobs[group_blob] = json.dumps(seed).encode("utf-8")
+    store.blobs["tiles/v2/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {"z10/072_036": 12},
+            "counts": {"ready": 1, "blocked": {}},
+        }
+    ).encode("utf-8")
+    real_write = store.write_blob
+    raced = False
+
+    def write(path: str, data: bytes, *a: Any, **k: Any) -> None:
+        nonlocal raced
+        if path == group_blob and not raced:
+            raced = True
+            build_mod.publish_remakes(
+                store,
+                {
+                    "z10_0580_0295": (
+                        "tile",
+                        _old_tile(id="z10_0580_0295", version=1),
+                    )
+                },
+                "abc",
+            )
+        real_write(path, data, *a, **k)
+
+    store.write_blob = write  # type: ignore[method-assign]
+    versions = build_mod.publish_remakes(
+        store,
+        {"z10_0581_0294": ("tile", _old_tile(id="z10_0581_0294", version=4))},
+        "abc",
+    )
+    data = json.loads(store.read_blob(group_blob)[0].decode("utf-8"))
+    assert data["tiles"]["z10_0580_0295"]["version"] == 1
+    assert data["tiles"]["z10_0581_0294"]["version"] == 4
+    assert data["version"] == 14
+    assert versions == {"z10_0581_0294": 4}
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
+    assert index["groups"] == {"z10/072_036": 14}
+    assert index["counts"]["ready"] == 2
+    assert store.encodings[group_blob] == "gzip"
+
+
+def test_publish_remakes_fails_loud_on_endless_conflict() -> None:
+    """#216.1: retries give up loudly, recording what landed."""
+    from builder.worker_store import GenerationMismatch
+
+    store = FakeStore()
+    first = "tiles/v2/z10/072_036.json"
+    second = "tiles/v2/z10/073_037.json"
+    for blob, tile in (
+        (first, "z10_0581_0294"),
+        (second, "z10_0590_0298"),
+    ):
+        col, row = (72, 36) if blob == first else (73, 37)
+        store.blobs[blob] = json.dumps(
+            {
+                "format": 1,
+                "grid": "z10",
+                "group": [col, row],
+                "version": 1,
+                "tiles": {tile: _old_tile(id=tile, version=1)},
+                "blocked": {},
+            }
+        ).encode("utf-8")
+    real_write = store.write_blob
+
+    def write(path: str, data: bytes, *a: Any, **k: Any) -> None:
+        if path == second:
+            raise GenerationMismatch(path)
+        real_write(path, data, *a, **k)
+
+    store.write_blob = write  # type: ignore[method-assign]
+    with pytest.raises(build_mod.PublishConflictError, match="073_037"):
+        build_mod.publish_remakes(
+            store,
+            {
+                "z10_0581_0294": (
+                    "tile",
+                    _old_tile(id="z10_0581_0294", version=2),
+                ),
+                "z10_0590_0298": (
+                    "tile",
+                    _old_tile(id="z10_0590_0298", version=2),
+                ),
+            },
+            "abc123",
+        )
+    assert len(store.build_jobs) == 1
+    doc = next(iter(store.build_jobs.values()))
+    assert doc["tiles"] == ["z10_0581_0294"]
+
+
+def test_update_index_never_drops_a_group_version() -> None:
+    """#216.1: the index keeps the higher version it already has."""
+    store = FakeStore()
+    store.blobs["tiles/v2/z10/072_036.json"] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": 5,
+            "tiles": {},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    store.blobs["tiles/v2/index.json"] = json.dumps(
+        {
+            "format": 1,
+            "made_at": "",
+            "world": "",
+            "groups": {"z10/072_036": 10},
+            "counts": {"ready": 0, "blocked": {}},
+        }
+    ).encode("utf-8")
+    build_mod.publish_group("z10_0581_0294", _made_tile(), store, "abc123")
+    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
+    assert index["groups"] == {"z10/072_036": 10}
+    assert index["counts"] == {"ready": 1, "blocked": {}}
+
+
+def test_fake_store_generations_guard_writes() -> None:
+    """#216.1: the fake matches generations like Storage does."""
+    from builder.worker_store import GenerationMismatch
+
+    store = FakeStore()
+    assert store.read_blob("x.json") == (None, None)
+    store.write_blob("x.json", b"{}", if_generation_match=0)
+    assert store.read_blob("x.json") == (b"{}", 1)
+    with pytest.raises(GenerationMismatch):
+        store.write_blob("x.json", b"{}", if_generation_match=0)
+    with pytest.raises(GenerationMismatch):
+        store.write_blob("x.json", b"{}", if_generation_match=2)
+    store.write_blob("x.json", b"[]", if_generation_match=1)
+    assert store.read_blob("x.json") == (b"[]", 2)
+    store.write_blob("x.json", b"{}")
+    assert store.read_blob("x.json") == (b"{}", 3)
+
+
+def test_published_group_is_gzipped_compact_json() -> None:
+    """#216.2: group bytes are gzipped compact JSON, round-tripping."""
+    import gzip
+
+    store = FakeStore()
+    build_mod.publish_group("z10_0581_0294", _made_tile(), store, "abc123")
+    path = "tiles/v2/z10/072_036.json"
+    assert store.encodings[path] == "gzip"
+    raw = store.blobs[path]
+    assert raw[:2] == b"\x1f\x8b"
+    slim = json.loads(gzip.decompress(raw).decode("utf-8"))
+    assert gzip.decompress(raw) == json.dumps(slim, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    assert json.loads(store.read_blob(path)[0].decode("utf-8")) == slim
+    validate("tile-group", slim)
+
+
+def test_published_tiles_leave_out_sources_and_made() -> None:
+    """#216.3a: published tiles keep wanted, drop sources and made."""
+    made = json.loads((EXAMPLES / "valid" / "tile.json").read_text(encoding="utf-8"))
+    assert "sources" in made and "made" in made and "wanted" in made
+    store = FakeStore()
+    build_mod.publish_group(made["id"], made, store, "abc123")
+    group = json.loads(store.read_blob("tiles/v2/z10/072_036.json")[0].decode("utf-8"))
+    tile = group["tiles"][made["id"]]
+    assert "sources" not in tile
+    assert "made" not in tile
+    assert tile["wanted"] == made["wanted"]
+    validate("tile", tile)
+    validate("tile-group", group)
 
 
 def test_write_place_animal_brief_names_the_place_home(tmp_path: Path) -> None:

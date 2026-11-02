@@ -11,6 +11,8 @@ opens; take lays a job's checked items out like animundo-world.
 
 from __future__ import annotations
 
+import copy
+import gzip
 import hashlib
 import json
 import shutil
@@ -39,6 +41,66 @@ ITEM_STAGES = ("research", "minimum", "looks", "newhome", "oneshot", "plants")
 #: What take downloads and previews carry, laid out like the world.
 #: Border jobs never write `regions/`, so it travels only for places.
 TAKE_DIRS = ("homes", "animals", "models", "plants", "locale", "regions")
+
+#: The published tile index's blob.
+INDEX_BLOB = "tiles/v2/index.json"
+
+#: Publish attempts per file before a conflict fails loud (#216.1).
+PUBLISH_ATTEMPTS = 5
+
+
+class PublishConflictError(ValueError):
+    """A publish lost its race too often: loud, with the path (#216.1)."""
+
+    def __init__(self, path: str, attempts: int) -> None:
+        super().__init__(
+            f"{path}: still conflicting after {attempts} writes; a person looks"
+        )
+        self.path = path
+
+
+def _group_upload_bytes(data: dict[str, Any]) -> bytes:
+    """A group file's Storage bytes: slim, compact, gzipped (#216.2, #216.3).
+
+    Players never read a tile's `sources` or `made`, so published
+    tiles leave them out (choice (a): `wanted` stays, the server
+    reads it). Provenance stays in tile history, review bundles
+    and build_jobs. Every reader unzips by content encoding.
+    """
+    slim = copy.deepcopy(data)
+    for tile in (slim.get("tiles") or {}).values():
+        if isinstance(tile, dict):
+            tile.pop("sources", None)
+            tile.pop("made", None)
+    return gzip.compress(json.dumps(slim, separators=(",", ":")).encode("utf-8"))
+
+
+def _index_upload_bytes(index: dict[str, Any]) -> bytes:
+    """The tile index's Storage bytes: compact, gzipped (#216.2)."""
+    return gzip.compress(json.dumps(index, separators=(",", ":")).encode("utf-8"))
+
+
+def _empty_group(gcol: int, grow: int) -> dict[str, Any]:
+    """A group file's skeleton before its first tile lands."""
+    return {
+        "format": 1,
+        "grid": NAME,
+        "group": [gcol, grow],
+        "version": 0,
+        "tiles": {},
+        "blocked": {},
+    }
+
+
+def _empty_index() -> dict[str, Any]:
+    """The tile index's skeleton before its first group lands."""
+    return {
+        "format": 1,
+        "made_at": "",
+        "world": "",
+        "groups": {},
+        "counts": {"ready": 0, "blocked": {}},
+    }
 
 
 def item_pipeline(
@@ -382,31 +444,53 @@ def publish_group(
 ) -> str:
     """One made tile to Storage: its group file and the tile index.
 
-    The group merges over the published one; the index counts move
-    by the honest delta (this tile newly ready, or no longer
-    blocked for its old reason). Returns the group Storage path.
-    With `history` (job, kind, cost_usd), a made/remade row lands
-    in the tile history (#165), and the tile's latest row at
+    The group merges over a freshly re-read copy and writes with
+    its generation, retrying races instead of losing the other
+    writer's tiles (#216.1); the index counts move by the honest
+    delta (this tile newly ready, or no longer blocked for its
+    old reason). Returns the group Storage path. With `history`
+    (job, kind, cost_usd), a made/remade row lands in the tile
+    history (#165), and the tile's latest row at
     `tile_history/<tile>` (#195.2).
     """
     from . import history as history_mod
     from .tiles import write_group
+    from .worker_store import GenerationMismatch
 
     gcol, grow = group(tile)
     blob_path = group_path(tile)
-    old_raw = store.read_blob(blob_path)
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_dir = Path(tmp)
-        if old_raw is not None:
-            old = json.loads(old_raw.decode("utf-8"))
-            (tmp_dir / NAME).mkdir(parents=True, exist_ok=True)
-            (tmp_dir / NAME / f"{gcol:03d}_{grow:03d}.json").write_bytes(old_raw)
-        else:
-            old = {"tiles": {}, "blocked": {}}
-        path = write_group(tmp_dir, tile, made_tile, None)
-        data = json.loads(path.read_bytes())
-        store.write_blob(blob_path, path.read_bytes())
-    _update_index(store, gcol, grow, data["version"], old, tile, world_commit)
+    last: GenerationMismatch | None = None
+    data: dict[str, Any] = {}
+    old: dict[str, Any] = {"tiles": {}, "blocked": {}}
+    for _ in range(PUBLISH_ATTEMPTS):
+        old_raw, gen = store.read_blob(blob_path)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            if old_raw is not None:
+                old = json.loads(old_raw.decode("utf-8"))
+                (tmp_dir / NAME).mkdir(parents=True, exist_ok=True)
+                (tmp_dir / NAME / f"{gcol:03d}_{grow:03d}.json").write_bytes(old_raw)
+            else:
+                old = {"tiles": {}, "blocked": {}}
+            path = write_group(tmp_dir, tile, made_tile, None)
+            data = json.loads(path.read_bytes())
+        try:
+            store.write_blob(
+                blob_path,
+                _group_upload_bytes(data),
+                "application/json",
+                if_generation_match=gen or 0,
+                content_encoding="gzip",
+            )
+        except GenerationMismatch as error:
+            last = error
+            continue
+        break
+    else:
+        raise PublishConflictError(blob_path, PUBLISH_ATTEMPTS) from last
+    _update_index(
+        store, gcol, grow, data["version"], old, [(tile, True, None)], world_commit
+    )
     if history is not None:
         event = (
             "remade"
@@ -458,34 +542,44 @@ def _update_index(
     grow: int,
     version: int,
     old_group: dict[str, Any],
-    tile: str,
+    deltas: list[tuple[str, bool, str | None]],
     world_commit: str,
-    count: bool = True,
 ) -> None:
     """The tile index: this group's version, counts by honest delta.
 
-    A places-only filing bumps the version with no count delta
-    (#170.2): no tile changed readiness.
+    `deltas` is (tile, made, blocked reason) per tile this
+    publish changed, applied against the fresh group copy; empty
+    for a places-only filing, which bumps the version with no
+    count delta (#170.2). The group's version never goes down,
+    and the write carries the read generation, retried on races
+    (#216.1).
     """
-    raw = store.read_blob("tiles/v2/index.json")
-    if raw is not None:
-        index = json.loads(raw.decode("utf-8"))
-    else:
-        index = {
-            "format": 1,
-            "made_at": "",
-            "world": "",
-            "groups": {},
-            "counts": {"ready": 0, "blocked": {}},
-        }
+    from .worker_store import GenerationMismatch
+
     key = f"{NAME}/{gcol:03d}_{grow:03d}"
-    index["groups"][key] = version
-    if count:
-        _apply_index_delta(index, old_group, tile, True, None)
-    index["made_at"] = datetime.now(UTC).isoformat()
-    index["world"] = world_commit
-    validate("tile-index", index)
-    store.write_blob("tiles/v2/index.json", json.dumps(index).encode("utf-8"))
+    last: GenerationMismatch | None = None
+    for _ in range(PUBLISH_ATTEMPTS):
+        raw, gen = store.read_blob(INDEX_BLOB)
+        index = json.loads(raw.decode("utf-8")) if raw is not None else _empty_index()
+        index["groups"][key] = max(int(index["groups"].get(key, 0)), version)
+        for tile, made, reason in deltas:
+            _apply_index_delta(index, old_group, tile, made, reason)
+        index["made_at"] = datetime.now(UTC).isoformat()
+        index["world"] = world_commit
+        validate("tile-index", index)
+        try:
+            store.write_blob(
+                INDEX_BLOB,
+                _index_upload_bytes(index),
+                "application/json",
+                if_generation_match=gen or 0,
+                content_encoding="gzip",
+            )
+        except GenerationMismatch as error:
+            last = error
+            continue
+        return
+    raise PublishConflictError(INDEX_BLOB, PUBLISH_ATTEMPTS) from last
 
 
 def publish_places(
@@ -497,38 +591,50 @@ def publish_places(
     """One place's wanted list into its group file, under `places`.
 
     The tile's own entry is untouched: the tile stays the
-    hand-made region (#170.2). Returns the group Storage path.
+    hand-made region (#170.2). Merges over a freshly re-read
+    copy and writes with its generation, retried on races
+    (#216.1). Returns the group Storage path.
     """
+    from .worker_store import GenerationMismatch
+
     gcol, grow = group(tile)
     blob_path = group_path(tile)
-    old_raw = store.read_blob(blob_path)
-    if old_raw is not None:
-        old = json.loads(old_raw.decode("utf-8"))
+    last: GenerationMismatch | None = None
+    data: dict[str, Any] = {}
+    old: dict[str, Any] = {"tiles": {}, "blocked": {}}
+    for _ in range(PUBLISH_ATTEMPTS):
+        old_raw, gen = store.read_blob(blob_path)
+        if old_raw is not None:
+            old = json.loads(old_raw.decode("utf-8"))
+        else:
+            old = {"tiles": {}, "blocked": {}}
+        data = {
+            "format": 1,
+            "grid": NAME,
+            "group": [gcol, grow],
+            "version": int(old.get("version", 0)) + 1,
+            "tiles": old.get("tiles") or {},
+            "blocked": old.get("blocked") or {},
+        }
+        places = dict(old.get("places") or {})
+        places[tile] = entry
+        data["places"] = places
+        validate("tile-group", data)
+        try:
+            store.write_blob(
+                blob_path,
+                _group_upload_bytes(data),
+                "application/json",
+                if_generation_match=gen or 0,
+                content_encoding="gzip",
+            )
+        except GenerationMismatch as error:
+            last = error
+            continue
+        break
     else:
-        old = {"tiles": {}, "blocked": {}}
-    data = {
-        "format": 1,
-        "grid": NAME,
-        "group": [gcol, grow],
-        "version": int(old.get("version", 0)) + 1,
-        "tiles": old.get("tiles") or {},
-        "blocked": old.get("blocked") or {},
-    }
-    places = dict(old.get("places") or {})
-    places[tile] = entry
-    data["places"] = places
-    validate("tile-group", data)
-    store.write_blob(blob_path, (json.dumps(data, indent=1) + "\n").encode("utf-8"))
-    _update_index(
-        store,
-        gcol,
-        grow,
-        data["version"],
-        old,
-        tile,
-        world_commit,
-        count=False,
-    )
+        raise PublishConflictError(blob_path, PUBLISH_ATTEMPTS) from last
+    _update_index(store, gcol, grow, data["version"], old, [], world_commit)
     return blob_path
 
 
@@ -546,8 +652,12 @@ Remake = tuple[str, dict[str, Any] | None]
 
 
 def _content(tile: dict[str, Any]) -> dict[str, Any]:
-    """The tile without provenance: what a version bump means."""
-    return {k: v for k, v in tile.items() if k not in ("version", "made")}
+    """The tile without provenance: what a version bump means.
+
+    Published tiles leave `sources` and `made` out (#216.3),
+    so neither counts, or no remake would ever come back skip.
+    """
+    return {k: v for k, v in tile.items() if k not in ("version", "made", "sources")}
 
 
 def _filed_now(world: Path, kind: str, what: str) -> bool:
@@ -627,24 +737,27 @@ def remake_decision(
 
 def publish_remakes(
     store: Any,
-    groups: dict[str, dict[str, Any]],
     decisions: dict[str, Remake],
     world_commit: str,
     history: dict[str, Any] | None = None,
 ) -> dict[str, int]:
-    """Changed remake tiles to Storage: one write per group, index once.
+    """Changed remake tiles to Storage: one write per group, index per group.
 
-    `groups` holds the loaded group files by blob path; only groups
-    with a changed tile are written, their version up by one.
-    Returns `versions` for the tiles whose content changed. With
-    `history` (job, kind, cost_usd), every written tile lands a
-    made/remade/blocked row in the tile history (#165), and its
-    latest row at `tile_history/<tile>` (#195.2). Without a job
-    of their own, the pass writes its own history rows plus one
-    `build_jobs` remake record, so areas hear of it (#209.1).
+    Only groups with a changed tile are written, each merged over
+    a freshly re-read copy and written with its generation, so a
+    concurrent writer's tiles survive (#216.1). Tile versions
+    count from the fresh copy, and the index takes the higher
+    version with honest deltas. Returns `versions` for the tiles
+    whose content changed. With `history` (job, kind, cost_usd),
+    every written tile lands a made/remade/blocked row in the
+    tile history (#165), and its latest row at `tile_history/<tile>`
+    (#195.2). Without a job of their own, the pass writes its own
+    history rows plus one `build_jobs` remake record, so areas
+    hear of it (#209.1); a conflict that fails loud halfway still
+    records what landed.
     """
     from . import history as history_mod
-    from .grid import NAME, group, group_path
+    from .grid import group_path
 
     remake_id: str | None = None
     if history is None or not history.get("job"):
@@ -657,56 +770,25 @@ def publish_remakes(
             continue
         by_blob.setdefault(group_path(tile), []).append(tile)
     versions: dict[str, int] = {}
-    raw = store.read_blob("tiles/v2/index.json")
-    if raw is not None:
-        index = json.loads(raw.decode("utf-8"))
-    else:
-        index = {
-            "format": 1,
-            "made_at": "",
-            "world": "",
-            "groups": {},
-            "counts": {"ready": 0, "blocked": {}},
-        }
-    for blob_path, tiles in by_blob.items():
-        gcol, grow = group(tiles[0])
-        data = groups.get(blob_path)
-        if data is None:
-            raw_group = store.read_blob(blob_path)
-            data = (
-                json.loads(raw_group.decode("utf-8"))
-                if raw_group is not None
-                else {
-                    "format": 1,
-                    "grid": NAME,
-                    "group": [gcol, grow],
-                    "version": 0,
-                    "tiles": {},
-                    "blocked": {},
-                }
-            )
-            groups[blob_path] = data
-        old = json.loads(json.dumps(data))
-        for tile in tiles:
-            kind, entry = decisions[tile]
-            assert entry is not None
-            if kind == "tile":
-                data.setdefault("tiles", {})[tile] = entry
-                data.get("blocked", {}).pop(tile, None)
-                versions[tile] = int(entry["version"])
-            else:
-                data.setdefault("blocked", {})[tile] = entry
-                data.get("tiles", {}).pop(tile, None)
-        data["version"] = int(data.get("version", 0)) + 1
-        validate("tile-group", data)
-        store.write_blob(blob_path, json.dumps(data, indent=1).encode("utf-8"))
-        index["groups"][f"{NAME}/{gcol:03d}_{grow:03d}"] = data["version"]
-        for tile in tiles:
-            kind, entry = decisions[tile]
-            assert entry is not None
-            reason = entry.get("reason") if kind == "blocked" else None
-            _apply_index_delta(index, old, tile, kind == "tile", reason)
-            if history is not None:
+    try:
+        for blob_path, tiles in by_blob.items():
+            data, old = _write_remake_group(store, blob_path, tiles, decisions)
+            for tile in tiles:
+                seated = (data.get("tiles") or {}).get(tile)
+                if seated is not None:
+                    versions[tile] = int(seated["version"])
+            gcol, grow = group(tiles[0])
+            deltas = []
+            for tile in tiles:
+                kind, entry = decisions[tile]
+                assert entry is not None
+                reason = entry.get("reason") if kind == "blocked" else None
+                deltas.append((tile, kind == "tile", reason))
+            _update_index(store, gcol, grow, data["version"], old, deltas, world_commit)
+            for tile in tiles:
+                kind, entry = decisions[tile]
+                assert entry is not None
+                reason = entry.get("reason") if kind == "blocked" else None
                 if kind == "blocked":
                     event: str = "blocked"
                 elif tile in (old.get("tiles") or {}) or tile in (
@@ -727,13 +809,71 @@ def publish_remakes(
                 )
                 history_mod.record(store, entry)
                 history_mod.record_tile(store, entry)
-    index["made_at"] = datetime.now(UTC).isoformat()
-    index["world"] = world_commit
-    validate("tile-index", index)
-    store.write_blob("tiles/v2/index.json", json.dumps(index).encode("utf-8"))
+    except PublishConflictError:
+        if remake_id is not None and versions and hasattr(store, "set_build_job"):
+            _record_remake(store, remake_id, versions, world_commit)
+        raise
     if remake_id is not None and versions and hasattr(store, "set_build_job"):
         _record_remake(store, remake_id, versions, world_commit)
     return versions
+
+
+def _write_remake_group(
+    store: Any,
+    blob_path: str,
+    tiles: list[str],
+    decisions: dict[str, Remake],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One remake group over a fresh copy, matched and retried (#216.1).
+
+    Merges only this job's changed tiles; each tile's version
+    counts from the fresh copy's tile, and the group's from the
+    fresh group. Returns the written group and the fresh copy it
+    merged over, for honest index deltas and history events.
+    """
+    from .worker_store import GenerationMismatch
+
+    gcol, grow = group(tiles[0])
+    last: GenerationMismatch | None = None
+    for _ in range(PUBLISH_ATTEMPTS):
+        raw, gen = store.read_blob(blob_path)
+        old = (
+            json.loads(raw.decode("utf-8"))
+            if raw is not None
+            else _empty_group(gcol, grow)
+        )
+        data = copy.deepcopy(old)
+        data.setdefault("tiles", {})
+        data.setdefault("blocked", {})
+        for tile in tiles:
+            kind, entry = decisions[tile]
+            assert entry is not None
+            if kind == "tile":
+                prior = data["tiles"].get(tile)
+                seated = dict(entry)
+                seated["version"] = (
+                    int(prior.get("version", 0)) + 1 if isinstance(prior, dict) else 1
+                )
+                data["tiles"][tile] = seated
+                data["blocked"].pop(tile, None)
+            else:
+                data["blocked"][tile] = entry
+                data["tiles"].pop(tile, None)
+        data["version"] = int(data.get("version", 0)) + 1
+        validate("tile-group", data)
+        try:
+            store.write_blob(
+                blob_path,
+                _group_upload_bytes(data),
+                "application/json",
+                if_generation_match=gen or 0,
+                content_encoding="gzip",
+            )
+        except GenerationMismatch as error:
+            last = error
+            continue
+        return data, old
+    raise PublishConflictError(blob_path, PUBLISH_ATTEMPTS) from last
 
 
 def _remake_job_id(world_commit: str) -> str:
@@ -834,7 +974,7 @@ def take_bundle(store: Any, job_id: str, out_dir: Path) -> Path:
         rel = name.removeprefix(f"review/{job_id}/")
         path = dest / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        data = store.read_blob(name)
+        data, _ = store.read_blob(name)
         assert data is not None
         path.write_bytes(data)
     return dest

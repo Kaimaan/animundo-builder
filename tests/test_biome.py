@@ -165,7 +165,7 @@ def test_remake_seats_the_newcomer_on_its_biome_tiles(
     out = remake_biome_tiles(store, world, "coral_reef", "table_coral", "abc123")
     assert out["held"] == []
     assert out["versions"] == {"z10_0927_0560": 3}
-    data = json.loads(store.blobs["tiles/v2/z10/115_070.json"].decode("utf-8"))
+    data = json.loads(store.read_blob("tiles/v2/z10/115_070.json")[0].decode("utf-8"))
     grown = data["tiles"]["z10_0927_0560"]["plants"]["water"]
     assert {"id": "table_coral", "density": 0.245} in grown
     assert "table_coral" in data["tiles"]["z10_0927_0560"]["requires"]["plants"]

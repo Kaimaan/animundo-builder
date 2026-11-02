@@ -85,6 +85,21 @@ class PlantsStage:
             for listed in (region.get("plants") or {}).get(side, []) or []:
                 if isinstance(listed, dict) and listed.get("id"):
                     entries.setdefault(listed["id"], {"model": listed["id"]})
+        brief_path = ctx.job_dir / "home.json"
+        brief = (
+            json.loads(brief_path.read_text(encoding="utf-8"))
+            if brief_path.is_file()
+            else {}
+        )
+        own = brief.get("plant") if isinstance(brief, dict) else None
+        if own and own not in entries:
+            # A plant item the region never names stops here,
+            # saying why, instead of building nothing and
+            # failing later at the ship with an empty file (#215.2).
+            raise _Stopped(
+                f"{own}: {region_path.name} never names the item's plant, "
+                "so there is nothing to start from"
+            )
         new_ids = sorted(new_plant_ids(region, world))
         if len(new_ids) > self.max_new_plants:
             raise _Stopped(
@@ -97,12 +112,6 @@ class PlantsStage:
             return self._nothing()
         survey = json.loads((ctx.job_dir / "survey.json").read_text(encoding="utf-8"))
         sandbox = _ensure_sandbox(ctx.job_dir, world)
-        brief_path = ctx.job_dir / "home.json"
-        brief = (
-            json.loads(brief_path.read_text(encoding="utf-8"))
-            if brief_path.is_file()
-            else {}
-        )
         start = brief.get("from") if isinstance(brief, dict) else None
         facts = _flora_facts(survey)
         progress = _load_progress(ctx.job_dir)

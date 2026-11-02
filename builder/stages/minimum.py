@@ -235,7 +235,8 @@ class MinimumStage:
             for fish in region.get("fish", []) or []:
                 if isinstance(fish, dict) and fish.get("kind"):
                     have.add(_slug(str(fish["kind"])))
-            animals = region.get("animals", {}) or {}
+            key = "species" if region.get("biome") else "animals"
+            animals = region.get(key, {}) or {}
             if isinstance(animals, dict):
                 for group in ("playable", "prey", "predators"):
                     for animal_id in animals.get(group, []) or []:

@@ -1573,7 +1573,11 @@ class Worker:
                 continue
             try:
                 place = tile_place(
-                    doc, self.world, str(item["what"]), str(item["kind"])
+                    doc,
+                    self.world,
+                    str(item["what"]),
+                    str(item["kind"]),
+                    start=str(item.get("from") or ""),
                 )
             except ConvertError as error:
                 print(

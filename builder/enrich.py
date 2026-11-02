@@ -24,33 +24,42 @@ GAME_ONLY = ("level", "edges", "coast", "ecoregions", "habitat", "land", "plants
 
 _CONVERT = """
 import copy, json, sys
-tools, tile_path, what, kind = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+tools, tile_path, what, kind = sys.argv[1:5]
+start, name = sys.argv[5], sys.argv[6]
 sys.path.insert(0, tools)
 import food, layers, tile_region
 tile = json.load(open(tile_path, encoding="utf-8"))
+biome = str(tile.get("biome") or tile.get("home") or "")
 made = tile_region.place(tile)
-region = {"id": "tl_" + tile["id"], "name": "Tile " + tile["id"],
+region = {"id": "tl_" + tile["id"], "name": name or "Tile " + tile["id"],
           "country": "(tile)",
-          "author": tile_region.read_biome(tile["home"]).get("author", "Animundo team")}
+          "author": tile_region.read_biome(biome).get("author", "Animundo team"),
+          "biome": biome}
 region.update({k: v for k, v in made.items() if k not in __game_only__})
+plants = copy.deepcopy(tile.get("plants") or {})
 if what:
     if kind == "plant":
         spec = layers.spec("plants", what) or {}
         on = spec.get("grows", {}).get("on") or []
+        if not on and start:
+            started = (layers.spec("plants", start) or {}).get("grows", {})
+            on = started.get("on") or []
         side = "water" if "seabed" in on or "reef" in on else "cover"
-        plants = copy.deepcopy(tile.get("plants") or {})
         grown = plants.get(side)
         if not isinstance(grown, list):
             grown = []
             plants[side] = grown
         if what not in [p.get("id") for p in grown if isinstance(p, dict)]:
             grown.append({"id": what, "density": 0.2 if "reef" in on else 0.1})
-        layers.use_plants(region, plants)
     else:
         lists = region.setdefault("animals", {}).setdefault("playable", [])
         if what not in lists:
             lists.append(what)
+    layers.use_plants(region, plants)
     region["food"] = food.worked_out(region)
+region["plants"] = plants
+if "animals" in region:
+    region["species"] = region.pop("animals")
 print(json.dumps(region))
 """.replace("__game_only__", repr(GAME_ONLY))
 
@@ -59,16 +68,39 @@ class ConvertError(RuntimeError):
     """The world's converter refused the tile."""
 
 
+def _place_name(tile: str, world: Path) -> str:
+    """The live place's English name for this tile, or "" (#215.1)."""
+    from .tiles import live_place_for_tile
+
+    try:
+        place = live_place_for_tile(tile, world)
+    except ValueError:
+        return ""
+    if place is None:
+        return ""
+    name = place.get("name")
+    if isinstance(name, dict):
+        name = name.get("en")
+    return name.strip() if isinstance(name, str) and name.strip() else ""
+
+
 def tile_place(
     tile: dict[str, Any],
     world: Path,
     what: str = "",
     kind: str = "",
+    start: str = "",
 ) -> dict[str, Any]:
     """One tile as its checkable place, the new thing seated (#161.1).
 
     `tile` is a tile doc (spec 02 §2); `what`/`kind` seat the new
-    animal or plant and rework the food. Needs a world with
+    animal or plant and rework the food. The place keeps its
+    biome and its layered plants, and names its cast in
+    `species`, as a tile does; a tile in a live place takes the
+    place's name (#215.1). `start` is the filed plant the new
+    plant adapts from: a newcomer with no spec file yet takes
+    its grounds from the start plant's spec, so a coral made
+    from a coral is seated in the water. Needs a world with
     `tools/tile_region.py`.
     """
     tools = world / "tools"
@@ -81,7 +113,17 @@ def tile_place(
         tile_path = handle.name
     try:
         proc = subprocess.run(
-            [sys.executable, "-c", _CONVERT, str(tools), tile_path, what, kind],
+            [
+                sys.executable,
+                "-c",
+                _CONVERT,
+                str(tools),
+                tile_path,
+                what,
+                kind,
+                start,
+                _place_name(str(tile.get("id", "")), world),
+            ],
             capture_output=True,
             text=True,
             check=False,

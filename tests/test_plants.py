@@ -316,6 +316,21 @@ def test_known_species_reuses_its_spec(tmp_path: Path) -> None:
     assert not (tmp_path / "models").exists(), "no build for a reuse"
 
 
+def test_plant_item_missing_from_region_fails_loud(tmp_path: Path) -> None:
+    """#215.2: a plant item the region never names stops here, not at ship."""
+    world = _world(tmp_path)
+    _inputs(tmp_path, plants=[])
+    (tmp_path / "home.json").write_text(
+        json.dumps({"plant": "table_coral", "from": "closed_brain_coral"})
+    )
+    pipeline = Pipeline([PlantsStage(match=_match_new)], tmp_path / "state.json")
+    with pytest.raises(StageFailedError, match="stage plants failed"):
+        pipeline.run(_ctx(tmp_path, world))
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert "table_coral" in state["failed"]["error"]
+    assert "nothing to start from" in state["failed"]["error"]
+
+
 def test_fourth_new_plant_stops(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(
@@ -568,3 +583,175 @@ def test_unowned_problem_stops(tmp_path: Path) -> None:
         pipeline.run(_ctx(tmp_path, world))
     state = json.loads((tmp_path / "state.json").read_text())
     assert "outside the new plant" in state["failed"]["error"]
+
+
+def _reef_tile() -> dict[str, Any]:
+    """The reef tile's fields the converter reads, as the maker lays them."""
+    return {
+        "id": "z10_0927_0560",
+        "kind": "code",
+        "version": 30,
+        "center": {"lat": -16.8, "lon": 146.07},
+        "level": 5,
+        "height": 32,
+        "habitat": "sea",
+        "home": "coral_reef",
+        "biome": "coral_reef",
+        "seed": 901855012,
+        "water": 0.0,
+        "species": {
+            "playable": [
+                "clownfish",
+                "blue_tang",
+                "butterflyfish",
+                "lionfish",
+                "green_sea_turtle",
+                "reef_shark",
+                "bottlenose_dolphin",
+            ],
+            "prey": ["clownfish", "blue_tang", "butterflyfish"],
+            "predators": ["reef_shark", "lionfish"],
+        },
+        "plants": {
+            "water": [
+                {"id": "branching_staghorn_coral", "density": 0.34},
+                {"id": "closed_brain_coral", "density": 0.3},
+                {"id": "giant_sea_fan", "density": 0.26},
+                {"id": "halimeda", "density": 0.08},
+                {"id": "dugong_grass", "density": 0.25},
+                {"id": "paddle_grass", "density": 0.25},
+            ]
+        },
+    }
+
+
+def test_replay_table_coral_on_reef_tile(tmp_path: Path) -> None:
+    """#215.3: convert, build from a coral, file; the reef stays in budget."""
+    import shutil
+
+    from builder.biome import join_plant, plant_ground
+    from builder.enrich import tile_place
+
+    checkout = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (checkout / "tools" / "tile_region.py").is_file():
+        pytest.skip("needs a world checkout beside the builder")
+    region = tile_place(
+        _reef_tile(),
+        checkout,
+        "table_coral",
+        "plant",
+        start="branching_staghorn_coral",
+    )
+    assert region["biome"] == "coral_reef"
+    regions = tmp_path / "regions"
+    regions.mkdir(parents=True)
+    (regions / "tl_z10_0927_0560.json").write_text(json.dumps(region))
+    checks = tmp_path / "checks"
+    checks.mkdir(parents=True)
+    (checks / "enrich_places.json").write_text(
+        json.dumps({"places": ["tl_z10_0927_0560"]})
+    )
+    (tmp_path / "survey.json").write_text(json.dumps({"facts": [], "species": []}))
+    (tmp_path / "home.json").write_text(
+        json.dumps(
+            {
+                "plant": "table_coral",
+                "names": ["table coral"],
+                "from": "branching_staghorn_coral",
+            }
+        )
+    )
+    world = _world(tmp_path)
+    schema_path = world / "schemas" / "model.schema.json"
+    schema = json.loads(schema_path.read_text())
+    schema["$defs"]["plant_model"]["properties"]["grows"] = {}
+    schema_path.write_text(json.dumps(schema))
+    for stem in (
+        "branching_staghorn_coral",
+        "closed_brain_coral",
+        "giant_sea_fan",
+        "halimeda",
+        "dugong_grass",
+        "paddle_grass",
+    ):
+        shutil.copy(
+            checkout / "models" / "plants" / f"{stem}.json",
+            world / "models" / "plants" / f"{stem}.json",
+        )
+    draft = dict(
+        SPEC,
+        id="table_coral",
+        name="Table coral",
+        latin="Acropora hyacinthus",
+        kind="bush",
+        grows={"on": ["seabed"], "density": 0.2},
+    )
+    review = {"species": "table_coral", "round": 1, "issues": []}
+    chat = ScriptChat([json.dumps(draft), json.dumps(review)])
+
+    def match(world: Path, latin: str) -> dict[str, Any]:
+        assert latin == "Acropora hyacinthus"
+        return {"taxon": TAXON, "files": []}
+
+    result = PlantsStage(match=match, chat=chat, build=_build_ok).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/table_coral.json"]
+    final = json.loads(
+        (tmp_path / "models" / "plants" / "table_coral.json").read_text()
+    )
+    assert final["grows"]["on"] == ["reef"]
+    filed = tmp_path / "fileworld"
+    (filed / "tools").mkdir(parents=True)
+    for tool in ("biomes.py", "layers.py", "food.py"):
+        shutil.copy(checkout / "tools" / tool, filed / "tools" / tool)
+    shutil.copytree(checkout / "food", filed / "food")
+    (filed / "animals").mkdir(parents=True)
+    (filed / "models" / "trees").mkdir(parents=True)
+    (filed / "models" / "plants").mkdir(parents=True)
+    (filed / "lands").mkdir(parents=True)
+    shutil.copy(
+        checkout / "lands" / "tropical_moist.json",
+        filed / "lands" / "tropical_moist.json",
+    )
+    for stem in (
+        "branching_staghorn_coral",
+        "closed_brain_coral",
+        "giant_sea_fan",
+        "halimeda",
+        "dugong_grass",
+        "paddle_grass",
+    ):
+        shutil.copy(
+            checkout / "models" / "plants" / f"{stem}.json",
+            filed / "models" / "plants" / f"{stem}.json",
+        )
+    (filed / "models" / "plants" / "table_coral.json").write_text(json.dumps(final))
+    (filed / "biomes").mkdir(parents=True)
+    shutil.copy(
+        checkout / "biomes" / "coral_reef.json",
+        filed / "biomes" / "coral_reef.json",
+    )
+    (filed / "homes").mkdir(parents=True)
+    report = join_plant(filed, "coral_reef", "table_coral")
+    assert report["total"] <= 1.0
+    biome = json.loads((filed / "biomes" / "coral_reef.json").read_text())
+    specs = {
+        stem: json.loads((filed / "models" / "plants" / f"{stem}.json").read_text())
+        for stem in (
+            "branching_staghorn_coral",
+            "closed_brain_coral",
+            "giant_sea_fan",
+            "halimeda",
+            "dugong_grass",
+            "paddle_grass",
+            "table_coral",
+        )
+    }
+    reef = sum(
+        entry["density"]
+        for entry in biome["plants"]["water"]
+        if plant_ground(specs[entry["id"]]["grows"]) == "reef"
+    )
+    assert reef <= 1.0
+    assert "table_coral" in {entry["id"] for entry in biome["plants"]["water"]}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from builder.enrich import (
     place_tiles,
@@ -220,3 +221,87 @@ def test_place_tiles_ignores_an_unmanifested_scaffold(tmp_path: Path) -> None:
         json.dumps({"id": "zz_work"}), encoding="utf-8"
     )
     assert place_tiles(tmp_path) == {}
+
+
+def _reef_tile() -> dict[str, Any]:
+    """The reef tile's fields the converter reads, as the maker lays them."""
+    return {
+        "id": "z10_0927_0560",
+        "kind": "code",
+        "version": 30,
+        "center": {"lat": -16.8, "lon": 146.07},
+        "level": 5,
+        "height": 32,
+        "habitat": "sea",
+        "home": "coral_reef",
+        "biome": "coral_reef",
+        "seed": 901855012,
+        "water": 0.0,
+        "species": {
+            "playable": [
+                "clownfish",
+                "blue_tang",
+                "butterflyfish",
+                "lionfish",
+                "green_sea_turtle",
+                "reef_shark",
+                "bottlenose_dolphin",
+            ],
+            "prey": ["clownfish", "blue_tang", "butterflyfish"],
+            "predators": ["reef_shark", "lionfish"],
+        },
+        "plants": {
+            "water": [
+                {"id": "branching_staghorn_coral", "density": 0.34},
+                {"id": "closed_brain_coral", "density": 0.3},
+                {"id": "giant_sea_fan", "density": 0.26},
+                {"id": "halimeda", "density": 0.08},
+                {"id": "dugong_grass", "density": 0.25},
+                {"id": "paddle_grass", "density": 0.25},
+            ]
+        },
+    }
+
+
+def test_converted_tile_keeps_biome_plants_and_place_name() -> None:
+    """#215.1: the converted tile is a place on its biome, named by it."""
+    import pytest
+
+    from builder.enrich import tile_place
+
+    checkout = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (checkout / "tools" / "tile_region.py").is_file():
+        pytest.skip("needs a world checkout beside the builder")
+    region = tile_place(
+        _reef_tile(),
+        checkout,
+        "table_coral",
+        "plant",
+        start="branching_staghorn_coral",
+    )
+    assert region["biome"] == "coral_reef"
+    assert "animals" not in region
+    assert region["species"]["playable"][:3] == [
+        "clownfish",
+        "blue_tang",
+        "butterflyfish",
+    ]
+    water = region["plants"]["water"]
+    assert {entry["id"] for entry in water} == {
+        "branching_staghorn_coral",
+        "closed_brain_coral",
+        "giant_sea_fan",
+        "halimeda",
+        "dugong_grass",
+        "paddle_grass",
+        "table_coral",
+    }
+    seated = next(entry for entry in water if entry["id"] == "table_coral")
+    assert seated["density"] == 0.2
+    grown = {
+        plant["model"]: plant.get("on", [])
+        for plant in region["ground_cover"]["plants"]
+    }
+    assert grown["branching_staghorn_coral"] == ["reef"]
+    assert grown["closed_brain_coral"] == ["reef"]
+    assert region["name"] == "Great Barrier Reef – Green Island"

@@ -1270,7 +1270,9 @@ def test_enrich_intake_writes_converter_places(
     worker._run_stages(SimpleNamespace(), "j1", T, plan, item, item_dir, None, [T])
     assert not (item_dir / "regions" / "zz_work.json").exists()
     region = json.loads((item_dir / "regions" / f"tl_{T}.json").read_text())
-    assert region["animals"]["playable"] == ["mountain_hare", "vole", "lion"]
+    assert region["biome"] == "boreal_forest"
+    assert "animals" not in region
+    assert region["species"]["playable"] == ["mountain_hare", "vole", "lion"]
     brief = json.loads((item_dir / "home.json").read_text())
     assert brief["enrich"] == {"tiles": [T]}
     research = {
@@ -1351,7 +1353,7 @@ def test_enrich_run_item_writes_places_for_its_tiles(
             tmp_path / "jobs" / "j1" / "enrich_lion" / "regions" / f"tl_{T}.json"
         ).read_text()
     )
-    assert region["animals"]["playable"] == ["fox", "lion"]
+    assert region["species"]["playable"] == ["fox", "lion"]
 
 
 def test_enrich_item_report_names_its_tile(tmp_path: Path, monkeypatch: Any) -> None:
@@ -1601,7 +1603,7 @@ def test_enrich_intake_checks_a_region_tile_as_a_tile(
     item_dir = tmp_path / "jobs" / "j1" / "enrich_lion"
     worker._write_enrich_places("j1", item_dir, [P], item)
     region = json.loads((item_dir / "regions" / f"tl_{P}.json").read_text())
-    assert region["animals"]["playable"] == ["mountain_hare", "vole", "lion"]
+    assert region["species"]["playable"] == ["mountain_hare", "vole", "lion"]
     assert not (item_dir / "regions" / "xx_test_reef.json").exists()
     manifest = json.loads((item_dir / "checks" / "enrich_places.json").read_text())
     assert manifest == {"places": [f"tl_{P}"]}

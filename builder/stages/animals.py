@@ -302,14 +302,22 @@ def _save_progress(
     )
 
 
+def _cast(region: dict[str, Any]) -> dict[str, Any]:
+    """The region's cast: `species` on a biome, `animals` elsewhere (#215.1)."""
+    key = "species" if region.get("biome") else "animals"
+    cast = region.get(key)
+    return cast if isinstance(cast, dict) else {}
+
+
 def _roles_in_region(region: dict[str, Any]) -> dict[str, str]:
     roles = {}
+    cast = _cast(region)
     for group, role in (
         ("playable", "playable"),
         ("predators", "predator"),
         ("prey", "prey"),
     ):
-        for animal_id in region.get("animals", {}).get(group, []):
+        for animal_id in cast.get(group, []):
             roles.setdefault(animal_id, role)
     for fish in region.get("fish", []):
         roles.setdefault(fish.get("kind", ""), "fish")
@@ -323,7 +331,7 @@ def _region_foods(region: dict[str, Any]) -> set[str]:
 
 def _region_cast(region: dict[str, Any]) -> set[str]:
     cast = set()
-    for group in region.get("animals", {}).values():
+    for group in _cast(region).values():
         cast.update(group)
     cast.update(fish.get("kind", "") for fish in region.get("fish", []))
     return cast - {""}

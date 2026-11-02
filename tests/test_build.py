@@ -583,6 +583,51 @@ def _old_tile(**over: Any) -> dict[str, Any]:
     return tile
 
 
+def test_overlay_decision_judges_only_the_species() -> None:
+    """#227.1: moved land never blocks; the species, fish and plants do."""
+    old = _old_tile()
+    drifted = _old_tile(
+        seed=9,
+        home="sea",
+        edges={"n": [2]},
+        species={"playable": ["fox", "lynx"], "prey": [], "predators": []},
+        wanted=[],
+    )
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", old, None, drifted, None, "animal", "lynx"
+    ) == ("overlay", None)
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", old, None, drifted, None, "animal", "pike"
+    ) == ("skipped", "pike is not in the remake")
+    hungry = _old_tile(wanted=[{"kind": "animal", "what": "pike", "part": "lake"}])
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", hungry, None, drifted, None, "animal", "pike"
+    ) == ("no_food", None)
+    fished = _old_tile(
+        species={"playable": [], "prey": [], "predators": [], "fish": ["pike"]}
+    )
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", None, None, fished, None, "animal", "pike"
+    ) == ("overlay", None)
+    planted = {"plants": {"cover": [{"id": "pine", "share": 0.5}]}}
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", None, None, planted, None, "plant", "pine"
+    ) == ("overlay", None)
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", None, None, planted, None, "plant", "spruce"
+    ) == ("skipped", "spruce is not in the remake")
+
+
+def test_overlay_decision_skips_blocked_and_empty() -> None:
+    """#227.2: a blocked or empty remake skips with the reason."""
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", None, None, None, {"reason": "no_home"}, "animal", "lynx"
+    ) == ("skipped", "remade no_home")
+    assert build_mod.overlay_decision(
+        "z10_0581_0294", None, None, None, None, "animal", "lynx"
+    ) == ("skipped", "remade blocked")
+
+
 def test_remake_decision_backfills_a_missing_name(tmp_path: Path) -> None:
     """#209.2: an old tile without a name republishes with one."""
     old = _old_tile()

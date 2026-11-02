@@ -1206,6 +1206,85 @@ def test_enrich_review_overlays_only_the_tiles_that_list_it(
     assert writes.count("tiles/v2/index.json") == 0
 
 
+def test_enrich_review_overlays_drifted_tiles(tmp_path: Path, monkeypatch: Any) -> None:
+    """#227.1: enrich judges the species, never the moved shore or plants."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A, B = "z10_0581_0294", "z10_0580_0295"
+    block = boreal_3x3()
+    edge = {f"{c},{r}": list(block["581,294"]) for r in (294, 295, 296) for c in (579,)}
+    edge.update({f"{c},296": list(block["581,294"]) for c in (580, 581)})
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, {**block, **edge})
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    FOUR = ("fox", "mountain_hare", "vole", "lion")
+    made: dict[str, Any] = {}
+    for tile in (A, B):
+        tile_made, blocked = make_tile(
+            tile,
+            worker._habitat_grid(),
+            worker.world,
+            builder_root=tmp_path,
+            species_source=SpeciesSource(
+                client=_AnswerClient(_forest_survey(*FOUR)), cache_dir=cache
+            ),
+        )
+        assert blocked is None and tile_made is not None
+        made[tile] = tile_made
+    blob_path = group_path(A)
+    store.blobs[blob_path] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": 1,
+            "tiles": {
+                tile: {
+                    **made[tile],
+                    "shore": {"span": 999, "reach": 999, "d": "AAAA"},
+                    "plants": {"cover": [{"id": "drifted_weed", "share": 0.9}]},
+                }
+                for tile in (A, B)
+            },
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    store.blobs["tiles/v2/index.json"] = json.dumps(
+        {"format": 1, "made_at": "", "world": "", "groups": {}, "counts": {}}
+    ).encode("utf-8")
+    _file_lion(worker.world, ["grass"])
+    store.build_jobs["j1"] = _enrich_job(
+        tile=A,
+        tiles=[A, B],
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lion",
+                "status": "checking",
+                "report": "review/j1/enrich_lion/report.html",
+            }
+        ],
+        review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A, B]
+    assert job["no_food"] == []
+    assert job["skipped"] == {}
+
+
 def test_enrich_intake_writes_converter_places(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -3316,9 +3395,14 @@ def test_enrich_review_ships_a_plant_pack_like_an_animal(
         )
     )
     worker.review_enrich_job("j1", job)
-    # No cached survey here, so the remake fails loudly: the point
-    # is the job sails past the ship, instead of waiting for a hand.
-    assert store.build_jobs["j1"]["status"] == "failed"
+    # No cached survey here, so the tiles skip; the point is the
+    # job sails past the ship, instead of waiting for a hand
+    # (#227.2: tiles never fail the job).
+    done = store.build_jobs["j1"]
+    assert done["status"] == "published"
+    assert done["overlay"] == []
+    assert sorted(done["skipped"]) == ["z10_0580_0295", "z10_0581_0294"]
+    assert "cached" in done["skipped"]["z10_0581_0294"]
 
 
 def _spread_job(**over: Any) -> dict[str, Any]:
@@ -3481,10 +3565,11 @@ def test_spread_runs_keyless_and_skips_the_tile_without_it(
     assert store.tile_history == []
 
 
-def test_spread_fails_the_job_when_a_fit_tile_drifts(
+def test_spread_overlays_a_fit_tile_despite_drift(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#199.4: a remake that moves the tile fails, never skips."""
+    """#227.1: shore/plant drift since publication never blocks the overlay."""
+    from builder.grid import group_path
     from builder.species import Source as SpeciesSource
 
     A = "z10_0581_0294"
@@ -3494,7 +3579,38 @@ def test_spread_fails_the_job_when_a_fit_tile_drifts(
     )
     assert worker.world is not None
     _file_lion(worker.world, ["grass"])
+    blob_path = group_path(A)
+    published = json.loads(store.blobs[blob_path].decode("utf-8"))
+    published["tiles"][A]["shore"] = {"span": 999, "reach": 999, "d": "AAAA"}
+    published["tiles"][A]["plants"] = {"cover": [{"id": "drifted_weed", "share": 0.9}]}
+    store.blobs[blob_path] = json.dumps(published).encode("utf-8")
     store.build_jobs["j1"] = _spread_job(tiles=[A])
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A]
+    assert job["skipped"] == {}
+    assert job["pack"] == "packs/j1/1/"
+
+
+def test_spread_skips_the_tile_whose_remake_raises(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#227.2: one raising remake skips its tile; the rest overlay."""
+    from builder.species import Source as SpeciesSource
+
+    A, B, F = "z10_0581_0294", "z10_0580_0295", "z10_0590_0298"
+    FOUR = ("fox", "mountain_hare", "vole", "lion")
+    store = FakeStore()
+    worker, cache = _spread_world(tmp_path, store, {A: FOUR, B: FOUR, F: FOUR})
+    assert worker.world is not None
+    _file_lion(worker.world, ["grass"])
+    store.build_jobs["j1"] = _spread_job(tiles=[A, B, F])
     monkeypatch.setattr(
         worker,
         "_species_source",
@@ -3504,18 +3620,19 @@ def test_spread_fails_the_job_when_a_fit_tile_drifts(
 
     real_make = tiles_mod.make_tile
 
-    def drifted(*args: Any, **kwargs: Any) -> Any:
-        made, blocked = real_make(*args, **kwargs)
-        assert made is not None
-        made["seed"] = "drifted"
-        return made, blocked
+    def flaky(tile: str, *args: Any, **kwargs: Any) -> Any:
+        if tile == B:
+            raise ValueError("boom")
+        return real_make(tile, *args, **kwargs)
 
-    monkeypatch.setattr(tiles_mod, "make_tile", drifted)
+    monkeypatch.setattr(tiles_mod, "make_tile", flaky)
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
-    assert job["status"] == "failed"
-    assert job["error"] == "remake_failed"
-    assert "skipped" not in job
+    assert job["status"] == "published"
+    assert job["overlay"] == [A, F]
+    assert list(job["skipped"]) == [B]
+    assert "boom" in job["skipped"][B]
+    assert job["pack"] == "packs/j1/1/"
 
 
 def test_spread_stages_a_pack_only_species(tmp_path: Path, monkeypatch: Any) -> None:

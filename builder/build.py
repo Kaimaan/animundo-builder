@@ -735,6 +735,52 @@ def remake_decision(
     return ("tile", made), no_food
 
 
+def overlay_decision(
+    tile: str,
+    old_tile: dict[str, Any] | None,
+    old_blocked: dict[str, Any] | None,
+    made: dict[str, Any] | None,
+    blocked: dict[str, Any] | None,
+    kind: str,
+    what: str,
+) -> tuple[str, str | None]:
+    """One overlay tile's verdict from its remake alone (#227.1).
+
+    The species decides: `what` in the remake's species, fish or
+    (for a plant) plants joins the overlay; wanted by the
+    published tile but missing is `no_food`; anything else skips
+    with the reason. Seed, home, edges, coast, plants and `wanted`
+    are never compared with the published tile: an overlay
+    publishes no land. Returns the verdict ("overlay", "no_food"
+    or "skipped") and the skip reason.
+    """
+    if made is None:
+        reason = (blocked or {}).get("reason") or "blocked"
+        return "skipped", f"remade {reason}"
+    if kind == "plant":
+        plants = made.get("plants") or {}
+        grown = [
+            entry.get("id")
+            for side in ("cover", "water")
+            for entry in plants.get(side, []) or []
+            if isinstance(entry, dict)
+        ]
+        if what in grown:
+            return "overlay", None
+    else:
+        species = made.get("species", {})
+        if any(
+            what in (species.get(name) or [])
+            for name in ("playable", "prey", "predators", "fish")
+        ):
+            return "overlay", None
+    wanted_before = [e.get("what") for e in (old_tile or {}).get("wanted", [])]
+    wanted_before += [e.get("what") for e in (old_blocked or {}).get("wanted", [])]
+    if what in wanted_before:
+        return "no_food", None
+    return "skipped", f"{what} is not in the remake"
+
+
 def publish_remakes(
     store: Any,
     decisions: dict[str, Remake],

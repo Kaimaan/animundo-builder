@@ -23,9 +23,14 @@ from .schemas import validate
 
 PACK_FORMAT = 1
 MIN_GAME = 1
+#: The newest game release the checks mirror: level 2 reads
+#: `additions/tiles.json`, so a pack may ask for up to this (#220).
+GAME_LEVEL = 2
 MAX_GLB_BYTES = 2 * 1024 * 1024
 MAX_PACK_BYTES = 8 * 1024 * 1024
 MANIFEST_MAX = 65536
+#: Most tiles one overlay names (spec 02 §8b).
+MAX_OVERLAY_TILES = 5000
 
 #: Where an enrich pack's files may sit (spec 02 §8b).
 DATA_DIRS = ("animals/", "models/", "locale/", "additions/")
@@ -45,19 +50,26 @@ MAX_ADDED_FISH = 50
 PLANT_SIDES = ("cover", "water")
 MAX_ADDED_PLANTS = 20
 
+#: An overlay's only keys: an additions file's, plus its tiles (#220).
+OVERLAY_KEYS = ADDITION_KEYS + ("tiles",)
+
 
 class PackExists(Exception):
     """The pack version is already published; publish a later one."""
 
 
 def assemble_enrich_pack(
-    pack_id: str, version: int, files: dict[str, bytes]
+    pack_id: str,
+    version: int,
+    files: dict[str, bytes],
+    min_game: int = MIN_GAME,
 ) -> dict[str, bytes]:
     """The pack's files plus its manifest, validated, unjudged.
 
     The manifest is spec 02 §8b's (`format`, `version`, `min_game`,
     `kind`, every file's size and SHA-256); the folder names the
-    pack. Whether the game would take it is `check_pack`'s call.
+    pack. A pack with `additions/tiles.json` asks for game 2 (#220).
+    Whether the game would take it is `check_pack`'s call.
     """
     if not files:
         raise ValueError("a pack needs at least one file")
@@ -66,7 +78,7 @@ def assemble_enrich_pack(
     manifest = {
         "format": PACK_FORMAT,
         "version": version,
-        "min_game": MIN_GAME,
+        "min_game": min_game,
         "kind": "enrich",
         "files": [
             {
@@ -191,6 +203,114 @@ def _plants_problems(plants: Any) -> list[str]:
     return []
 
 
+def build_tiles_overlay(
+    kind: str,
+    what: str,
+    world: Any,
+    made_tiles: list[dict[str, Any]],
+    tiles: list[str],
+) -> bytes:
+    """`additions/tiles.json`: one species onto its passing tiles (#220).
+
+    The species sits in the same lists the remakes put it in (their
+    union over the tiles); a fish also swims with its count (#178.3:
+    5 small, else 2), a plant with its first tile's seating. The
+    game merges it into each listed tile on load. Refuses loud when
+    no tile passed or the file breaks the game's rules.
+    """
+    if not tiles:
+        raise ValueError("an overlay needs at least one tile")
+    if len(tiles) > MAX_OVERLAY_TILES:
+        raise ValueError(f"an overlay holds {MAX_OVERLAY_TILES} tiles at most")
+    doc: dict[str, Any] = {"format": 1}
+    if kind == "plant":
+        side, density = _overlay_plant_seating(made_tiles, what)
+        doc["plants"] = {side: [{"id": what, "density": density}]}
+    else:
+        for name in ADDITION_LISTS:
+            seated = (
+                what in (made.get("species") or {}).get(name, []) for made in made_tiles
+            )
+            if any(seated):
+                doc[name] = [what]
+        fish = _overlay_fish(world, what)
+        if fish is not None:
+            doc["fish"] = [fish]
+    doc["tiles"] = list(tiles)
+    problems = check_tiles_overlay(doc)
+    if problems:
+        raise ValueError(f"bad overlay: {problems[0]}")
+    return json.dumps(doc, separators=(",", ":")).encode("utf-8")
+
+
+def check_tiles_overlay(overlay: Any) -> list[str]:
+    """Why the game would refuse `additions/tiles.json`, or nothing (#220).
+
+    An additions file's keys and rules, plus `tiles`: 1 to 5,000
+    grid tile ids, and at least one species to add.
+    """
+    from .grid import parse_tile
+
+    if not isinstance(overlay, dict):
+        return ["not an object"]
+    for key in overlay:
+        if str(key) not in OVERLAY_KEYS:
+            return [f"an overlay adds no {key}"]
+    if overlay.get("format") != 1:
+        return ["format isn't 1"]
+    rest = {key: value for key, value in overlay.items() if key != "tiles"}
+    problems = check_additions(rest)
+    if problems:
+        return problems
+    adds = ("fish", "playable", "predators", "prey", "plants")
+    if not any(key in overlay for key in adds):
+        return ["an overlay adds nothing"]
+    tiles = overlay.get("tiles")
+    if not isinstance(tiles, list) or not tiles:
+        return ["tiles isn't a non-empty list"]
+    if len(tiles) > MAX_OVERLAY_TILES:
+        return [f"tiles holds more than {MAX_OVERLAY_TILES}"]
+    for tile in tiles:
+        try:
+            parse_tile(tile)
+        except (ValueError, TypeError):
+            return ["tiles has a bad tile id"]
+    return []
+
+
+def _overlay_fish(world: Any, what: str) -> dict[str, Any] | None:
+    """The fish entry, or nothing when it doesn't swim (#178.3)."""
+    try:
+        raw = (world / "animals" / f"{what}.json").read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    tags = data.get("tags") or []
+    model = data.get("model") or {}
+    if (
+        data.get("archetype") != "fish"
+        and model.get("archetype") != "fish"
+        and "fish" not in tags
+    ):
+        return None
+    return {"kind": what, "count": 5 if "small_fish" in tags else 2}
+
+
+def _overlay_plant_seating(
+    made_tiles: list[dict[str, Any]], what: str
+) -> tuple[str, float]:
+    """The first tile's side and density for the plant (#220)."""
+    for made in made_tiles:
+        plants = made.get("plants") or {}
+        for side in PLANT_SIDES:
+            for entry in plants.get(side, []) or []:
+                if isinstance(entry, dict) and entry.get("id") == what:
+                    return side, entry["density"]
+    raise ValueError(f"{what} is seated on no passing tile")
+
+
 def next_pack_version(store: Any, pack_id: str) -> int:
     """One past the pack's newest published version, or 1 when new."""
     prefix = f"packs/{pack_id}/"
@@ -246,7 +366,7 @@ def _manifest_problems(manifest: dict[str, Any]) -> list[str]:
     if manifest["kind"] != "enrich":
         return ["kind is not enrich"]
     min_game = manifest["min_game"]
-    if not _is_int(min_game) or int(min_game) > MIN_GAME:
+    if not _is_int(min_game) or int(min_game) > GAME_LEVEL:
         shown = str(int(min_game)) if _is_int(min_game) else str(min_game)
         return [f"it needs a newer game (min_game {shown})"]
     if not isinstance(manifest["files"], list) or not manifest["files"]:

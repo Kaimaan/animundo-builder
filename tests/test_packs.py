@@ -14,8 +14,10 @@ from builder.packs import (
     MAX_PACK_BYTES,
     PackExists,
     assemble_enrich_pack,
+    build_tiles_overlay,
     check_additions,
     check_pack,
+    check_tiles_overlay,
     next_pack_version,
     publish_pack,
 )
@@ -243,3 +245,93 @@ def test_second_publish_leaves_the_first_untouched() -> None:
         store.blobs["packs/animal_hammerhead/2/animals/hammerhead.json"]
         == b'{"id": "hammerhead", "v": 2}'
     )
+
+
+def _made(species: dict[str, list[str]], plants: dict | None = None) -> dict[str, Any]:
+    made: dict[str, Any] = {"species": species}
+    if plants is not None:
+        made["plants"] = plants
+    return made
+
+
+def test_overlay_pack_asks_for_game_two(tmp_path: Any) -> None:
+    """#220: a pack with the overlay names min_game 2 and still verifies."""
+    overlay = build_tiles_overlay(
+        "animal",
+        "lynx",
+        tmp_path,
+        [_made({"playable": ["lynx"], "prey": [], "predators": []})],
+        ["z10_0581_0294"],
+    )
+    pack = assemble_enrich_pack(
+        "spread_20261102_1", 1, {"additions/tiles.json": overlay}, min_game=2
+    )
+    assert check_pack(pack) == []
+    assert _manifest(pack)["min_game"] == 2
+
+
+def test_overlay_lists_union_fish_and_plants(tmp_path: Any) -> None:
+    """#220: the union of the remakes' lists, a fish count, a seating."""
+    animals = tmp_path / "animals"
+    animals.mkdir()
+    (animals / "perch.json").write_text(json.dumps({"tags": ["fish", "small_fish"]}))
+    (animals / "pike.json").write_text(json.dumps({"archetype": "fish", "tags": []}))
+    small = build_tiles_overlay(
+        "animal",
+        "perch",
+        tmp_path,
+        [_made({"playable": ["perch"], "prey": [], "predators": []})],
+        ["z10_0581_0294"],
+    )
+    assert json.loads(small)["fish"] == [{"kind": "perch", "count": 5}]
+    big = build_tiles_overlay(
+        "animal",
+        "pike",
+        tmp_path,
+        [
+            _made({"playable": [], "prey": [], "predators": ["pike"]}),
+            _made({"playable": ["pike"], "prey": [], "predators": []}),
+        ],
+        ["z10_0581_0294", "z10_0580_0295"],
+    )
+    assert json.loads(big)["fish"] == [{"kind": "pike", "count": 2}]
+    assert json.loads(big)["playable"] == ["pike"]
+    assert json.loads(big)["predators"] == ["pike"]
+    plant = build_tiles_overlay(
+        "plant",
+        "cloudberry",
+        tmp_path,
+        [_made({}, {"cover": [{"id": "cloudberry", "density": 0.1}]})],
+        ["z10_0581_0294"],
+    )
+    assert json.loads(plant) == {
+        "format": 1,
+        "plants": {"cover": [{"id": "cloudberry", "density": 0.1}]},
+        "tiles": ["z10_0581_0294"],
+    }
+
+
+def test_overlay_refuses_loud() -> None:
+    """#220: no tile, too many, a bad id, or nothing added all refuse."""
+    from pathlib import Path
+
+    world = Path("/nonexistent")
+    with pytest.raises(ValueError, match="at least one tile"):
+        build_tiles_overlay("animal", "lynx", world, [], [])
+    many = [f"z10_{c:04d}_0294" for c in range(5001)]
+    with pytest.raises(ValueError, match="tiles at most"):
+        build_tiles_overlay(
+            "animal", "lynx", world, [_made({"playable": ["lynx"]})] * 5001, many
+        )
+    assert check_tiles_overlay({"format": 1, "playable": ["lynx"], "tiles": []}) == [
+        "tiles isn't a non-empty list"
+    ]
+    assert check_tiles_overlay(
+        {"format": 1, "playable": ["lynx"], "tiles": ["z10_0581_0294", "nope"]}
+    ) == ["tiles has a bad tile id"]
+    assert check_tiles_overlay({"format": 1, "tiles": ["z10_0581_0294"]}) == [
+        "an overlay adds nothing"
+    ]
+    assert check_tiles_overlay(
+        {"format": 1, "playable": ["lynx"], "tiles": ["z10_0581_0294"], "food": []}
+    ) == ["an overlay adds no food"]

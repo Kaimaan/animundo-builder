@@ -26,7 +26,7 @@
     },
     "tiles": {
       "type": "array",
-      "description": "For enrich: every tile that lists the thing in wanted, most played first, at most 200. For remake: the tiles the pass changed.",
+      "description": "For enrich: every tile that lists the thing in wanted, most played first, any number since overlays (0059). For remake: the tiles the pass changed.",
       "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
     },
     "world": {
@@ -47,9 +47,24 @@
     },
     "versions": {
       "type": "object",
-      "description": "For enrich and remake, when published: each remade tile's new version.",
+      "description": "For remake, when published: each remade tile's new version. Enrich and spread publish overlays instead since 0059.",
       "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "pack": {
+      "type": "string",
+      "minLength": 1,
+      "description": "For enrich and spread, when published with passing tiles: the overlay pack's Storage prefix."
+    },
+    "overlay": {
+      "type": "array",
+      "description": "For enrich and spread, when published: the tiles in the overlay pack.",
+      "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
+    },
+    "no_food": {
+      "type": "array",
+      "description": "For enrich and spread, when published: the listed tiles left out of the overlay for food.",
+      "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
     },
     "budget_usd": {"type": "number", "minimum": 0},
     "version": {
@@ -113,10 +128,6 @@
       "if": {"properties": {"kind": {"const": "remake"}}},
       "then": {"required": ["tiles"]},
       "else": {"required": ["tile"]}
-    },
-    {
-      "if": {"properties": {"kind": {"const": "enrich"}}},
-      "then": {"properties": {"tiles": {"maxItems": 200}}}
     }
   ]
 }

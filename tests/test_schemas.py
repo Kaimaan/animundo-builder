@@ -145,8 +145,16 @@ def test_build_job_takes_a_remake_pass_without_a_single_tile() -> None:
         validate("build-job", build)
     big = _valid("build-job")
     big.update({"kind": "enrich", "tiles": [f"z10_0581_{i:04d}" for i in range(201)]})
-    with pytest.raises(jsonschema.ValidationError):
-        validate("build-job", big)
+    # No 200 cap since overlays (#220.5).
+    validate("build-job", big)
+    big.update(
+        {
+            "overlay": ["z10_0581_0294"],
+            "no_food": [],
+            "pack": "packs/animal_lynx/1/",
+        }
+    )
+    validate("build-job", big)
 
 
 def test_build_job_takes_an_enrich_job() -> None:

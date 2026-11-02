@@ -1087,10 +1087,10 @@ def _file_lion(world: Path, diet: list[str]) -> None:
     (world / "animal-list.json").write_text(json.dumps(listed))
 
 
-def test_enrich_review_remakes_only_the_tiles_that_list_it(
+def test_enrich_review_overlays_only_the_tiles_that_list_it(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#143.4's lab: two tiles list the lion, one doesn't."""
+    """#220: two tiles list the lion, one doesn't (the lab of #143.4)."""
     import json
 
     from builder.grid import group_path
@@ -1149,6 +1149,7 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
         }
     ).encode("utf-8")
     before_c = store.blobs[g2]
+    before_g1 = store.blobs[g1]
     store.blobs["tiles/v2/index.json"] = json.dumps(
         {
             "format": 1,
@@ -1191,18 +1192,18 @@ def test_enrich_review_remakes_only_the_tiles_that_list_it(
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {A: 2, B: 2}
-    g1data = json.loads(store.read_blob(g1)[0].decode("utf-8"))
-    assert g1data["version"] == 2
-    assert "lion" in g1data["tiles"][A]["species"]["playable"]
-    assert "lion" in g1data["tiles"][B]["species"]["playable"]
-    assert "wanted" not in g1data["tiles"][A]
+    assert job["overlay"] == [A, B]
+    assert job["no_food"] == []
+    assert "versions" not in job
+    assert job["pack"] == "packs/animal_lion/1/"
+    tiles_doc, manifest = _pack_files(store, job["pack"])
+    assert tiles_doc == {"format": 1, "playable": ["lion"], "tiles": [A, B]}
+    assert manifest["min_game"] == 2
+    assert store.blobs[g1] == before_g1
     assert store.blobs[g2] == before_c
-    assert writes.count(g1) == 1
+    assert writes.count(g1) == 0
     assert writes.count(g2) == 0
-    assert writes.count("tiles/v2/index.json") == 1
-    index = json.loads(store.read_blob("tiles/v2/index.json")[0].decode("utf-8"))
-    assert index["counts"]["ready"] == 3
+    assert writes.count("tiles/v2/index.json") == 0
 
 
 def test_enrich_intake_writes_converter_places(
@@ -1458,8 +1459,8 @@ def test_tile_doc_remakes_an_unpublished_tile(tmp_path: Path, monkeypatch: Any) 
         worker._tile_doc(T)
 
 
-def test_enrich_review_remakes_a_region_tile(tmp_path: Path, monkeypatch: Any) -> None:
-    """#202.3: a region grid no longer shields a tile from its remake."""
+def test_enrich_review_overlays_a_region_tile(tmp_path: Path, monkeypatch: Any) -> None:
+    """#220: a region grid no longer shields a tile from its overlay (#202.3)."""
     import json
 
     from builder.grid import group_path
@@ -1529,13 +1530,17 @@ def test_enrich_review_remakes_a_region_tile(tmp_path: Path, monkeypatch: Any) -
         "_species_source",
         lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
     )
+    before = store.blobs[blob]
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {P: 2}
-    remade = json.loads(store.read_blob(blob)[0].decode("utf-8"))
-    assert remade["tiles"][P]["kind"] == "code"
-    assert "lion" in remade["tiles"][P]["species"]["playable"]
+    assert job["overlay"] == [P]
+    assert "versions" not in job
+    tiles_doc, manifest = _pack_files(store, job["pack"])
+    assert tiles_doc["playable"] == ["lion"]
+    assert tiles_doc["tiles"] == [P]
+    assert manifest["min_game"] == 2
+    assert store.blobs[blob] == before
 
 
 def _region_world(world: Path) -> None:
@@ -1758,8 +1763,10 @@ def test_enrich_failure_names_its_stage_and_the_tile(
     assert state["params"]["area"] == "z10_0581_0294 (Boreal forest north of Nuuksio)"
 
 
-def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) -> None:
-    """#143.4: the wanted opener publishes its tile at version 1."""
+def test_enrich_review_overlays_a_blocked_tile(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#220: the wanted opener joins the overlay; its group stays blocked."""
     import json
 
     from builder.grid import group_path
@@ -1817,17 +1824,20 @@ def test_enrich_review_opens_a_blocked_tile(tmp_path: Path, monkeypatch: Any) ->
         "_species_source",
         lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
     )
+    before = store.blobs[blob]
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {D: 1}
-    data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
-    assert "lion" in data["tiles"][D]["species"]["playable"]
-    assert data["blocked"] == {}
+    assert job["overlay"] == [D]
+    assert "versions" not in job
+    tiles_doc, _manifest = _pack_files(store, job["pack"])
+    assert tiles_doc["playable"] == ["lion"]
+    assert tiles_doc["tiles"] == [D]
+    assert store.blobs[blob] == before
 
 
 def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
-    """#143.4: the unfed lion stays out; the report says no_food."""
+    """#220: the unfed lion stays out; the report says no_food, no pack."""
     import json
 
     from builder.grid import group_path
@@ -1886,13 +1896,15 @@ def test_enrich_review_flags_no_food(tmp_path: Path, monkeypatch: Any) -> None:
         "_species_source",
         lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
     )
+    before = store.blobs[blob]
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {A: 2}
-    data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
-    assert "lion" not in data["tiles"][A]["species"]["playable"]
-    assert "wanted" not in data["tiles"][A]
+    assert job["overlay"] == []
+    assert job["no_food"] == [A]
+    assert "pack" not in job
+    assert "versions" not in job
+    assert store.blobs[blob] == before
     report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
     assert "no_food z10_0581_0294" in report
 
@@ -1976,7 +1988,7 @@ def _ship_job(store: Any, tiles: list[str]) -> None:
 def test_enrich_review_ships_only_tiles_that_passed_their_places(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#161.2: the passed tile remakes; the failed one is listed, left out."""
+    """#220: the passed tile overlays; the failed one is listed, left out."""
     import json
 
     from builder.species import Source as SpeciesSource
@@ -2010,14 +2022,16 @@ def test_enrich_review_ships_only_tiles_that_passed_their_places(
         "_species_source",
         lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
     )
+    before = store.blobs[blob]
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {A: 2}
-    data = json.loads(store.read_blob(blob)[0].decode("utf-8"))
-    assert "lion" in data["tiles"][A]["species"]["playable"]
-    assert data["tiles"][B]["version"] == 1
-    assert "wanted" in data["tiles"][B]
+    assert job["overlay"] == [A]
+    assert job["no_food"] == []
+    assert "versions" not in job
+    tiles_doc, _manifest = _pack_files(store, job["pack"])
+    assert tiles_doc["tiles"] == [A]
+    assert store.blobs[blob] == before
     report = store.blobs["review/j1/enrich_lion/report.html"].decode("utf-8")
     assert f"place {B}" in report
     assert "mushrooms" in report
@@ -3321,8 +3335,55 @@ def _spread_job(**over: Any) -> dict[str, Any]:
     return job
 
 
+def _pack_files(store: Any, prefix: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """An overlay pack's tiles doc and manifest (#220)."""
+    raw, _ = store.read_blob(prefix + "additions/tiles.json")
+    assert raw is not None
+    tiles_doc = json.loads(raw.decode("utf-8"))
+    raw, _ = store.read_blob(prefix + "manifest.json")
+    assert raw is not None
+    return tiles_doc, json.loads(raw.decode("utf-8"))
+
+
+def _list_lynx(world: Path) -> None:
+    """Lynx on the fake list, unfiled like the lion (#220)."""
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"].append(
+        {
+            "id": "lynx",
+            "name": "Lynx",
+            "latin": "Lynx lynx",
+            "gbif_key": 5219405,
+            "habitats": ["boreal_forest"],
+            "start_from": "fox",
+            "can_make": True,
+        }
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+
+
+def _file_lynx(world: Path) -> None:
+    """A filed lynx that hunts voles off grass (#220)."""
+    (world / "animals" / "lynx.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "tags": ["predator"],
+                "diet": ["grass"],
+                "hunts": ["vole"],
+            }
+        )
+    )
+    listed = json.loads((world / "animal-list.json").read_text())
+    next(e for e in listed["animals"] if e["id"] == "lynx")["in_library"] = "lynx"
+    (world / "animal-list.json").write_text(json.dumps(listed))
+
+
 def _spread_world(
-    tmp_path: Path, store: FakeStore, surveys: dict[str, tuple[str, ...]]
+    tmp_path: Path,
+    store: FakeStore,
+    surveys: dict[str, tuple[str, ...]],
+    prepare: Any = None,
 ) -> tuple[Any, Path]:
     """Surveyed tiles with their cache, filed nothing yet (#199.4)."""
     from builder.grid import group_path
@@ -3334,6 +3395,8 @@ def _spread_world(
     edge.update({f"{c},296": list(block["581,294"]) for c in (580, 581)})
     worker = _flow_worker(tmp_path, store, {**block, **edge, **boreal_3x3(590, 298)})
     assert worker.world is not None
+    if prepare is not None:
+        prepare(worker.world)
     _named_list(worker.world)
     cache = tmp_path / "cache"
     by_group: dict[str, dict[str, Any]] = {}
@@ -3375,7 +3438,7 @@ def _spread_world(
 def test_spread_runs_keyless_and_skips_the_tile_without_it(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """#199.1: the fit tile remakes with no call; the miss skips."""
+    """#220: the fit tile overlays with no call; the miss skips (#199.1)."""
     from builder.grid import group_path
     from builder.species import Source as SpeciesSource
 
@@ -3390,7 +3453,9 @@ def test_spread_runs_keyless_and_skips_the_tile_without_it(
         },
     )
     assert worker.world is not None
+    before_a = store.blobs[group_path(A)]
     before_c = store.blobs[group_path(C)]
+    before_index = store.blobs["tiles/v2/index.json"]
     _file_lion(worker.world, ["grass"])
     store.build_jobs["j1"] = _spread_job(tiles=[A, C])
     monkeypatch.setattr(
@@ -3401,13 +3466,19 @@ def test_spread_runs_keyless_and_skips_the_tile_without_it(
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {A: 2}
+    assert job["overlay"] == [A]
+    assert job["no_food"] == []
     assert job["skipped"] == {C: "lion is not in the tile's survey"}
     assert job["cost_usd"] == 0.0
-    remade = json.loads(store.read_blob(group_path(A))[0].decode("utf-8"))
-    assert "lion" in remade["tiles"][A]["species"]["playable"]
-    assert "wanted" not in remade["tiles"][A]
+    assert "versions" not in job
+    assert job["pack"] == "packs/j1/1/"
+    tiles_doc, manifest = _pack_files(store, job["pack"])
+    assert tiles_doc == {"format": 1, "playable": ["lion"], "tiles": [A]}
+    assert manifest["min_game"] == 2
+    assert store.blobs[group_path(A)] == before_a
     assert store.blobs[group_path(C)] == before_c
+    assert store.blobs["tiles/v2/index.json"] == before_index
+    assert store.tile_history == []
 
 
 def test_spread_fails_the_job_when_a_fit_tile_drifts(
@@ -3448,7 +3519,7 @@ def test_spread_fails_the_job_when_a_fit_tile_drifts(
 
 
 def test_spread_stages_a_pack_only_species(tmp_path: Path, monkeypatch: Any) -> None:
-    """#199.2: a live pack's lion spreads, then leaves no file."""
+    """#220: a live pack's lion spreads to an overlay, then leaves no file."""
     from builder.species import Source as SpeciesSource
 
     A = "z10_0581_0294"
@@ -3473,7 +3544,10 @@ def test_spread_stages_a_pack_only_species(tmp_path: Path, monkeypatch: Any) -> 
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["versions"] == {A: 2}
+    assert job["overlay"] == [A]
+    assert "versions" not in job
+    tiles_doc, _manifest = _pack_files(store, job["pack"])
+    assert tiles_doc["playable"] == ["lion"]
     assert not (worker.world / "animals" / "lion.json").exists()
 
 
@@ -3521,6 +3595,173 @@ def test_spread_fits_a_listed_sea_home_on_a_coast_tile(
     listed["animals"] = [e for e in listed["animals"] if e["id"] != "lion"]
     (worker.world / "animal-list.json").write_text(json.dumps(listed))
     assert worker._spread_fits("j1", "animal", "lion", T) is not None
+
+
+def test_spread_lynx_publishes_an_overlay_pack(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#220.7: lynx spreads to two fed tiles; the third is no_food."""
+    from builder.grid import group_path
+    from builder.packs import check_pack, check_tiles_overlay
+    from builder.species import Source as SpeciesSource
+
+    A, B, C = "z10_0581_0294", "z10_0580_0295", "z10_0590_0298"
+    store = FakeStore()
+    worker, cache = _spread_world(
+        tmp_path,
+        store,
+        {
+            A: ("fox", "mountain_hare", "vole", "lynx"),
+            B: ("fox", "mountain_hare", "vole", "lynx"),
+            C: ("fox", "mountain_hare", "lynx"),
+        },
+        prepare=_list_lynx,
+    )
+    assert worker.world is not None
+    _file_lynx(worker.world)
+    before = dict(store.blobs)
+    store.build_jobs["j1"] = _spread_job(
+        tiles=[A, B, C], spread={"kind": "animal", "what": "lynx"}
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A, B]
+    assert job["no_food"] == [C]
+    assert job["skipped"] == {}
+    assert "versions" not in job
+    assert job["pack"] == "packs/j1/1/"
+    tiles_doc, manifest = _pack_files(store, job["pack"])
+    assert tiles_doc == {
+        "format": 1,
+        "playable": ["lynx"],
+        "predators": ["lynx"],
+        "tiles": [A, B],
+    }
+    assert manifest["min_game"] == 2
+    assert check_tiles_overlay(tiles_doc) == []
+    packed = {
+        name.removeprefix(job["pack"]): store.blobs[name]
+        for name in store.list_blobs(job["pack"])
+    }
+    assert check_pack(packed) == []
+    for path, data in before.items():
+        assert store.blobs[path] == data
+    assert store.tile_history == []
+    assert group_path(C) in before
+
+
+def test_enrich_review_publishes_the_overlay_next_to_its_animal(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#220.7: the shipped lynx overlays two tiles in its pack's v2."""
+    from builder.species import Source as SpeciesSource
+
+    A, B, C = "z10_0581_0294", "z10_0580_0295", "z10_0590_0298"
+    store = FakeStore()
+    worker, cache = _spread_world(
+        tmp_path,
+        store,
+        {
+            A: ("fox", "mountain_hare", "vole", "lynx"),
+            B: ("fox", "mountain_hare", "vole", "lynx"),
+            C: ("fox", "mountain_hare", "lynx"),
+        },
+        prepare=_list_lynx,
+    )
+    assert worker.world is not None
+    _file_lynx(worker.world)
+    v1 = {
+        "animals/lynx.json": b"{}",
+        "models/lynx.glb": b"glb-bytes",
+        "models/previews/lynx.png": b"png-bytes",
+        "locale/en/animals.json": b"{}",
+        "locale/fi/animals.json": b"{}",
+    }
+    store.blobs["packs/animal_lynx/1/manifest.json"] = json.dumps(
+        {
+            "format": 1,
+            "version": 1,
+            "min_game": 1,
+            "kind": "enrich",
+            "files": [{"path": rel} for rel in sorted(v1)],
+        }
+    ).encode("utf-8")
+    for rel, data in v1.items():
+        store.blobs[f"packs/animal_lynx/1/{rel}"] = data
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lynx"
+    item_dir.mkdir(parents=True)
+    (item_dir / "report.html").write_text("<html></html>", encoding="utf-8")
+    (item_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research", "ship"],
+                "results": {"ship": {"pack": "packs/animal_lynx/1/"}},
+            }
+        )
+    )
+    store.build_jobs["j1"] = _enrich_job(
+        tile=A,
+        tiles=[A, B, C],
+        items=["enrich_lynx"],
+        enrich={"kind": "animal", "what": "lynx", "from": "fox"},
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lynx",
+                "status": "checking",
+                "report": "review/j1/enrich_lynx/report.html",
+            }
+        ],
+        review={"enrich_lynx": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    before = dict(store.blobs)
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A, B]
+    assert job["no_food"] == [C]
+    assert "versions" not in job
+    assert job["pack"] == "packs/animal_lynx/2/"
+    tiles_doc, manifest = _pack_files(store, job["pack"])
+    assert tiles_doc["tiles"] == [A, B]
+    assert manifest["min_game"] == 2
+    assert {e["path"] for e in manifest["files"]} == set(v1) | {"additions/tiles.json"}
+    for path, data in before.items():
+        assert store.blobs[path] == data
+    report = store.blobs["review/j1/enrich_lynx/report.html"].decode("utf-8")
+    assert f"no_food {C}" in report
+
+
+def test_overlay_pack_files_prefers_the_job_folder(tmp_path: Path) -> None:
+    """#220: the ship's local files carry over; the manifest doesn't."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    pack_dir = tmp_path / "jobs" / "j1" / "enrich_lynx" / "pack"
+    (pack_dir / "animals").mkdir(parents=True)
+    (pack_dir / "animals" / "lynx.json").write_bytes(b"{}")
+    (pack_dir / "manifest.json").write_bytes(b"{}")
+    files = worker._overlay_pack_files("j1", "enrich_lynx", "packs/animal_lynx/1/")
+    assert files == {"animals/lynx.json": b"{}"}
+
+
+def test_overlay_pack_files_refuses_a_missing_ship_pack(tmp_path: Path) -> None:
+    """#220: a ship pack in neither place fails loud."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    with pytest.raises(ValueError, match="holds no pack"):
+        worker._overlay_pack_files("j1", "enrich_lynx", "packs/animal_lynx/1/")
+    assert worker._overlay_pack_files("j1", "enrich_lynx", None) == {}
 
 
 def test_enrich_label_takes_the_live_place_name(tmp_path: Path) -> None:

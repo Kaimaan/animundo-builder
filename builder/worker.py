@@ -111,6 +111,24 @@ class _NoHome(ValueError):
     """The tile has no home in this checkout; a made one may follow."""
 
 
+def _overlay_present(made: dict[str, Any] | None, kind: str, what: str) -> bool:
+    """Whether the remade tile holds the species, for the overlay (#220)."""
+    if not made:
+        return False
+    if kind == "plant":
+        plants = made.get("plants") or {}
+        return any(
+            entry.get("id") == what
+            for side in ("cover", "water")
+            for entry in plants.get(side, []) or []
+            if isinstance(entry, dict)
+        )
+    species = made.get("species") or {}
+    return any(
+        what in (species.get(name) or []) for name in ("playable", "prey", "predators")
+    )
+
+
 def git_commit(world: Path | None) -> str:
     """The world checkout's short commit, or "unknown" without git."""
     if world is None:
@@ -465,11 +483,13 @@ class Worker:
 
         Like an enrich job's ship step without the build: no
         research, no model, no model calls. Each listed grid
-        tile remakes by code with the species. A tile where
-        the species doesn't fit is skipped with the reason,
-        not failed.
+        tile is judged by code; the tiles where the species
+        fits go in the pack's overlay, the rest are skipped
+        with the reason or flagged for food (#220). No group
+        file is written; the pack id is the job id.
         """
         from . import build as build_mod
+        from . import packs as packs_mod
 
         assert self.world is not None
         spec = job.get("spread") or {}
@@ -485,24 +505,48 @@ class Worker:
             return
         try:
             try:
-                versions, skipped, no_food = self._spread_tiles(
+                passing, made_by_tile, skipped, no_food = self._spread_tiles(
                     job_id, job, kind, str(what)
                 )
             except build_mod.EnrichRemakeError as error:
                 print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
                 self._fail(job_id, "remake_failed")
                 return
-            self._update(
-                job_id,
-                {
-                    "versions": versions,
-                    "skipped": skipped,
-                    "no_food": no_food,
-                    "cost_usd": 0.0,
-                },
-            )
+            update: dict[str, Any] = {
+                "overlay": passing,
+                "skipped": skipped,
+                "no_food": no_food,
+                "cost_usd": 0.0,
+            }
+            if passing:
+                try:
+                    overlay = packs_mod.build_tiles_overlay(
+                        kind,
+                        str(what),
+                        self.world,
+                        [made_by_tile[tile] for tile in passing],
+                        passing,
+                    )
+                    version = packs_mod.next_pack_version(self.store, job_id)
+                    pack = packs_mod.assemble_enrich_pack(
+                        job_id,
+                        version,
+                        {"additions/tiles.json": overlay},
+                        min_game=2,
+                    )
+                    problems = packs_mod.check_pack(pack)
+                    if problems:
+                        raise ValueError(problems[0])
+                    update["pack"] = packs_mod.publish_pack(
+                        self.store, job_id, version, pack
+                    )
+                except ValueError as error:
+                    print(f"build job {job_id}: pack: {error}", file=sys.stderr)
+                    self._fail(job_id, "bad_pack")
+                    return
+            self._update(job_id, update)
             print(
-                f"build job {job_id}: spread {what} to {len(versions)} tiles, "
+                f"build job {job_id}: spread {what} to {len(passing)} tiles, "
                 f"{len(skipped)} skipped"
             )
             self._set_status(job_id, "published")
@@ -628,8 +672,8 @@ class Worker:
 
     def _spread_tiles(
         self, job_id: str, job: dict[str, Any], kind: str, what: str
-    ) -> tuple[dict[str, int], dict[str, str], list[str]]:
-        """Every listed grid tile remade keyless; versions and skips."""
+    ) -> tuple[list[str], dict[str, dict[str, Any]], dict[str, str], list[str]]:
+        """The listed tiles judged keyless: passing, remade, skipped, unfed."""
         import dataclasses
         import json
 
@@ -640,7 +684,8 @@ class Worker:
         assert self.world is not None
         source = dataclasses.replace(self._species_source(), client=None)
         groups: dict[str, dict[str, Any]] = {}
-        decisions: dict[str, build_mod.Remake] = {}
+        passing: list[str] = []
+        made_by_tile: dict[str, dict[str, Any]] = {}
         skipped: dict[str, str] = {}
         no_food: list[str] = []
         for tile in job.get("tiles", []):
@@ -664,7 +709,7 @@ class Worker:
                 builder_root=self.builder_root,
                 species_source=source,
             )
-            verdict, hungry = build_mod.remake_decision(
+            _verdict, hungry = build_mod.remake_decision(
                 tile,
                 (old.get("tiles") or {}).get(tile),
                 (old.get("blocked") or {}).get(tile),
@@ -674,16 +719,13 @@ class Worker:
                 what,
                 spread=what,
             )
-            decisions[tile] = verdict
             if hungry:
                 no_food.append(tile)
-        versions = build_mod.publish_remakes(
-            self.store,
-            decisions,
-            self.world_commit or "unknown",
-            self._history_context(job_id, "spread"),
-        )
-        return versions, skipped, no_food
+            elif _overlay_present(made, kind, what):
+                passing.append(tile)
+                assert made is not None
+                made_by_tile[tile] = made
+        return passing, made_by_tile, skipped, no_food
 
     def _snapshot_plan(self, job_id: str, job: dict[str, Any], tile: str) -> None:
         """Freeze the plan's approved items into the job folder.
@@ -1108,24 +1150,26 @@ class Worker:
         self._set_status(job_id, "published", {"version": made["version"]})
 
     def review_enrich_job(self, job_id: str, job: dict[str, Any]) -> None:
-        """Remake a shipped enrich item's tiles, then publish (#143.4).
+        """Overlay a shipped enrich item's passing tiles, then publish (#220).
 
         The ship stage's gates replace the person's review (#174):
-        an item whose ship completed remakes now; `not_accepted`
+        an item whose ship completed overlays now; `not_accepted`
         still drops it. Items reviewed the old way (a `shipped`
-        verdict, in the checkout) remake as before. A plant item
-        ships its pack like an animal now (#188.3). Else every
-        listed tile is remade by code from its cached survey
-        (never a new call), the changed groups publish in one go,
-        and the job carries `versions` for the tiles that changed
-        and the pack the ship published. Tiles the thing missed
-        for food are flagged `no_food` in the item's report. With
-        per-tile place verdicts (#161.2), only the tiles that
-        passed remake; the rest are listed with their reasons
-        instead of failing the whole job, and no passed tile
-        fails the job as `place`.
+        verdict, in the checkout) overlay as before, into an
+        overlay-only first pack version. A plant item ships its
+        pack like an animal now (#188.3). Else every listed tile
+        is judged by code from its cached survey (never a new
+        call), the passing tiles go in the pack's overlay as a
+        new pack version next to the ship's files, and the job
+        carries `pack`, `overlay` and `no_food`, never `versions`.
+        Tiles the thing missed for food are flagged `no_food` in
+        the item's report. With per-tile place verdicts (#161.2),
+        only the tiles that passed judge; the rest are listed
+        with their reasons instead of failing the whole job, and
+        no passed tile fails the job as `place`.
         """
         from . import build as build_mod
+        from . import packs as packs_mod
 
         assert self.world is not None
         tile = self._job_tile(job_id, job)
@@ -1160,7 +1204,9 @@ class Worker:
             return
         self._require_lease(job_id)
         try:
-            versions, no_food = self._remake_enrich_tiles(job_id, job, item, ship)
+            passing, made_by_tile, no_food = self._remake_enrich_tiles(
+                job_id, job, item, ship
+            )
         except build_mod.EnrichRemakeError as error:
             print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
             self._fail(job_id, "remake_failed")
@@ -1171,13 +1217,78 @@ class Worker:
             print(f"build job {job_id}: remake failed: {error}", file=sys.stderr)
             self._fail(job_id, "no_cache")
             return
-        what = (job.get("enrich") or {}).get("what", "")
+        enrich = job.get("enrich") or {}
+        kind, what = str(enrich["kind"]), str(enrich.get("what", ""))
         self._flag_no_food(job_id, item, no_food, what)
         self._flag_place(job_id, item, failed, missing, [])
         self._history_left_out(job_id, job, ship, failed, missing)
-        self._update(job_id, {"versions": versions, **({"pack": pack} if pack else {})})
-        print(f"build job {job_id}: remade {len(versions)} tiles")
+        update: dict[str, Any] = {"overlay": passing, "no_food": no_food}
+        if passing:
+            try:
+                overlay = packs_mod.build_tiles_overlay(
+                    kind,
+                    what,
+                    self.world,
+                    [made_by_tile[tile] for tile in passing],
+                    passing,
+                )
+                pack_id = f"{kind}_{what}"
+                files = self._overlay_pack_files(job_id, item_id or "", pack)
+                files["additions/tiles.json"] = overlay
+                version = packs_mod.next_pack_version(self.store, pack_id)
+                packed = packs_mod.assemble_enrich_pack(
+                    pack_id, version, files, min_game=2
+                )
+                problems = packs_mod.check_pack(packed)
+                if problems:
+                    raise ValueError(problems[0])
+                update["pack"] = packs_mod.publish_pack(
+                    self.store, pack_id, version, packed
+                )
+            except (ValueError, KeyError) as error:
+                print(f"build job {job_id}: pack: {error}", file=sys.stderr)
+                self._fail(job_id, "bad_pack")
+                return
+        self._update(job_id, update)
+        print(f"build job {job_id}: overlaid {len(passing)} tiles")
         self._set_status(job_id, "published")
+
+    def _overlay_pack_files(
+        self, job_id: str, item_id: str, prefix: str | None
+    ) -> dict[str, bytes]:
+        """The ship's pack files to carry into the overlay version (#220).
+
+        The job folder's copy first, else the published prefix's;
+        nothing for an old-way item, whose first version holds
+        only the overlay. Refuses loud when the ship named a pack
+        that is nowhere to be found.
+        """
+        import json
+
+        local = self.jobs_dir / job_id / item_id / "pack"
+        if local.is_dir():
+            files = {
+                path.relative_to(local).as_posix(): path.read_bytes()
+                for path in sorted(local.rglob("*"))
+                if path.is_file()
+            }
+            files.pop("manifest.json", None)
+            if files:
+                return files
+        if prefix is None:
+            return {}
+        raw, _ = self.store.read_blob(f"{prefix}manifest.json")
+        if raw is None:
+            raise ValueError(f"{prefix} holds no pack")
+        files = {}
+        for entry in json.loads(raw.decode("utf-8")).get("files", []):
+            blob, _ = self.store.read_blob(f"{prefix}{entry['path']}")
+            if blob is None:
+                raise ValueError(f"{prefix}{entry['path']} is missing")
+            files[str(entry["path"])] = blob
+        if not files:
+            raise ValueError(f"{prefix} holds no pack")
+        return files
 
     def _ship_completed(self, job_id: str, item_id: str) -> bool:
         """Whether the item's ship stage completed (#174)."""
@@ -1329,10 +1440,10 @@ class Worker:
         job: dict[str, Any],
         item: dict[str, Any],
         ship: set[str] | None = None,
-    ) -> tuple[dict[str, int], list[str]]:
-        """Every listed tile remade keyless; versions and no-food tiles.
+    ) -> tuple[list[str], dict[str, dict[str, Any]], list[str]]:
+        """The listed tiles judged keyless: passing, remade, unfed.
 
-        With per-tile place verdicts only the passed tiles remake.
+        With per-tile place verdicts only the passed tiles judge.
         """
         import dataclasses
         import json
@@ -1344,8 +1455,10 @@ class Worker:
         assert self.world is not None
         source = dataclasses.replace(self._species_source(), client=None)
         groups: dict[str, dict[str, Any]] = {}
-        decisions: dict[str, build_mod.Remake] = {}
+        passing: list[str] = []
+        made_by_tile: dict[str, dict[str, Any]] = {}
         no_food: list[str] = []
+        kind = str((job.get("enrich") or {})["kind"])
         what = str(item["what"])
         for tile in job.get("tiles", []):
             if ship is not None and tile not in ship:
@@ -1363,7 +1476,7 @@ class Worker:
                 builder_root=self.builder_root,
                 species_source=source,
             )
-            verdict, hungry = build_mod.remake_decision(
+            _verdict, hungry = build_mod.remake_decision(
                 tile,
                 (old.get("tiles") or {}).get(tile),
                 (old.get("blocked") or {}).get(tile),
@@ -1372,16 +1485,13 @@ class Worker:
                 self.world,
                 what,
             )
-            decisions[tile] = verdict
             if hungry:
                 no_food.append(tile)
-        versions = build_mod.publish_remakes(
-            self.store,
-            decisions,
-            self.world_commit or "unknown",
-            self._history_context(job_id, "enrich"),
-        )
-        return versions, no_food
+            elif _overlay_present(made, kind, what):
+                passing.append(tile)
+                assert made is not None
+                made_by_tile[tile] = made
+        return passing, made_by_tile, no_food
 
     def _flag_no_food(
         self, job_id: str, item: dict[str, Any], tiles: list[str], what: str

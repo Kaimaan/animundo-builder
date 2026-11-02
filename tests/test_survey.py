@@ -216,7 +216,30 @@ def test_research_calls_cap_tool_calls(tmp_path: Path) -> None:
     )
     SurveyStage().run(_ctx(tmp_path, client))
     assert len(client.calls) == 2
-    assert all(call["max_tool_calls"] == 10 for call in client.calls)
+    assert all(call["max_tool_calls"] == 5 for call in client.calls)
+
+
+def test_stopped_write_still_keeps_research(tmp_path: Path) -> None:
+    """#219: research notes land before the write, surviving a stop."""
+
+    class BudgetExceededForTest(Exception):
+        pass
+
+    class DyingChat(ScriptClient):
+        def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
+            raise BudgetExceededForTest
+
+    client = DyingChat(
+        [
+            _research_response("LAND ...", LAND_URLS),
+            _research_response("SPECIES ...", SPECIES_URLS),
+        ]
+    )
+    with pytest.raises(BudgetExceededForTest):
+        SurveyStage().run(_ctx(tmp_path, client))
+    assert (tmp_path / "research_land.md").read_text() == "LAND ..."
+    assert (tmp_path / "research_species.md").read_text() == "SPECIES ..."
+    assert not (tmp_path / "survey.json").exists()
 
 
 def test_dropped_species_sent_back_for_fix(tmp_path: Path) -> None:

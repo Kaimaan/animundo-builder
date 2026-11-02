@@ -3,9 +3,10 @@
 Fixed shape, no model-decided flow: one land call, one species call, an
 extra gaps call only when fewer than three independent source sites turned
 up, then one structured write call with fix retries. A research answer cut
-off at max_tokens is continued, never taken as ok. Eight model calls, 40
+off at max_tokens is continued, never taken as ok. Eight model calls, 20
 searches and 1.2M input tokens at most, no call over 0.5M input; going
-over stops the job.
+over stops the job. Research notes are saved as they land, so a stopped
+job still keeps its research.
 """
 
 from __future__ import annotations
@@ -29,10 +30,10 @@ SEARCH_TOOL = [{"type": "web_search"}]
 MIN_DOMAINS = 3
 MAX_CONTINUATIONS = 2
 MAX_INPUT_PER_CALL = 500_000
-# Same per-call search cap as the research stage (#218: one uncapped call
-# ran 19 searches and half the survey's cost).
-SEARCHES = 5
-SEARCH_SLACK = 5
+# Five grounded searches a call at most (#219: a search fetches ~8k input
+# tokens, ~$0.013, so land + species + write lands near $0.20 and a $0.25
+# job cap survives when no gaps call or continuation is needed).
+MAX_TOOL_CALLS = 5
 
 
 def domain_of(url: str) -> str:
@@ -56,7 +57,7 @@ class SurveyStage:
     def __init__(
         self,
         max_rounds: int = 8,
-        max_searches: int = 40,
+        max_searches: int = 20,
         max_input_tokens: int = 1_200_000,
     ) -> None:
         self.max_rounds = max_rounds
@@ -72,9 +73,11 @@ class SurveyStage:
         land_text, land_urls = self._research(
             ctx, "survey_land", {"AREA_JSON": area_json}
         )
+        (ctx.job_dir / "research_land.md").write_text(land_text, encoding="utf-8")
         species_text, species_urls = self._research(
             ctx, "survey_species", {"AREA_JSON": area_json}
         )
+        (ctx.job_dir / "research_species.md").write_text(species_text, encoding="utf-8")
         cited = {url for url in land_urls | species_urls if urlparse(url).hostname}
         gaps_text = ""
         if len({domain_of(url) for url in cited}) < MIN_DOMAINS:
@@ -88,11 +91,8 @@ class SurveyStage:
             )
             gaps_text = f"The gap research:\n\n{extra_text}"
             cited |= {url for url in extra_urls if urlparse(url).hostname}
-        survey = self._write(ctx, area, land_text, species_text, gaps_text, cited)
-        (ctx.job_dir / "research_land.md").write_text(land_text, encoding="utf-8")
-        (ctx.job_dir / "research_species.md").write_text(species_text, encoding="utf-8")
-        if gaps_text:
             (ctx.job_dir / "research_gaps.md").write_text(gaps_text, encoding="utf-8")
+        survey = self._write(ctx, area, land_text, species_text, gaps_text, cited)
         out = ctx.job_dir / "survey.json"
         out.write_text(json.dumps(survey, indent=2), encoding="utf-8")
         domains = self._survey_domains(survey)
@@ -113,7 +113,7 @@ class SurveyStage:
             tools=SEARCH_TOOL,
             timeout=180,
             max_tokens=DEFAULT_MAX_TOKENS,
-            max_tool_calls=SEARCHES + SEARCH_SLACK,
+            max_tool_calls=MAX_TOOL_CALLS,
         )
         text = response_text(response)
         found = _citation_urls(response)
@@ -127,7 +127,7 @@ class SurveyStage:
                 tools=SEARCH_TOOL,
                 timeout=180,
                 max_tokens=DEFAULT_MAX_TOKENS,
-                max_tool_calls=SEARCHES + SEARCH_SLACK,
+                max_tool_calls=MAX_TOOL_CALLS,
             )
             text += "\n" + response_text(response)
             found |= _citation_urls(response)

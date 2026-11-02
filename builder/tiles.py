@@ -749,6 +749,102 @@ def home_food_kinds(home: dict[str, Any]) -> set[str]:
     return kinds
 
 
+def overlay_fed_on(
+    world: Path,
+    home: dict[str, Any],
+    greens: dict[str, Any] | None,
+    living: list[str],
+    what: str,
+) -> tuple[bool, list[str]]:
+    """Whether `what` eats here as the game's guard judges it (#231.1).
+
+    Every `diet` kind in the tile's food kinds, and every `hunts`
+    tag on another living animal: the maker's pre-check for the
+    game's `drop_unfed`, run against the published tile merged
+    with the overlay. Returns fed and the missing diet kinds (a
+    plant can only ever cover those, never `hunts`). The living
+    read leniently; `what` itself must be filed.
+    """
+    data = _animal(world / "animals" / f"{what}.json")
+    kinds = tile_food_kinds(world, home, greens)
+    missing = [kind for kind in (data.get("diet") or []) if kind not in kinds]
+    tags: set[str] = set()
+    for other in living:
+        if other == what:
+            continue
+        try:
+            tags.update(_animal(world / "animals" / f"{other}.json").get("tags") or [])
+        except (OSError, ValueError):
+            continue
+    hunts_ok = all(tag in tags for tag in (data.get("hunts") or []))
+    return (not missing and hunts_ok), missing
+
+
+def overlay_carry_for(
+    world: Path,
+    remake_greens: dict[str, Any] | None,
+    missing: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Remake cover/water plants covering the missing kinds (#231.2).
+
+    Greedy in diet order, stable by plant id, with the remake's
+    densities; a plant without a shippable density covers
+    nothing. Sides the remake doesn't list stay unlisted.
+    """
+    by_kind: dict[str, list[tuple[str, str, float]]] = {}
+    for side in ("cover", "water"):
+        picks = (remake_greens or {}).get(side) or []
+        for entry in picks:
+            if not isinstance(entry, dict) or not entry.get("id"):
+                continue
+            density = entry.get("density", entry.get("share"))
+            if (
+                not isinstance(density, (int, float))
+                or isinstance(density, bool)
+                or not 0.0 < density <= 1.0
+            ):
+                continue
+            kind = _food_kind(_grows(world, "plants", entry["id"]).get("food"))
+            if kind:
+                by_kind.setdefault(kind, []).append((side, entry["id"], float(density)))
+    for plants in by_kind.values():
+        plants.sort(key=lambda plant: plant[1])
+    carried: dict[str, list[dict[str, Any]]] = {}
+    used: set[str] = set()
+    for kind in missing:
+        for side, pid, density in by_kind.get(kind, []):
+            if pid in used:
+                continue
+            used.add(pid)
+            carried.setdefault(side, []).append({"id": pid, "density": density})
+            break
+    return carried
+
+
+def overlay_merged_greens(
+    published_greens: dict[str, Any] | None,
+    carried: dict[str, list[dict[str, Any]]] | None,
+) -> dict[str, Any] | None:
+    """Published plants plus carried ones, as the game merges them (#231.2).
+
+    Plants the tile already has stay single; sides neither lists
+    stay unlisted, so the home's plants still count there.
+    """
+    merged: dict[str, Any] = {}
+    for side in ("cover", "water"):
+        base = (published_greens or {}).get(side)
+        have = {p.get("id") for p in base or [] if isinstance(p, dict)}
+        adds = [
+            entry
+            for entry in (carried or {}).get(side, [])
+            if entry.get("id") not in have
+        ]
+        if base is None and not adds:
+            continue
+        merged[side] = list(base or []) + adds
+    return merged or None
+
+
 def home_fish(world: Path, home: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """The home's fish kinds that have animal files, by kind.
 

@@ -3668,6 +3668,137 @@ def test_spread_stages_a_pack_only_species(tmp_path: Path, monkeypatch: Any) -> 
     assert not (worker.world / "animals" / "lion.json").exists()
 
 
+def _hare_world(
+    tmp_path: Path, store: FakeStore, surveys: dict[str, tuple[str, ...]]
+) -> tuple[Any, Path]:
+    """A spread world where the hare eats clover no tile has yet (#231)."""
+
+    def unfile_hare(world: Path) -> None:
+        (world / "animals" / "mountain_hare.json").unlink()
+
+    worker, cache = _spread_world(tmp_path, store, surveys, prepare=unfile_hare)
+    assert worker.world is not None
+    (worker.world / "food").mkdir(exist_ok=True)
+    (worker.world / "food" / "rules.json").write_text(json.dumps({"kinds": {}}))
+    boreal = worker.world / "homes" / "boreal_forest.json"
+    home = json.loads(boreal.read_text())
+    home["ground_cover"] = {"grass": 0.15, "plants": [{"food": "berries"}]}
+    boreal.write_text(json.dumps(home))
+    (worker.world / "models" / "plants" / "red_clover.json").write_text(
+        json.dumps({"id": "red_clover", "grows": {"food": "clover"}})
+    )
+    (worker.world / "animals" / "mountain_hare.json").write_text(
+        json.dumps({"playable": True, "tags": ["small_mammal"], "diet": ["clover"]})
+    )
+    return worker, cache
+
+
+def _clover_drift(monkeypatch: Any) -> None:
+    """Today's maker grows red clover; the published tiles predate it."""
+    import builder.tiles as tiles_mod
+
+    real_make = tiles_mod.make_tile
+    real_kinds = tiles_mod.tile_food_kinds
+
+    def drifted(tile: str, *args: Any, **kwargs: Any) -> Any:
+        tiles_mod.tile_food_kinds = lambda *a, **k: real_kinds(*a, **k) | {"clover"}  # noqa: E731
+        try:
+            made, blocked = real_make(tile, *args, **kwargs)
+        finally:
+            tiles_mod.tile_food_kinds = real_kinds
+        assert made is not None
+        made.setdefault("plants", {}).setdefault("cover", []).append(
+            {"id": "red_clover", "density": 0.2}
+        )
+        return made, blocked
+
+    monkeypatch.setattr(tiles_mod, "make_tile", drifted)
+
+
+def test_spread_carries_the_plant_the_published_tile_lacks(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#231.2: the remake's red clover feeds the hare on its old tile."""
+    from builder.species import Source as SpeciesSource
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker, cache = _hare_world(tmp_path, store, {A: ("fox", "mountain_hare", "vole")})
+    store.build_jobs["j1"] = _spread_job(
+        tiles=[A], spread={"kind": "animal", "what": "mountain_hare"}
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    _clover_drift(monkeypatch)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A]
+    assert job["no_food"] == []
+    tiles_doc, _manifest = _pack_files(store, job["pack"])
+    assert tiles_doc["playable"] == ["mountain_hare"]
+    assert tiles_doc["plants"]["cover"] == [{"id": "red_clover", "density": 0.2}]
+
+
+def test_spread_no_food_when_the_remake_lacks_the_kind_too(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#231.3: no clover anywhere feeds nothing; the tile is no_food."""
+    from builder.species import Source as SpeciesSource
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker, cache = _hare_world(tmp_path, store, {A: ("fox", "mountain_hare", "vole")})
+    store.build_jobs["j1"] = _spread_job(
+        tiles=[A], spread={"kind": "animal", "what": "mountain_hare"}
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == []
+    assert job["no_food"] == [A]
+    assert "pack" not in job
+
+
+def test_spread_no_food_when_the_tile_is_full(tmp_path: Path, monkeypatch: Any) -> None:
+    """#231.2: 24 published plants leave no room for the clover."""
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker, cache = _hare_world(tmp_path, store, {A: ("fox", "mountain_hare", "vole")})
+    blob_path = group_path(A)
+    published = json.loads(store.blobs[blob_path].decode("utf-8"))
+    published["tiles"][A]["plants"] = {
+        "cover": [{"id": f"weed_{i:02d}", "density": 0.1} for i in range(24)]
+    }
+    store.blobs[blob_path] = json.dumps(published).encode("utf-8")
+    store.build_jobs["j1"] = _spread_job(
+        tiles=[A], spread={"kind": "animal", "what": "mountain_hare"}
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    _clover_drift(monkeypatch)
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == []
+    assert job["no_food"] == [A]
+    assert "pack" not in job
+
+
 def test_spread_fits_a_listed_sea_home_on_a_coast_tile(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

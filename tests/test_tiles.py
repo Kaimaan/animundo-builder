@@ -18,6 +18,9 @@ from builder.tiles import (
     make_tile,
     near_made_or_noted,
     open_sea_entries,
+    overlay_carry_for,
+    overlay_fed_on,
+    overlay_merged_greens,
     pick_species,
     tile_edges,
     tile_facts,
@@ -1433,6 +1436,70 @@ def test_helsinki_tile_carries_its_coast() -> None:
     assert made["coast"] == [mask[r * 5 : (r + 1) * 5] for r in range(5)]
     assert made["coast"][0].count("1") >= 4
     assert made["coast"][4] == "00000"
+
+
+def _fed_world(tmp_path: Path) -> Path:
+    world = _world(tmp_path)
+    (world / "food").mkdir(exist_ok=True)
+    (world / "food" / "rules.json").write_text(json.dumps({"kinds": {}}))
+    plants = world / "models" / "plants"
+    plants.mkdir(parents=True)
+    (plants / "red_clover.json").write_text(
+        json.dumps({"id": "red_clover", "grows": {"food": "clover"}})
+    )
+    (plants / "thyme.json").write_text(
+        json.dumps({"id": "thyme", "grows": {"food": "thyme"}})
+    )
+    (world / "animals" / "hare.json").write_text(
+        json.dumps({"playable": True, "tags": ["small_mammal"], "diet": ["clover"]})
+    )
+    (world / "animals" / "stoat.json").write_text(
+        json.dumps(
+            {"playable": True, "tags": ["predator"], "diet": [], "hunts": ["vole"]}
+        )
+    )
+    return world
+
+
+def test_overlay_fed_on_judges_diet_and_hunts(tmp_path: Path) -> None:
+    """#231.1: every diet kind present, every hunt tag living."""
+    world = _fed_world(tmp_path)
+    home = _home(world)
+    greens = {"cover": [{"id": "red_clover"}]}
+    assert overlay_fed_on(world, home, greens, [], "hare") == (True, [])
+    assert overlay_fed_on(world, home, None, [], "hare") == (False, ["clover"])
+    assert overlay_fed_on(world, home, None, ["vole"], "stoat") == (True, [])
+    assert overlay_fed_on(world, home, None, ["fox"], "stoat") == (False, [])
+    assert overlay_fed_on(world, home, None, ["stoat"], "stoat") == (False, [])
+
+
+def test_overlay_carry_for_covers_missing_kinds(tmp_path: Path) -> None:
+    """#231.2: greedy in diet order; unshippable densities cover nothing."""
+    world = _fed_world(tmp_path)
+    greens = {
+        "cover": [
+            {"id": "red_clover", "density": 0.2},
+            {"id": "thyme", "density": 0.3},
+            {"id": "flat_weed", "density": 0},
+            {"id": "tall_weed", "density": 2.0},
+        ]
+    }
+    assert overlay_carry_for(world, greens, ["clover", "thyme"]) == {
+        "cover": [{"id": "red_clover", "density": 0.2}, {"id": "thyme", "density": 0.3}]
+    }
+    assert overlay_carry_for(world, greens, ["bark"]) == {}
+    assert overlay_carry_for(world, None, ["clover"]) == {}
+
+
+def test_overlay_merged_greens_dedups_and_keeps_sides(tmp_path: Path) -> None:
+    """#231.2: carried plants join; unlisted sides stay home-grown."""
+    _fed_world(tmp_path)
+    carried = {"cover": [{"id": "red_clover", "density": 0.2}]}
+    assert overlay_merged_greens(None, carried) == carried
+    published = {"cover": [{"id": "red_clover", "density": 0.5}]}
+    assert overlay_merged_greens(published, carried) == published
+    assert overlay_merged_greens(None, None) is None
+    assert overlay_merged_greens({"cover": []}, None) == {"cover": []}
 
 
 def test_make_tile_blends_a_part_reef_cell(tmp_path: Path) -> None:

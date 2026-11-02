@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .grid import center, parse_tile
-from .habitats import HabitatGrid
+from .habitats import REEF_TRACT_SHARE, HabitatGrid
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
 from .prices import ITEM_ESTIMATES, SURVEY_ESTIMATE_USD
 from .schemas import ROOT as BUILDER_ROOT
@@ -465,6 +465,16 @@ def plan_tile(
     land = habitat_grid.cell_data(col, row)[5]
     habitat = coast_habitat(eco1, habitat, land, biomes, biome_number)
     home = home_for_cell(eco1, habitat, biomes, biome_number)
+    if (
+        habitat == "open_ocean"
+        and home in ("open_sea", "coral_reef")
+        and habitat_grid.reef_share(col, row) >= REEF_TRACT_SHARE
+        and "coral_reef" in biomes
+        and not biomes["coral_reef"].get("retired")
+    ):
+        # The plan surveys the reef tile the maker would make (#226.1).
+        habitat = "sea"
+        home = "coral_reef"
     entries = library_animals(world)
     unfiled = _unfiled(world, habitat, entries)
     if unfiled_presence is None:

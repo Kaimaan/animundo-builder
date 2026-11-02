@@ -328,6 +328,66 @@ def test_plan_blocks_no_land_without_a_style(tmp_path: Path) -> None:
     assert plan["items"] == []
 
 
+def test_reef_cell_without_a_place_plans_code_only(tmp_path: Path) -> None:
+    """#226.1: a mostly-reef cell plans the reef tile, not open water."""
+    world = _world(tmp_path)
+    (world / "homes" / "coral_reef.json").write_text(
+        json.dumps(
+            {
+                "habitat": "sea",
+                "ecoregions": [150],
+                "food": [{"kind": "water_bugs"}],
+            }
+        )
+    )
+    (world / "homes" / "open_sea.json").write_text(
+        json.dumps({"habitat": "open_ocean", "ecoregions": [], "food": []})
+    )
+    biomes = world / "biomes"
+    biomes.mkdir()
+    (biomes / "coral_reef.json").write_text(
+        json.dumps({"habitat": "sea", "ecoregions": [150]})
+    )
+    (biomes / "open_sea.json").write_text(
+        json.dumps({"habitat": "open_ocean", "ecoregions": []})
+    )
+    (world / "animals" / "clownfish.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"].append(
+        {"id": "clownfish", "gbif_key": 1234567, "habitats": ["reef"]}
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    ocean: list[Any] = [None, 0.0, None, 0.0, None, 0.0, 0.0, 0.0]
+    cells = {f"{c},{r}": list(ocean) for r in (559, 560, 561) for c in (926, 927, 928)}
+    habitat_grid = HabitatGrid(cells, reef={"927,560": 0.3})
+    plan = plan_tile(
+        "z10_0927_0560",
+        None,
+        habitat_grid,
+        world,
+        "abc123",
+        presence={"clownfish": 5.0},
+        unfiled_presence={},
+        builder_root=tmp_path,
+        species={
+            "place": "Coral Sea reef waters with coral reef",
+            "parts": [{"kind": "sea", "species": ["clownfish"]}],
+            "plants": [],
+            "trees": [],
+            "outside_animals": [],
+            "outside_plants": [],
+            "name_en": "Reef Waters",
+            "name_fi": "Riuttavedet",
+        },
+    )
+    validate("plan", plan)
+    assert plan["code_only"] is True
+    assert plan["items"] == []
+    assert "blocked" not in plan
+
+
 def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
     """#169.1: z10_0926_0560 never plans with home: sea."""
     import gzip

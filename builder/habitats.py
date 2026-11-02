@@ -30,6 +30,19 @@ from .grid import NAME, N, lat_of, lon_of, parse_tile
 #: The baked grid file's name inside a grid directory.
 BAKED_GRID_FILE = f"{NAME}.json.gz"
 
+#: Sparse reef shares beside the grid (`{"x,y": share}`), from the
+#: GBR reef-features map (#226.1).
+REEF_FILE = "reef.json.gz"
+
+#: Provenance tag for tiles the reef map placed.
+REEF_SOURCE = "gbrmpa:torres_strait_features_v1b"
+
+#: A cell this reef-covered or more builds from the reef home:
+#: a fifth, calibrated on the live Green Island tile's 0.211
+#: (#226.1). The planner flips it; the grid habitat stays the
+#: sea it is, so live places keep their tiles.
+REEF_TRACT_SHARE = 0.2
+
 #: RESOLVE biome number to habitat id. Boreal forest becomes
 #: `boreal_lake` when wet; see `habitat_for()`.
 BIOME_TO_HABITAT: dict[int, str] = {
@@ -64,7 +77,10 @@ MASK_STEP = 0.1
 
 
 def habitat_for(
-    eco_id: int | None, biome: int | None, land: float, water: float
+    eco_id: int | None,
+    biome: int | None,
+    land: float,
+    water: float,
 ) -> str:
     """The habitat id for one cell's baked values."""
     if land < 0.1:
@@ -94,10 +110,14 @@ class HabitatGrid:
     """The baked grid file: cell data and habitats by tile."""
 
     def __init__(
-        self, cells: dict[str, list[Any]], grid_dir: Path | None = None
+        self,
+        cells: dict[str, list[Any]],
+        grid_dir: Path | None = None,
+        reef: dict[str, float] | None = None,
     ) -> None:
         self._cells = cells
         self.grid_dir = grid_dir
+        self._reef = reef or {}
 
     @classmethod
     def load(cls, path: Path) -> HabitatGrid:
@@ -106,7 +126,12 @@ class HabitatGrid:
         data = json.loads(raw)
         if data.get("grid") != NAME:
             raise ValueError(f"{path} is a {data.get('grid')} grid, not {NAME}")
-        return cls(data["cells"], grid_dir=path.parent)
+        reef_path = path.parent / REEF_FILE
+        reef: dict[str, float] = {}
+        if reef_path.is_file():
+            reef_data = json.loads(gzip.open(reef_path, "rt", encoding="utf-8").read())
+            reef = {k: float(v) for k, v in reef_data.get("cells", {}).items()}
+        return cls(data["cells"], grid_dir=path.parent, reef=reef)
 
     def cells(self) -> list[str]:
         """Every baked cell key (`"x,y"`)."""
@@ -144,6 +169,15 @@ class HabitatGrid:
         """The habitat id for one cell."""
         eco1, _s1, _e2, _s2, biome, land, water, _elev = self.cell_data(col, row)
         return habitat_for(eco1, biome, land, water)
+
+    def reef_share(self, col: int, row: int) -> float:
+        """The cell's reef-covered share, 0 without the reef file (#226.1)."""
+        return self._reef.get(f"{col},{row}", 0.0)
+
+    def reef_at(self, tile: str) -> float:
+        """The reef-covered share for one tile id."""
+        col, row = parse_tile(tile)
+        return self.reef_share(col, row)
 
     def habitat_at(self, tile: str) -> str:
         """The habitat id for one tile id."""

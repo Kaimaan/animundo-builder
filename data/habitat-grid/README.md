@@ -46,11 +46,26 @@ mask; `coast` is land against water, sea or lake.
   `lakes.json` joins the 1:10m lakes by `ne_id` with English and
   Finnish labels from each feature's `wikidataid`, else the
   Natural Earth name. Fetched once for #204, not per tile.
+- **Complete GBR Reef and Island Features V1b** (Lawrey & Stewart
+  2016, NESP TWQ 3.13, AIMS/TSRA/GBRMPA): `reef.json.gz` maps
+  `"col,row"` to the reef-covered share (0–1, 3 decimals) for
+  239 z10 cells, from the 7,063 `LEVEL_1 == "Reef"` polygons.
+  Licensed under [CC BY 3.0
+  Australia](https://creativecommons.org/licenses/by/3.0/au/)
+  (dataset record [10.26274/vhj5-gr60](https://doi.org/10.26274/vhj5-gr60),
+  confirmed Nov 2, 2026). Attribution: "Lawrey, E. P., Stewart M.
+  (2016) Complete Great Barrier Reef (GBR) Reef and Island Feature
+  boundaries including Torres Strait (NESP TWQ 3.13, AIMS, TSRA,
+  GBRMPA) [Dataset]. eAtlas. https://doi.org/10.26274/vhj5-gr60"
+  and "© Great Barrier Reef Marine Park Authority 2014" for the
+  GBR Features part, as the record requests.
 
 Kai confirms each source and licence before any tile is published
 (T57). Status: RESOLVE, Natural Earth and ETOPO 2022 all confirmed
 by Kai on Oct 28, 2026; HydroLAKES ordered for #202 on Nov 1, 2026;
-Wikidata labels (CC0) ordered for #204 on Nov 1, 2026.
+Wikidata labels (CC0) ordered for #204 on Nov 1, 2026; the GBR reef
+features (CC BY 3.0 AU) baked for #226 on Nov 2, 2026, awaiting
+Kai's confirmation before anything ships with it.
 
 ## How it is baked
 
@@ -72,3 +87,14 @@ uv run builder habitats bake \
   --dem /tmp/habitat-staging/ETOPO_2022_surface.tif \
   --out data/habitat-grid
 ```
+
+`reef.json.gz` was baked separately for #226 (one-shot script, not
+committed): the shapefile's `LEVEL_1 == "Reef"` polygons clipped
+exactly against each candidate z10 cell box (Sutherland–Hodgman,
+signed ring areas), the share being reef area over cell-box area;
+cells under 0.0005 share were dropped. A cell at or above
+`REEF_TRACT_SHARE` (0.2, calibrated on the live Green Island
+tile's 0.211) builds from the `coral_reef` home; below that the
+reef blends in. The grid habitat stays the sea it is, so live
+places keep their tiles; reef-built tiles name the map in
+`sources.habitat` (`gbrmpa:torres_strait_features_v1b`).

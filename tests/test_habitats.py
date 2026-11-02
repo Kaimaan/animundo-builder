@@ -153,6 +153,48 @@ def test_habitat_grid_refuses_an_old_grid(tmp_path: Path) -> None:
         HabitatGrid.load(path)
 
 
+def test_habitat_grid_reads_reef_shares(tmp_path: Path) -> None:
+    """#226.1: the reef file beside the grid reads as shares."""
+    with gzip.open(tmp_path / "z10.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "grid": "z10",
+                "cells": {
+                    "581,295": [None, 0.0, None, 0.0, None, 0.0, 0.0, 0.0],
+                    "582,295": [None, 0.0, None, 0.0, None, 0.0, 0.0, 0.0],
+                },
+            },
+            handle,
+        )
+    with gzip.open(tmp_path / "reef.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump({"grid": "z10", "cells": {"581,295": 0.25}}, handle)
+    grid = HabitatGrid.load(tmp_path / "z10.json.gz")
+    assert grid.reef_at("z10_0581_0295") == 0.25
+    assert grid.reef_at("z10_0582_0295") == 0.0
+    assert grid.habitat_at("z10_0581_0295") == "open_ocean"
+
+
+def test_committed_grid_ring_reef_shares() -> None:
+    """#226.5: the ring's reef shares come from the map, not the web."""
+    grid = _committed_grid()
+    if grid is None:
+        return
+    assert grid.reef_at("z10_0927_0560") == pytest.approx(0.211)
+    assert grid.reef_at("z10_0926_0559") == pytest.approx(0.229)
+    assert grid.reef_at("z10_0928_0561") == pytest.approx(0.164)
+    assert grid.reef_at("z10_0926_0560") == pytest.approx(0.002)
+    assert grid.habitat_at("z10_0927_0560") == "open_ocean"
+
+
+def test_committed_grid_deep_coral_sea_has_no_reef() -> None:
+    """#226.5: a deep Coral Sea cell reads no reef."""
+    grid = _committed_grid()
+    if grid is None:
+        return
+    assert grid.reef_at("z10_0952_0570") == 0.0
+    assert grid.habitat_at("z10_0952_0570") == "open_ocean"
+
+
 def test_committed_grid_covers_the_lab_spots() -> None:
     path = (
         Path(__file__).resolve().parent.parent / "data" / "habitat-grid" / "z10.json.gz"

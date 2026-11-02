@@ -31,7 +31,12 @@ from .grid import (
     tile_at,
     tile_id,
 )
-from .habitats import HabitatGrid, habitat_for
+from .habitats import (
+    REEF_SOURCE,
+    REEF_TRACT_SHARE,
+    HabitatGrid,
+    habitat_for,
+)
 from .presence import animals_for_habitat, fetch_smoothed
 from .schemas import validate
 from .shore import shore_for_tile
@@ -330,7 +335,9 @@ def home_for_cell(
     lists the cell's ecoregion, else the generic `sea` (#140.1),
     but only where it fits: a known tropical biome refuses it
     (#169.1). Open ocean with no ecoregion builds from the one
-    `open_sea` home when the checkout has it (#177.1). Boreal
+    `open_sea` home when the checkout has it (#177.1). The reef
+    blend resolves through the `coral_reef` home the same way
+    (#226.1). Boreal
     water picks the lake home through the tile's habitat: a
     boreal_lake cell builds from boreal_lakeland, a
     boreal_forest cell from boreal_forest. Retired biomes are
@@ -342,6 +349,12 @@ def home_for_cell(
         and not homes["open_sea"].get("retired")
     ):
         return "open_sea"
+    if (
+        habitat == "coral_reef"
+        and "coral_reef" in homes
+        and not homes["coral_reef"].get("retired")
+    ):
+        return "coral_reef"
     if eco is None:
         return None
     if habitat in ("sea", "open_ocean"):
@@ -1437,6 +1450,27 @@ def make_tile(
                     biomes.get(placed, {}),
                     builder_root or BUILDER_ROOT,
                 )
+    if (
+        habitat == "open_ocean"
+        and home in ("open_sea", "coral_reef")
+        and habitat_grid.reef_share(col, row) >= REEF_TRACT_SHARE
+        and "coral_reef" in biomes
+        and not biomes["coral_reef"].get("retired")
+    ):
+        # A mostly-reef cell with no live place builds from the
+        # reef home, habitat sea like the placed reef tiles: the
+        # same listed-home path a reef-sea cell takes (#226.1). A
+        # cell another listed sea home covers keeps its home: the
+        # reef home must list the ecoregion (#198.2).
+        habitat = "sea"
+        home = "coral_reef"
+        house = homes.get(home, biomes[home])
+        regions = house.get("ecoregions") or []
+        if eco1 is None and regions:
+            eco1 = regions[0]
+        reef_flipped = True
+    else:
+        reef_flipped = False
     sea: dict[str, Any] | None = None
     land_style: str | None = None
     land_eco: int | None = None
@@ -1462,6 +1496,11 @@ def make_tile(
             "biome": blend_home,
             "share": round(share2, 2),
         }
+    if blend is None:
+        reef = habitat_grid.reef_share(col, row)
+        reef_home = home_for_cell(None, "coral_reef", biomes) if reef > 0 else None
+        if reef_home is not None and reef_home != home:
+            blend = {"home": reef_home, "biome": reef_home, "share": round(reef, 2)}
     coast: list[str] | None = None
     if land > 0.0 and habitat != "open_ocean":
         # Lake water reads 0 in the mask like the sea (#202.2):
@@ -1474,7 +1513,11 @@ def make_tile(
     animals = list_animals(world)
     candidates = []
     seen: set[str] = set()
-    for label in sorted(_candidate_habitats(habitat, eco1, biome, land, water)):
+    labels = _candidate_habitats(habitat, eco1, biome, land, water)
+    if home == "coral_reef":
+        # Reef-filed animals live on reef tiles, not plain sea ones.
+        labels.add("reef")
+    for label in sorted(labels):
         for entry in animals_for_habitat(animals, label):
             if entry["id"] not in seen:
                 seen.add(entry["id"])
@@ -1610,6 +1653,9 @@ def make_tile(
             "at": datetime.now(UTC).isoformat(),
         },
     }
+    if reef_flipped:
+        # The reef map placed this tile, not the ecoregion grid.
+        made_tile["sources"]["habitat"] = REEF_SOURCE
     if habitat != "open_ocean":
         # Every land tile carries its compass name, like the plan
         # (#195.1): the game reads it straight from the tile. The

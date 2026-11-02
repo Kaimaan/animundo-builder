@@ -1216,6 +1216,94 @@ def test_home_for_cell_prefers_the_sea_home_listing_the_cell() -> None:
     assert home_for_cell(717, "sea", {}) is None
 
 
+def test_home_for_cell_builds_reef_from_its_home() -> None:
+    """#226.1: the reef blend resolves through the coral_reef home."""
+    homes = {
+        "sea": {"habitat": "sea", "ecoregions": [651]},
+        "coral_reef": {"habitat": "sea", "ecoregions": [150]},
+    }
+    assert home_for_cell(None, "coral_reef", homes) == "coral_reef"
+    assert home_for_cell(150, "coral_reef", homes) == "coral_reef"
+    retired = {"coral_reef": {"habitat": "sea", "retired": True}}
+    assert home_for_cell(None, "coral_reef", retired) is None
+
+
+def _recorded_reef_species() -> dict[str, Any]:
+    return {
+        "place": "Coral Sea reef waters with coral reef",
+        "parts": [{"kind": "sea", "species": ["clownfish"]}],
+        "plants": [],
+        "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
+        "name_en": "Reef Waters",
+        "name_fi": "Riuttavedet",
+    }
+
+
+def test_reef_cell_without_a_place_plans_coral_reef() -> None:
+    """#226.1: a mostly-reef cell with no live place builds coral_reef."""
+    import sys
+
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0926_0559",
+        load_grid(grid_dir),
+        world,
+        builder_root=ROOT,
+        species=_recorded_reef_species(),
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "coral_reef"
+    assert made["habitat"] == "sea"
+    assert made["biome"] == "coral_reef"
+    assert made.get("blend") is None
+    assert "clownfish" in made["species"]["playable"]
+    assert made["ecoregion"] == 150
+    assert made["sources"]["habitat"] == "gbrmpa:torres_strait_features_v1b"
+    tools = str(world / "tools")
+    sys.path.insert(0, tools)
+    try:
+        import tile_region
+    finally:
+        sys.path.remove(tools)
+    assert tile_region.place(made)["terrain"]["reef"] > 0
+
+
+def test_deep_coral_sea_cell_still_plans_open_sea() -> None:
+    """#226.1: a deep Coral Sea cell still builds open_sea."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0952_0570",
+        load_grid(grid_dir),
+        world,
+        presence={"common_tern": 30.0},
+        builder_root=ROOT,
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "open_sea"
+    assert made["habitat"] == "open_ocean"
+    assert made["biome"] == "open_sea"
+
+
 def test_make_tile_builds_the_reviewed_sea_border() -> None:
     """#140.1: with world d009df2, z10_0581_0297 is ready from sea_717."""
     from builder.schemas import ROOT
@@ -1345,6 +1433,37 @@ def test_helsinki_tile_carries_its_coast() -> None:
     assert made["coast"] == [mask[r * 5 : (r + 1) * 5] for r in range(5)]
     assert made["coast"][0].count("1") >= 4
     assert made["coast"][4] == "00000"
+
+
+def test_make_tile_blends_a_part_reef_cell(tmp_path: Path) -> None:
+    """#226.1: a part-reef sea tile carries the reef as its blend."""
+    from builder.habitats import HabitatGrid
+
+    world = _world(tmp_path)
+    (world / "animals" / "herring.json").write_text(
+        json.dumps({"playable": True, "tags": ["fish"], "diet": ["water_bugs"]})
+    )
+    (world / "homes" / "coral_reef.json").write_text(
+        json.dumps(
+            {
+                "habitat": "coral_reef",
+                "ecoregions": [150],
+                "food": [{"kind": "water_bugs"}],
+            }
+        )
+    )
+    habitat_grid = HabitatGrid(_sea_3x3(336, 455), reef={"336,455": 0.1})
+    made, blocked = make_tile(
+        "z10_0336_0455",
+        habitat_grid,
+        world,  # type: ignore[arg-type]
+        presence={"herring": 30.0},
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["habitat"] == "sea"
+    assert made["blend"] == {"home": "coral_reef", "biome": "coral_reef", "share": 0.1}
 
 
 def test_make_tile_uses_sea_home_for_sea(tmp_path: Path) -> None:

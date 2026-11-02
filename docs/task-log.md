@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #234.3 (table coral job _5 hand-fixed; 046653c green — Kai looks in the game)
+
+- #234.1 (round sides) and #234.2 (underwater colours) are absorbed by #236's looks guard, which is plan-only until Kai says go — no code here. #234.3 went ahead as #236 allows.
+- The hand fix is on the job's files, worker v27, no new model run ($0). How: downloaded `models/plants/table_coral.json` from `enrich_20261102_plant_table_coral_5` on the `animundo-jobs` volume; swapped only parts and colours to #221's spec (stalk/plate/rim cylinders at detail 0.5/1.0/1.0, ochre `#a86f35` plate with `#d9b77c` rim, `#6e4a2a` stalk); rebuilt the .glb and preview with local Blender 5.2.3 through the world's `tools/build_model.sh` in a world-copy sandbox; uploaded the spec, .glb and preview back and verified the readback.
+- Before/after (both previews viewed): a square pale-beige diamond → an 8-sided warm ochre plate with a lighter rim on a dark stalk, 68 triangles against the 300 budget. Eight sides reads round at game distance; the preview is still the land scene with the squirrel (the sea scene is game-side work, #236.4). `year.notes` still says "pale brown" — #221's spec changes only parts and colours, so the wording is Kai's/game-side call.
+- Commit `046653c` carries the replay test: _5's exact square spec replays through a blocking square/pale review into the round ochre final, filed on the reef. Worker version unchanged (v27). Kai looks at it in the game before it ships; soft and blue corals wait for #236.
+
 ## 2026-11-02: inbox #233 (reef map decides under places; 94f8195 green — ready to deploy)
 
 - #233.1: a mostly-reef cell (≥ 0.2) under a live place builds `coral_reef` even when the region file names no biome. C without its region biome raised "names no biome" before; now the flip builds it from `coral_reef` (maker and planner, same condition, so skip-raise and flip always agree). Any other biome-less open-sea place tile still raises for a person.

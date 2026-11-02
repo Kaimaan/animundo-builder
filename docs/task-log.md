@@ -3,6 +3,122 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #216
+  (builder 5c4319b;
+  CI green run
+  41437466585)
+
+- No lost
+  updates
+  (5c4319b):
+  read_blob
+  returns bytes
+  with the
+  generation,
+  write_blob
+  takes
+  if_generation_match
+  (0 for new).
+  Every group
+  write re-reads
+  fresh, merges
+  only this
+  job's tiles,
+  numbers from
+  the fresh copy,
+  writes
+  matched, and
+  retries 5
+  times, then
+  PublishConflictError.
+  The index
+  takes max
+  with honest
+  deltas, per
+  group. All
+  four paths go
+  through the
+  three matched
+  publishers.
+- Groups and
+  the index go
+  up compact
+  and gzipped,
+  application/json,
+  content_encoding
+  gzip.
+  Emulator
+  check: upload
+  stores both
+  headers right,
+  download_as_bytes
+  unzips to the
+  same JSON
+  (182 bytes up,
+  255 down).
+  But the
+  emulator
+  serves raw
+  gzip bytes to
+  curl with and
+  without
+  Accept-Encoding
+  (blank
+  Content-Encoding):
+  it does not
+  transcode
+  like real
+  Storage, and
+  it ignores
+  preconditions.
+  So the header
+  negotiation
+  still needs
+  the in-game
+  native/web
+  check before
+  deploy.
+- Choice (a):
+  published
+  tiles drop
+  sources and
+  made, keep
+  wanted. The
+  tile contract
+  no longer
+  requires
+  them; full
+  maker tiles
+  still pass.
+  Provenance
+  stays in
+  history,
+  bundles and
+  build_jobs.
+- Tests: raced
+  group retry,
+  endless
+  conflict loud
+  with partial
+  record, index
+  never down,
+  fake
+  generations,
+  gzipped
+  compact
+  round-trip,
+  slim tiles
+  pass both
+  schemas.
+  Suite: 1118
+  passed. Ruff
+  and gitleaks
+  clean. No
+  deploy: needs
+  Kai's go, and
+  the game-side
+  client check.
+
 ## 2026-11-02: inbox #215
   (builder 9c4aebe,
   d6a38e8,

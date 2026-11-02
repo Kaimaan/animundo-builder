@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #242 (Helsinki coast remake — both tiles live as taiga)
+
+- Done by hand the way #213 did (`admin.mjs remake` still doesn't exist): builder 7ac3db0 (past 2bdbf2c), world main f18175405dd1. Fresh model surveys (the cached ones describe sea), made by code, the world's `check_tile` passes on both (tile/animals/region), published with one `remake` job record so areas follow.
+- z10_0583_0296 → v13 `boreal_taiga` with a coast ("Boreal forest east of Nuuksio National Park" / "Havumetsä Nuuksion kansallispuiston itäpuolella"). Playable: common_tern, herring_gull, frog, fox, moose, mountain_hare, squirrel, flying_squirrel, kestrel, great_tit, chaffinch, bee.
+- z10_0581_0297 → v14 `boreal_taiga` with a coast ("Boreal forest south of Nuuksio National Park" / "Havumetsä Nuuksion kansallispuiston eteläpuolella"). Playable: perch, pike, mallard, common_tern, herring_gull, fox, frog, moose, mountain_hare, squirrel, kestrel, great_tit, chaffinch, bee.
+- Spend $0.087 total ($0.0227 + $0.0642 survey), far under the $1.00 cap — the #219-era $0.80 estimate was stale; today's surveys are one cheap call each. Job `remake-f18175405dd1-2026-11-02` (kind remake, published, both tiles+versions, cost 0.087); areas read v13/v14 at once. Tile history carries `remade` rows with each tile's survey cost.
+- Notes: the first survey answer for _0297 tripped the species-place guard and a re-ask passed (no extra charge issue; the guard did its job). The job record went in a single `published` write after the tiles, so the deployed worker never saw a pending hand job. One intermediate publish of _0296 went out with a placeholder world string and no history while diagnosing auth timeouts; it was superseded within minutes by the proper v13 and areas never saw it. Open: the publish script as a /tmp file hit oauth2 read timeouts four times while identical inline commands worked — unexplained, possibly just the flaky link (the #238 bake saturates it); the run scripts live at /tmp/remake242.py and /tmp/publish242.py if the reviewer wants them.
+- The reviewer can now look at both tiles in the game.
+
 ## 2026-11-02: inbox #241 (decision 0061 food rule — food never filters, gaps instead)
 
 - Done. `check_draft.py` (world rev a0717b6) is the food rule: `builder/tiles.py` calls `tools/food.py` (`batch_eats_here` / `batch_food_gaps`) for one tile at a time, batching all diets × grounds; `compat.py` requires the rule and exits loud (exit 2) on a pre-0061 world; CI's world pin is now a0717b6.

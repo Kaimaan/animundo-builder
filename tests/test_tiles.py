@@ -1622,6 +1622,27 @@ def test_make_tile_thins_densities_to_fit_the_world_budget(
     assert [p["density"] for p in made["plants"]["cover"]] == [0.4, 0.4]
 
 
+def test_make_tile_defaults_missing_outside_lists_on_a_recording(
+    tmp_path: Path,
+) -> None:
+    """#210: a pre-strict recording without outside lists still makes."""
+    world = _berry_world(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
+    recorded = {
+        k: v for k, v in _berry_species().items() if not k.startswith("outside_")
+    }
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        habitat_grid,
+        world,
+        builder_root=tmp_path,
+        species=recorded,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["species"]["playable"]
+
+
 def test_make_tile_raises_when_densities_cannot_fit(tmp_path: Path) -> None:
     """#186: three thinnings that still fail stop loudly, like before."""
     world = _berry_world(tmp_path)

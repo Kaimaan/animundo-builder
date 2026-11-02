@@ -1308,8 +1308,13 @@ def make_tile(
         trees_list = list_library(world, "trees")
         facts = tile_facts(tile, habitat_grid, world, home, False)
         if species is not None:
+            recorded = {
+                **species,
+                "outside_animals": species.get("outside_animals") or [],
+                "outside_plants": species.get("outside_plants") or [],
+            }
             answer = check_answer(
-                species,
+                recorded,
                 ids,
                 [p["id"] for p in greens_list],
                 [t["id"] for t in trees_list],

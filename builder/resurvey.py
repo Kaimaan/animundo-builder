@@ -293,6 +293,8 @@ def run_round(
                 "trees": cached.get("trees", []),
                 "name_en": cached.get("name_en"),
                 "name_fi": cached.get("name_fi"),
+                "outside_animals": cached.get("outside_animals") or [],
+                "outside_plants": cached.get("outside_plants") or [],
                 "present": list(dict.fromkeys(s for p in parts for s in p["species"])),
             }
 

@@ -939,6 +939,58 @@ def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
     }
 
 
+def test_plan_tile_surveys_end_to_end_through_the_probe(tmp_path: Path) -> None:
+    """#210: a surveyed tile plans; the probe keeps the outside lists."""
+    from types import SimpleNamespace
+
+    from builder.species import Source
+
+    world = _world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    for entry in listed["animals"]:
+        entry.setdefault("name", entry["id"].replace("_", " ").title())
+        entry.setdefault("latin", "Sus scrofa")
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox", "mountain_hare"]}],
+        "plants": [],
+        "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
+        "name_en": "Fox woods",
+        "name_fi": "Kettujen metsä",
+    }
+
+    class _FakeSurvey:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def chat(self, **kwargs: Any) -> Any:
+            self.calls += 1
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))
+                ]
+            )
+
+    client = _FakeSurvey()
+    plan = plan_tile(
+        "z10_0581_0294",
+        None,
+        habitat_grid,
+        world,
+        "abc123",
+        presence=None,
+        unfiled_presence={},
+        species_source=Source(client=client, cache_dir=tmp_path / "sp"),
+    )
+    assert client.calls == 1
+    assert "blocked" not in plan
+    assert "probe" not in plan
+
+
 def test_plan_leaves_the_probe_undecided_without_a_key(tmp_path: Path) -> None:
     """#169.3: no cached survey and no key prints needs_survey, free."""
     from builder.species import Source

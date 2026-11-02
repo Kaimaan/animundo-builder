@@ -749,6 +749,8 @@ def _resolve_species(
             key: fetched[key]
             for key in ("place", "parts", "plants", "trees", "name_en", "name_fi")
         }
+        probe["outside_animals"] = fetched.get("outside_animals") or []
+        probe["outside_plants"] = fetched.get("outside_plants") or []
     else:
         probe = None
     return probe, fetched, False

@@ -59,14 +59,27 @@ mask; `coast` is land against water, sea or lake.
   GBRMPA) [Dataset]. eAtlas. https://doi.org/10.26274/vhj5-gr60"
   and "© Great Barrier Reef Marine Park Authority 2014" for the
   GBR Features part, as the record requests.
+- **ESA WorldCover 2021 v200** (10 m land cover from Sentinel-1
+  and Sentinel-2): `landcover.json.gz` maps `"col,row"` to
+  `[built, crop, wildmask]` for every grid land cell — the
+  built-up (class 50) and cropland (class 40) fractions of the
+  cell's non-water pixels (0–1, 4 decimals), plus a 25-character
+  wild mask in coast order (`b` holds built-up, `c` cropland,
+  `w` mostly water, `l` wild land). Licensed under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+  Attribution: "© ESA WorldCover project 2021 / Contains modified
+  Copernicus Sentinel data (2021) processed by ESA WorldCover
+  consortium".
 
 Kai confirms each source and licence before any tile is published
 (T57). Status: RESOLVE, Natural Earth and ETOPO 2022 all confirmed
 by Kai on Oct 28, 2026; HydroLAKES ordered for #202 on Nov 1, 2026;
 Wikidata labels (CC0) ordered for #204 on Nov 1, 2026; the GBR reef
 features (CC BY 3.0 AU) baked for #226 on Nov 2, 2026, confirmed
-by Kai on Nov 2, 2026 (#230). The game credits it by "Our story"
-and in the game repo's `CREDITS.md` (game-side).
+by Kai on Nov 2, 2026 (#230); ESA WorldCover 2021 (CC BY 4.0)
+baked for #238 on Nov 2, 2026, awaiting Kai's confirmation. The
+game credits it by "Our story" and in the game repo's `CREDITS.md`
+(game-side).
 
 ## How it is baked
 
@@ -101,3 +114,19 @@ tile's 0.211) builds from the `coral_reef` home; below that the
 reef blends in. The grid habitat stays the sea it is, so live
 places keep their tiles; reef-built tiles name the map in
 `sources.habitat` (`gbrmpa:torres_strait_features_v1b`).
+
+`landcover.json.gz` was baked separately for #238 (one-shot
+script, not committed): every 3° WorldCover tile touching a grid
+land cell read once at 1:2 overview through Planetary Computer
+(free), class pixels counted per z10 cell box (built-up 50,
+cropland 40, water 80), shares over non-water pixels. A first
+pass at 1:16 was thrown away: the coarse overviews lose sparse
+built-up and cropland (verified against full-resolution reads on
+sample cells). The mask comes from the same read: each fifth of
+the cell is `b` at 1 % built-up or more, else `c` at 5 %
+cropland or more, else `w` over half water, else `l`. Tiles ESA
+never published (Antarctica south of 60°S and a few
+ocean-dominated tiles) leave their cells at 0/0 with a water
+mask; all are wild ice, water or uninhabited islets, and none
+sits near the wild thresholds. Wild for a place tile means
+built-up under 2 % with built-up plus cropland under 25 %.

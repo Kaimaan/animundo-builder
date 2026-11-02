@@ -259,3 +259,74 @@ def test_bake_water_counts_lakes_only_hydrolakes_sees(tmp_path: Path) -> None:
     assert grid.coast(581, 295) == "1" * 25
     assert grid.cell_data(581, 295)[6] > 0
     assert grid.cell_data(581, 294)[6] == 0
+
+
+def test_habitat_grid_reads_landcover(tmp_path: Path) -> None:
+    """#238: the land-cover file beside the grid reads as shares."""
+    with gzip.open(tmp_path / "z10.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "grid": "z10",
+                "cells": {
+                    "581,295": [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0],
+                    "582,295": [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0],
+                },
+            },
+            handle,
+        )
+    with gzip.open(tmp_path / "landcover.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump({"cells": {"581,295": [0.31, 0.0, "b" + "l" * 24]}}, handle)
+    grid = HabitatGrid.load(tmp_path / "z10.json.gz")
+    assert grid.landcover_share(581, 295) == (0.31, 0.0)
+    assert grid.wild_mask(581, 295) == "b" + "l" * 24
+    assert grid.landcover_share(582, 295) is None
+    assert grid.wild_mask(582, 295) is None
+
+
+def test_committed_landcover_covers_every_land_cell() -> None:
+    """#238: the baked file values every land cell with a good mask."""
+    grid = _committed_grid()
+    if grid is None:
+        return
+    path = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "habitat-grid"
+        / "landcover.json.gz"
+    )
+    if not path.is_file():
+        return
+    checked = 0
+    for key in grid.cells():
+        col, row = (int(part) for part in key.split(","))
+        if grid.cell_data(col, row)[5] <= 0:
+            continue
+        shares = grid.landcover_share(col, row)
+        assert shares is not None, key
+        assert 0.0 <= shares[0] <= 1.0, key
+        assert 0.0 <= shares[1] <= 1.0, key
+        mask = grid.wild_mask(col, row)
+        assert mask is not None, key
+        assert len(mask) == 25, key
+        assert set(mask) <= set("bclw"), key
+        checked += 1
+    assert checked > 400000
+
+
+def test_committed_manaus_is_built_mamiraua_wild() -> None:
+    """#238: Manaus fails wild, Mamirauá passes, on the baked map."""
+    from builder.place import tile_wild
+
+    grid = _committed_grid()
+    if grid is None:
+        return
+    path = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "habitat-grid"
+        / "landcover.json.gz"
+    )
+    if not path.is_file():
+        return
+    assert tile_wild("z10_0341_0520", grid) is False
+    assert tile_wild("z10_0325_0518", grid) is True

@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .grid import N, parse_tile, tile_at, tile_id
+from .grid import N, bounds, parse_tile, tile_at, tile_id
 from .habitats import HabitatGrid
 from .plan import closest_plant, home_plant_entries, plant_slug
 from .presence import fetch_raw, match_kingdom
@@ -217,6 +217,126 @@ def cells_within(tile: str, radius: int = GBIF_RADIUS) -> list[str]:
             if 0 <= r < N:
                 out.append(tile_id(c, r))
     return out
+
+
+#: A place tile is wild below 2 % built-up and below 25 %
+#: built-up plus cropland (#238).
+WILD_BUILT_MAX = 0.02
+WILD_CROP_SUM_MAX = 0.25
+
+#: How far a picked tile moves to find wild land: 3 tiles (#238).
+WILD_MOVE_RANGE = 3
+
+
+class NoWildTile(Exception):
+    """No wild tile near the surveyed one: the job fails naming it."""
+
+
+def tile_wild(tile: str, grid: HabitatGrid) -> bool | None:
+    """Whether the tile is wild land, None without land-cover data (#238).
+
+    Sea cells have no data and pass through unchecked: nothing
+    is built on water.
+    """
+    col, row = parse_tile(tile)
+    shares = grid.landcover_share(col, row)
+    if shares is None:
+        return None
+    built, crop = shares
+    return built < WILD_BUILT_MAX and built + crop < WILD_CROP_SUM_MAX
+
+
+def ensure_wild_tiles(
+    tiles: list[str], grid: HabitatGrid
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Wild tiles for the surveyed ones, with the moves made (#238).
+
+    Each tile that is not wild moves to the nearest tile within
+    3 that is wild and keeps the habitat (the same habitat and
+    biome number); each move is recorded as {from, to, why}. A
+    tile with nothing wild nearby raises NoWildTile. Tiles
+    without land-cover data stay as surveyed.
+    """
+    out: list[str] = []
+    moved: list[dict[str, str]] = []
+    for tile in tiles:
+        if tile_wild(tile, grid) is not False:
+            out.append(tile)
+            continue
+        target = _nearest_wild(tile, grid)
+        if target is None:
+            raise NoWildTile(tile)
+        out.append(target)
+        moved.append({"from": tile, "to": target, "why": _wild_why(tile, grid)})
+    return out, moved
+
+
+def _nearest_wild(tile: str, grid: HabitatGrid) -> str | None:
+    """The nearest wild tile within range keeping the habitat."""
+    col, row = parse_tile(tile)
+    habitat = grid.habitat(col, row)
+    biome = grid.cell_data(col, row)[4]
+    for ring in range(1, WILD_MOVE_RANGE + 1):
+        for dr in range(-ring, ring + 1):
+            for dc in range(-ring, ring + 1):
+                if max(abs(dc), abs(dr)) != ring:
+                    continue
+                c, r = (col + dc) % N, row + dr
+                if not (0 <= r < N):
+                    continue
+                candidate = tile_id(c, r)
+                if tile_wild(candidate, grid) is not True:
+                    continue
+                if grid.habitat(c, r) != habitat:
+                    continue
+                if grid.cell_data(c, r)[4] != biome:
+                    continue
+                return candidate
+    return None
+
+
+def _wild_why(tile: str, grid: HabitatGrid) -> str:
+    """Why the tile moved: its built-up and cropland shares."""
+    col, row = parse_tile(tile)
+    built, crop = grid.landcover_share(col, row) or (0.0, 0.0)
+    text = f"{tile} is {_pct(built)} % built-up"
+    if crop >= 0.01:
+        text += f" and {_pct(crop)} % cropland"
+    return text
+
+
+def _pct(share: float) -> str:
+    """The share as a short percent: `2`, `12.5`."""
+    rounded = round(share * 100, 1)
+    return str(int(rounded)) if rounded == int(rounded) else str(rounded)
+
+
+def wild_spot(
+    tile: str, lat: float, lon: float, grid: HabitatGrid
+) -> tuple[float, float]:
+    """The start spot on a wild part of the tile (#238).
+
+    The nearest wild-land mask cell's centre; the point as
+    given when the tile has no mask or no wild land in it.
+    """
+    col, row = parse_tile(tile)
+    mask = grid.wild_mask(col, row)
+    if mask is None or "l" not in mask:
+        return lat, lon
+    mnla, mxla, mnlo, mxlo = bounds(tile)
+    best: tuple[float, float, float] | None = None
+    for r in range(5):
+        for s in range(5):
+            if mask[r * 5 + s] != "l":
+                continue
+            cla = mxla - (r + 0.5) / 5 * (mxla - mnla)
+            clo = mnlo + (s + 0.5) / 5 * (mxlo - mnlo)
+            dist = (cla - lat) ** 2 + (clo - lon) ** 2
+            if best is None or dist < best[0]:
+                best = (dist, cla, clo)
+    if best is None:
+        return lat, lon
+    return best[1], best[2]
 
 
 def gbif_near(tile: str, animals: list[dict[str, Any]]) -> dict[str, int]:

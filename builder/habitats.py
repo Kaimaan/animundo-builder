@@ -34,6 +34,11 @@ BAKED_GRID_FILE = f"{NAME}.json.gz"
 #: GBR reef-features map (#226.1).
 REEF_FILE = "reef.json.gz"
 
+#: Built-up and cropland shares beside the grid, from ESA
+#: WorldCover 2021 (`{"x,y": [built, crop, wildmask]}`), plus a
+#: 5 by 5 wild mask per land cell (#238).
+LANDCOVER_FILE = "landcover.json.gz"
+
 #: Provenance tag for tiles the reef map placed.
 REEF_SOURCE = "gbrmpa:torres_strait_features_v1b"
 
@@ -115,11 +120,13 @@ class HabitatGrid:
         grid_dir: Path | None = None,
         reef: dict[str, float] | None = None,
         extent: dict[str, list[int]] | None = None,
+        landcover: dict[str, list[Any]] | None = None,
     ) -> None:
         self._cells = cells
         self.grid_dir = grid_dir
         self._reef = reef or {}
         self._extent = extent
+        self._landcover = landcover or {}
 
     @classmethod
     def load(cls, path: Path) -> HabitatGrid:
@@ -135,7 +142,22 @@ class HabitatGrid:
             reef_data = json.loads(gzip.open(reef_path, "rt", encoding="utf-8").read())
             reef = {k: float(v) for k, v in reef_data.get("cells", {}).items()}
             extent = reef_data.get("extent")
-        return cls(data["cells"], grid_dir=path.parent, reef=reef, extent=extent)
+        cover_path = path.parent / LANDCOVER_FILE
+        landcover: dict[str, list[Any]] = {}
+        if cover_path.is_file():
+            raw_cover = gzip.open(cover_path, "rt", encoding="utf-8").read()
+            cover_data = json.loads(raw_cover)
+            landcover = {
+                k: [float(v[0]), float(v[1]), str(v[2])]
+                for k, v in cover_data.get("cells", {}).items()
+            }
+        return cls(
+            data["cells"],
+            grid_dir=path.parent,
+            reef=reef,
+            extent=extent,
+            landcover=landcover,
+        )
 
     def cells(self) -> list[str]:
         """Every baked cell key (`"x,y"`)."""
@@ -196,6 +218,28 @@ class HabitatGrid:
         """The reef-covered share for one tile id."""
         col, row = parse_tile(tile)
         return self.reef_share(col, row)
+
+    def landcover_share(self, col: int, row: int) -> tuple[float, float] | None:
+        """The cell's (built-up, cropland) shares, None without data (#238).
+
+        Shares are fractions of the cell's non-water pixels; sea
+        cells and cells the land-cover file skips have none.
+        """
+        entry = self._landcover.get(f"{col},{row}")
+        if entry is None:
+            return None
+        return float(entry[0]), float(entry[1])
+
+    def wild_mask(self, col: int, row: int) -> str | None:
+        """The cell's 5 by 5 wild mask, None without data (#238).
+
+        Row-major from the north-west corner: `b` holds built-up,
+        `c` cropland, `w` mostly water, `l` wild land.
+        """
+        entry = self._landcover.get(f"{col},{row}")
+        if entry is None or len(entry) < 3:
+            return None
+        return str(entry[2])
 
     def habitat_at(self, tile: str) -> str:
         """The habitat id for one tile id."""

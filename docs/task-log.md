@@ -3,6 +3,16 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-02: inbox #233 (reef map decides under places; 94f8195 green — ready to deploy)
+
+- #233.1: a mostly-reef cell (≥ 0.2) under a live place builds `coral_reef` even when the region file names no biome. C without its region biome raised "names no biome" before; now the flip builds it from `coral_reef` (maker and planner, same condition, so skip-raise and flip always agree). Any other biome-less open-sea place tile still raises for a person.
+- #233.2: blends are 2-key now (`{home, share}`), reef and eco alike — the 3-key shape fails the world's tile check on every blended tile, and the converter reads the blend fine from `home`. No code anywhere read the third key.
+- Replays: C plans code-only and builds `coral_reef` with no region biome (committed, region faked out); Nuuksio `z10_0581_0295` still builds `boreal_taiga` with no blend (committed pin). The remake path calls the same `make_tile`, so remaking C reads back `coral_reef`.
+- Two notes from the grid. (1) The SE probe error came from the stale grid: on the current map SE is 0.063, a plain open-sea tile, no blend. (2) Every live below-band (0.10–0.19) sea cell is eco 183, which no home lists — those cells are unmakable today (pre-existing gap, out of #233's scope), so the below-band blend is pinned by unit emission only, on top of the world-checked 2-key shape.
+- Questions for Kai. (1) A region file that EXPLICITLY names a non-coral biome for a ≥ 0.2 reef cell still wins (hand content preserved); say if the reef map should override it instead. (2) If a 183 home ever lands, should 183 below-band cells blend `coral_reef` (which lists 150 only — the world checks blend-home existence, not listing), or ride clean? No live case either way today.
+- Tests: 2 new committed replays + 1 plan test (all failed first, then green), 2 blend assertions updated to 2-key. `test_tiles.py` 90 passed + the known pre-existing `test_replacing_plants` world-drift failure; `test_plan.py` 47 passed; ruff clean.
+- Ready to deploy: builder `94f8195` with green CI. Kai deploys.
+
 ## 2026-11-02: inbox #232 (coast land builds taiga; 2bdbf2c green — ready to deploy)
 
 - Where the two cells became sea: the grid's own habitat (land 0.16/0.12 < 0.5 → `sea`), not the flip.

@@ -3,6 +3,18 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #267 + #268 (v37 live; the reviewer reset Mamirauá — build running, not touched)
+
+- #267 asked for #266.4, but #268 (later, wins) says the reviewer already reset `place_20261102_mamiraua_sustainable_development_reserve` on Kai's go — so no reset, no writes to that job from here, task-log reply only.
+- Read-only check at 18:28 UTC: the build IS running. Status `building`/`approved`, cap $6, quote $3.96, no error, no `waiting`; worker `modal:27` claimed it at 18:27 UTC with the lease fresh to 18:57. Progress is empty because stage C is still inside its first species item; spend sits at the $0.22 research. Research set is the corrected one: 8 animals (sloth among them, for wanted) and precatoria among the plants.
+- Nothing odd seen. How it ends (published packs, or the failing item and reason) isn't knowable yet — the first species is still making. The reviewer is watching it; a later item can report the ending.
+- $0. No code, no commit beyond this reply.
+
+## 2026-11-03: inbox #262 (the two #261s both stand)
+
+- Nothing to build: both #261s were already done and logged by title as #261a (sea-tile reef plants + the west tile, commit f99ec01) and #261b (table-coral reset + the bad_pack wart, commit db9207f), #261a first. #262 is satisfied as written.
+- $0. No code, no commit beyond this reply.
+
 ## 2026-11-03: inbox #266 (Mamirauá's tile came before its animals; the quiet no_short stop)
 
 - #266.1: picked species-first. Stage C ran `make_tile` before any species existed, so the tile blocked `no_animal` on the job's own unmade animals. Now `_place_make_species` runs first with no tile regions (the maker's hunts come from the research alone; the review's region verdicts simply have nothing to sort), the tiles make against the ship checkout with the new species filed, every item ships its overlay before anything publishes, and a failed species fails `item_failed` with the tile still off Storage — a half place never goes live. A biome tree the tiles seat rides the tile with no overlay (overlays only cover ground plants; the tree's own ship pack already carries its files). Already-shipped items note their pack, so a crash-resume doesn't publish duplicate overlay versions.

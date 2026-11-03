@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #266 (Mamirauá's tile came before its animals; the quiet no_short stop)
+
+- #266.1: picked species-first. Stage C ran `make_tile` before any species existed, so the tile blocked `no_animal` on the job's own unmade animals. Now `_place_make_species` runs first with no tile regions (the maker's hunts come from the research alone; the review's region verdicts simply have nothing to sort), the tiles make against the ship checkout with the new species filed, every item ships its overlay before anything publishes, and a failed species fails `item_failed` with the tile still off Storage — a half place never goes live. A biome tree the tiles seat rides the tile with no overlay (overlays only cover ground plants; the tree's own ship pack already carries its files). Already-shipped items note their pack, so a crash-resume doesn't publish duplicate overlay versions.
+- #266.2: a waiting place writes the reason on the job (`waiting: "no_short"`), cleared when the job moves on — `place-show` now shows the Mamirauá-style 30-minute sit instead of silence.
+- #266.3: three tests, all keyless. Species-first ends `published` on a biome whose only present animal is unfiled: the tile seats the lion, `packs/animal_lion/1/additions/tiles.json` carries the tile, and `packs/place_fi_nuuksio/1/` lands. A failing animal fails `item_failed` with no tile blob and no `packs/` at all. The `waiting` field sets on `no_short` and clears on the next run.
+- Two latent publish-blockers surfaced by the first end-to-end run, fixed in the same commit. (1) `_place_ship_world` copied its own checkout's files onto themselves (`SameFileError`) — the item globs now skip the ship checkout. (2) `country_name` crashed on `builder_root=None`, which the worker always runs with — it now falls back to the checkout's own `data/country-names.json`. Neither ever fired live: no place has reached publish yet.
+- Ready to deploy: commit ee2ddfd, CI green (run 41685406831: the first attempt died mid-pytest with no log and null step conclusions — runner loss, not a failure; the rerun passed clean). $0 — no model calls, no live runs. #266.4 (reset Mamirauá to `building`/`approved`, cap $6) waits for the deploy + Kai's go, as the item says.
+
 ## 2026-11-03: inbox #265 (v36 live; re-plan the 16% tile; Mamirauá's $3.96 quote)
 
 - Worker v36 verified live on `f34f048` via container exec (fresh container). No code in this item — $0 live checks only.

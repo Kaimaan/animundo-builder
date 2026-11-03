@@ -497,6 +497,38 @@ def test_listen_reports_a_dead_backend(tmp_path: Path, monkeypatch, capsys) -> N
     assert "no credentials" in capsys.readouterr().err
 
 
+def test_listen_refuses_a_grid_without_its_files(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    """#247.2: the worker never starts on a file-less grid."""
+    import gzip
+
+    from builder import worker_store
+    from builder.worker import listen
+
+    class _Store:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+    monkeypatch.setattr(worker_store, "FirebaseStore", _Store)
+    grid_dir = tmp_path / "grids"
+    grid_dir.mkdir()
+    with gzip.open(grid_dir / "z10.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump({"grid": "z10", "cells": {}}, handle)
+    code = listen(
+        Config(ledger_path=str(tmp_path / "ledger.json")),
+        tmp_path / "jobs",
+        tmp_path / "world",
+        "demo",
+        None,
+        grid_dir,
+    )
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "reef.json.gz" in err
+    assert "landcover.json.gz" in err
+
+
 def _flow_worker(
     tmp_path: Path, store: FakeStore, tile_cells: dict[str, Any]
 ) -> Worker:

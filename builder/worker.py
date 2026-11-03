@@ -2782,6 +2782,15 @@ def listen(
         config=config,
         grid_dir=grid_dir,
     )
+    if grid_dir is not None:
+        from .habitats import describe_grid, require_grid
+
+        print(describe_grid(grid_dir))
+        try:
+            require_grid(grid_dir)
+        except (FileNotFoundError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
     print(start_line(config, store, world))
     Listener(worker=worker, store=store, poll_seconds=300).start()
     return 0

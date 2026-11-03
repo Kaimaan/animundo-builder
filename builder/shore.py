@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from .grid import lat_of, lon_of, parse_tile
+from .habitats import LAKES_FILE, SHORE_FILE
 
 #: Game metres between shore points; 33 points a side, both sides.
 SPAN = 32
@@ -58,10 +59,10 @@ class ShoreData:
         from shapely.strtree import STRtree
 
         raw = json.loads(
-            gzip.open(grid_dir / "shore.json.gz", "rt", encoding="utf-8").read()
+            gzip.open(grid_dir / SHORE_FILE, "rt", encoding="utf-8").read()
         )
         self.names: dict[str, dict[str, str]] = json.loads(
-            (grid_dir / "lakes.json").read_text(encoding="utf-8")
+            (grid_dir / LAKES_FILE).read_text(encoding="utf-8")
         )["lakes"]
         land_polys: list[Any] = []
         lake_polys: list[tuple[str, Any]] = []
@@ -157,7 +158,7 @@ def scale(lat: float) -> float:
 def load(grid_dir: str) -> ShoreData | None:
     """The grid dir's shores, or None without the shore files."""
     path = Path(grid_dir)
-    if not (path / "shore.json.gz").is_file() or not (path / "lakes.json").is_file():
+    if not (path / SHORE_FILE).is_file() or not (path / LAKES_FILE).is_file():
         return None
     return ShoreData(path)
 

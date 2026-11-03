@@ -157,6 +157,27 @@ def test_build_job_takes_a_remake_pass_without_a_single_tile() -> None:
     validate("build-job", big)
 
 
+def test_build_job_takes_a_remake_waiting_for_a_yes() -> None:
+    """#245.5: a priced remake fails its own contract without the fields."""
+    job = _valid("build-job")
+    del job["tile"]
+    job.update(
+        {
+            "kind": "remake",
+            "tiles": ["z10_0581_0294"],
+            "status": "waiting_yes",
+            "price_usd": 0.05,
+            "created_by": "admin",
+        }
+    )
+    validate("build-job", job)
+    job["remake_yes"] = {"cap": 1.0, "at": "2026-11-03T00:00:00+00:00"}
+    validate("build-job", job)
+    del job["remake_yes"]
+    job["remake_no"] = {"at": "2026-11-03T00:00:00+00:00"}
+    validate("build-job", job)
+
+
 def test_build_job_takes_an_enrich_job() -> None:
     job = _valid("build-job")
     job.update(

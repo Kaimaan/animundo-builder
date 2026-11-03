@@ -330,3 +330,87 @@ def test_committed_manaus_is_built_mamiraua_wild() -> None:
         return
     assert tile_wild("z10_0341_0520", grid) is False
     assert tile_wild("z10_0325_0518", grid) is True
+
+
+def _tiny_grid(tmp_path: Path) -> Path:
+    """A valid but file-less grid directory."""
+    grid_dir = tmp_path / "grids"
+    grid_dir.mkdir()
+    with gzip.open(grid_dir / "z10.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump({"grid": "z10", "cells": {}}, handle)
+    return grid_dir
+
+
+def test_strict_load_refuses_a_grid_without_reef(tmp_path: Path) -> None:
+    """#245.2: strict load fails loud instead of planning pre-map."""
+    from builder.habitats import HabitatGrid, load_grid
+
+    grid_dir = _tiny_grid(tmp_path)
+    load_grid(grid_dir)
+    with pytest.raises(FileNotFoundError, match="reef.json.gz"):
+        HabitatGrid.load(grid_dir / "z10.json.gz", strict=True)
+    with pytest.raises(FileNotFoundError, match="landcover.json.gz"):
+        load_grid(grid_dir, strict=True)
+
+
+def test_require_grid_names_every_missing_sibling(tmp_path: Path) -> None:
+    """#247.2: the startup check names all four missing files."""
+    from builder.habitats import require_grid
+
+    grid_dir = _tiny_grid(tmp_path)
+    with pytest.raises(FileNotFoundError) as caught:
+        require_grid(grid_dir)
+    for name in ("reef.json.gz", "landcover.json.gz", "shore.json.gz", "lakes.json"):
+        assert name in str(caught.value)
+
+
+def test_deploy_image_covers_every_grid_file() -> None:
+    """#247.3: /grids ships all the files the loaders read."""
+    import re
+
+    from builder.habitats import BAKED_GRID_FILE, REQUIRED_GRID_FILES
+
+    deploy = (
+        Path(__file__).resolve().parent.parent / "deploy" / "modal_worker.py"
+    ).read_text()
+    shipped = set(re.findall(r"/grids/([A-Za-z0-9_.]+)", deploy))
+    for name in (BAKED_GRID_FILE, *REQUIRED_GRID_FILES):
+        assert name in shipped, name
+
+
+def test_deploy_layout_makes_reef_nw_coral_reef(tmp_path: Path) -> None:
+    """#245.4: the /grids layout builds the ring's NW tile as reef."""
+    from builder.habitats import describe_grid, require_grid
+    from builder.schemas import ROOT
+
+    committed = ROOT / "data" / "habitat-grid"
+    world = ROOT.parent / "animundo-world"
+    if not (committed / "landcover.json.gz").is_file():
+        pytest.skip("needs the baked grid files")
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs an animundo-world checkout")
+    grid_dir = tmp_path / "grids"
+    grid_dir.mkdir()
+    for name in (
+        "z10.json.gz",
+        "reef.json.gz",
+        "landcover.json.gz",
+        "shore.json.gz",
+        "lakes.json",
+    ):
+        (grid_dir / name).symlink_to(committed / name)
+    grid = require_grid(grid_dir)
+    assert "MISSING" not in describe_grid(grid_dir)
+    from builder.tiles import make_tile
+
+    made, blocked = make_tile(
+        "z10_0926_0559",
+        grid,
+        world,
+        presence={"clownfish": 5.0},
+        builder_root=ROOT,
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "coral_reef"
+    assert made["biome"] == "coral_reef"

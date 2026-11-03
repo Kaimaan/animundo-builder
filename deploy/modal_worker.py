@@ -117,6 +117,25 @@ image = (
         BUILDER / "data" / "habitat-grid" / "z10.json.gz",
         "/grids/z10.json.gz",
     )
+    # Every grid sibling the worker reads beside z10.json.gz
+    # (#245, #247): without them reef cells plan pre-map, place
+    # tiles skip the wild-land check, and tiles get no shore.
+    .add_local_file(
+        BUILDER / "data" / "habitat-grid" / "reef.json.gz",
+        "/grids/reef.json.gz",
+    )
+    .add_local_file(
+        BUILDER / "data" / "habitat-grid" / "landcover.json.gz",
+        "/grids/landcover.json.gz",
+    )
+    .add_local_file(
+        BUILDER / "data" / "habitat-grid" / "shore.json.gz",
+        "/grids/shore.json.gz",
+    )
+    .add_local_file(
+        BUILDER / "data" / "habitat-grid" / "lakes.json",
+        "/grids/lakes.json",
+    )
     .add_local_file(
         BUILDER / "data" / "seas.json.gz",
         "/src/builder/data/seas.json.gz",

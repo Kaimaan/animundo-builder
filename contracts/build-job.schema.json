@@ -118,6 +118,19 @@
       "type": "object",
       "description": "Kai's no: {at}. Fails the job turned_down."
     },
+    "price_usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "For remake at its stop: the survey's or build's estimate in USD."
+    },
+    "remake_yes": {
+      "type": "object",
+      "description": "Kai's yes to a priced remake: {cap, at}. Consumed once."
+    },
+    "remake_no": {
+      "type": "object",
+      "description": "Kai's no to a priced remake: {at}. Fails the job turned_down."
+    },
     "needed_land": {
       "type": "string",
       "minLength": 1,

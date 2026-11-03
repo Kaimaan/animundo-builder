@@ -39,6 +39,16 @@ REEF_FILE = "reef.json.gz"
 #: 5 by 5 wild mask per land cell (#238).
 LANDCOVER_FILE = "landcover.json.gz"
 
+#: Simplified shores and lake names beside the grid, read by
+#: shore.load for every tile with a shore in reach (#204).
+SHORE_FILE = "shore.json.gz"
+LAKES_FILE = "lakes.json"
+
+#: Grid siblings the production worker needs beside the baked
+#: grid: the image ships them to /grids, and the worker refuses
+#: to start without them (#245, #247).
+REQUIRED_GRID_FILES = (REEF_FILE, LANDCOVER_FILE, SHORE_FILE, LAKES_FILE)
+
 #: Provenance tag for tiles the reef map placed.
 REEF_SOURCE = "gbrmpa:torres_strait_features_v1b"
 
@@ -106,9 +116,67 @@ def habitat_for(
     return habitat
 
 
-def load_grid(grid_dir: Path) -> HabitatGrid:
-    """The baked habitat grid from its directory."""
-    return HabitatGrid.load(grid_dir / BAKED_GRID_FILE)
+def load_grid(grid_dir: Path, *, strict: bool = False) -> HabitatGrid:
+    """The baked habitat grid from its directory.
+
+    Strict refuses a grid without its reef and land-cover
+    files; tests and old grids keep the lenient default.
+    """
+    return HabitatGrid.load(grid_dir / BAKED_GRID_FILE, strict=strict)
+
+
+def describe_grid(grid_dir: Path) -> str:
+    """One line per grid file with what it holds (#245.3).
+
+    Missing files show as such: the worker prints this at
+    start so the container log shows what it loaded.
+    """
+    lines = []
+    main = grid_dir / BAKED_GRID_FILE
+    if main.is_file():
+        try:
+            cells = len(
+                json.loads(gzip.open(main, "rt", encoding="utf-8").read()).get(
+                    "cells", {}
+                )
+            )
+            lines.append(f"{BAKED_GRID_FILE}: {cells} cells")
+        except ValueError:
+            lines.append(f"{BAKED_GRID_FILE}: unreadable")
+    else:
+        lines.append(f"{BAKED_GRID_FILE}: MISSING")
+    for name in REQUIRED_GRID_FILES:
+        path = grid_dir / name
+        if not path.is_file():
+            lines.append(f"{name}: MISSING")
+            continue
+        try:
+            if path.suffix == ".gz":
+                data = json.loads(gzip.open(path, "rt", encoding="utf-8").read())
+            else:
+                data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            lines.append(f"{name}: unreadable")
+            continue
+        if name == SHORE_FILE:
+            lines.append(
+                f"{name}: {len(data.get('land', []))} land, "
+                f"{len(data.get('lakes', {}))} lakes"
+            )
+        elif name == LAKES_FILE:
+            lines.append(f"{name}: {len(data.get('lakes', {}))} names")
+        else:
+            lines.append(f"{name}: {len(data.get('cells', {}))} cells")
+    return "\n".join(lines)
+
+
+def require_grid(grid_dir: Path) -> HabitatGrid:
+    """The production grid: every sibling present, else loud (#247.2)."""
+    missing = [name for name in REQUIRED_GRID_FILES if not (grid_dir / name).is_file()]
+    if missing:
+        joined = ", ".join(missing)
+        raise FileNotFoundError(f"{grid_dir} lacks grid files: {joined}")
+    return load_grid(grid_dir, strict=True)
 
 
 class HabitatGrid:
@@ -129,12 +197,25 @@ class HabitatGrid:
         self._landcover = landcover or {}
 
     @classmethod
-    def load(cls, path: Path) -> HabitatGrid:
-        """Read a baked `z10.json.gz` file; older grids refuse."""
+    def load(cls, path: Path, *, strict: bool = False) -> HabitatGrid:
+        """Read a baked `z10.json.gz` file; older grids refuse.
+
+        Strict refuses a grid without its reef and land-cover
+        files instead of planning without them (#245.2).
+        """
         raw = gzip.open(path, "rt", encoding="utf-8").read()
         data = json.loads(raw)
         if data.get("grid") != NAME:
             raise ValueError(f"{path} is a {data.get('grid')} grid, not {NAME}")
+        if strict:
+            missing = [
+                name
+                for name in (REEF_FILE, LANDCOVER_FILE)
+                if not (path.parent / name).is_file()
+            ]
+            if missing:
+                joined = ", ".join(missing)
+                raise FileNotFoundError(f"{path.parent} lacks grid files: {joined}")
         reef_path = path.parent / REEF_FILE
         reef: dict[str, float] = {}
         extent: dict[str, list[int]] | None = None

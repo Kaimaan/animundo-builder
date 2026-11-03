@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #249 (PolyForm Strict licence + credits + judge path)
+
+- Done, no deploy. `LICENSE` is the required notice plus the byte-exact official plain text of PolyForm Strict 1.0.0 (fetched from polyformproject.org, verified identical). GitHub's API reports a licence on the repo (key `other` — PolyForm isn't in GitHub's named-licence list, so it shows as a custom licence with the file linked; the notice stays above the text as required).
+- README `## Licence` rewritten per the item (source-available, read/clone/run noncommercial including judging, pre-2026-11-01 stays Apache-2.0, link to `LICENSE`), with a third-party data paragraph: habitat-grid sources by reference, GBIF occurrence data (gbif.org), Wikidata place ids (CC0), OSM credit for the lab globe.
+- Credits check: no OSM data in the repo — `places-of-interest.json` is Wikidata (says so in the file), `vendor/` holds only Natural Earth, and the Oct 26 area index was never built. The only OSM touch is the committed `docs/tiles-lab/globe.png`, rendered on a CARTO+OSM basemap; its README now carries "© OpenStreetMap contributors © CARTO". No GBIF records committed (no occurrence/dataset ids anywhere in the tree); the planner only reads the live API.
+- Judge's path fixed: the advertised replay is broken (`examples/n_401_434` is a pre-z10 recording; the command fails on the old tile id), so the README now sends judges down a verified $0 path — clone, `uv sync`, `uv run pytest`, `uv run builder tiles lab` (ran it here: works keyless) — notes the world checkout's own licence, retires the old recording honestly, and corrects "690 tests" to over 1,200 (1,225 collected). Not verified: `tiles make` with a key (spends; unchanged text).
+- Commit defaf0a, CI green. Nothing to deploy.
+
 ## 2026-11-03: inbox #244 (WorldCover licence confirmed — noted)
 
 - Kai: "Licence OK". ESA WorldCover 2021 under CC BY 4.0 is confirmed for the wild-land check with the attribution in `data/habitat-grid/README.md`; places built with it may publish. No code change; noting it here per the item.

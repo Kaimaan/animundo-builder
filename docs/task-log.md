@@ -3,6 +3,11 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #275 + #276 (Mamirauá end to end)
+
+- Deploy, 23:05 UTC: worker v41 on builder 598cfaa (`#275` + place-id fallback), CI green both commits (runs 41728601735, 41734813146). Single live container `ta-01M6HTNF6Y20VB21DTBNV1QWBR`, code hash matches, old container stopped. The run-2 kinds it fixes: prey remade per hunter (jaguar dir held capybara's files + 4 verdicts), model-owned facts (playable/abilities/texts), the unread schema verdict (anaconda's 1400-triangle spec walked past), and stale progress labels. Test build #1 (`place_20261103_mamiraua_test_1`, same research, publish-off, cap $4) created 23:07 UTC, picked up 23:12 UTC. Running total still $0.73 of $6.
+- Run-2 notes for the record: the "dolphin" in the jaguar verdict is the check naming the first library animal matching `large_mammal` tags, not the file hunting dolphin — the file's hunts were code-set and right; only the texts were missing. The anaconda did NOT pass: the gate let a real schema failure through (now gates). The capybara label is a pre-#269.1 entry the reuse never refreshed (now refreshes on skip).
+
 ## 2026-11-03: inbox #269 (the capybara's passed retry still failed; spend split; legs)
 
 - #269.1, the verdict, in two parts. (a) `failed_checks` now counts only the last attempt in each retry family (`oneshot-`, `models-`, `plants-` with a trailing number); singletons unchanged. Shared by place, border and enrich jobs — they all close through it, and tiles never retry, so nothing else changes. (b) The deeper bug: the place gate read `_ship_completed`, but the place pipeline never runs a `ship` stage — so it failed EVERY place item, including this capybara. (The `checks_failed` annotation's presence proves the pipeline finished clean: a raise would leave status `failed` with no annotation.) The gate now reads the progress verdict: `checking` passes, `failed`/`skipped`/never-ran fails with the entry's reason.

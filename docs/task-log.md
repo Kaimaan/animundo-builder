@@ -3,6 +3,21 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #247 (grid files missing live — shipped, loud, audited)
+
+- Done in the same commit as #245 (`6095ea9`, CI green): all four files ride `/grids`, and `listen()` runs a fake-free `require_grid` before the first snapshot — a file-less container exits 1 naming the files instead of planning blind. The start log prints `describe_grid` (file + counts), so the reviewer sees the load in the container.
+- Test: the image's `/grids` targets cover `z10.json.gz` plus every `REQUIRED_GRID_FILES` entry (fails if the deploy list and the loaders drift apart); a symlinked deploy layout builds the ring's NW tile as `coral_reef`.
+- Audit (#247.4), live state vs a local full-grid recompute: 4 tiles lack shore they should have, all Modal code jobs from the Nov 2 batch — `z10_0584_0296` (v1, `z10_0584_0296_code_7f21f8c`), `z10_0579_0296` (v11, `..._579_0296_code_7f21f8c`), `z10_0582_0290` (v18, `..._582_0290_code_7f21f8c`), `z10_0581_0291` (v19, `..._581_0291_code_7f21f8c`). Those four are the remake list. Everything else Modal-made is fine now: 6 inland tiles legitimately shoreless, 2 coast tiles since remade with shore, and the 2 reef-region tiles (`z10_0927_0562` v4, `z10_0927_0563` v7) are `coral_reef` with shore via later hand remakes — no live reef victim. Landcover: no victim — Mamirauá's tile is genuinely wild (0/0) so its waiting research stands, and the Amazon job failed before any check.
+- #232's sea was not the missing shore: habitat and the coast mask both come from the z10 cells, which the image always had; the tiles were sea by the land<0.5 rule, as the #232 reply says. #242's Helsinki remake ran on this Mac with the full local grid — both published tiles carry live shore.
+- Ready to deploy: builder `6095ea9`. The reef ring remakes can run once this and #246 are live.
+
+## 2026-11-03: inbox #245 (grid files into the image — ready to deploy)
+
+- Done with #247 in `6095ea9` (CI green, #247's later text wins where they differ): `reef.json.gz`, `landcover.json.gz`, `shore.json.gz` and `lakes.json` ship to `/grids` (shore/lakes included: the worker writes every in-reach tile's `shore` from them). Loudness: `HabitatGrid.load(..., strict=True)` refuses a grid without reef/landcover, `require_grid` checks all four, and the worker exits 1 at start when any is missing; tests and old grids keep the lenient default. The start log prints each file with its counts.
+- #245.5: the build-job contract now lists `price_usd`, `remake_yes` (`{cap, at}`) and `remake_no` (`{at}`), matching what `admin.mjs remake-yes/no` write — a waiting remake validates again.
+- Tests: strict load without reef fails; the deploy coverage test; the NW tile builds `coral_reef` from a deploy-layout grid; `listen` refuses a file-less grid; a waiting remake validates. Full suite 1210 passed; the 2 maker failures are the known pre-existing world drift.
+- Ready to deploy: builder `6095ea9` with green CI.
+
 ## 2026-11-03: inbox #246 (planner gaps are a report, never items — ready to deploy)
 
 - Done. The made-probe branch no longer turns gaps into `food_*` items: a probe that makes is `code_only` with no items, and its gaps ride the plan as a `gaps: {species: {diet, hunts}}` report field (added to the plan contract). The reef test is back to `code_only: True, items: []`, pinning the clownfish water-plants gap in the report.

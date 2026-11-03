@@ -898,7 +898,10 @@ class Worker:
         if not (self.world / "biomes" / f"{survey['biome']}.json").is_file():
             update["needed_land"] = str(survey["biome"])
             parts = place_mod.price_place_build(
-                survey["tiles"], survey["missing"], self._median_estimates()
+                survey["tiles"],
+                survey["missing"],
+                self._median_estimates(),
+                self.world,
             )
             research["price_parts"] = parts
             update["price"] = parts["total"]
@@ -917,7 +920,7 @@ class Worker:
         research["tiles"] = wild_tiles
         # The price follows the final tiles, after wild moves (#246).
         parts = place_mod.price_place_build(
-            wild_tiles, survey["missing"], self._median_estimates()
+            wild_tiles, survey["missing"], self._median_estimates(), self.world
         )
         research["price_parts"] = parts
         update["price"] = parts["total"]
@@ -945,29 +948,39 @@ class Worker:
     def _reprice_waiting_place(
         self, job_id: str, job: dict[str, Any]
     ) -> dict[str, Any]:
-        """A waiting place's build quote, once, against today's world (#239.2).
+        """A waiting place's build quote, fresh against today's world (#239.2).
 
         Jobs surveyed before price parts re-price on the next
-        start; species filed since cost nothing. A yes already on
-        the doc only stands when its cap still covers the new
+        start; species filed since cost nothing. A quote whose
+        named species no longer match what the build would
+        build (a filed species, a plant swap, an unmakable
+        animal) re-prices too, so the yes always answers the
+        current quote (#264.3, #264.4). A yes already on the
+        doc only stands when its cap still covers the new
         total, else it is stale and goes, loudly.
         """
         from . import place as place_mod
 
         assert self.world is not None
         research = job.get("research") or {}
-        if not isinstance(research, dict) or research.get("price_parts"):
+        if not isinstance(research, dict):
             return job
         missing = place_mod.missing_species(
             research.get("animals", []),
             research.get("plants", []),
             self.world,
             str(research.get("biome", "")),
+            research.get("plant_swaps"),
         )
+        if research.get("price_parts") and self._quote_is_fresh(
+            research["price_parts"], research, missing
+        ):
+            return job
         parts = place_mod.price_place_build(
             [t for t in research.get("tiles", []) or [] if isinstance(t, str)],
             missing,
             self._median_estimates(),
+            self.world,
         )
         research["price_parts"] = parts
         update: dict[str, Any] = {"research": research, "price": parts["total"]}
@@ -990,6 +1003,38 @@ class Worker:
             )
         self._update(job_id, update)
         return self.store.get_build_job(job_id) or job
+
+    def _quote_is_fresh(
+        self,
+        parts: dict[str, Any],
+        research: dict[str, Any],
+        missing: list[dict[str, str]],
+    ) -> bool:
+        """The quote still names what the build would build (#264).
+
+        Id sets and the tile count, never the dollars: medians
+        drift as the log fills, but only a changed species set
+        (filed, swapped, unmakable) makes the quote stale.
+        """
+        from . import place as place_mod
+
+        assert self.world is not None
+        if not isinstance(parts, dict):
+            return False
+        tiles = [t for t in research.get("tiles", []) or [] if isinstance(t, str)]
+        fresh = place_mod.price_place_build(
+            tiles, missing, self._median_estimates(), self.world
+        )
+        for key in ("animals", "plants"):
+            if not isinstance(parts.get(key), list):
+                return False
+            old = sorted(
+                entry.get("id") for entry in parts[key] if isinstance(entry, dict)
+            )
+            new = sorted(entry["id"] for entry in fresh[key])
+            if old != new:
+                return False
+        return (parts.get("tiles") or {}).get("n") == len(tiles)
 
     def _place_answer(self, job_id: str, job: dict[str, Any]) -> None:
         """Kai's yes or no to a surveyed place, consumed once (#222.3)."""
@@ -1154,6 +1199,7 @@ class Worker:
             research.get("plants", []),
             self.world,
             str(research.get("biome", "")),
+            research.get("plant_swaps"),
         )
         plants = (biome.get("plants") or {}) if isinstance(biome, dict) else {}
         biome_ids = sorted(
@@ -1570,6 +1616,7 @@ class Worker:
             research.get("plants", []),
             self.world,
             str(research.get("biome", "")),
+            research.get("plant_swaps"),
         )
         wanted = [drop for drop in survey_missing if drop["what"] not in job_made]
         filed_animals = {

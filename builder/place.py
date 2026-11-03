@@ -528,22 +528,30 @@ def missing_species(
     plants: list[dict[str, Any]],
     world: Path,
     biome: str,
+    swaps: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
     """What the research found that the world lacks right now (#239.2).
 
     The re-price runs this against the current world: species
-    filed since the survey cost nothing to build.
+    filed since the survey cost nothing to build. `swaps` maps
+    a researched plant slug to the species to build instead
+    (a human correction, kept on the job's research, #264.3):
+    the swapped name runs the same filed checks as a surveyed
+    one, so an already-filed correction costs nothing.
     """
     kept = [
         {"id": entry["id"], "source": entry.get("source", "")}
         for entry in animals
         if isinstance(entry, dict) and isinstance(entry.get("id"), str)
     ]
-    greens = [
-        {"name": entry["name"], "source": entry.get("source", "")}
-        for entry in plants
-        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-    ]
+    greens = []
+    for entry in plants:
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            continue
+        name = entry["name"]
+        if swaps and plant_slug(name) in swaps:
+            name = swaps[plant_slug(name)]
+        greens.append({"name": name, "source": entry.get("source", "")})
     return _survey_missing(kept, greens, world, biome)
 
 
@@ -827,14 +835,23 @@ def price_place_build(
     tiles: list[str],
     missing: list[dict[str, Any]],
     estimates: dict[str, tuple[float, str]],
+    world: Path,
 ) -> dict[str, Any]:
-    """The build's quote: tiles plus each missing species (#239.2).
+    """The build's quote: tiles plus each species it builds (#239.2).
 
     Every number says where it came from: the cost log's rows
-    or today's fixed hand numbers (#259.4).
+    or today's fixed hand numbers (#259.4). Missing animals
+    with no `start_from` to adapt cost nothing: stage C leaves
+    them on wanted instead of building them (#264.4).
     """
+    from .animal_list import find_list, load_list
     from .prices import ITEM_ESTIMATES, PLACE_BUILD_USD_PER_TILE
 
+    listed = {
+        entry["id"]: entry
+        for entry in load_list(find_list(world))["animals"]
+        if isinstance(entry.get("id"), str)
+    }
     tile_usd, tile_from = estimates.get("tile", (PLACE_BUILD_USD_PER_TILE, "fixed"))
     animal_usd, animal_from = estimates.get(
         "animal", (ITEM_ESTIMATES["animal"], "fixed")
@@ -843,7 +860,9 @@ def price_place_build(
     animals = [
         {"id": entry["what"], "usd": animal_usd, "from": animal_from}
         for entry in missing
-        if entry.get("kind") == "animal" and isinstance(entry.get("what"), str)
+        if entry.get("kind") == "animal"
+        and isinstance(entry.get("what"), str)
+        and (listed.get(entry["what"]) or {}).get("start_from")
     ]
     plants = [
         {"id": entry["what"], "usd": plant_usd, "from": plant_from}

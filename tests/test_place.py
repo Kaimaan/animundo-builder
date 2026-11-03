@@ -1658,10 +1658,13 @@ def test_thin_biome_counts_mix_and_food_not_only_ids() -> None:
     )
 
 
-def test_place_price_quotes_tiles_plus_missing_species() -> None:
+def test_place_price_quotes_tiles_plus_missing_species(tmp_path: Path) -> None:
     """#239.2: every quoted number names its source."""
+    import fake_world
+
     from builder.place import price_place_build
 
+    world = fake_world.make_world(tmp_path)
     estimates = {
         "tile": (0.50, "fixed"),
         "animal": (0.40, "log, 3 rows"),
@@ -1674,11 +1677,57 @@ def test_place_price_quotes_tiles_plus_missing_species() -> None:
             {"kind": "plant", "what": "acai", "part": "boreal_forest"},
         ],
         estimates,
+        world,
     )
     assert parts["total"] == 1.03
     assert parts["tiles"] == {"n": 1, "usd": 0.50, "from": "fixed"}
     assert parts["animals"] == [{"id": "lion", "usd": 0.40, "from": "log, 3 rows"}]
     assert parts["plants"] == [{"id": "acai", "usd": 0.13, "from": "fixed"}]
+
+
+def test_place_price_skips_animals_with_no_start(tmp_path: Path) -> None:
+    """#264.4: a missing animal stage C won't build costs nothing."""
+    import fake_world
+
+    from builder.place import price_place_build
+
+    world = fake_world.make_world(tmp_path)
+    estimates = {
+        "tile": (0.50, "fixed"),
+        "animal": (0.42, "fixed"),
+        "plant": (0.13, "fixed"),
+    }
+    parts = price_place_build(
+        ["z10_0581_0294"],
+        [
+            {"kind": "animal", "what": "lion", "part": "boreal_forest"},
+            {"kind": "animal", "what": "vole", "part": "boreal_forest"},
+        ],
+        estimates,
+        world,
+    )
+    assert parts["animals"] == [{"id": "lion", "usd": 0.42, "from": "fixed"}]
+    assert parts["total"] == 0.92
+
+
+def test_missing_species_honours_a_plant_swap(tmp_path: Path) -> None:
+    """#264.3: a swapped plant misses under its correction's slug."""
+    import fake_world
+
+    from builder.place import missing_species
+
+    world = fake_world.make_world(tmp_path)
+    missing = missing_species(
+        [],
+        [{"name": "Euterpe oleracea", "source": "s"}],
+        world,
+        "rainforest",
+        {"euterpe_oleracea": "euterpe_precatoria"},
+    )
+    assert missing == [
+        {"kind": "plant", "what": "euterpe_precatoria", "part": "rainforest"}
+    ]
+    assert missing_species([], [], world, "rainforest", None) == []
 
 
 def test_job_survey_keeps_short_and_country_when_answered(tmp_path: Path) -> None:

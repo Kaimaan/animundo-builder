@@ -225,6 +225,97 @@ def test_waiting_place_reprices_before_the_answer(tmp_path: Path) -> None:
     assert job["research"]["price_parts"]["total"] == 0.92
 
 
+def test_waiting_place_with_stale_parts_reprices(tmp_path: Path) -> None:
+    """#264: a quote naming an unmakable animal re-prices without it."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    listing = json.loads((worker.world / "animal-list.json").read_text())
+    listing["animals"].append(
+        {"id": "sloth", "gbif_key": 9, "habitats": ["boreal_forest"]}
+    )
+    (worker.world / "animal-list.json").write_text(json.dumps(listing))
+    store.build_jobs["j1"] = _place_job(
+        status="waiting_yes",
+        research={
+            "tiles": [A],
+            "biome": "boreal_forest",
+            "animals": [
+                {"id": "lion", "source": "s"},
+                {"id": "sloth", "source": "s"},
+            ],
+            "plants": [],
+            "price_parts": {
+                "tiles": {"n": 1, "usd": 0.50, "from": "fixed"},
+                "animals": [
+                    {"id": "lion", "usd": 0.42, "from": "fixed"},
+                    {"id": "sloth", "usd": 0.42, "from": "fixed"},
+                ],
+                "plants": [],
+                "total": 1.34,
+            },
+        },
+        price=1.34,
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["price"] == 0.92
+    assert job["research"]["price_parts"]["animals"] == [
+        {"id": "lion", "usd": 0.42, "from": "fixed"}
+    ]
+
+
+def test_waiting_place_with_fresh_parts_keeps_them(tmp_path: Path) -> None:
+    """#264: a current quote is left alone, medians drift or not."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    parts = {
+        "tiles": {"n": 1, "usd": 0.50, "from": "fixed"},
+        "animals": [{"id": "lion", "usd": 0.42, "from": "fixed"}],
+        "plants": [],
+        "total": 0.92,
+        "note": "stays",
+    }
+    store.build_jobs["j1"] = _place_job(
+        status="waiting_yes",
+        research={
+            "tiles": [A],
+            "biome": "boreal_forest",
+            "animals": [{"id": "lion", "source": "s"}],
+            "plants": [],
+            "price_parts": dict(parts),
+        },
+        price=0.92,
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["research"]["price_parts"] == parts
+    assert job["price"] == 0.92
+
+
+def test_waiting_place_reprice_honours_plant_swaps(tmp_path: Path) -> None:
+    """#264.3: the re-price builds the swapped plant, not the researched."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    store.build_jobs["j1"] = _place_job(
+        status="waiting_yes",
+        research={
+            "tiles": [A],
+            "biome": "boreal_forest",
+            "animals": [],
+            "plants": [{"name": "Euterpe oleracea", "source": "s"}],
+            "plant_swaps": {"euterpe_oleracea": "euterpe_precatoria"},
+        },
+        price=0.50,
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["price"] == 0.63
+    assert job["research"]["price_parts"]["plants"] == [
+        {"id": "euterpe_precatoria", "usd": 0.13, "from": "fixed"}
+    ]
+
+
 def test_reprice_drops_a_yes_its_cap_no_longer_covers(tmp_path: Path) -> None:
     """#239.2: a stale yes goes loudly; a covering yes stands."""
     store = FakeStore()

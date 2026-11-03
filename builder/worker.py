@@ -1011,6 +1011,7 @@ class Worker:
                 )
                 print(f"build job {job_id}: the survey would spend; waiting for yes")
                 return
+        survey_before = self._survey_spent(tile)
         try:
             plan = plan_tile(
                 tile,
@@ -1027,7 +1028,7 @@ class Worker:
             self._fail(job_id, "no_plan")
             return
         self.store.set_plan(tile, plan)
-        self._record_remake_survey_spend(job_id, tile)
+        self._record_remake_survey_spend(job_id, tile, survey_before)
         if plan.get("blocked"):
             self._fail(job_id, str(plan["blocked"]))
             return
@@ -1070,18 +1071,15 @@ class Worker:
     ) -> None:
         """A remake that needs items: priced, approved, then built."""
         from .build import order_items
-        from .ledger import FileLedger
 
         expand = order_items(plan.get("items", []))
         improve = plan.get("improve", [])
         wanted = [i["id"] for i in [*expand, *improve]]
         if "items" not in job:
             self._update(job_id, {"items": wanted})
-        spent = 0.0
-        try:
-            spent = FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
-        except OSError:
-            pass
+        spent = (self.store.get_build_job(job_id) or {}).get("survey_usd", 0.0)
+        if not isinstance(spent, (int, float)):
+            spent = 0.0
         price = round(
             spent + sum(float(i.get("estimate_usd", 0.0)) for i in [*expand, *improve]),
             2,
@@ -1094,29 +1092,35 @@ class Worker:
         self._snapshot_plan(job_id, job, tile)
         self.build_items(job_id, job, tile)
 
-    def _record_remake_survey_spend(self, job_id: str, tile: str) -> None:
-        """The remake's survey spend onto the job, once (#252.2).
-
-        A paid survey joins `cost_usd`, with `survey_usd` marking
-        what joined so a re-run never adds it twice and the
-        history row adds only new spend. A free survey (cache)
-        says so on the job instead.
-        """
+    def _survey_spent(self, tile: str) -> float:
+        """The ledger's 7-day survey spend for one tile, 0 unreadable."""
         from .ledger import FileLedger
 
+        try:
+            return FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
+        except OSError:
+            return 0.0
+
+    def _record_remake_survey_spend(
+        self, job_id: str, tile: str, survey_before: float
+    ) -> None:
+        """This run's survey spend onto the job, once (#252.2, #257.1).
+
+        The ledger is cumulative, so only the before/after
+        difference joins `cost_usd`, with `survey_usd` marking
+        what joined so a re-run never adds it twice. A free
+        survey (cache) says so on the job instead.
+        """
         job = self.store.get_build_job(job_id) or {}
         if "survey_usd" in job or "survey_cached" in job:
             return
-        try:
-            spent = FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
-        except OSError:
-            return
-        if spent > 0:
+        diff = max(0.0, self._survey_spent(tile) - survey_before)
+        if diff > 0:
             before = job.get("cost_usd", 0.0)
             before = before if isinstance(before, (int, float)) else 0.0
             self._update(
                 job_id,
-                {"cost_usd": round(before + spent, 6), "survey_usd": round(spent, 6)},
+                {"cost_usd": round(before + diff, 6), "survey_usd": round(diff, 6)},
             )
         else:
             self._update(job_id, {"survey_cached": True})
@@ -1704,15 +1708,11 @@ class Worker:
                 update["pack"] = packs_mod.publish_pack(
                     self.store, pack_id, version, packed
                 )
-            except (ValueError, KeyError) as error:
+            except (ValueError, KeyError, packs_mod.PackExists) as error:
                 print(f"build job {job_id}: pack: {error}", file=sys.stderr)
+                self._fail_item(job_id, job, item_id or "")
                 self._fail(job_id, "bad_pack")
                 return
-        if "pack" not in update:
-            self._update(job_id, update)
-            self._fail_item(job_id, job, item_id or "")
-            self._fail(job_id, "nothing_overlaid")
-            return
         self._update(job_id, update)
         print(f"build job {job_id}: overlaid {len(passing)} tiles")
         self._set_status(job_id, "published")
@@ -2156,23 +2156,21 @@ class Worker:
         """The job's half of a tile history row (#165.1, #195.2).
 
         With a tile, the tile's own survey spend joins the job's
-        cost, so the row carries what the tile really cost. Spend
-        the job already carries (`survey_usd`, #252.2) joins only
-        its new remainder, never twice.
+        cost, so the row carries what the tile really cost. A job
+        carrying its own survey spend (`survey_usd`) or marked
+        cached (`survey_cached`, #257.1) needs no addition; the
+        ledger's cumulative count would add other runs' surveys.
         """
         from .ledger import FileLedger
 
         job = self.store.get_build_job(job_id) or {}
         cost = job.get("cost_usd", 0.0)
         total = cost if isinstance(cost, (int, float)) else 0.0
-        if tile is not None:
+        if tile is not None and "survey_usd" not in job and "survey_cached" not in job:
             try:
-                survey = FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
+                total += FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
             except OSError:
-                survey = 0.0
-            recorded = job.get("survey_usd", 0.0)
-            recorded = recorded if isinstance(recorded, (int, float)) else 0.0
-            total += max(0.0, survey - recorded)
+                pass
         return {
             "job": job_id,
             "kind": kind,

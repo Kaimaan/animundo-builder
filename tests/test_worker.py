@@ -859,8 +859,10 @@ def test_remake_with_gaps_publishes_by_code(tmp_path: Path, monkeypatch: Any) ->
     assert job["versions"] == {"z10_0581_0294": 2}
 
 
-def test_remake_records_its_paid_survey_once(tmp_path: Path, monkeypatch: Any) -> None:
-    """#252.2: a paid survey lands on the job and the row, never twice."""
+def test_remake_ignores_an_older_survey_on_a_cached_run(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#257.1: a cached survey records 0, never the ledger's past."""
     monkeypatch.setattr(
         "builder.plan.fetch_smoothed", lambda tile, candidates: {"fox": 5.0}
     )
@@ -868,7 +870,7 @@ def test_remake_records_its_paid_survey_once(tmp_path: Path, monkeypatch: Any) -
     store.build_jobs["j1"] = _remake_job()
     _seed_ready_tile(store)
     worker = _flow_worker(tmp_path, store, boreal_3x3())
-    survey = {"spent": 0.05, "updated": "2026-11-03"}
+    survey = {"spent": 0.05, "updated": "2026-11-01"}
     (tmp_path / "ledger.json").write_text(
         json.dumps(
             {
@@ -882,11 +884,34 @@ def test_remake_records_its_paid_survey_once(tmp_path: Path, monkeypatch: Any) -
     worker.handle_build_job("j1")
     job = store.build_jobs["j1"]
     assert job["status"] == "published"
-    assert job["cost_usd"] == 0.05
-    assert job["survey_usd"] == 0.05
-    assert store.tile_docs["z10_0581_0294"]["cost_usd"] == 0.05
-    worker._record_remake_survey_spend("j1", "z10_0581_0294")
-    assert store.build_jobs["j1"]["cost_usd"] == 0.05
+    assert job["cost_usd"] == 0.0
+    assert job["survey_cached"] is True
+    assert "survey_usd" not in job
+    assert store.tile_docs["z10_0581_0294"]["cost_usd"] == 0.0
+
+
+def test_remake_records_only_its_own_survey_call(tmp_path: Path) -> None:
+    """#257.1: a paid survey records its own call, not the past."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert store.claim_build_job("j1", worker.worker_id) is True
+    survey = {"spent": 0.08, "updated": "2026-11-03"}
+    (tmp_path / "ledger.json").write_text(
+        json.dumps(
+            {
+                "jobs": {"survey:z10_0581_0294": survey},
+                "days": {},
+                "total": 0.08,
+            }
+        )
+    )
+    worker._record_remake_survey_spend("j1", "z10_0581_0294", 0.05)
+    job = store.build_jobs["j1"]
+    assert job["cost_usd"] == 0.03
+    assert job["survey_usd"] == 0.03
+    worker._record_remake_survey_spend("j1", "z10_0581_0294", 0.05)
+    assert store.build_jobs["j1"]["cost_usd"] == 0.03
 
 
 def test_remake_marks_a_cached_survey_on_the_job(
@@ -1649,6 +1674,96 @@ def test_enrich_review_seats_the_items_own_plant(
     tiles_doc, _ = _pack_files(store, job["pack"])
     assert tiles_doc["plants"] == {"water": [{"id": "table_coral", "density": 0.245}]}
     assert tiles_doc["tiles"] == [A]
+
+
+def test_enrich_review_pack_failure_fails_the_item(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#257.3: bad_pack and PackExists fail the item with the reason."""
+    import json
+
+    from builder.grid import group_path
+    from builder.packs import PackExists
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A = "z10_0581_0294"
+
+    def run(job_id: str, blame: str) -> dict[str, Any]:
+        base = tmp_path / job_id
+        store = FakeStore()
+        worker = _flow_worker(base, store, boreal_3x3())
+        assert worker.world is not None
+        _named_list(worker.world)
+        cache = base / "cache"
+        made, blocked = make_tile(
+            A,
+            worker._habitat_grid(),
+            worker.world,
+            builder_root=base,
+            species_source=SpeciesSource(
+                client=_AnswerClient(_forest_survey("fox", "vole")), cache_dir=cache
+            ),
+        )
+        assert blocked is None and made is not None
+        store.blobs[group_path(A)] = json.dumps(
+            {
+                "format": 1,
+                "grid": "z10",
+                "group": [72, 36],
+                "version": 1,
+                "tiles": {A: made},
+                "blocked": {},
+            }
+        ).encode("utf-8")
+        plants = worker.world / "models" / "plants"
+        plants.mkdir(parents=True, exist_ok=True)
+        (plants / "table_coral.json").write_text(json.dumps({"id": "table_coral"}))
+        regions = base / "jobs" / job_id / "enrich_table_coral" / "regions"
+        regions.mkdir(parents=True)
+        (regions / f"tl_{A}.json").write_text(
+            json.dumps(
+                {
+                    "id": f"tl_{A}",
+                    "biome": "boreal_forest",
+                    "plants": {"water": [{"id": "table_coral", "density": 0.245}]},
+                    "species": {"playable": ["fox", "vole"]},
+                }
+            )
+        )
+        store.build_jobs[job_id] = _enrich_job(
+            tile=A,
+            tiles=[A],
+            items=["enrich_table_coral"],
+            enrich={"kind": "plant", "what": "table_coral", "from": "soft_coral"},
+            status="checking",
+            progress=[{"id": "enrich_table_coral", "status": "checking"}],
+            review={
+                "enrich_table_coral": {"by": "kai", "at": "t", "result": "shipped"}
+            },
+        )
+        with monkeypatch.context() as m:
+            m.setattr(
+                worker,
+                "_species_source",
+                lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+            )
+            if blame == "bad_pack":
+                m.setattr("builder.packs.check_pack", lambda packed: ["boom"])
+            else:
+
+                def taken(*args: Any, **kwargs: Any) -> Any:
+                    raise PackExists("taken")
+
+                m.setattr("builder.packs.publish_pack", taken)
+            worker.handle_build_job(job_id)
+        return store.build_jobs[job_id]
+
+    for blame in ("bad_pack", "PackExists"):
+        job = run(f"j-{blame}", blame)
+        assert job["status"] == "failed"
+        assert job["error"] == "bad_pack"
+        assert job["progress"] == [{"id": "enrich_table_coral", "status": "failed"}]
 
 
 def test_enrich_review_fails_when_every_tile_skips(

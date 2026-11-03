@@ -12,7 +12,7 @@ jobs:
       # The world revision the compat check runs against (#160.4).
       # Bump with the world when it moves; the revision step below
       # prints the exact commit every run tested.
-      WORLD_REV: a0717b6ff966217a4f95a4654e150b55a654977b
+      WORLD_REV: 2178899f832163e2a2e37e11477434ea2f313161
       ANIMUNDO_WORLD: ${{ github.workspace }}/animundo-world
     steps:
       - uses: actions/checkout@v4

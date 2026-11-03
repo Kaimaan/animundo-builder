@@ -19,14 +19,7 @@ from typing import Any
 
 
 def commit(path: Path | None) -> str:
-    """The checkout's short commit, or "unknown" without git.
-
-    The deployed image has no `.git`, so the deploy bakes its
-    commit into `BUILDER_COMMIT`, which wins here (#252.3).
-    """
-    baked = os.environ.get("BUILDER_COMMIT", "").strip()
-    if baked:
-        return baked
+    """The checkout's short commit, or "unknown" without git."""
     if path is None:
         return "unknown"
     try:
@@ -42,7 +35,12 @@ def commit(path: Path | None) -> str:
     return out or "unknown"
 
 
-BUILDER_COMMIT = commit(Path(__file__).resolve().parent.parent)
+def _baked_commit() -> str:
+    """The deploy's commit from the image, or "" locally (#252.3, #257.2)."""
+    return os.environ.get("BUILDER_COMMIT", "").strip()
+
+
+BUILDER_COMMIT = _baked_commit() or commit(Path(__file__).resolve().parent.parent)
 """The builder release that records: its own short commit."""
 
 

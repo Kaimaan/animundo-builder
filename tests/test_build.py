@@ -365,16 +365,27 @@ def test_publish_group_writes_tile_history_doc() -> None:
     assert store.tile_history[-1]["tile"] == "z10_0581_0294"
 
 
-def test_baked_commit_wins_without_git(tmp_path: Path, monkeypatch: Any) -> None:
-    """#252.3: the image's BUILDER_COMMIT names the maker."""
-    from builder.history import commit
+def test_baked_commit_names_only_the_builder(tmp_path: Path, monkeypatch: Any) -> None:
+    """#257.2: BUILDER_COMMIT never leaks into another checkout's commit."""
+    from builder.history import _baked_commit, commit
 
     monkeypatch.setenv("BUILDER_COMMIT", "efd705e")
-    assert commit(None) == "efd705e"
-    assert commit(tmp_path) == "efd705e"
-    monkeypatch.delenv("BUILDER_COMMIT")
+    assert _baked_commit() == "efd705e"
     assert commit(None) == "unknown"
     assert commit(tmp_path) == "unknown"
+    monkeypatch.delenv("BUILDER_COMMIT")
+    assert _baked_commit() == ""
+
+
+def test_tile_maker_falls_back_to_the_baked_commit(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#257.2: without git the tile's maker is the deployed commit."""
+    from builder import history as history_mod
+    from builder.tiles import _versions
+
+    monkeypatch.setattr(history_mod, "BUILDER_COMMIT", "baked123")
+    assert _versions(tmp_path, tmp_path)[0] == "baked123"
 
 
 def test_publish_group_skips_an_identical_tile() -> None:

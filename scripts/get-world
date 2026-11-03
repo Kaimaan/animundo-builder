@@ -3,7 +3,7 @@
 # The tests that need the world skip without it; run this once to run them.
 # Same pin as CI (.github/workflows/check.yml WORLD_REV).
 set -eu
-PIN="a0717b6ff966217a4f95a4654e150b55a654977b"
+PIN="2178899f832163e2a2e37e11477434ea2f313161"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="${1:-$(dirname "$HERE")/animundo-world}"
 if [ -d "$DEST/.git" ]; then

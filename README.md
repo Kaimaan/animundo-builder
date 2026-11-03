@@ -11,8 +11,8 @@ Every model the builder calls is a Meta model, and every call goes through one f
 | Model | Model id | Where it runs | What it does |
 |---|---|---|---|
 | Muse Spark | `muse-spark-1.3` | Meta Model API | Research with web search and sources; the tile's animals from the game's list (structured output, one call a tile, cached) |
-| Muse Spark Open | `meta-models/muse-spark-open-1026` | Baseten | The strict forms (animal edits, home choices, plants) and the words, falling back to Muse Spark inside the same caps |
-| SAM 3.1 | `sam-3.1` | Meta Model API | Masks for measuring reference sheets ([`builder/sam.py`](builder/sam.py) decodes the wire format; original code, no SDK copied) |
+| Muse Spark Open | `meta-models/muse-spark-open-1026` | Baseten | The strict forms (animal edits, home choices, plants), the words, and the render and text reviews — [`builder/pipeline.py`](builder/pipeline.py) sends them to the open host first, falling back to Muse Spark inside the same caps |
+| SAM 3.1 | `sam-3.1` | Meta Model API | Masks for measuring reference sheets — reference sheets, command-line path only (`ReferencesStage`, run from `builder`); not in the live worker ([`builder/sam.py`](builder/sam.py) decodes the wire format; original code, no SDK copied) |
 
 The transport is the `openai` Python package pointed at Meta's endpoint, Meta's own documented pattern. No OpenAI service, key or model is used. `grep -rn "BASE_URL =" builder/meta.py` shows the only two hosts. Each call's usage record says which host ran it. Caps are checked before every model call: each call reserves its worst-case cost against the job, the day and the total, and isn't sent if that would cross a cap or if the ledger can't be read ([`builder/ledger.py`](builder/ledger.py), [`builder/meta.py`](builder/meta.py)). Each build job also carries its own budget, set by the game.
 
@@ -24,7 +24,7 @@ From a fresh clone, with no key and no account (all $0):
 uv sync && uv run pytest
 ```
 
-Installs the environment, then prints `1121 passed, 105 skipped`: the full suite green with no key, no animundo-world and no Blender (Nov 3). The skips are tests that need a world checkout; each says so.
+Installs the environment, then prints `1135 passed, 111 skipped`: the full suite green with no key, no animundo-world and no Blender (Nov 3). The skips are tests that need a world checkout; each says so.
 
 ```
 ./scripts/get-world
@@ -110,7 +110,7 @@ An approved border build makes the **minimum set** the tile needs: its home, one
 | Animal | A new animal: a short list of edits to the closest reference model; code does the geometry, Blender builds it | Muse Spark Open or Muse Spark |
 | Plant | A new findable plant, drafted from the home's named plants | Muse Spark Open or Muse Spark |
 | Words | English and Finnish for every new text | Muse Spark Open or Muse Spark |
-| Pack | Runs every check and lays the batch out for review | none (code) |
+| Pack | Border build's items: laid out for a person, who reviews in the game's admin console; shipped items publish with the tile. Enrich items and places: the checks replace review — pass everything and the content pack goes live (0049) | none (code) |
 
 The hosted worker runs all of this on Modal ([`deploy/modal_worker.py`](deploy/modal_worker.py), [docs](docs/worker.md)): one always-on container, job folders on a volume, the world pulled before every tile it makes.
 
@@ -219,9 +219,9 @@ This repository is public from its first commit. Never commit API keys, tokens, 
 
 ## To finish
 
-- [ ] `builder eval` and its results (T40).
-- [ ] `examples/`: real border builds from the event, with their reports and preview sheets (T41).
-- [ ] Later Muse session exports as release assets (Oct 26–28 are up; Nov 2 is exported and scanned, awaiting Kai's review).
+- [ ] `builder eval` and its results (T40) — a scored quality gate; judges can read the suite instead.
+- [ ] `examples/`: real border builds from the event, with their reports and preview sheets (T41) — nice-to-have evidence; the live game and Quick check show the same path working.
+- [ ] Later Muse session exports as release assets (Oct 26–28 are up; Nov 2 is exported and scanned, awaiting Kai's review) — provenance only, not needed to judge the entry.
 
 ## Licence
 

@@ -1384,6 +1384,10 @@ def _versions(builder_root: Path, world: Path) -> tuple[str, str]:
 
     maker = run(["git", "describe", "--tags", "--always"], builder_root)
     commit = run(["git", "rev-parse", "--short", "HEAD"], world)
+    if maker is None:
+        from .history import BUILDER_COMMIT as baked
+
+        maker = baked or None
     return maker or "dev", commit or "unknown"
 
 

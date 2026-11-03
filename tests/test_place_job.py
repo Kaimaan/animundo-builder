@@ -781,6 +781,187 @@ def test_place_ship_species_fails_a_failed_item(tmp_path: Path) -> None:
     assert store.build_jobs["j1"]["error"] == "item_failed"
 
 
+def _lion_answer() -> dict[str, Any]:
+    """A tile survey with only the unfiled lion present (#266.3)."""
+    return {
+        "parts": [{"kind": "forest", "species": ["lion"]}],
+        "present": ["lion"],
+        "date": "2026-11-03",
+        "plants": [],
+        "trees": [],
+        "place": "Boreal forest",
+    }
+
+
+def _rich_biome(world: Path) -> None:
+    (world / "biomes" / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "boreal_forest",
+                "ecoregions": [717],
+                "plants": {
+                    "trees": [{"id": "pine", "share": 1.0}],
+                    "cover": [],
+                    "water": [],
+                },
+            }
+        )
+    )
+
+
+def _build_research(**over: Any) -> dict[str, Any]:
+    research: dict[str, Any] = {
+        "tiles": [A],
+        "biome": "boreal_forest",
+        "centre": {"lat": 60.5, "lon": 24.5},
+        "name": {"en": "Nuuksio", "fi": "Nuuksio", "fi_gen": "Nuuksion"},
+        "short": {"en": "Nuuksio", "fi": "Nuuksio", "fi_gen": "Nuuksion"},
+        "country": "fi",
+        "animals": [{"id": "lion", "source": "s"}],
+        "plants": [],
+        "price_parts": {
+            "tiles": {"n": 1, "usd": 0.50, "from": "fixed"},
+            "animals": [{"id": "lion", "usd": 0.42, "from": "fixed"}],
+            "plants": [],
+            "total": 0.92,
+        },
+    }
+    research.update(over)
+    return research
+
+
+def _stub_make_lion(worker: Worker, job_id: str, item: dict[str, Any]) -> None:
+    """A made lion as run_item would leave it: files plus ship state."""
+    item_dir = worker.jobs_dir / job_id / item["id"]
+    (item_dir / "animals").mkdir(parents=True)
+    (item_dir / "animals" / "lion.json").write_text(
+        json.dumps(
+            {
+                "id": "lion",
+                "playable": True,
+                "habitats": ["boreal_forest"],
+                "hunts": ["vole"],
+                "diet": [],
+            }
+        )
+    )
+    (item_dir / "state.json").write_text(
+        json.dumps({"completed": ["ship"], "results": {"ship": {"pack": None}}})
+    )
+
+
+def test_place_builds_species_first_then_publishes_together(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#266.3: past the tile on an empty habitat; tile and species together."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_species", lambda *args, **kwargs: _lion_answer()
+    )
+
+    def fake_run_item(
+        self: Worker,
+        job_id: str,
+        job: dict[str, Any],
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        budget: float,
+    ) -> None:
+        _stub_make_lion(self, job_id, item)
+
+    monkeypatch.setattr(Worker, "run_item", fake_run_item)
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+    )
+    assert worker._claim("j1")
+    worker._place_build("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published", job.get("error")
+    data = json.loads(store.read_blob(group_path(A))[0].decode("utf-8"))
+    assert "lion" in data["tiles"][A]["species"]["playable"]
+    overlay = store.read_blob("packs/animal_lion/1/additions/tiles.json")[0]
+    assert overlay is not None
+    assert A in json.loads(overlay.decode("utf-8"))["tiles"]
+    place_blob = store.read_blob("packs/place_fi_nuuksio/1/places/fi_nuuksio.json")[0]
+    assert place_blob is not None
+
+
+def test_place_build_failing_animal_publishes_nothing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#266.3: an animal that fails keeps the tile off Storage too."""
+    from builder.stages.maker import _Stopped
+
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_species", lambda *args, **kwargs: _lion_answer()
+    )
+
+    def fail_stages(self: Worker, *args: Any, **kwargs: Any) -> None:
+        raise _Stopped("lion: no reference spec")
+
+    monkeypatch.setattr(Worker, "_run_stages", fail_stages)
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+    )
+    assert worker._claim("j1")
+    worker._place_build("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "item_failed"
+    assert store.read_blob(group_path(A))[0] is None
+    assert [n for n in store.blobs if n.startswith("packs/")] == []
+
+
+def test_place_build_no_short_sets_waiting_then_clears(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#266.2: a waiting place names its reason; moving on clears it."""
+    from builder.worker import _Off
+
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    research = _build_research()
+    del research["short"]
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=research,
+    )
+    assert worker._claim("j1")
+    worker._place_build("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert job["status"] == "building"
+    assert job["waiting"] == "no_short"
+    assert store.read_blob(group_path(A))[0] is None
+    research["short"] = {"en": "Nuuksio", "fi": "Nuuksio", "fi_gen": "Nuuksion"}
+    store.build_jobs["j1"]["research"] = research
+
+    def stop_now(*args: Any, **kwargs: Any) -> None:
+        raise _Off()
+
+    monkeypatch.setattr(Worker, "run_item", stop_now)
+    worker._place_build("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert "waiting" not in job
+
+
 def test_place_job_validates() -> None:
     """The #224.1 request shape validates."""
     from builder.schemas import validate

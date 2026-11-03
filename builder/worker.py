@@ -1067,11 +1067,17 @@ class Worker:
         print(f"build job {job_id}: yes accepted at ${cap:.2f}; stage C builds it")
 
     def _place_build(self, job_id: str, job: dict[str, Any]) -> None:
-        """Stage C: tiles, species, place file, checks, pack (#239, #259)."""
+        """Stage C: species, tiles, place file, checks, pack (#239, #266).
+
+        The species come first: a place tile must not need
+        animals that the same job has yet to make (#266.1).
+        Nothing publishes until every species ships, so a
+        failed species keeps the tile off Storage too and a
+        half place never goes live.
+        """
         import json
 
         from . import place as place_mod
-        from .tiles import check_with_world, make_tile
 
         assert self.world is not None
         if not self._claim(job_id):
@@ -1111,39 +1117,38 @@ class Worker:
                 "{en, fi, fi_gen} and research.country (2-letter code); "
                 "the build resumes on the next poll"
             )
+            self._update(job_id, {"waiting": "no_short"})
             return
+        if job.get("waiting") is not None:
+            self._update(job_id, {"waiting": DELETE})
+            job = self.store.get_build_job(job_id) or job
+            research = job.get("research") or {}
         tiles = [t for t in research.get("tiles", []) if isinstance(t, str)]
         if not tiles:
             print(f"build job {job_id}: research names no tiles", file=sys.stderr)
             self._fail(job_id, "no_tiles")
             return
-        survey_before = sum(self._survey_spent(t) for t in tiles)
-        made: dict[str, dict[str, Any]] = {}
-        over_cap: list[str] = []
-        for tile in tiles:
-            source = self._species_source(tile)
-            tile_made, blocked = make_tile(
-                tile,
-                self._habitat_grid(),
-                self.world,
-                builder_root=self.builder_root,
-                species_source=source,
-                over_cap=over_cap,
-            )
-            if blocked is not None or tile_made is None:
-                print(f"build job {job_id}: {tile} blocked: {blocked}", file=sys.stderr)
-                self._fail(job_id, "tile_blocked")
-                return
-            failures = check_with_world(tile_made, self.world)
-            if failures:
-                detail = "; ".join(f"{c}: {', '.join(p)}" for c, p in failures)
-                print(f"build job {job_id}: {tile}: {detail}", file=sys.stderr)
-                self._fail(job_id, "tile_check")
-                return
-            made[tile] = tile_made
-        self._record_place_survey_spend(job_id, job, survey_before)
-        if over_cap:
-            self._update(job_id, {"plants_over_cap": sorted(set(over_cap))})
+        items = self._place_make_species(
+            job_id, job, research, biome, tiles[0], approved
+        )
+        if items is None:
+            return
+        ship_world = self._place_ship_world(
+            job_id, self.jobs_dir / job_id, research, biome
+        )
+        made = self._place_make_tiles(job_id, job, tiles, ship_world)
+        if made is None:
+            return
+        greens = biome.get("plants") if isinstance(biome, dict) else None
+        tree_ids = {
+            entry.get("id")
+            for entry in ((greens or {}).get("trees") or [])
+            if isinstance(entry, dict) and entry.get("id")
+        }
+        if not self._place_ship_all_species(
+            job_id, job, items, ship_world, made, tree_ids
+        ):
+            return
         from . import build as build_mod
 
         commit = self.world_commit or "unknown"
@@ -1155,12 +1160,8 @@ class Worker:
                 commit,
                 history={"job": job_id, "kind": "place"},
             )
-        if not self._place_make_species(
-            job_id, job, research, biome, tiles[0], approved
-        ):
-            return
         job = self.store.get_build_job(job_id) or job
-        self._place_publish(job_id, job, research, biome, made)
+        self._place_publish(job_id, job, research, biome, made, ship_world)
 
     def _record_place_survey_spend(
         self, job_id: str, job: dict[str, Any], survey_before: float
@@ -1183,12 +1184,17 @@ class Worker:
         biome: dict[str, Any],
         first_tile: str,
         approved: float,
-    ) -> bool:
+    ) -> list[dict[str, Any]] | None:
         """Each missing animal and plant through the item chain (#222.5).
 
         The biome's plant list wins over the research's when it
-        names any (#239.5); research plants otherwise. False stops
-        the build (off, paused, or out of budget).
+        names any (#239.5); research plants otherwise. Returns
+        the built items, or nothing after failing or stopping
+        the build (off, paused, or out of budget). Runs before
+        the tiles exist, so with no tile regions: the maker's
+        hunts come from the research alone, and the tile webs
+        still compute from every filed species at tile time
+        (#266.1).
         """
         from . import place as place_mod
         from .animal_list import find_list, load_list
@@ -1259,36 +1265,140 @@ class Worker:
                 continue
             if not self._fits_budget(item, job, approved):
                 self._fail(job_id, "budget")
-                return False
+                return None
             self._require_lease(job_id)
-            item_dir = self.jobs_dir / job_id / item["id"]
-            item_dir.mkdir(parents=True, exist_ok=True)
-            self._write_enrich_places(
-                job_id,
-                item_dir,
-                [t for t in research.get("tiles", []) if isinstance(t, str)],
-                item,
-            )
             try:
                 self.run_item(job_id, job, first_tile, plan, item, approved)
             except _Off:
                 print(f"build job {job_id}: off switch stopped {item['id']}")
-                return False
+                return None
             except _Paused:
                 print(f"build job {job_id}: spend uncertain, {item['id']} paused")
                 self._update(job_id, {"error": "paused_spend_uncertain"})
-                return False
+                return None
             except _BudgetOut as error:
                 self._fail(job_id, error.code)
-                return False
+                return None
             job = self.store.get_build_job(job_id) or job
-            if not self._place_ship_species(job_id, job, item):
-                return False
+            if not self._ship_completed(job_id, item["id"]):
+                entry = next(
+                    (e for e in job.get("progress", []) if e.get("id") == item["id"]),
+                    {},
+                )
+                print(
+                    f"build job {job_id}: {item['id']} failed: "
+                    f"{entry.get('error', 'its make failed')}",
+                    file=sys.stderr,
+                )
+                self._fail(job_id, "item_failed")
+                return None
+        return items
+
+    def _place_make_tiles(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        tiles: list[str],
+        ship_world: Any,
+    ) -> dict[str, dict[str, Any]] | None:
+        """The place's tiles, made with its new species already filed (#266.1).
+
+        The maker runs against the ship checkout, so the tile
+        webs seat every researched species the build just made
+        instead of blocking on the missing ones. A blocked or
+        failing tile fails the build; nothing is published yet.
+        """
+        from .tiles import check_with_world, make_tile
+
+        survey_before = sum(self._survey_spent(t) for t in tiles)
+        made: dict[str, dict[str, Any]] = {}
+        over_cap: list[str] = []
+        for tile in tiles:
+            source = self._species_source(tile)
+            tile_made, blocked = make_tile(
+                tile,
+                self._habitat_grid(),
+                ship_world,
+                builder_root=self.builder_root,
+                species_source=source,
+                over_cap=over_cap,
+            )
+            if blocked is not None or tile_made is None:
+                print(f"build job {job_id}: {tile} blocked: {blocked}", file=sys.stderr)
+                self._fail(job_id, "tile_blocked")
+                return None
+            failures = check_with_world(tile_made, ship_world)
+            if failures:
+                detail = "; ".join(f"{c}: {', '.join(p)}" for c, p in failures)
+                print(f"build job {job_id}: {tile}: {detail}", file=sys.stderr)
+                self._fail(job_id, "tile_check")
+                return None
+            made[tile] = tile_made
+        self._record_place_survey_spend(job_id, job, survey_before)
+        if over_cap:
+            self._update(job_id, {"plants_over_cap": sorted(set(over_cap))})
+        return made
+
+    def _place_ship_all_species(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        items: list[dict[str, Any]],
+        ship_world: Any,
+        made: dict[str, dict[str, Any]],
+        tree_ids: set[str],
+    ) -> bool:
+        """Every built item onto the tiles, before anything publishes (#266.1).
+
+        The remakes run against the ship checkout with the new
+        species filed, so each overlay seats from the same tiles
+        the build is about to publish. The first item that
+        can't ship fails the build, and the tiles stay off
+        Storage with it. A tree the tiles seat rides the tile:
+        overlays only cover ground plants, so it ships with no
+        pack beyond its own.
+        """
+        for item in items:
             job = self.store.get_build_job(job_id) or job
+            entry = next(
+                (e for e in job.get("progress", []) if e.get("id") == item["id"]),
+                {},
+            )
+            if entry.get("pack"):
+                print(f"build job {job_id}: {item['id']} already shipped")
+                continue
+            if self._place_tree_rides(item, made, tree_ids):
+                print(f"build job {job_id}: {item['id']} rides its tile; no overlay")
+                pack = self._ship_pack(job_id, item["id"])
+                if pack is not None:
+                    self._note_item_pack(job_id, item["id"], pack)
+                continue
+            if not self._place_ship_species(job_id, job, item, ship_world):
+                return False
         return True
 
+    @staticmethod
+    def _place_tree_rides(
+        item: dict[str, Any],
+        made: dict[str, dict[str, Any]],
+        tree_ids: set[str],
+    ) -> bool:
+        """A biome tree seated on every made tile needs no overlay (#266.1)."""
+        if item.get("kind") != "plant" or item.get("what") not in tree_ids:
+            return False
+        if not made:
+            return False
+        return all(
+            any(
+                entry.get("id") == item["what"]
+                for entry in (tile.get("plants") or {}).get("trees", []) or []
+                if isinstance(entry, dict)
+            )
+            for tile in made.values()
+        )
+
     def _place_ship_species(
-        self, job_id: str, job: dict[str, Any], item: dict[str, Any]
+        self, job_id: str, job: dict[str, Any], item: dict[str, Any], world: Any = None
     ) -> bool:
         """The made species onto the place's tiles, as its overlay (#222.5).
 
@@ -1297,11 +1407,16 @@ class Worker:
         species, and a new pack version carries the species
         plus `additions/tiles.json` (#220). An item whose make
         failed, or a species that can't ship, fails the job
-        first (0049-style: a half place never goes live).
+        first (0049-style: a half place never goes live). The
+        remake runs against the given world (the ship checkout
+        with the build's new species filed), else this worker's
+        own (#266.1).
         """
         from . import packs as packs_mod
 
         assert self.world is not None
+        if world is None:
+            world = self.world
         if not self._ship_completed(job_id, item["id"]):
             entry = next(
                 (e for e in job.get("progress", []) if e.get("id") == item["id"]),
@@ -1324,7 +1439,7 @@ class Worker:
             return False
         self._require_lease(job_id)
         passing, made_by_tile, gaps, skipped = self._remake_enrich_tiles(
-            job_id, shim, item, ship
+            job_id, shim, item, ship, world
         )
         what = str(item["what"])
         self._flag_gaps(job_id, item, gaps, what)
@@ -1338,7 +1453,7 @@ class Worker:
             overlay = packs_mod.build_tiles_overlay(
                 str(item["kind"]),
                 what,
-                self.world,
+                world,
                 [made_by_tile[tile] for tile in passing],
                 passing,
             )
@@ -1390,13 +1505,16 @@ class Worker:
             shutil.rmtree(overlay)
         shutil.copytree(self.world, overlay, ignore=shutil.ignore_patterns(".git"))
         for src in sorted(job_dir.glob("*/animals/*.json")):
-            shutil.copy(src, overlay / "animals" / src.name)
+            if overlay not in src.parents:
+                shutil.copy(src, overlay / "animals" / src.name)
         greens = overlay / "models" / "plants"
         greens.mkdir(parents=True, exist_ok=True)
         for src in sorted(job_dir.glob("*/models/plants/*.json")):
-            shutil.copy(src, greens / src.name)
+            if overlay not in src.parents:
+                shutil.copy(src, greens / src.name)
         for src in sorted(job_dir.glob("*/models/plants/*.glb")):
-            shutil.copy(src, greens / src.name)
+            if overlay not in src.parents:
+                shutil.copy(src, greens / src.name)
         habitat = biome.get("habitat") if isinstance(biome, dict) else None
         try:
             listing_path = overlay / "animal-list.json"
@@ -1477,6 +1595,7 @@ class Worker:
         research: dict[str, Any],
         biome: dict[str, Any],
         made: dict[str, dict[str, Any]],
+        ship_world: Any = None,
     ) -> None:
         """The place file, its checks, pack, wanted and publish (#222.6, #224)."""
         import json
@@ -1502,7 +1621,8 @@ class Worker:
             self._fail(job_id, "no_short")
             return
         place_id = place["id"]
-        ship_world = self._place_ship_world(job_id, job_dir, research, biome)
+        if ship_world is None:
+            ship_world = self._place_ship_world(job_id, job_dir, research, biome)
         check_dir = job_dir / "place-check"
         check_dir.mkdir(parents=True, exist_ok=True)
         place_path = check_dir / f"{place_id}.json"
@@ -2686,6 +2806,7 @@ class Worker:
         job: dict[str, Any],
         item: dict[str, Any],
         ship: set[str] | None = None,
+        world: Any = None,
     ) -> tuple[
         list[str],
         dict[str, dict[str, Any]],
@@ -2699,6 +2820,9 @@ class Worker:
         skips with the reason; the job carries on (#227.2). A
         listed animal whose habitats don't hold the tile's
         biome skips as a habitat mismatch, unlisted as now (#258.2).
+        The remake runs against the given world, else this
+        worker's own; a place build passes its ship checkout
+        with the new species filed (#266.1).
         """
         import dataclasses
         import json
@@ -2708,6 +2832,8 @@ class Worker:
         from .tiles import _animal_fits, make_tile
 
         assert self.world is not None
+        if world is None:
+            world = self.world
         source = dataclasses.replace(self._species_source(), client=None)
         groups: dict[str, dict[str, Any]] = {}
         passing: list[str] = []
@@ -2729,7 +2855,7 @@ class Worker:
                 made, blocked = make_tile(
                     tile,
                     self._habitat_grid(),
-                    self.world,
+                    world,
                     builder_root=self.builder_root,
                     species_source=source,
                 )

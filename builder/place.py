@@ -1148,11 +1148,19 @@ def place_tiles(world: Path, place_id: str, survey_tile: str) -> list[str]:
     return [survey_tile]
 
 
-def country_name(code: str, builder_root: Path) -> str | None:
-    """The English country name for a 2-letter code, else nothing (#239.3)."""
+def country_name(code: str, builder_root: Path | None) -> str | None:
+    """The English country name for a 2-letter code, else nothing (#239.3).
+
+    Without a root the checkout's own data answers (#266.1):
+    the worker runs with no root, and a place publish must not
+    need one.
+    """
+    from .schemas import ROOT as _ROOT
+
+    root = builder_root if builder_root is not None else _ROOT
     try:
         names = json.loads(
-            (builder_root / "data" / "country-names.json").read_text(encoding="utf-8")
+            (root / "data" / "country-names.json").read_text(encoding="utf-8")
         ).get("names", {})
     except (OSError, ValueError):
         return None
@@ -1342,7 +1350,7 @@ def write_job_place(
     world: Path,
     made: dict[str, dict[str, Any]],
     grid: Any,
-    builder_root: Path,
+    builder_root: Path | None,
 ) -> dict[str, Any]:
     """The live place file from stage C's build, by code (#239.3).
 

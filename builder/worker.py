@@ -1025,6 +1025,7 @@ class Worker:
             self._fail(job_id, "no_plan")
             return
         self.store.set_plan(tile, plan)
+        self._record_remake_survey_spend(job_id, tile)
         if plan.get("blocked"):
             self._fail(job_id, str(plan["blocked"]))
             return
@@ -1088,6 +1089,33 @@ class Worker:
         job = self.store.get_build_job(job_id) or job
         self._snapshot_plan(job_id, job, tile)
         self.build_items(job_id, job, tile)
+
+    def _record_remake_survey_spend(self, job_id: str, tile: str) -> None:
+        """The remake's survey spend onto the job, once (#252.2).
+
+        A paid survey joins `cost_usd`, with `survey_usd` marking
+        what joined so a re-run never adds it twice and the
+        history row adds only new spend. A free survey (cache)
+        says so on the job instead.
+        """
+        from .ledger import FileLedger
+
+        job = self.store.get_build_job(job_id) or {}
+        if "survey_usd" in job or "survey_cached" in job:
+            return
+        try:
+            spent = FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
+        except OSError:
+            return
+        if spent > 0:
+            before = job.get("cost_usd", 0.0)
+            before = before if isinstance(before, (int, float)) else 0.0
+            self._update(
+                job_id,
+                {"cost_usd": round(before + spent, 6), "survey_usd": round(spent, 6)},
+            )
+        else:
+            self._update(job_id, {"survey_cached": True})
 
     @staticmethod
     def _remake_cap(job: dict[str, Any]) -> float:
@@ -2118,7 +2146,9 @@ class Worker:
         """The job's half of a tile history row (#165.1, #195.2).
 
         With a tile, the tile's own survey spend joins the job's
-        cost, so the row carries what the tile really cost.
+        cost, so the row carries what the tile really cost. Spend
+        the job already carries (`survey_usd`, #252.2) joins only
+        its new remainder, never twice.
         """
         from .ledger import FileLedger
 
@@ -2127,9 +2157,12 @@ class Worker:
         total = cost if isinstance(cost, (int, float)) else 0.0
         if tile is not None:
             try:
-                total += FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
+                survey = FileLedger(self.config.ledger_path).job_spent(f"survey:{tile}")
             except OSError:
-                pass
+                survey = 0.0
+            recorded = job.get("survey_usd", 0.0)
+            recorded = recorded if isinstance(recorded, (int, float)) else 0.0
+            total += max(0.0, survey - recorded)
         return {
             "job": job_id,
             "kind": kind,

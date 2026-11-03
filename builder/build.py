@@ -451,7 +451,10 @@ def publish_group(
     old reason). Returns the group Storage path. With `history`
     (job, kind, cost_usd), a made/remade row lands in the tile
     history (#165), and the tile's latest row at
-    `tile_history/<tile>` (#195.2).
+    `tile_history/<tile>` (#195.2). A remake whose content
+    equals the published tile writes nothing: no new version,
+    no row, no index touch (#252.1); the tile keeps the
+    published version.
     """
     from . import history as history_mod
     from .tiles import write_group
@@ -459,6 +462,19 @@ def publish_group(
 
     gcol, grow = group(tile)
     blob_path = group_path(tile)
+    fresh_raw, _ = store.read_blob(blob_path)
+    if fresh_raw is not None:
+        try:
+            fresh = json.loads(fresh_raw.decode("utf-8"))
+        except ValueError:
+            fresh = {}
+        old_tile = (fresh.get("tiles") or {}).get(tile)
+        if isinstance(old_tile, dict) and _content(made_tile) == _content(old_tile):
+            made_tile["version"] = int(
+                old_tile.get("version") or fresh.get("version") or 1
+            )
+            print(f"{tile} unchanged; keeping version {made_tile['version']}")
+            return blob_path
     last: GenerationMismatch | None = None
     data: dict[str, Any] = {}
     old: dict[str, Any] = {"tiles": {}, "blocked": {}}

@@ -1450,7 +1450,15 @@ def _make_place_tile(
         made_tile["ecoregion"] = eco1
     if wanted:
         made_tile["wanted"] = wanted
-    made_tile["name"] = plan_name(habitat, lat, lon, world)
+    # A live place's tile carries the place's name (#252.4); the
+    # compass is only the fallback for a nameless place file.
+    placed_name = place.get("name") or {}
+    if placed_name.get("en"):
+        made_tile["name"] = {"en": placed_name["en"]}
+        if placed_name.get("fi"):
+            made_tile["name"]["fi"] = placed_name["fi"]
+    else:
+        made_tile["name"] = plan_name(habitat, lat, lon, world)
     if waters:
         made_tile["plants"] = {"water": waters}
     shore = shore_for_tile(tile, habitat_grid.grid_dir)
@@ -1860,6 +1868,8 @@ def make_tile(
         assert sea is not None and land_style is not None and land_eco is not None
         del made_tile["ecoregion"]
         made_tile["sea"] = sea["sea"]
+        # The sea's own names: the world's check requires them
+        # (#252.4's compass name waits on the world; see log).
         made_tile["name"] = sea["name"]
         made_tile["land"] = land_style
         made_tile["land_share"] = round(land, 2)

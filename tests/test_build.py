@@ -365,6 +365,39 @@ def test_publish_group_writes_tile_history_doc() -> None:
     assert store.tile_history[-1]["tile"] == "z10_0581_0294"
 
 
+def test_baked_commit_wins_without_git(tmp_path: Path, monkeypatch: Any) -> None:
+    """#252.3: the image's BUILDER_COMMIT names the maker."""
+    from builder.history import commit
+
+    monkeypatch.setenv("BUILDER_COMMIT", "efd705e")
+    assert commit(None) == "efd705e"
+    assert commit(tmp_path) == "efd705e"
+    monkeypatch.delenv("BUILDER_COMMIT")
+    assert commit(None) == "unknown"
+    assert commit(tmp_path) == "unknown"
+
+
+def test_publish_group_skips_an_identical_tile() -> None:
+    """#252.1: same content writes nothing and keeps the version."""
+    store = FakeStore()
+    first = _made_tile()
+    build_mod.publish_group(
+        "z10_0581_0294", first, store, "abc123", {"job": "j1", "kind": "code"}
+    )
+    assert first["version"] == 1
+    assert len(store.tile_history) == 1
+    before = store.read_blob("tiles/v2/z10/072_036.json")[0]
+    again = _made_tile()
+    again["made"] = {"by": "b", "maker": "m2", "world": "w", "at": "later"}
+    path = build_mod.publish_group(
+        "z10_0581_0294", again, store, "abc123", {"job": "j2", "kind": "code"}
+    )
+    assert path == "tiles/v2/z10/072_036.json"
+    assert again["version"] == 1
+    assert store.read_blob(path)[0] == before
+    assert len(store.tile_history) == 1
+
+
 def test_publish_group_moves_counts_by_delta() -> None:
     store = FakeStore()
     store.write_blob(

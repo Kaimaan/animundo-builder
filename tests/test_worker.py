@@ -804,6 +804,55 @@ def test_remake_with_gaps_publishes_by_code(tmp_path: Path, monkeypatch: Any) ->
     assert job["versions"] == {"z10_0581_0294": 2}
 
 
+def test_remake_records_its_paid_survey_once(tmp_path: Path, monkeypatch: Any) -> None:
+    """#252.2: a paid survey lands on the job and the row, never twice."""
+    monkeypatch.setattr(
+        "builder.plan.fetch_smoothed", lambda tile, candidates: {"fox": 5.0}
+    )
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    _seed_ready_tile(store)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    survey = {"spent": 0.05, "updated": "2026-11-03"}
+    (tmp_path / "ledger.json").write_text(
+        json.dumps(
+            {
+                "jobs": {"survey:z10_0581_0294": survey},
+                "days": {},
+                "total": 0.05,
+            }
+        )
+    )
+    worker.species = _forest_survey("fox", "vole")
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["cost_usd"] == 0.05
+    assert job["survey_usd"] == 0.05
+    assert store.tile_docs["z10_0581_0294"]["cost_usd"] == 0.05
+    worker._record_remake_survey_spend("j1", "z10_0581_0294")
+    assert store.build_jobs["j1"]["cost_usd"] == 0.05
+
+
+def test_remake_marks_a_cached_survey_on_the_job(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#252.2: a free survey says cached on the job."""
+    monkeypatch.setattr(
+        "builder.plan.fetch_smoothed", lambda tile, candidates: {"fox": 5.0}
+    )
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    _seed_ready_tile(store)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    worker.species = _forest_survey("fox", "vole")
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["cost_usd"] == 0.0
+    assert job["survey_cached"] is True
+
+
 def test_remake_build_path_prices_its_items(tmp_path: Path) -> None:
     """#243.3: a remake that needs making waits with the build price."""
     store = FakeStore()

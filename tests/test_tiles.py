@@ -2739,6 +2739,26 @@ def test_remade_reef_tile_plays_its_corals_and_clownfish() -> None:
     assert tile_region.place(made)["terrain"]["reef"] > 0
 
 
+def test_live_place_tile_carries_the_places_name() -> None:
+    """#252.4: the reef's own tile is named for the place, not the compass."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    place = json.loads((world / "places" / "au_great_barrier_reef.json").read_text())
+    made, blocked = make_tile(
+        "z10_0927_0560", load_grid(grid_dir), world, builder_root=ROOT
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["name"] == {"en": place["name"]["en"], "fi": place["name"]["fi"]}
+
+
 def test_reef_map_places_coral_reef_when_region_names_no_biome() -> None:
     """#233: C builds coral_reef from the reef map without its region biome."""
     from unittest import mock

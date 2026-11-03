@@ -10,6 +10,7 @@ A failed history write is printed and never fails the tile.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -18,7 +19,14 @@ from typing import Any
 
 
 def commit(path: Path | None) -> str:
-    """The checkout's short commit, or "unknown" without git."""
+    """The checkout's short commit, or "unknown" without git.
+
+    The deployed image has no `.git`, so the deploy bakes its
+    commit into `BUILDER_COMMIT`, which wins here (#252.3).
+    """
+    baked = os.environ.get("BUILDER_COMMIT", "").strip()
+    if baked:
+        return baked
     if path is None:
         return "unknown"
     try:

@@ -46,6 +46,24 @@ WORKER_ENV = {
     "BUILDER_SPECIES_CACHE_DIR": "/jobs/species-cache",
 }
 
+
+def _deploy_commit() -> str:
+    """This checkout's short commit for the image's history rows (#252.3)."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=BUILDER,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+    except OSError:
+        return "unknown"
+    return out or "unknown"
+
+
+WORKER_ENV["BUILDER_COMMIT"] = _deploy_commit()
+
 #: The builder installs editable, not as a wheel: the wheel ships
 #: only the `builder/` package, but the worker reads the contracts,
 #: schemas, prompts and `exclusions.json` from the checkout next to

@@ -1470,6 +1470,148 @@ def test_enrich_review_overlays_only_the_tiles_that_list_it(
     assert writes.count("tiles/v2/index.json") == 0
 
 
+def test_enrich_review_seats_the_items_own_plant(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#251.2: a plant enrich overlays with its reviewed seating."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        A,
+        worker._habitat_grid(),
+        worker.world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(
+            client=_AnswerClient(_forest_survey("fox", "vole")), cache_dir=cache
+        ),
+    )
+    assert blocked is None and made is not None
+    assert "plants" not in made
+    blob = group_path(A)
+    store.blobs[blob] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": 1,
+            "tiles": {A: made},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    plants = worker.world / "models" / "plants"
+    plants.mkdir(parents=True, exist_ok=True)
+    (plants / "table_coral.json").write_text(json.dumps({"id": "table_coral"}))
+    regions = tmp_path / "jobs" / "j1" / "enrich_table_coral" / "regions"
+    regions.mkdir(parents=True)
+    (regions / f"tl_{A}.json").write_text(
+        json.dumps(
+            {
+                "id": f"tl_{A}",
+                "biome": "boreal_forest",
+                "plants": {"water": [{"id": "table_coral", "density": 0.245}]},
+                "species": {"playable": ["fox", "vole"]},
+            }
+        )
+    )
+    store.build_jobs["j1"] = _enrich_job(
+        tile=A,
+        tiles=[A],
+        items=["enrich_table_coral"],
+        enrich={"kind": "plant", "what": "table_coral", "from": "soft_coral"},
+        status="checking",
+        progress=[{"id": "enrich_table_coral", "status": "checking"}],
+        review={"enrich_table_coral": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A]
+    assert job["pack"] == "packs/plant_table_coral/1/"
+    tiles_doc, _ = _pack_files(store, job["pack"])
+    assert tiles_doc["plants"] == {"water": [{"id": "table_coral", "density": 0.245}]}
+    assert tiles_doc["tiles"] == [A]
+
+
+def test_enrich_review_fails_when_every_tile_skips(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#251.3: an empty overlay fails loud, never published."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _named_list(worker.world)
+    cache = tmp_path / "cache"
+    made, blocked = make_tile(
+        A,
+        worker._habitat_grid(),
+        worker.world,
+        builder_root=tmp_path,
+        species_source=SpeciesSource(
+            client=_AnswerClient(_forest_survey("fox", "vole")), cache_dir=cache
+        ),
+    )
+    assert blocked is None and made is not None
+    blob = group_path(A)
+    store.blobs[blob] = json.dumps(
+        {
+            "format": 1,
+            "grid": "z10",
+            "group": [72, 36],
+            "version": 1,
+            "tiles": {A: made},
+            "blocked": {},
+        }
+    ).encode("utf-8")
+    plants = worker.world / "models" / "plants"
+    plants.mkdir(parents=True, exist_ok=True)
+    (plants / "table_coral.json").write_text(json.dumps({"id": "table_coral"}))
+    store.build_jobs["j1"] = _enrich_job(
+        tile=A,
+        tiles=[A],
+        items=["enrich_table_coral"],
+        enrich={"kind": "plant", "what": "table_coral", "from": "soft_coral"},
+        status="checking",
+        progress=[{"id": "enrich_table_coral", "status": "checking"}],
+        review={"enrich_table_coral": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed"
+    assert job["error"] == "nothing_overlaid"
+    assert job["overlay"] == []
+    assert job["skipped"] == {A: "table_coral is not in the remake"}
+    assert job["progress"] == [{"id": "enrich_table_coral", "status": "failed"}]
+    assert "pack" not in job
+    assert not [name for name in store.blobs if name.startswith("packs/")]
+
+
 def test_enrich_review_overlays_drifted_tiles(tmp_path: Path, monkeypatch: Any) -> None:
     """#227.1: enrich judges the species, never the moved shore or plants."""
     import json
@@ -3662,10 +3804,11 @@ def test_enrich_review_ships_a_plant_pack_like_an_animal(
     )
     worker.review_enrich_job("j1", job)
     # No cached survey here, so the tiles skip; the point is the
-    # job sails past the ship, instead of waiting for a hand
-    # (#227.2: tiles never fail the job).
+    # job sails past the ship, instead of waiting for a hand.
+    # Since #251.3 an empty overlay fails loud, never published.
     done = store.build_jobs["j1"]
-    assert done["status"] == "published"
+    assert done["status"] == "failed"
+    assert done["error"] == "nothing_overlaid"
     assert done["overlay"] == []
     assert sorted(done["skipped"]) == ["z10_0580_0295", "z10_0581_0294"]
     assert "cached" in done["skipped"]["z10_0581_0294"]

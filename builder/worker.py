@@ -1639,6 +1639,11 @@ class Worker:
             "gaps": gaps,
             "skipped": skipped,
         }
+        if not passing:
+            self._update(job_id, update)
+            self._fail_item(job_id, job, item_id or "")
+            self._fail(job_id, "nothing_overlaid")
+            return
         if passing:
             try:
                 overlay = packs_mod.build_tiles_overlay(
@@ -1665,9 +1670,22 @@ class Worker:
                 print(f"build job {job_id}: pack: {error}", file=sys.stderr)
                 self._fail(job_id, "bad_pack")
                 return
+        if "pack" not in update:
+            self._update(job_id, update)
+            self._fail_item(job_id, job, item_id or "")
+            self._fail(job_id, "nothing_overlaid")
+            return
         self._update(job_id, update)
         print(f"build job {job_id}: overlaid {len(passing)} tiles")
         self._set_status(job_id, "published")
+
+    def _fail_item(self, job_id: str, job: dict[str, Any], item_id: str) -> None:
+        """The item's progress to failed, the rest untouched (#251.3)."""
+        progress = [
+            {**entry, "status": "failed"} if entry.get("id") == item_id else entry
+            for entry in job.get("progress", [])
+        ]
+        self._update(job_id, {"progress": progress})
 
     def _overlay_pack_files(
         self, job_id: str, item_id: str, prefix: str | None
@@ -1940,6 +1958,8 @@ class Worker:
                 skipped[tile] = f"remake raised: {error}"
                 print(f"{tile} skipped: remake raised: {error}")
                 continue
+            if made is not None:
+                made = self._seat_enrich_item(job_id, item, tile, kind, what, made)
             verdict, why = build_mod.overlay_decision(
                 tile,
                 (old.get("tiles") or {}).get(tile),
@@ -1959,6 +1979,66 @@ class Worker:
                 skipped[tile] = why
         gaps = self._overlay_gaps(kind, what, passing, made_by_tile, old_by_tile)
         return passing, made_by_tile, gaps, skipped
+
+    def _seat_enrich_item(
+        self,
+        job_id: str,
+        item: dict[str, Any],
+        tile: str,
+        kind: str,
+        what: str,
+        made: dict[str, Any],
+    ) -> dict[str, Any]:
+        """The remake with the item's own plant or animal seated (#251.2).
+
+        The review-time remake grows from the published biome,
+        which doesn't have the new thing yet, so without this
+        the item's own overlay always skips ("not in the
+        remake"). The seating comes from the job's reviewed
+        region file, as the checks saw it; a plant rides its
+        reviewed side and density into the remake, an animal its
+        reviewed species lists. No region file, or no seating
+        in it, leaves the remake as made.
+        """
+        import json
+
+        item_dir = self.jobs_dir / job_id / str(item.get("id") or "")
+        region_path = item_dir / "regions" / f"tl_{tile}.json"
+        try:
+            region = json.loads(region_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return made
+        if not isinstance(region, dict):
+            return made
+        if kind == "plant":
+            plants = region.get("plants") or {}
+            if not isinstance(plants, dict):
+                return made
+            for side in ("cover", "water"):
+                for entry in plants.get(side, []) or []:
+                    if (
+                        isinstance(entry, dict)
+                        and entry.get("id") == what
+                        and isinstance(entry.get("density"), (int, float))
+                    ):
+                        grown = (made.get("plants") or {}).get(side) or []
+                        if what not in [
+                            e.get("id") for e in grown if isinstance(e, dict)
+                        ]:
+                            made.setdefault("plants", {}).setdefault(side, []).append(
+                                {"id": what, "density": entry["density"]}
+                            )
+                        return made
+            return made
+        species = region.get("species") or {}
+        if not isinstance(species, dict):
+            return made
+        for name in ("playable", "prey", "predators", "fish"):
+            if what in (species.get(name) or []):
+                cast = (made.get("species") or {}).get(name) or []
+                if what not in cast:
+                    made.setdefault("species", {}).setdefault(name, []).append(what)
+        return made
 
     def _flag_gaps(
         self,

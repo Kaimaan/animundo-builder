@@ -1690,6 +1690,7 @@ class Worker:
             }
             files.pop("manifest.json", None)
             if files:
+                self._refuse_stale_pack_models(job_id, item_id, files)
                 return files
         if prefix is None:
             return {}
@@ -1705,6 +1706,38 @@ class Worker:
         if not files:
             raise ValueError(f"{prefix} holds no pack")
         return files
+
+    def _refuse_stale_pack_models(
+        self, job_id: str, item_id: str, files: dict[str, bytes]
+    ) -> None:
+        """Refuse a pack whose models lag the item's models/ (#248.2).
+
+        A hand fix after ship (the round coral) changes the
+        item's models while the pack copy keeps the old bytes;
+        the overlay must not publish those. Every models/ file
+        must exist on both sides with the same bytes, else the
+        overlay fails loud as bad_pack.
+        """
+        item_models = self.jobs_dir / job_id / item_id / "models"
+        packed = sorted(p for p in files if p.startswith("models/"))
+        if not packed:
+            return
+        if not item_models.is_dir():
+            raise ValueError("the pack has models but the item keeps none")
+        kept = {
+            path.relative_to(item_models).as_posix(): path.read_bytes()
+            for path in sorted(item_models.rglob("*"))
+            if path.is_file()
+        }
+        for rel in packed:
+            name = rel.removeprefix("models/")
+            if name not in kept:
+                raise ValueError(f"pack model {rel} is gone from the item")
+            if kept[name] != files[rel]:
+                raise ValueError(f"pack model {rel} lags the item's models/")
+        for name in sorted(kept):
+            if f"models/{name}" not in files:
+                raise ValueError(f"item model models/{name} never made the pack")
 
     def _ship_completed(self, job_id: str, item_id: str) -> bool:
         """Whether the item's ship stage completed (#174)."""

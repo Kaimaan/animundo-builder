@@ -4310,6 +4310,74 @@ def test_enrich_review_publishes_the_overlay_next_to_its_animal(
     assert f"gaps {C}" in report
 
 
+def test_enrich_overlay_refuses_a_pack_behind_its_models(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#248.3: a hand fix after ship blocks the overlay until synced."""
+    from builder.species import Source as SpeciesSource
+
+    A = "z10_0581_0294"
+    store = FakeStore()
+    worker, cache = _spread_world(
+        tmp_path,
+        store,
+        {A: ("fox", "mountain_hare", "vole", "lynx")},
+        prepare=_list_lynx,
+    )
+    assert worker.world is not None
+    _file_lynx(worker.world)
+    _link_food_rule(worker.world)
+    item_dir = tmp_path / "jobs" / "j1" / "enrich_lynx"
+    pack_dir = item_dir / "pack"
+    (pack_dir / "models").mkdir(parents=True)
+    (pack_dir / "animals" / "lynx.json").parent.mkdir(parents=True)
+    (pack_dir / "animals" / "lynx.json").write_bytes(b"{}")
+    (pack_dir / "models" / "lynx.glb").write_bytes(b"square-glb")
+    (pack_dir / "manifest.json").write_bytes(b"{}")
+    (item_dir / "models").mkdir(parents=True)
+    (item_dir / "models" / "lynx.glb").write_bytes(b"round-glb")
+    (item_dir / "report.html").write_text("<html></html>", encoding="utf-8")
+    (item_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research", "ship"],
+                "results": {"ship": {"pack": "packs/animal_lynx/1/"}},
+            }
+        )
+    )
+    store.build_jobs["j1"] = _enrich_job(
+        tile=A,
+        tiles=[A],
+        items=["enrich_lynx"],
+        enrich={"kind": "animal", "what": "lynx", "from": "fox"},
+        status="checking",
+        progress=[
+            {
+                "id": "enrich_lynx",
+                "status": "checking",
+                "report": "review/j1/enrich_lynx/report.html",
+            }
+        ],
+        review={"enrich_lynx": {"by": "kai", "at": "t", "result": "shipped"}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "_species_source",
+        lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+    )
+    worker.handle_build_job("j1")
+    failed = store.build_jobs["j1"]
+    assert failed["status"] == "failed"
+    assert failed["error"] == "bad_pack"
+    (pack_dir / "models" / "lynx.glb").write_bytes(b"round-glb")
+    store.build_jobs["j1"]["status"] = "checking"
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [A]
+    assert store.blobs[job["pack"] + "models/lynx.glb"] == b"round-glb"
+
+
 def test_overlay_pack_files_prefers_the_job_folder(tmp_path: Path) -> None:
     """#220: the ship's local files carry over; the manifest doesn't."""
     store = FakeStore()

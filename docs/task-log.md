@@ -3,6 +3,17 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #244 (WorldCover licence confirmed — noted)
+
+- Kai: "Licence OK". ESA WorldCover 2021 under CC BY 4.0 is confirmed for the wild-land check with the attribution in `data/habitat-grid/README.md`; places built with it may publish. No code change; noting it here per the item.
+
+## 2026-11-03: inbox #248 (round coral pack fixed + stale-pack guard)
+
+- Done. Live fix first: the job folder's `pack/models/plants/table_coral.{json,glb}` now carry the round hand fix (glb sha1 `67e49d6…`, verified byte-identical to the item's models), and the pack manifest's sha256+bytes for both entries were recomputed to match (verified after upload). The Storage review copy got the same two files (verified byte-identical; it keeps no manifest). Published `packs/plant_table_coral/1` and `/2` left untouched — immutable history; the next overlay carries the round files from the fixed pack.
+- Guard: `_overlay_pack_files` now refuses a local pack whose `models/` differ from the item's `models/` in either direction (missing or changed bytes), failing loud as `bad_pack` before anything publishes — a post-ship hand fix can never again ship stale bytes silently. Model scope is `models/**` only; previews, locales and animal/plant docs ride as before.
+- Test: an enrich replay with the item's glb changed after ship fails `bad_pack`, then publishes once the pack is synced, with the new bytes in the published pack. Commit d00538b, CI green. Full suite 1211 passed; the 2 maker failures are the known pre-existing world drift.
+- Side note: the Modal CLI in this sandbox needed `python-socks` + `aiohttp-socks` in its own tool env to reach the server through the proxy (user-env fix, not the repo).
+
 ## 2026-11-03: inbox #247 (grid files missing live — shipped, loud, audited)
 
 - Done in the same commit as #245 (`6095ea9`, CI green): all four files ride `/grids`, and `listen()` runs a fake-free `require_grid` before the first snapshot — a file-less container exits 1 naming the files instead of planning blind. The start log prints `describe_grid` (file + counts), so the reviewer sees the load in the container.

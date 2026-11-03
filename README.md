@@ -30,7 +30,9 @@ Installs the environment, then prints `1135 passed, 111 skipped`: the full suite
 ./scripts/get-world
 ```
 
-Clones public animundo-world at the pinned commit CI uses (`a0717b6`) into the folder next to this one. Needs network to GitHub, no key. Prints `animundo-world at a0717b6 in .../animundo-world`.
+Clones public animundo-world at the pinned commit CI uses (`2178899`) into the folder next to this one. Needs network to GitHub, no key. Prints `animundo-world at 2178899 in .../animundo-world`.
+
+With the world next to the clone, `uv run pytest` prints `1243 passed, 20 skipped` (Nov 3): the world tests run against the bare checkout, and only the Blender/asset tests skip. CI runs the same and stays green.
 
 ```
 uv run builder request plan z10_0581_0294 --world ../animundo-world --species examples/plan-z10_0581_0294/species.json --presence examples/plan-z10_0581_0294/presence.json

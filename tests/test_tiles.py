@@ -1757,8 +1757,11 @@ def test_open_sea_tile_keeps_whale_dolphin_and_turtle() -> None:
 
     world, grid, root = _reef_world_and_grid()
     for name in ("humpback_whale", "bottlenose_dolphin", "green_sea_turtle"):
-        if not (world / "animals" / f"{name}.json").is_file():
+        path = world / "animals" / f"{name}.json"
+        if not path.is_file():
             pytest.skip(f"needs the filed {name}")
+        if not json.loads(path.read_text(encoding="utf-8")).get("open_sea"):
+            pytest.skip(f"needs world 3c4978f ({name} lives at sea)")
     made, blocked = make_tile(
         "z10_0927_0559",
         grid,

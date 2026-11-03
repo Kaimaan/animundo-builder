@@ -1510,6 +1510,16 @@ def test_place_research_pass_runs_before_making(tmp_path: Path) -> None:
     assert state["results"]["research"]["cost_usd"] > 0
 
 
+def test_place_id_falls_back_to_country_short() -> None:
+    """#275.1: old research without region_id still names the place."""
+    from builder.place import place_id_of
+
+    assert place_id_of({"region_id": "fi_nuuksio"}) == "fi_nuuksio"
+    assert place_id_of({"short": {"en": "Mamirauá"}, "country": "br"}) == "br_mamiraua"
+    assert place_id_of({}) is None
+    assert place_id_of({"short": {"en": ""}, "country": "br"}) is None
+
+
 def test_place_job_validates() -> None:
     """The #224.1 request shape validates."""
     from builder.schemas import validate

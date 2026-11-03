@@ -1413,7 +1413,7 @@ class Worker:
                 }
             )
         plan = {"items": items, "world": self.world_commit or "unknown"}
-        region = research.get("region_id")
+        region = place_mod.place_id_of(research)
         if isinstance(region, str):
             plan["region_id"] = region
         animals = [item for item in items if item.get("kind") == "animal"]

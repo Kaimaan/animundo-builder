@@ -1168,6 +1168,26 @@ def country_name(code: str, builder_root: Path | None) -> str | None:
     return name if isinstance(name, str) and name else None
 
 
+def place_id_of(research: dict[str, Any]) -> str | None:
+    """The job place's id: the survey's, else country plus short (#275.1).
+
+    Stage-C research predates `region_id` surveys, so the id
+    falls back to the same `country_short` the place file
+    takes. Nothing when neither names it.
+    """
+    region = research.get("region_id")
+    if isinstance(region, str):
+        return region
+    short = research.get("short")
+    country = research.get("country")
+    if not isinstance(short, dict) or not isinstance(country, str):
+        return None
+    slug = place_slug(str(short.get("en", "")))
+    if not slug or not country.strip():
+        return None
+    return f"{country.strip().lower()}_{slug}"
+
+
 def place_slug(short_en: str) -> str:
     """`Mamirauá` to `mamiraua`: the place id's short part (#239.3)."""
     import re

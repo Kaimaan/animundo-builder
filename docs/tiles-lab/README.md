@@ -10,3 +10,6 @@ Two spots are ready (Nuuksio and Lapland, both taiga in ecoregion
 the Wales sea cell have homes but no animal files yet, so they are
 honestly `no_animal`. Everything else is `no_home`: no home lists
 its ecoregion yet. All ready tiles pass the world's `check_tile.py`.
+
+The globe renders on a CARTO basemap: © OpenStreetMap
+contributors © CARTO.

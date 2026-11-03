@@ -105,25 +105,21 @@ Every model call goes through one file, [`builder/meta.py`](builder/meta.py). It
 
 ## Run the $0 path with no key
 
-Recorded replays retired with the grown-up builder, then came back for border requests: `examples/n_401_434` holds a recorded tundra-border build (the plan plus every model answer), and this rebuilds it locally with no key and no model cost:
-
 ```
 git clone https://github.com/Kaimaan/animundo-builder
 cd animundo-builder
 uv sync
 uv run pytest
-uv run builder request build n_401_434 --replay examples/n_401_434 --world ../animundo-world --out /tmp/replay
-```
-
-690 tests pass with no key and no paid call. The replay needs a checkout of [animundo-world](https://github.com/Kaimaan/animundo-world) next to it and Blender installed (it still builds the models); each item lands under `/tmp/replay/replay/<item>` with its report, laid out like a worker's job. A replay always runs clean and fails loudly when the recording no longer matches the code. Recording a new one spends real money: the same command with `--record <dir>`. With a Meta key for the tiles the cache lacks (the planner also reads GBIF's free API):
-
-```
-uv run builder tiles make --at 60.30,24.62 --out /tmp/tile --world ../animundo-world
-uv run builder request plan n_401_434 --world ../animundo-world
 uv run builder tiles lab --out /tmp/lab --world ../animundo-world
 ```
 
-The first makes one tile (one Muse Spark species call unless the tile is cached); the second plans a tundra border (home, animal, food, one thing to find, each estimated); the third repeats the 21-spot lab run with its counts and globe (add `--land` with a Natural Earth land shapefile for the globe's background, as in [`docs/tiles-lab/`](docs/tiles-lab/)).
+Over 1,200 tests pass with no key and no paid call. The lab repeats the 21-spot tile run with its counts (add `--land` with a Natural Earth land shapefile for the globe's background, as in [`docs/tiles-lab/`](docs/tiles-lab/)). Both need a checkout of [animundo-world](https://github.com/Kaimaan/animundo-world) next to this one; the world repo carries its own licence. The old recorded replay under `examples/` retired with the pre-z10 grid. With a Meta key for the tiles the cache lacks (the planner also reads GBIF's free API):
+
+```
+uv run builder tiles make --at 60.30,24.62 --out /tmp/tile --world ../animundo-world
+```
+
+This makes one tile (one Muse Spark species call unless the tile is cached).
 
 ## Built during the event
 
@@ -194,4 +190,6 @@ This repository is public from its first commit. Never commit API keys, tokens, 
 
 ## Licence
 
-© Animundo. All rights reserved. The repository is public so judges and anyone else can read it; it is not open source. Versions published before 2026-11-01 stay under Apache-2.0.
+© Animundo (Kai Lemmetty). The code in this repository is source-available under [PolyForm Strict 1.0.0](LICENSE), so anyone may read, clone and run it for noncommercial purposes, including judging; no changes or redistribution. Versions published before 2026-11-01 stay under Apache-2.0.
+
+Third-party data keeps its own licences: the habitat grid's sources are credited in [`data/habitat-grid/README.md`](data/habitat-grid/README.md); occurrence counts are read live from [GBIF](https://www.gbif.org/) (no records are committed); place ids and well-known places come from Wikidata (CC0); the tiles-lab globe renders © OpenStreetMap contributors (see [`docs/tiles-lab/`](docs/tiles-lab/)).

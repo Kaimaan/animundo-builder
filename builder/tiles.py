@@ -1899,17 +1899,23 @@ def make_tile(
         if land_style is None:
             return None, {"reason": "no_land", "habitat": habitat}
     blend: dict[str, Any] | None = None
-    blend_home = home_for_cell(eco2, habitat, biomes) if eco2 is not None else None
-    if blend_home is not None and blend_home != home and share2 >= 0.1:
-        # Two keys only: the world's tile check takes no third (#233).
-        blend = {"home": blend_home, "share": round(share2, 2)}
-    if blend is None:
-        reef = habitat_grid.reef_share(col, row)
-        reef_home = home_for_cell(None, "coral_reef", biomes) if reef >= 0.1 else None
-        if reef_home is not None and reef_home != home:
-            # Blends ship at 0.1 and up like eco blends (#230):
-            # tinier shares ride no tile.
-            blend = {"home": reef_home, "share": round(reef, 2)}
+    if home != "open_sea":
+        # No blend on an open-sea tile: the world's check
+        # refuses any (0047), and since #255 the reef reaches
+        # a sea tile through terrain.reef_mask alone (#263.1).
+        blend_home = home_for_cell(eco2, habitat, biomes) if eco2 is not None else None
+        if blend_home is not None and blend_home != home and share2 >= 0.1:
+            # Two keys only: the world's tile check takes no third (#233).
+            blend = {"home": blend_home, "share": round(share2, 2)}
+        if blend is None:
+            reef = habitat_grid.reef_share(col, row)
+            reef_home = (
+                home_for_cell(None, "coral_reef", biomes) if reef >= 0.1 else None
+            )
+            if reef_home is not None and reef_home != home:
+                # Blends ship at 0.1 and up like eco blends (#230):
+                # tinier shares ride no tile.
+                blend = {"home": reef_home, "share": round(reef, 2)}
     coast: list[str] | None = None
     if land > 0.0 and habitat != "open_ocean":
         # Lake water reads 0 in the mask like the sea (#202.2):

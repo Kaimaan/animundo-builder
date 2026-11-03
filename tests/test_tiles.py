@@ -1751,6 +1751,65 @@ def test_open_sea_reef_tile_seats_reef_growers_at_biome_density(
     assert made["requires"]["plants"] == sorted(waters)
 
 
+def test_open_sea_tile_keeps_whale_dolphin_and_turtle() -> None:
+    """#263.2: the sea's whale, dolphin and turtle stay playable at sea."""
+    from builder.tiles import check_with_world
+
+    world, grid, root = _reef_world_and_grid()
+    for name in ("humpback_whale", "bottlenose_dolphin", "green_sea_turtle"):
+        if not (world / "animals" / f"{name}.json").is_file():
+            pytest.skip(f"needs the filed {name}")
+    made, blocked = make_tile(
+        "z10_0927_0559",
+        grid,
+        world,
+        presence={
+            "humpback_whale": 5.0,
+            "bottlenose_dolphin": 6.0,
+            "green_sea_turtle": 7.0,
+            "common_tern": 9.0,
+        },
+        builder_root=root,
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert set(made["species"]["playable"]) == {
+        "humpback_whale",
+        "bottlenose_dolphin",
+        "green_sea_turtle",
+        "common_tern",
+    }
+    assert check_with_world(made, world) == []
+
+
+def test_open_sea_reef_cell_has_a_mask_and_no_blend(monkeypatch: Any) -> None:
+    """#263.1: a 16%-reef cell is open_sea with a mask, no blend, passing."""
+    from builder.tiles import check_with_world
+
+    world, grid, root = _reef_world_and_grid()
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, candidates: {"common_tern": 9.0}
+    )
+    made, blocked = make_tile("z10_0928_0561", grid, world, builder_root=root)
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["home"] == "open_sea"
+    assert len(made["terrain"]["reef_mask"]) == 256
+    assert "blend" not in made
+    assert check_with_world(made, world) == []
+    flipped, blocked = make_tile(
+        "z10_0926_0559",
+        grid,
+        world,
+        presence={"common_tern": 9.0},
+        builder_root=root,
+    )
+    assert blocked is None, blocked
+    assert flipped is not None
+    assert flipped["home"] == "coral_reef"
+    assert check_with_world(flipped, world) == []
+
+
 def test_make_tile_builds_the_reviewed_sea_border() -> None:
     """#232.1: z10_0581_0297 builds taiga with a coast, keeping its gull."""
     from builder.schemas import ROOT

@@ -23,9 +23,9 @@ from .schemas import validate
 
 PACK_FORMAT = 1
 MIN_GAME = 1
-#: The newest game release the checks mirror: level 2 reads
-#: `additions/tiles.json`, so a pack may ask for up to this (#220).
-GAME_LEVEL = 2
+#: The newest game release the checks mirror: level 3 reads a
+#: place from its pack, so a pack may ask for up to this (#224.3).
+GAME_LEVEL = 3
 MAX_GLB_BYTES = 2 * 1024 * 1024
 MAX_PACK_BYTES = 8 * 1024 * 1024
 MANIFEST_MAX = 65536
@@ -99,13 +99,47 @@ def assemble_enrich_pack(
     return packed
 
 
+def assemble_place_pack(
+    pack_id: str, version: int, place_id: str, place: bytes
+) -> dict[str, bytes]:
+    """The finished place as its public pack (#224.3).
+
+    `places/<id>.json` and the manifest (`kind: place`,
+    `min_game: 3`); the caller's checks judged the place, the
+    game's level 3 judges it again. New species keep their own
+    enrich packs, never a seat in here.
+    """
+    if not PACK_ID.match(pack_id):
+        raise ValueError(f"{pack_id} is no pack id")
+    rel = f"places/{place_id}.json"
+    manifest = {
+        "format": PACK_FORMAT,
+        "version": version,
+        "min_game": 3,
+        "kind": "place",
+        "files": [
+            {
+                "path": rel,
+                "sha256": hashlib.sha256(place).hexdigest(),
+                "bytes": len(place),
+            }
+        ],
+    }
+    validate("pack-manifest", manifest)
+    return {
+        rel: place,
+        "manifest.json": json.dumps(manifest, indent=2).encode("utf-8"),
+    }
+
+
 def check_pack(files: dict[str, bytes]) -> list[str]:
     """Why the game would refuse the pack, or nothing when it ships.
 
     Mirrors `scripts/preview.gd` (`files_error`, `file_error`, and
     the download's size-and-hash check on every file) at spec 02
-    §8b's shape: the enrich folders, `kind: enrich`, and a manifest
-    of at most 64 KB.
+    §8b's shape: the enrich folders, `kind: enrich` or `place`, and
+    a manifest of at most 64 KB. A place pack holds only its place
+    file (#224.3); the game judges the place itself (level 3).
     """
     raw = files.get("manifest.json")
     if raw is None:
@@ -122,12 +156,20 @@ def check_pack(files: dict[str, bytes]) -> list[str]:
     if problems:
         return problems
     entries = manifest["files"]
+    kind = manifest["kind"]
     total = 0
     for entry in entries:
-        problems.extend(_entry_problems(entry, files))
+        problems.extend(_entry_problems(entry, files, kind))
         size = entry.get("bytes") if isinstance(entry, dict) else None
         if _is_int(size):
             total += int(size)
+    if kind == "place" and not any(
+        isinstance(entry, dict)
+        and isinstance(entry.get("path"), str)
+        and entry["path"].startswith("places/")
+        for entry in entries
+    ):
+        problems.append("a place pack holds its place file")
     if total > MAX_PACK_BYTES:
         problems.append("bigger than 8 MB")
     return problems
@@ -369,8 +411,8 @@ def _manifest_problems(manifest: dict[str, Any]) -> list[str]:
         return ["format is not a positive integer"]
     if int(manifest["format"]) > PACK_FORMAT:
         return ["format is newer than this game reads"]
-    if manifest["kind"] != "enrich":
-        return ["kind is not enrich"]
+    if manifest["kind"] not in ("enrich", "place"):
+        return ["kind is neither enrich nor place"]
     min_game = manifest["min_game"]
     if not _is_int(min_game) or int(min_game) > GAME_LEVEL:
         shown = str(int(min_game)) if _is_int(min_game) else str(min_game)
@@ -380,7 +422,9 @@ def _manifest_problems(manifest: dict[str, Any]) -> list[str]:
     return []
 
 
-def _entry_problems(entry: Any, files: dict[str, bytes]) -> list[str]:
+def _entry_problems(
+    entry: Any, files: dict[str, bytes], kind: str = "enrich"
+) -> list[str]:
     if not isinstance(entry, dict):
         return ["a file entry is no object"]
     for key in ("path", "sha256", "bytes"):
@@ -391,7 +435,10 @@ def _entry_problems(entry: Any, files: dict[str, bytes]) -> list[str]:
         return ["a file entry is no object"]
     if path == "" or path.startswith("/") or ".." in path or path == "manifest.json":
         return [f"bad path {path}"]
-    if not path.startswith(DATA_DIRS):
+    if kind == "place":
+        if not path.startswith("places/"):
+            return [f"a place pack holds only its place: {path}"]
+    elif not path.startswith(DATA_DIRS):
         return [f"file outside the pack folders: {path}"]
     if not path.endswith(DATA_EXTS):
         return [f"not data: {path}"]

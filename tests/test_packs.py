@@ -14,6 +14,7 @@ from builder.packs import (
     MAX_PACK_BYTES,
     PackExists,
     assemble_enrich_pack,
+    assemble_place_pack,
     build_tiles_overlay,
     check_additions,
     check_pack,
@@ -335,3 +336,45 @@ def test_overlay_refuses_loud() -> None:
     assert check_tiles_overlay(
         {"format": 1, "playable": ["lynx"], "tiles": ["z10_0581_0294"], "food": []}
     ) == ["an overlay adds no food"]
+
+
+def test_place_pack_holds_only_its_place() -> None:
+    """#224.3: a place pack ships `places/<id>.json` as `kind: place`."""
+    place = b'{"id": "br_mamiraua", "live": true}'
+    pack = assemble_place_pack("place_br_mamiraua", 1, "br_mamiraua", place)
+    assert sorted(pack) == ["manifest.json", "places/br_mamiraua.json"]
+    manifest = _manifest(pack)
+    assert manifest["kind"] == "place"
+    assert manifest["min_game"] == 3
+    assert check_pack(pack) == []
+    with pytest.raises(ValueError, match="no pack id"):
+        assemble_place_pack("Place-Bad!", 1, "br_mamiraua", place)
+
+
+def test_place_pack_refuses_species_files() -> None:
+    """#224.3: new species keep their own packs, never a seat in here."""
+    place = b'{"id": "br_mamiraua", "live": true}'
+    pack = assemble_place_pack("place_br_mamiraua", 1, "br_mamiraua", place)
+    manifest = _manifest(pack)
+    manifest["files"].append(
+        {
+            "path": "animals/capybara.json",
+            "sha256": hashlib.sha256(b"{}").hexdigest(),
+            "bytes": 2,
+        }
+    )
+    pack["manifest.json"] = json.dumps(manifest).encode("utf-8")
+    pack["animals/capybara.json"] = b"{}"
+    assert check_pack(pack) == [
+        "a place pack holds only its place: animals/capybara.json"
+    ]
+
+
+def test_enrich_pack_refuses_places_files() -> None:
+    """`places/` belongs to place packs, not enrich ones."""
+    files = dict(_files())
+    files["places/br_mamiraua.json"] = b"{}"
+    pack = assemble_enrich_pack("animal_hammerhead", 1, files)
+    assert check_pack(pack) == [
+        "file outside the pack folders: places/br_mamiraua.json"
+    ]

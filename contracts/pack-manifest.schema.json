@@ -17,7 +17,7 @@
     "draft_id": {"type": "string", "minLength": 1},
     "draft_place_id": {"type": "string", "pattern": "^(draft_|[a-z]+_[a-z0-9_]+$)"},
     "place_id": {"type": "string", "minLength": 1},
-    "kind": {"type": "string", "const": "enrich"},
+    "kind": {"type": "string", "enum": ["enrich", "place"]},
     "min_game": {"type": "integer", "minimum": 1},
     "version": {"type": "integer", "minimum": 1},
     "format": {"type": "integer", "minimum": 1},

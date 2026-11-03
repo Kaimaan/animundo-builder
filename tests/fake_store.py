@@ -32,6 +32,7 @@ class FakeStore:
         self.tile_history: list[dict[str, Any]] = []
         self.tile_docs: dict[str, dict[str, Any]] = {}
         self.jobs: dict[str, dict[str, Any]] = {}
+        self.cost_log: dict[str, dict[str, Any]] = {}
         self.watchers: list[tuple[str, Any]] = []
         self.unsubscribed: list[str] = []
         self.blobs: dict[str, bytes] = {}
@@ -148,6 +149,15 @@ class FakeStore:
 
     def update_job(self, job_id: str, fields: dict[str, Any]) -> None:
         self.jobs[job_id].update(fields)
+
+    def get_cost_log(self, doc_id: str) -> dict[str, Any] | None:
+        return self.cost_log.get(doc_id)
+
+    def write_cost_log(self, doc_id: str, record: dict[str, Any]) -> None:
+        self.cost_log[doc_id] = record
+
+    def list_cost_log(self) -> list[tuple[str, dict[str, Any]]]:
+        return sorted(self.cost_log.items())
 
     def watch_requests(self, callback: Any) -> Any:
         self.watchers.append(("requests", callback))

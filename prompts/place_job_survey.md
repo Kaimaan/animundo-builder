@@ -40,12 +40,16 @@ $ANIMALS
 ## Name
 
 The place's name in English, Finnish and Finnish genitive,
-and its Wikidata id (like `Q123`).
+and its Wikidata id (like `Q123`). A short child-friendly
+name in `short` with `en`, `fi` and `fi_gen` (one or two
+words, like `Mamirauá`), and the 2-letter country code in
+`country` (like `BR`).
 
 ## Output
 
 Strict JSON only, exactly these keys: `centre` with `lat`
 and `lon`, `tiles`, `tiles_why` (one sentence when `tiles`
 holds more than one, else blank), `biome`, `name` with `en`,
-`fi` and `fi_gen`, `wikidata`, `animals` with `id` and
+`fi` and `fi_gen`, `short` with `en`, `fi` and `fi_gen`,
+`country`, `wikidata`, `animals` with `id` and
 `source`, `plants` with `name` and `source`.

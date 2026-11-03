@@ -22,6 +22,8 @@ import random
 import sys
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -127,6 +129,27 @@ class Usage:
         )
 
 
+_current_part: ContextVar[str | None] = ContextVar("cost_part", default=None)
+
+
+@contextmanager
+def cost_part(part: str) -> Iterator[None]:
+    """Tag this block's model calls with their cost part (#259.2).
+
+    First setter wins: an item run tags its species, so reviews
+    inside it stay with the item (the enrich chain price covers
+    them); a standalone review, research or survey tags itself.
+    """
+    if _current_part.get() is not None:
+        yield
+        return
+    token = _current_part.set(part)
+    try:
+        yield
+    finally:
+        _current_part.reset(token)
+
+
 class CostLogger:
     """Appends one JSON line per model call. Never holds a key."""
 
@@ -152,6 +175,9 @@ class CostLogger:
             "duration_s": round(duration_s, 3),
             "result": result,
         }
+        part = _current_part.get()
+        if part is not None:
+            line["part"] = part
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(line) + "\n")
@@ -180,6 +206,9 @@ class CostLogger:
         }
         if refs:
             line["receipts"] = refs
+        part = _current_part.get()
+        if part is not None:
+            line["part"] = part
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(line) + "\n")

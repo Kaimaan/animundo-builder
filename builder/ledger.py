@@ -171,6 +171,15 @@ class FileLedger:
         with _LockedFile(self.path) as locked:
             return float(locked.data.get("jobs", {}).get(job_id, {}).get("spent", 0.0))
 
+    def namespaces(self, prefix: str) -> list[str]:
+        """Job namespaces starting here, for one job's items (#259.2)."""
+        with _LockedFile(self.path) as locked:
+            return sorted(
+                namespace
+                for namespace in locked.data.get("jobs", {})
+                if namespace.startswith(prefix)
+            )
+
     def day_spent(self, day: str | None = None) -> float:
         """Today's (or one day's) spend, for the worker's daily limit."""
         with _LockedFile(self.path) as locked:

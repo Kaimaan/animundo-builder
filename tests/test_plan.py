@@ -187,6 +187,7 @@ def test_plan_lists_home_from_nearest(tmp_path: Path) -> None:
             "what": "999",
             "from": "boreal_forest",
             "estimate_usd": 0.2,
+            "estimate_from": "fixed",
         }
     ]
     assert plan["estimate_usd"] == 0.2
@@ -647,6 +648,7 @@ def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:
             "what": "zebra",
             "from": "mountain_hare",
             "estimate_usd": 0.42,
+            "estimate_from": "fixed",
         }
     ]
     assert [i["id"] for i in plan["improve"]] == ["improve_lion", "improve_okapi"]
@@ -900,6 +902,7 @@ def test_plan_lists_one_thing_to_find(tmp_path: Path) -> None:
             "what": "arctic_willow",
             "from": "bilberry",
             "estimate_usd": 0.13,
+            "estimate_from": "fixed",
         }
     ]
 
@@ -957,6 +960,7 @@ def test_plan_plant_prefers_the_survey_pick(tmp_path: Path) -> None:
             "what": "bladderwrack",
             "from": "bilberry",
             "estimate_usd": 0.13,
+            "estimate_from": "fixed",
         }
     ]
 
@@ -984,6 +988,7 @@ def test_plan_plant_falls_back_when_the_survey_pick_is_filed(
             "what": "cloudberry",
             "from": "bilberry",
             "estimate_usd": 0.13,
+            "estimate_from": "fixed",
         }
     ]
 
@@ -1105,6 +1110,7 @@ def test_plan_adapts_a_find_from_the_same_food_kind(tmp_path: Path) -> None:
             "what": "cloudberry",
             "from": "bilberry",
             "estimate_usd": 0.13,
+            "estimate_from": "fixed",
         }
     ]
 

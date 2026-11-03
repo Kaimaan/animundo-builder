@@ -160,6 +160,19 @@ class FirebaseStore:
     def update_job(self, job_id: str, fields: dict[str, Any]) -> None:
         self._db.collection("jobs").document(job_id).update(_translated(fields))
 
+    def get_cost_log(self, doc_id: str) -> dict[str, Any] | None:
+        snap = self._db.collection("cost_log").document(doc_id).get()
+        return snap.to_dict() if snap.exists else None
+
+    def write_cost_log(self, doc_id: str, record: dict[str, Any]) -> None:
+        self._db.collection("cost_log").document(doc_id).set(record)
+
+    def list_cost_log(self) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (snap.id, snap.to_dict() or {})
+            for snap in self._db.collection("cost_log").stream()
+        ]
+
     # -- Storage blobs: tiles, review bundles, previews ----------------------
 
     def read_blob(self, path: str) -> tuple[bytes | None, int | None]:

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -561,6 +562,19 @@ def closest_plant(
     return have[0]
 
 
+def _estimator(
+    estimates: dict[str, tuple[float, str]] | None,
+) -> Callable[[str, float], tuple[float, str]]:
+    """Quoted dollars and source per kind: medians or fixed (#259.4)."""
+
+    def quote(kind: str, fixed: float) -> tuple[float, str]:
+        if estimates is not None and kind in estimates:
+            return estimates[kind]
+        return fixed, "fixed"
+
+    return quote
+
+
 def plan_tile(
     tile: str,
     request: dict[str, Any] | None,
@@ -572,6 +586,7 @@ def plan_tile(
     builder_root: Path | None = None,
     species: dict[str, Any] | None = None,
     species_source: Any | None = None,
+    estimates: dict[str, tuple[float, str]] | None = None,
 ) -> dict[str, Any]:
     """The border plan for one tile, valid against the plan contract.
 
@@ -580,8 +595,11 @@ def plan_tile(
     commit moves; a new home can turn an AI plan into `code_only`.
     An excluded cell gets no items: it is never built. The
     code-only probe makes the tile the worker would make: a recorded
-    `species` answer, else the cache or one model call.
+    `species` answer, else the cache or one model call. `estimates`
+    overrides the fixed item numbers with measured medians plus
+    their source; without it the quote stays fixed (#259.4).
     """
+    quote = _estimator(estimates)
     col, row = parse_tile(tile)
     eco1 = habitat_grid.cell_data(col, row)[0]
     biome_number = habitat_grid.cell_data(col, row)[4]
@@ -600,6 +618,7 @@ def plan_tile(
             lon,
             world_commit,
             world=world,
+            estimates=estimates,
         )
     homes = available_homes(world)
     biomes = available_biomes(world)
@@ -649,6 +668,7 @@ def plan_tile(
             None,
             "open_water",
             world=world,
+            estimates=estimates,
         )
     bundle: str | None = None
     if home is None:
@@ -673,6 +693,7 @@ def plan_tile(
                     None,
                     "no_land",
                     world=world,
+                    estimates=estimates,
                 )
             bundle = default_bundle(tile, habitat_grid, biomes, habitat, style, eco1)
             if bundle is None:
@@ -690,6 +711,7 @@ def plan_tile(
                     None,
                     "no_home",
                     world=world,
+                    estimates=estimates,
                 )
             home_id = bundle
             adapt = False
@@ -713,13 +735,15 @@ def plan_tile(
             tile_facts(tile, habitat_grid, world, home_id, adapt),
         )
     if home is None and bundle is None:
+        home_usd, home_from = quote("home", ITEM_ESTIMATES["home"])
         items.append(
             {
                 "id": f"home_{eco1}",
                 "kind": "home",
                 "what": str(eco1),
                 "from": home_id,
-                "estimate_usd": ITEM_ESTIMATES["home"],
+                "estimate_usd": home_usd,
+                "estimate_from": home_from,
             }
         )
     else:
@@ -754,6 +778,7 @@ def plan_tile(
                     None,
                     world,
                     "needs_survey",
+                    estimates=estimates,
                 )
             except RuntimeError as error:
                 # The probe tile fails the world's check for good:
@@ -777,6 +802,7 @@ def plan_tile(
                     answer,
                     f"world_check: {detail}",
                     world,
+                    estimates=estimates,
                 )
         if made is not None:
             # A probe that makes is code_only: its gaps are a
@@ -796,6 +822,7 @@ def plan_tile(
                 answer,
                 world=world,
                 gaps=gaps or None,
+                estimates=estimates,
             )
     # Expanding: each missing thing on its own (spec 04, minimum).
     # The home below is real, or the one the new home adapts from.
@@ -818,38 +845,44 @@ def plan_tile(
         present = {s: n for s, n in fetched.items() if n > 0}
     kind, food_gaps = _missing_food(present, world, house)
     if kind is not None:
+        food_usd, food_from = quote("food", ITEM_ESTIMATES["food"])
         items.append(
             {
                 "id": f"food_{kind}",
                 "kind": "food",
                 "what": kind,
                 "from": home_id,
-                "estimate_usd": ITEM_ESTIMATES["food"],
+                "estimate_usd": food_usd,
+                "estimate_from": food_from,
             }
         )
     if not pick_species(present, world, house)[0]:
         picked = _pick_animal(unfiled, unfiled_counts, request)
         if picked is not None:
+            animal_usd, animal_from = quote("animal", ITEM_ESTIMATES["animal"])
             items.append(
                 {
                     "id": f"animal_{picked['id']}",
                     "kind": "animal",
                     "what": picked["id"],
                     "from": picked["start_from"],
-                    "estimate_usd": ITEM_ESTIMATES["animal"],
+                    "estimate_usd": animal_usd,
+                    "estimate_from": animal_from,
                 }
             )
     picks = answer.get("plants") if answer else None
     find = _missing_find(world, house, picks if isinstance(picks, list) else None)
     if find is not None:
         slug, ref = find
+        plant_usd, plant_from = quote("plant", ITEM_ESTIMATES["plant"])
         items.append(
             {
                 "id": f"plant_{slug}",
                 "kind": "plant",
                 "what": slug,
                 "from": ref,
-                "estimate_usd": ITEM_ESTIMATES["plant"],
+                "estimate_usd": plant_usd,
+                "estimate_from": plant_from,
             }
         )
     return _finish(
@@ -866,6 +899,7 @@ def plan_tile(
         answer,
         world=world,
         gaps=food_gaps or None,
+        estimates=estimates,
     )
 
 
@@ -943,6 +977,7 @@ def _finish(
     world: Path | None = None,
     probe: str | None = None,
     gaps: dict[str, dict[str, list[str]]] | None = None,
+    estimates: dict[str, tuple[float, str]] | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items.
 
@@ -951,6 +986,7 @@ def _finish(
     probe needs a survey says so, and its estimate is that
     survey's cost (#169.3).
     """
+    quote = _estimator(estimates)
     picked_ids = {i["what"] for i in items if i["kind"] == "animal"}
     by_id = {e["id"]: e for e in unfiled}
     improve: list[dict[str, Any]] = []
@@ -961,21 +997,25 @@ def _finish(
             entry = by_id[species]
             if not entry.get("start_from"):
                 continue
+            animal_usd, animal_from = quote("animal", ITEM_ESTIMATES["animal"])
             improve.append(
                 {
                     "id": f"improve_{species}",
                     "kind": "animal",
                     "what": species,
                     "from": entry["start_from"],
-                    "estimate_usd": ITEM_ESTIMATES["animal"],
+                    "estimate_usd": animal_usd,
+                    "estimate_from": animal_from,
                 }
             )
             if len(improve) >= 2:
                 break
     coming = [item["what"] for item in [*items, *improve] if item["kind"] == "animal"]
     estimate = sum(i["estimate_usd"] for i in [*items, *improve])
+    survey_from = "fixed"
     if probe is not None:
-        estimate += SURVEY_ESTIMATE_USD
+        survey_usd, survey_from = quote("survey", SURVEY_ESTIMATE_USD)
+        estimate += survey_usd
     plan = {
         "format": 1,
         "tile": tile,
@@ -992,6 +1032,7 @@ def _finish(
         plan["blocked"] = blocked
     if probe is not None:
         plan["probe"] = probe
+        plan["survey_from"] = survey_from
     if gaps:
         plan["gaps"] = gaps
     validate("plan", plan)

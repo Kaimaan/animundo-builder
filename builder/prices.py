@@ -88,3 +88,8 @@ ITEM_ESTIMATES: dict[str, float] = {
 #: live place survey's $0.11 with six. Re-measure when the
 #: ledger holds real tile surveys.
 SURVEY_ESTIMATE_USD = 0.05
+
+#: One place tile's build share until the cost log medians it
+#: (#259.4): code makes are free, surveys are not, and this
+#: covers the tile with room while nothing is measured.
+PLACE_BUILD_USD_PER_TILE = 0.50

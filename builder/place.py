@@ -523,6 +523,30 @@ def _survey_missing(
     return drops[:WANTED_LIMIT]
 
 
+def missing_species(
+    animals: list[dict[str, Any]],
+    plants: list[dict[str, Any]],
+    world: Path,
+    biome: str,
+) -> list[dict[str, str]]:
+    """What the research found that the world lacks right now (#239.2).
+
+    The re-price runs this against the current world: species
+    filed since the survey cost nothing to build.
+    """
+    kept = [
+        {"id": entry["id"], "source": entry.get("source", "")}
+        for entry in animals
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    ]
+    greens = [
+        {"name": entry["name"], "source": entry.get("source", "")}
+        for entry in plants
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+    ]
+    return _survey_missing(kept, greens, world, biome)
+
+
 def write_survey(out_dir: Path, survey: dict[str, Any]) -> Path:
     """`survey.json` in §6a shape for `place plan` and the job."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -573,6 +597,17 @@ def job_survey_format() -> dict[str, Any]:
                     "required": ["en", "fi", "fi_gen"],
                     "additionalProperties": False,
                 },
+                "short": {
+                    "type": "object",
+                    "properties": {
+                        "en": {"type": "string"},
+                        "fi": {"type": "string"},
+                        "fi_gen": {"type": "string"},
+                    },
+                    "required": ["en", "fi", "fi_gen"],
+                    "additionalProperties": False,
+                },
+                "country": {"type": "string"},
                 "wikidata": {"type": "string"},
                 "animals": {"type": "array", "items": entry},
                 "plants": {"type": "array", "items": named},
@@ -583,6 +618,8 @@ def job_survey_format() -> dict[str, Any]:
                 "tiles_why",
                 "biome",
                 "name",
+                "short",
+                "country",
                 "wikidata",
                 "animals",
                 "plants",
@@ -687,6 +724,19 @@ def check_job_survey(
         or not name.get("fi_gen")
     ):
         raise SurveyError("the survey names nothing in English, Finnish and genitive")
+    short = data.get("short")
+    if short is not None and (
+        not isinstance(short, dict)
+        or not short.get("en")
+        or not short.get("fi")
+        or not short.get("fi_gen")
+    ):
+        raise SurveyError("the survey's short name wants en, fi and fi_gen")
+    country = data.get("country")
+    if country is not None and (
+        not isinstance(country, str) or len(country.strip()) != 2
+    ):
+        raise SurveyError("the survey's country is no 2-letter code")
     if not isinstance(data["wikidata"], str) or not data["wikidata"].strip():
         raise SurveyError("the survey names no Wikidata id")
     by_id = {a["id"]: a for a in animals}
@@ -703,7 +753,7 @@ def check_job_survey(
         if not entry.get("name") or not entry.get("source"):
             raise SurveyError("a plant entry has no name or source")
         plants.append({"name": entry["name"], "source": entry["source"]})
-    return {
+    survey: dict[str, Any] = {
         "place": place,
         "centre": {"lat": centre["lat"], "lon": centre["lon"]},
         "tiles": tiles,
@@ -717,6 +767,17 @@ def check_job_survey(
         "missing": _survey_missing(kept, plants, world, str(data["biome"])),
         "surveyed_at": _today(),
     }
+    if short is not None:
+        assert isinstance(short, dict)
+        survey["short"] = {
+            "en": short["en"],
+            "fi": short["fi"],
+            "fi_gen": short["fi_gen"],
+        }
+    if country is not None:
+        assert isinstance(country, str)
+        survey["country"] = country.strip().upper()
+    return survey
 
 
 def _survey_rectangle(tiles: Any) -> list[str]:
@@ -733,6 +794,75 @@ def _survey_rectangle(tiles: Any) -> list[str]:
     if wide > 2 or high > 2 or len(set(cells)) != wide * high:
         raise SurveyError("the surveyed tiles are no covered 2 by 2 rectangle")
     return sorted(set(tiles))
+
+
+def biome_thinness(biome: dict[str, Any]) -> str | None:
+    """None when the biome can build; else why it is thin (#239.1, #259.1).
+
+    Plants count as ids, written-out `trees.mix` entries, or
+    worked-out food (`small_life` lists, mix `food` fields): the
+    várzea has no ids yet but builds fine on its mix and food.
+    Only a biome with none of the three is thin.
+    """
+    plants = biome.get("plants") or {}
+    ids = any(
+        isinstance(entry, dict) and entry.get("id")
+        for side in ("trees", "cover", "water")
+        for entry in (plants.get(side) or [])
+    )
+    mix = [
+        entry
+        for entry in ((biome.get("trees") or {}).get("mix") or [])
+        if isinstance(entry, dict)
+    ]
+    small = biome.get("small_life") or {}
+    food = any(small.values()) if isinstance(small, dict) else False
+    food = food or any(entry.get("food") for entry in mix)
+    if not ids and not mix and not food:
+        return "the biome has no plants, written-out trees or food"
+    return None
+
+
+def price_place_build(
+    tiles: list[str],
+    missing: list[dict[str, Any]],
+    estimates: dict[str, tuple[float, str]],
+) -> dict[str, Any]:
+    """The build's quote: tiles plus each missing species (#239.2).
+
+    Every number says where it came from: the cost log's rows
+    or today's fixed hand numbers (#259.4).
+    """
+    from .prices import ITEM_ESTIMATES, PLACE_BUILD_USD_PER_TILE
+
+    tile_usd, tile_from = estimates.get("tile", (PLACE_BUILD_USD_PER_TILE, "fixed"))
+    animal_usd, animal_from = estimates.get(
+        "animal", (ITEM_ESTIMATES["animal"], "fixed")
+    )
+    plant_usd, plant_from = estimates.get("plant", (ITEM_ESTIMATES["plant"], "fixed"))
+    animals = [
+        {"id": entry["what"], "usd": animal_usd, "from": animal_from}
+        for entry in missing
+        if entry.get("kind") == "animal" and isinstance(entry.get("what"), str)
+    ]
+    plants = [
+        {"id": entry["what"], "usd": plant_usd, "from": plant_from}
+        for entry in missing
+        if entry.get("kind") == "plant" and isinstance(entry.get("what"), str)
+    ]
+    total = round(
+        len(tiles) * tile_usd + len(animals) * animal_usd + len(plants) * plant_usd, 2
+    )
+    return {
+        "tiles": {
+            "n": len(tiles),
+            "usd": round(len(tiles) * tile_usd, 2),
+            "from": tile_from,
+        },
+        "animals": animals,
+        "plants": plants,
+        "total": total,
+    }
 
 
 def plan_place(
@@ -999,6 +1129,91 @@ def place_tiles(world: Path, place_id: str, survey_tile: str) -> list[str]:
     return [survey_tile]
 
 
+def country_name(code: str, builder_root: Path) -> str | None:
+    """The English country name for a 2-letter code, else nothing (#239.3)."""
+    try:
+        names = json.loads(
+            (builder_root / "data" / "country-names.json").read_text(encoding="utf-8")
+        ).get("names", {})
+    except (OSError, ValueError):
+        return None
+    name = names.get(code.strip().upper())
+    return name if isinstance(name, str) and name else None
+
+
+def place_slug(short_en: str) -> str:
+    """`Mamirauá` to `mamiraua`: the place id's short part (#239.3)."""
+    import re
+    import unicodedata
+
+    ascii_name = unicodedata.normalize("NFKD", short_en).encode("ascii", "ignore")
+    words = re.findall(r"[a-z0-9]+", ascii_name.decode("ascii").lower())
+    return "_".join(words)
+
+
+def _animal_swims(animal: dict[str, Any] | None, habitats: list[str]) -> bool:
+    """Water start: spawn, sea habitats, or dive without walk or fly (#239)."""
+
+    def num(value: Any) -> float:
+        return value if isinstance(value, (int, float)) else 0.0
+
+    if animal is not None and animal.get("spawn") == "water":
+        return True
+    if set(habitats) & {"sea", "reef", "open_sea", "open_ocean"}:
+        return True
+    if animal is None:
+        return False
+    return bool(
+        num(animal.get("dive"))
+        and not num(animal.get("walk"))
+        and not num(animal.get("fly"))
+    )
+
+
+def place_start(
+    first: str | None,
+    tiles: list[str],
+    made: dict[str, dict[str, Any]],
+    centre: dict[str, float],
+    grid: Any,
+    world: Path,
+    job_dir: Path,
+) -> tuple[float, float]:
+    """The start point on ground suiting the first playable animal (#239).
+
+    Land for walkers (the wild spot), water for swimmers (a
+    water-majority tile's centre); the surveyed centre when
+    nothing suits better. The world's start check is the backstop.
+    """
+    from .grid import center
+
+    try:
+        lat = float(centre.get("lat", 0.0))
+        lon = float(centre.get("lon", 0.0))
+    except (TypeError, ValueError):
+        lat, lon = 0.0, 0.0
+    if first is None:
+        return lat, lon
+    animal = _animal_file(world, job_dir, first)
+    habitats: list[str] = []
+    try:
+        listed = json.loads(
+            (world / "animal-list.json").read_text(encoding="utf-8")
+        ).get("animals", [])
+        habitats = next(
+            (e.get("habitats", []) for e in listed if e.get("id") == first), []
+        )
+    except (OSError, ValueError):
+        pass
+    if not _animal_swims(animal, habitats if isinstance(habitats, list) else []):
+        return wild_spot(tiles[0], lat, lon, grid)
+    for tile in tiles:
+        if float((made.get(tile) or {}).get("water", 0.0)) >= 0.5:
+            cla, clo = center(tile)
+            return cla, clo
+    return lat, lon
+
+
 def file_places(
     store: Any, world: Path, survey_dir: Path, world_commit: str
 ) -> list[str]:
@@ -1102,6 +1317,110 @@ def write_place(
     }
 
 
+def write_job_place(
+    research: dict[str, Any],
+    job_dir: Path,
+    world: Path,
+    made: dict[str, dict[str, Any]],
+    grid: Any,
+    builder_root: Path,
+) -> dict[str, Any]:
+    """The live place file from stage C's build, by code (#239.3).
+
+    The id is `<country>_<short slug>`; `name` is the short
+    child-friendly triple, `name_full` the long official one;
+    playable is every surveyed animal filed or made by this job,
+    in survey order; the start suits the first playable animal;
+    `live` is true. Needs `research.short` and `research.country`:
+    without them the build stops naming the backfill, it never
+    guesses child-facing names.
+    """
+    from .grid import parse_tile
+
+    short = research.get("short")
+    if not isinstance(short, dict) or not short.get("en"):
+        raise ValueError("place needs research.short {en, fi, fi_gen}")
+    country = research.get("country")
+    if not isinstance(country, str) or not country.strip():
+        raise ValueError("place needs research.country (2-letter code)")
+    slug = place_slug(str(short["en"]))
+    if not slug:
+        raise ValueError("place needs a non-empty short English name")
+    country_full = country_name(country, builder_root)
+    if country_full is None:
+        raise ValueError(f"place needs a known country for {country!r}")
+    tiles = [t for t in research.get("tiles", []) if isinstance(t, str)]
+    playable: list[str] = []
+    files: dict[str, dict[str, Any]] = {}
+    for entry in research.get("animals", []):
+        if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+            continue
+        data = _animal_file(world, job_dir, entry["id"])
+        if data is None:
+            continue
+        playable.append(entry["id"])
+        files[entry["id"]] = data
+    centre = research.get("centre")
+    centre = centre if isinstance(centre, dict) else {}
+    start_lat, start_lon = place_start(
+        playable[0] if playable else None,
+        tiles,
+        made,
+        centre,
+        grid,
+        world,
+        job_dir,
+    )
+    cells = []
+    for tile in tiles:
+        col, row = parse_tile(tile)
+        cells.append([col, row])
+    name = research.get("name")
+    name = name if isinstance(name, dict) else {}
+
+    def num(value: Any) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    return {
+        "id": f"{country.strip().lower()}_{slug}",
+        "name": {"en": short["en"], "fi": short["fi"], "fi_gen": short["fi_gen"]},
+        "name_full": {
+            "en": name.get("en", ""),
+            "fi": name.get("fi", ""),
+            "fi_gen": name.get("fi_gen", ""),
+        },
+        "wikidata": str(research.get("wikidata", "")),
+        "country": country_full,
+        "center": {
+            "lat": num(centre.get("lat", 0.0)),
+            "lon": num(centre.get("lon", 0.0)),
+        },
+        "tiles": cells,
+        "species": {
+            "playable": playable,
+            "predators": sorted(
+                a for a, d in files.items() if set(d.get("hunts", [])) & set(playable)
+            ),
+            "prey": sorted(
+                {p for d in files.values() for p in d.get("hunts", [])} & set(playable)
+            ),
+        },
+        "points": [
+            {
+                "kind": "start",
+                "id": "default",
+                "lat": start_lat,
+                "lon": start_lon,
+                "facing": "north",
+            }
+        ],
+        "live": True,
+    }
+
+
 def check_place_file(path: Path, world: Path) -> list[str]:
     """The world's place schema over a draft file; [] when clean."""
     import jsonschema
@@ -1117,7 +1436,7 @@ def check_place_file(path: Path, world: Path) -> list[str]:
     return []
 
 
-def write_job_place(
+def write_replay_place(
     place_dir: Path, job_dir: Path, world: Path
 ) -> tuple[Path, list[str]]:
     """The job's draft place, and the world's verdict on it.
@@ -1153,7 +1472,7 @@ def replay_place(
 
     plan = json.loads((place_dir / "plan.json").read_text(encoding="utf-8"))
     reports = replay_request(plan["tile"], place_dir, out_dir, world, grid_dir)
-    place_path, problems = write_job_place(place_dir, out_dir / JOB_ID, world)
+    place_path, problems = write_replay_place(place_dir, out_dir / JOB_ID, world)
     if problems:
         raise ValueError(f"the draft place fails the world's checks: {problems[0]}")
     if store is not None:
@@ -1200,7 +1519,7 @@ def record_place(
         return ctx
 
     reports = run_request(plan["tile"], plan, out_dir, world, grid_dir, make_ctx, place)
-    place_path, problems = write_job_place(place_dir, out_dir / JOB_ID, world)
+    place_path, problems = write_replay_place(place_dir, out_dir / JOB_ID, world)
     if problems:
         raise ValueError(f"the draft place fails the world's checks: {problems[0]}")
     if store is not None:

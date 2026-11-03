@@ -1615,3 +1615,83 @@ def test_replayed_whale_makes_no_prey_and_reports_no_food(tmp_path: Path) -> Non
     assert stray == []
     assert "no_food" in build_report(item_dir).read_text()
     assert "no_food" in report_text(item_dir)
+
+
+def test_thin_biome_counts_mix_and_food_not_only_ids() -> None:
+    """#239.1, #259.1: the varzea builds; an empty biome fails thin."""
+    from builder.place import biome_thinness
+
+    assert biome_thinness({"plants": {"cover": [{"id": "x", "density": 0.1}]}}) is None
+    assert (
+        biome_thinness(
+            {
+                "plants": None,
+                "trees": {"mix": [{"shape": "coconut_palm", "food": "berries"}]},
+                "small_life": {"grass": ["canarana grass"]},
+            }
+        )
+        is None
+    )
+    assert (
+        biome_thinness({"plants": None, "trees": {"mix": []}, "small_life": {}})
+        == "the biome has no plants, written-out trees or food"
+    )
+
+
+def test_place_price_quotes_tiles_plus_missing_species() -> None:
+    """#239.2: every quoted number names its source."""
+    from builder.place import price_place_build
+
+    estimates = {
+        "tile": (0.50, "fixed"),
+        "animal": (0.40, "log, 3 rows"),
+        "plant": (0.13, "fixed"),
+    }
+    parts = price_place_build(
+        ["z10_0581_0294"],
+        [
+            {"kind": "animal", "what": "lion", "part": "boreal_forest"},
+            {"kind": "plant", "what": "acai", "part": "boreal_forest"},
+        ],
+        estimates,
+    )
+    assert parts["total"] == 1.03
+    assert parts["tiles"] == {"n": 1, "usd": 0.50, "from": "fixed"}
+    assert parts["animals"] == [{"id": "lion", "usd": 0.40, "from": "log, 3 rows"}]
+    assert parts["plants"] == [{"id": "acai", "usd": 0.13, "from": "fixed"}]
+
+
+def test_job_survey_keeps_short_and_country_when_answered(tmp_path: Path) -> None:
+    """#239.3: short names and country ride through when present."""
+    from builder.place import check_job_survey
+
+    world = tmp_path / "world"
+    (world / "animals").mkdir(parents=True)
+    (world / "models" / "plants").mkdir(parents=True)
+    animals = [{"id": "lion"}]
+    data = {
+        "centre": {"lat": 60.5, "lon": 24.5},
+        "tiles": ["z10_0581_0294"],
+        "biome": "boreal_forest",
+        "name": {"en": "X", "fi": "X", "fi_gen": "Xn"},
+        "short": {"en": "Mamirauá", "fi": "Mamirauá", "fi_gen": "Mamirauán"},
+        "country": "br",
+        "wikidata": "Q1",
+        "animals": [{"id": "lion", "source": "https://example.org/"}],
+        "plants": [],
+    }
+    survey = check_job_survey(data, "words", world, animals, [])
+    assert survey["short"] == {
+        "en": "Mamirauá",
+        "fi": "Mamirauá",
+        "fi_gen": "Mamirauán",
+    }
+    assert survey["country"] == "BR"
+    plain = check_job_survey(
+        {k: v for k, v in data.items() if k not in ("short", "country")},
+        "words",
+        world,
+        animals,
+        [],
+    )
+    assert "short" not in plain and "country" not in plain

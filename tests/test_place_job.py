@@ -12,7 +12,7 @@ from fake_store import FakeStore
 from fake_world import boreal_3x3, make_world, write_grids
 
 from builder.config import Config
-from builder.grid import center, tile_at
+from builder.grid import center, group_path, tile_at
 from builder.habitats import HabitatGrid
 from builder.place import tile_wild, wild_spot
 from builder.worker import Worker
@@ -103,7 +103,11 @@ def test_place_research_stops_at_waiting_yes(tmp_path: Path) -> None:
     assert job["research"]["missing"] == [
         {"kind": "animal", "what": "lion", "part": "boreal_forest"}
     ]
-    assert job["price"] == 1.00
+    assert job["price"] == 1.42
+    assert job["research"]["price_parts"]["total"] == 1.42
+    assert job["research"]["price_parts"]["animals"] == [
+        {"id": "lion", "usd": 0.42, "from": "fixed"}
+    ]
     assert job["spent_usd"] == 0.0
     assert "tile" not in job
     saved = json.loads((tmp_path / "jobs" / "j1" / "survey.json").read_text())
@@ -137,7 +141,7 @@ def test_place_bad_rectangle_fails_loud(tmp_path: Path) -> None:
 
 
 def test_place_one_tile_passes(tmp_path: Path) -> None:
-    """#228.1: a survey on one tile passes, priced as one tile."""
+    """#228.1: a survey on one tile passes, priced as one tile plus parts."""
     store = FakeStore()
     worker = _worker(tmp_path, store)
     worker.chat = _ScriptRespond([json.dumps(_survey(tiles=[A]))])
@@ -147,7 +151,12 @@ def test_place_one_tile_passes(tmp_path: Path) -> None:
     assert job["status"] == "waiting_yes"
     assert job["research"]["tiles"] == [A]
     assert job["research"]["tiles_why"] == ""
-    assert job["price"] == 0.50
+    assert job["price"] == 0.92
+    assert job["research"]["price_parts"]["tiles"] == {
+        "n": 1,
+        "usd": 0.50,
+        "from": "fixed",
+    }
 
 
 def test_place_crashed_before_its_survey_runs_it_again(tmp_path: Path) -> None:
@@ -179,7 +188,7 @@ def test_place_two_tiles_without_why_fail(tmp_path: Path) -> None:
 
 
 def test_place_two_tiles_with_why_pass(tmp_path: Path) -> None:
-    """#228.2: two tiles with a reason pass, priced as two tiles."""
+    """#228.2: two tiles with a reason pass, priced as two tiles plus parts."""
     store = FakeStore()
     worker = _worker(tmp_path, store)
     worker.chat = _ScriptRespond([json.dumps(_survey())])
@@ -192,7 +201,61 @@ def test_place_two_tiles_with_why_pass(tmp_path: Path) -> None:
         job["research"]["tiles_why"]
         == "The start clearing sits across the A/B tile side."
     )
-    assert job["price"] == 1.00
+    assert job["price"] == 1.42
+
+
+def test_waiting_place_reprices_before_the_answer(tmp_path: Path) -> None:
+    """#239.2: a waiting job without parts re-prices, then waits."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    store.build_jobs["j1"] = _place_job(
+        status="waiting_yes",
+        research={
+            "tiles": [A],
+            "biome": "boreal_forest",
+            "animals": [{"id": "lion", "source": "https://example.org/lion"}],
+            "plants": [],
+        },
+        price=0.50,
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["price"] == 0.92
+    assert job["research"]["price_parts"]["total"] == 0.92
+
+
+def test_reprice_drops_a_yes_its_cap_no_longer_covers(tmp_path: Path) -> None:
+    """#239.2: a stale yes goes loudly; a covering yes stands."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    research = {
+        "tiles": [A],
+        "biome": "boreal_forest",
+        "animals": [{"id": "lion", "source": "https://example.org/lion"}],
+        "plants": [],
+    }
+    store.build_jobs["j1"] = _place_job(
+        status="waiting_yes",
+        place_yes={"cap": 0.50, "at": "t"},
+        research=dict(research),
+        price=0.50,
+    )
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert "place_yes" not in job
+    assert job["price"] == 0.92
+    store.build_jobs["j2"] = _place_job(
+        status="waiting_yes",
+        place_yes={"cap": 2.50, "at": "t"},
+        research=dict(research),
+        price=0.50,
+    )
+    worker.handle_build_job("j2")
+    job = store.build_jobs["j2"]
+    assert job["status"] == "building"
+    assert job["phase"] == "approved"
 
 
 def test_place_no_turns_down(tmp_path: Path) -> None:
@@ -369,7 +432,7 @@ def test_wild_repeats_collapse_to_one(tmp_path: Path) -> None:
 
 
 def test_place_price_follows_final_tiles(tmp_path: Path) -> None:
-    """#246: a repeated survey tile prices once."""
+    """#246: a repeated survey tile prices once, plus the species parts."""
     store = FakeStore()
     worker = _worker(tmp_path, store)
     assert worker.grid_dir is not None
@@ -380,7 +443,8 @@ def test_place_price_follows_final_tiles(tmp_path: Path) -> None:
     job = store.build_jobs["j1"]
     assert job["status"] == "waiting_yes"
     assert job["research"]["tiles"] == [A]
-    assert job["price"] == 0.5
+    assert job["price"] == 0.92
+    assert job["research"]["price_parts"]["tiles"]["n"] == 1
 
 
 def test_place_city_tile_moves_to_wild_neighbour(tmp_path: Path) -> None:
@@ -552,6 +616,78 @@ def test_place_mamiraua_replay_passes_unchanged(tmp_path: Path) -> None:
     assert job["status"] == "waiting_yes"
     assert job["research"]["tiles"] == ["z10_0325_0518"]
     assert "moved" not in job["research"]
+
+
+def test_place_files_wanted_after_build(tmp_path: Path) -> None:
+    """#224.5: found-but-unmade species land on the tiles' wanted lists."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    job = _place_job(want=["lion", "dragon"])
+    store.build_jobs["j1"] = job
+    research = {
+        "tiles": [A],
+        "biome": "boreal_forest",
+        "animals": [
+            {"id": "lion", "source": "s"},
+            {"id": "fox", "source": "s"},
+        ],
+        "plants": [{"name": "Cloudberry", "source": "s"}],
+    }
+    worker._place_file_wanted("j1", job, research, "fi_nuuksio")
+    data = json.loads(store.read_blob(group_path(A))[0].decode("utf-8"))
+    entry = data["places"][A]
+    assert entry["region"] == "fi_nuuksio"
+    assert entry["surveyed_at"]
+    assert {"kind": "animal", "what": "lion", "part": "boreal_forest"} in entry[
+        "wanted"
+    ]
+    assert {"kind": "plant", "what": "cloudberry", "part": "boreal_forest"} in entry[
+        "wanted"
+    ]
+    assert all(item["what"] != "fox" for item in entry["wanted"])
+    assert sum(1 for item in entry["wanted"] if item["what"] == "lion") == 1
+    assert all(item["what"] != "dragon" for item in entry["wanted"])
+
+
+def test_place_wanted_skips_species_the_build_made(tmp_path: Path) -> None:
+    """#224.5: made species stay off wanted; all made files it empty."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    made = tmp_path / "jobs" / "j1" / "animal_lion" / "animals"
+    made.mkdir(parents=True)
+    (made / "lion.json").write_text("{}")
+    greens = tmp_path / "jobs" / "j1" / "plant_cloudberry" / "models" / "plants"
+    greens.mkdir(parents=True)
+    (greens / "cloudberry.json").write_text("{}")
+    job = _place_job(want=[])
+    store.build_jobs["j1"] = job
+    research = {
+        "tiles": [A],
+        "biome": "boreal_forest",
+        "animals": [{"id": "lion", "source": "s"}],
+        "plants": [{"name": "Cloudberry", "source": "s"}],
+    }
+    worker._place_file_wanted("j1", job, research, "fi_nuuksio")
+    data = json.loads(store.read_blob(group_path(A))[0].decode("utf-8"))
+    assert data["places"][A]["wanted"] == []
+    assert store.build_jobs["j1"].get("status") != "failed"
+
+
+def test_place_ship_species_fails_a_failed_item(tmp_path: Path) -> None:
+    """#222.5: an item whose make failed fails the place, never ships."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    job = _place_job(status="building", phase="approved")
+    job["research"] = {"tiles": [A], "biome": "boreal_forest"}
+    job["progress"] = [
+        {"id": "animal_lion", "status": "failed", "error": "maker: no spec"}
+    ]
+    store.build_jobs["j1"] = job
+    assert worker._claim("j1")
+    item = {"id": "animal_lion", "kind": "animal", "what": "lion"}
+    assert worker._place_ship_species("j1", job, item) is False
+    assert store.build_jobs["j1"]["status"] == "failed"
+    assert store.build_jobs["j1"]["error"] == "item_failed"
 
 
 def test_place_job_validates() -> None:

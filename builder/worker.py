@@ -31,10 +31,6 @@ LEASE_TTL_MINUTES = 30
 #: A document update value that deletes the field.
 DELETE = object()
 
-#: Stage-A build estimate per unfiled animal or plant (#222.2);
-#: stage C calibrates it from real runs.
-PLACE_BUILD_USD_PER_TILE = 0.50
-
 
 class Store(Protocol):
     """The Firestore surface the worker needs."""
@@ -70,6 +66,9 @@ class Store(Protocol):
     def get_job(self, job_id: str) -> dict[str, Any] | None: ...
     def set_job(self, job_id: str, doc: dict[str, Any]) -> None: ...
     def update_job(self, job_id: str, fields: dict[str, Any]) -> None: ...
+    def get_cost_log(self, doc_id: str) -> dict[str, Any] | None: ...
+    def write_cost_log(self, doc_id: str, record: dict[str, Any]) -> None: ...
+    def list_cost_log(self) -> list[tuple[str, dict[str, Any]]]: ...
 
 
 def default_worker_id() -> str:
@@ -225,6 +224,7 @@ class Worker:
                 builder_root=self.builder_root,
                 species=self.species,
                 species_source=self._species_source(tile),
+                estimates=self._median_estimates(),
             )
         except (ValueError, RuntimeError, FileNotFoundError, ConnectionError) as error:
             print(f"request {tile}: cannot plan: {error}", file=sys.stderr)
@@ -350,7 +350,10 @@ class Worker:
         if job is None or job.get("status") in ("published", "failed"):
             return False
         self._takeover_if_dead(job_id, job)
-        return self.store.claim_build_job(job_id, self.worker_id)
+        claimed = self.store.claim_build_job(job_id, self.worker_id)
+        if claimed and "started_at" not in job:
+            self._update(job_id, {"started_at": now_iso()})
+        return claimed
 
     def _takeover_if_dead(self, job_id: str, job: dict[str, Any]) -> None:
         """Expire a dead same-host owner's lease, so the claim can take it.
@@ -796,18 +799,19 @@ class Worker:
     def place_job(self, job_id: str, job: dict[str, Any]) -> None:
         """A place from one request: research, one stop, Kai's yes (#222).
 
-        Stage A: survey the place in words, write the research
-        summary with its price, and wait. A biome the world
-        lacks stops the job naming its land; a no turns it
-        down; a yes parks it approved under its cap for stage
-        C's build. No tile: the research draws the rectangle.
+        Survey the place in words, write the research summary
+        with its price, and wait. A biome the world lacks
+        stops the job naming its land; a no turns it down; a
+        yes approved under its cap builds it to live (stage
+        C, #239). No tile: the research draws the rectangle.
         """
         status = job.get("status") or "queued"
         if status == "waiting_yes":
+            job = self._reprice_waiting_place(job_id, job)
             self._place_answer(job_id, job)
             return
         if status == "building" and job.get("phase") == "approved":
-            print(f"build job {job_id}: yes accepted; stage C builds it")
+            self._place_build(job_id, job)
             return
         self._place_research(job_id, job)
 
@@ -819,6 +823,7 @@ class Worker:
         from .animal_list import find_list, load_list
         from .jobs import make_context
         from .ledger import CapExceeded, LedgerError
+        from .meta import cost_part
         from .pipeline import BudgetExceeded, BudgetTracker
 
         assert self.world is not None
@@ -852,9 +857,10 @@ class Worker:
             animals = load_list(find_list(self.world))["animals"]
             biomes = sorted(p.stem for p in (self.world / "biomes").glob("*.json"))
             try:
-                data, _searches = place_mod.ask_job_survey(
-                    ctx, words, animals, biomes, [str(w) for w in want]
-                )
+                with cost_part("research"):
+                    data, _searches = place_mod.ask_job_survey(
+                        ctx, words, animals, biomes, [str(w) for w in want]
+                    )
                 survey = place_mod.check_job_survey(
                     data, words, self.world, animals, [str(w) for w in want]
                 )
@@ -879,13 +885,21 @@ class Worker:
             "plants": survey["plants"],
             "missing": survey["missing"],
         }
+        if survey.get("short") is not None:
+            research["short"] = survey["short"]
+        if survey.get("country") is not None:
+            research["country"] = survey["country"]
         update: dict[str, Any] = {
             "research": research,
             "spent_usd": round(float(spent), 4),
         }
         if not (self.world / "biomes" / f"{survey['biome']}.json").is_file():
             update["needed_land"] = str(survey["biome"])
-            update["price"] = round(len(survey["tiles"]) * PLACE_BUILD_USD_PER_TILE, 2)
+            parts = place_mod.price_place_build(
+                survey["tiles"], survey["missing"], self._median_estimates()
+            )
+            research["price_parts"] = parts
+            update["price"] = parts["total"]
             self._update(job_id, update)
             self._fail(job_id, "no_biome")
             return
@@ -900,7 +914,11 @@ class Worker:
             return
         research["tiles"] = wild_tiles
         # The price follows the final tiles, after wild moves (#246).
-        update["price"] = round(len(wild_tiles) * PLACE_BUILD_USD_PER_TILE, 2)
+        parts = place_mod.price_place_build(
+            wild_tiles, survey["missing"], self._median_estimates()
+        )
+        research["price_parts"] = parts
+        update["price"] = parts["total"]
         if moved:
             research["moved"] = moved
         centre = research["centre"]
@@ -921,6 +939,55 @@ class Worker:
             f"build job {job_id}: surveyed {len(survey['tiles'])} tiles, "
             f"waiting for yes"
         )
+
+    def _reprice_waiting_place(
+        self, job_id: str, job: dict[str, Any]
+    ) -> dict[str, Any]:
+        """A waiting place's build quote, once, against today's world (#239.2).
+
+        Jobs surveyed before price parts re-price on the next
+        start; species filed since cost nothing. A yes already on
+        the doc only stands when its cap still covers the new
+        total, else it is stale and goes, loudly.
+        """
+        from . import place as place_mod
+
+        assert self.world is not None
+        research = job.get("research") or {}
+        if not isinstance(research, dict) or research.get("price_parts"):
+            return job
+        missing = place_mod.missing_species(
+            research.get("animals", []),
+            research.get("plants", []),
+            self.world,
+            str(research.get("biome", "")),
+        )
+        parts = place_mod.price_place_build(
+            [t for t in research.get("tiles", []) or [] if isinstance(t, str)],
+            missing,
+            self._median_estimates(),
+        )
+        research["price_parts"] = parts
+        update: dict[str, Any] = {"research": research, "price": parts["total"]}
+        yes = job.get("place_yes")
+        cap = yes.get("cap") if isinstance(yes, dict) else None
+        if (
+            isinstance(yes, dict)
+            and isinstance(cap, (int, float))
+            and parts["total"] > cap
+        ):
+            update["place_yes"] = DELETE
+            print(
+                f"build job {job_id}: re-priced to ${parts['total']:.2f}, "
+                f"above the ${cap:.2f} yes; waiting for a fresh yes"
+            )
+        else:
+            print(
+                f"build job {job_id}: re-priced to "
+                f"${parts['total']:.2f}, waiting for yes"
+            )
+        self._update(job_id, update)
+        return self.store.get_build_job(job_id) or job
 
     def _place_answer(self, job_id: str, job: dict[str, Any]) -> None:
         """Kai's yes or no to a surveyed place, consumed once (#222.3)."""
@@ -952,6 +1019,604 @@ class Worker:
         )
         print(f"build job {job_id}: yes accepted at ${cap:.2f}; stage C builds it")
 
+    def _place_build(self, job_id: str, job: dict[str, Any]) -> None:
+        """Stage C: tiles, species, place file, checks, pack (#239, #259)."""
+        import json
+
+        from . import place as place_mod
+        from .tiles import check_with_world, make_tile
+
+        assert self.world is not None
+        if not self._claim(job_id):
+            return
+        job = self.store.get_build_job(job_id) or job
+        research = job.get("research") or {}
+        self.pull_world()
+        self.world_commit = git_commit(self.world) or self.world_commit
+        biome_path = self.world / "biomes" / f"{research.get('biome')}.json"
+        try:
+            biome = (
+                json.loads(biome_path.read_text(encoding="utf-8"))
+                if biome_path.is_file()
+                else {}
+            )
+        except ValueError:
+            biome = {}
+        thin = place_mod.biome_thinness(biome) if biome else "the biome file is missing"
+        if thin is not None:
+            print(f"build job {job_id}: thin_biome: {thin}", file=sys.stderr)
+            self._fail(job_id, "thin_biome")
+            return
+        approved = self._approved_spend(job)
+        total = (research.get("price_parts") or {}).get("total", 0.0)
+        if isinstance(total, (int, float)) and total > approved:
+            print(
+                f"build job {job_id}: quoted ${total:.2f} above ${approved:.2f}",
+                file=sys.stderr,
+            )
+            self._fail(job_id, "over_cap")
+            return
+        if not isinstance(research.get("short"), dict) or not isinstance(
+            research.get("country"), str
+        ):
+            print(
+                f"build job {job_id}: no_short: backfill research.short "
+                "{en, fi, fi_gen} and research.country (2-letter code); "
+                "the build resumes on the next poll"
+            )
+            return
+        tiles = [t for t in research.get("tiles", []) if isinstance(t, str)]
+        if not tiles:
+            print(f"build job {job_id}: research names no tiles", file=sys.stderr)
+            self._fail(job_id, "no_tiles")
+            return
+        survey_before = sum(self._survey_spent(t) for t in tiles)
+        made: dict[str, dict[str, Any]] = {}
+        over_cap: list[str] = []
+        for tile in tiles:
+            source = self._species_source(tile)
+            tile_made, blocked = make_tile(
+                tile,
+                self._habitat_grid(),
+                self.world,
+                builder_root=self.builder_root,
+                species_source=source,
+                over_cap=over_cap,
+            )
+            if blocked is not None or tile_made is None:
+                print(f"build job {job_id}: {tile} blocked: {blocked}", file=sys.stderr)
+                self._fail(job_id, "tile_blocked")
+                return
+            failures = check_with_world(tile_made, self.world)
+            if failures:
+                detail = "; ".join(f"{c}: {', '.join(p)}" for c, p in failures)
+                print(f"build job {job_id}: {tile}: {detail}", file=sys.stderr)
+                self._fail(job_id, "tile_check")
+                return
+            made[tile] = tile_made
+        self._record_place_survey_spend(job_id, job, survey_before)
+        if over_cap:
+            self._update(job_id, {"plants_over_cap": sorted(set(over_cap))})
+        from . import build as build_mod
+
+        commit = self.world_commit or "unknown"
+        for tile, tile_made in made.items():
+            build_mod.publish_group(
+                tile,
+                tile_made,
+                self.store,
+                commit,
+                history={"job": job_id, "kind": "place"},
+            )
+        if not self._place_make_species(
+            job_id, job, research, biome, tiles[0], approved
+        ):
+            return
+        job = self.store.get_build_job(job_id) or job
+        self._place_publish(job_id, job, research, biome, made)
+
+    def _record_place_survey_spend(
+        self, job_id: str, job: dict[str, Any], survey_before: float
+    ) -> None:
+        """This build's tile-survey dollars onto the job, once (#259.2)."""
+        if "survey_usd" in job or "survey_cached" in job:
+            return
+        tiles = [t for t in (job.get("research") or {}).get("tiles", []) if t]
+        survey_after = sum(self._survey_spent(t) for t in tiles)
+        if survey_after > survey_before:
+            self._update(job_id, {"survey_usd": round(survey_after - survey_before, 6)})
+        else:
+            self._update(job_id, {"survey_cached": True})
+
+    def _place_make_species(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        research: dict[str, Any],
+        biome: dict[str, Any],
+        first_tile: str,
+        approved: float,
+    ) -> bool:
+        """Each missing animal and plant through the item chain (#222.5).
+
+        The biome's plant list wins over the research's when it
+        names any (#239.5); research plants otherwise. False stops
+        the build (off, paused, or out of budget).
+        """
+        from . import place as place_mod
+        from .animal_list import find_list, load_list
+
+        assert self.world is not None
+        missing = place_mod.missing_species(
+            research.get("animals", []),
+            research.get("plants", []),
+            self.world,
+            str(research.get("biome", "")),
+        )
+        plants = (biome.get("plants") or {}) if isinstance(biome, dict) else {}
+        biome_ids = sorted(
+            {
+                entry.get("id")
+                for side in ("trees", "cover", "water")
+                for entry in (plants.get(side) or [])
+                if isinstance(entry, dict) and entry.get("id")
+            }
+        )
+        filed_greens = sorted(
+            p.stem for p in (self.world / "models" / "plants").glob("*.json")
+        )
+        if biome_ids:
+            wanted_plants = [pid for pid in biome_ids if pid not in filed_greens]
+        else:
+            wanted_plants = [
+                entry["what"] for entry in missing if entry.get("kind") == "plant"
+            ]
+        listed = {
+            entry["id"]: entry for entry in load_list(find_list(self.world))["animals"]
+        }
+        items: list[dict[str, Any]] = []
+        estimates = self._median_estimates()
+        for entry in missing:
+            if entry.get("kind") != "animal":
+                continue
+            sid = entry["what"]
+            start = (listed.get(sid) or {}).get("start_from")
+            if not start:
+                print(f"build job {job_id}: {sid} has no start to adapt; wanted")
+                continue
+            usd, _ = estimates.get("animal", (0.42, "fixed"))
+            items.append(
+                {
+                    "id": f"animal_{sid}",
+                    "kind": "animal",
+                    "what": sid,
+                    "from": start,
+                    "estimate_usd": usd,
+                }
+            )
+        plant_usd, _ = estimates.get("plant", (0.13, "fixed"))
+        for slug in wanted_plants:
+            items.append(
+                {
+                    "id": f"plant_{slug}",
+                    "kind": "plant",
+                    "what": slug,
+                    "from": filed_greens[0] if filed_greens else slug,
+                    "estimate_usd": plant_usd,
+                }
+            )
+        plan = {"items": items, "world": self.world_commit or "unknown"}
+        for item in items:
+            if self._item_done(job, item["id"]):
+                continue
+            if not self._fits_budget(item, job, approved):
+                self._fail(job_id, "budget")
+                return False
+            self._require_lease(job_id)
+            item_dir = self.jobs_dir / job_id / item["id"]
+            item_dir.mkdir(parents=True, exist_ok=True)
+            self._write_enrich_places(
+                job_id,
+                item_dir,
+                [t for t in research.get("tiles", []) if isinstance(t, str)],
+                item,
+            )
+            try:
+                self.run_item(job_id, job, first_tile, plan, item, approved)
+            except _Off:
+                print(f"build job {job_id}: off switch stopped {item['id']}")
+                return False
+            except _Paused:
+                print(f"build job {job_id}: spend uncertain, {item['id']} paused")
+                self._update(job_id, {"error": "paused_spend_uncertain"})
+                return False
+            except _BudgetOut as error:
+                self._fail(job_id, error.code)
+                return False
+            job = self.store.get_build_job(job_id) or job
+            if not self._place_ship_species(job_id, job, item):
+                return False
+            job = self.store.get_build_job(job_id) or job
+        return True
+
+    def _place_ship_species(
+        self, job_id: str, job: dict[str, Any], item: dict[str, Any]
+    ) -> bool:
+        """The made species onto the place's tiles, as its overlay (#222.5).
+
+        The enrich review's ship tail without its verdicts: the
+        place checks gate the tiles, the remake seats the
+        species, and a new pack version carries the species
+        plus `additions/tiles.json` (#220). An item whose make
+        failed, or a species that can't ship, fails the job
+        first (0049-style: a half place never goes live).
+        """
+        from . import packs as packs_mod
+
+        assert self.world is not None
+        if not self._ship_completed(job_id, item["id"]):
+            entry = next(
+                (e for e in job.get("progress", []) if e.get("id") == item["id"]),
+                {},
+            )
+            print(
+                f"build job {job_id}: {item['id']} failed: "
+                f"{entry.get('error', 'its make failed')}",
+                file=sys.stderr,
+            )
+            self._fail(job_id, "item_failed")
+            return False
+        research = job.get("research") or {}
+        tiles = [t for t in research.get("tiles", []) if isinstance(t, str)]
+        shim = {**job, "tiles": tiles, "enrich": {"kind": item["kind"]}}
+        ship, failed, general, missing = self._place_ship(job_id, shim, item)
+        if general or (ship is not None and not ship):
+            self._flag_place(job_id, item, failed, missing, general)
+            self._fail(job_id, "place")
+            return False
+        self._require_lease(job_id)
+        passing, made_by_tile, gaps, skipped = self._remake_enrich_tiles(
+            job_id, shim, item, ship
+        )
+        what = str(item["what"])
+        self._flag_gaps(job_id, item, gaps, what)
+        self._flag_place(job_id, item, failed, missing, [])
+        self._history_left_out(job_id, shim, ship, failed, missing)
+        if not passing:
+            self._fail_item(job_id, job, item["id"])
+            self._fail(job_id, "nothing_overlaid")
+            return False
+        try:
+            overlay = packs_mod.build_tiles_overlay(
+                str(item["kind"]),
+                what,
+                self.world,
+                [made_by_tile[tile] for tile in passing],
+                passing,
+            )
+            pack_id = f"{item['kind']}_{what}"
+            files = self._overlay_pack_files(
+                job_id, item["id"], self._ship_pack(job_id, item["id"])
+            )
+            files["additions/tiles.json"] = overlay
+            version = packs_mod.next_pack_version(self.store, pack_id)
+            packed = packs_mod.assemble_enrich_pack(pack_id, version, files, min_game=2)
+            problems = packs_mod.check_pack(packed)
+            if problems:
+                raise ValueError(problems[0])
+            prefix = packs_mod.publish_pack(self.store, pack_id, version, packed)
+        except (ValueError, KeyError, packs_mod.PackExists) as error:
+            print(f"build job {job_id}: pack: {error}", file=sys.stderr)
+            self._fail_item(job_id, job, item["id"])
+            self._fail(job_id, "bad_pack")
+            return False
+        print(f"build job {job_id}: {item['id']} overlaid {len(passing)} tiles")
+        self._note_item_pack(job_id, item["id"], prefix)
+        return True
+
+    def _note_item_pack(self, job_id: str, item_id: str, prefix: str) -> None:
+        """The item's progress entry names its newest pack (#222.5)."""
+        job = self.store.get_build_job(job_id) or {}
+        progress = [
+            {**entry, "pack": prefix} if entry.get("id") == item_id else entry
+            for entry in job.get("progress", [])
+        ]
+        self._update(job_id, {"progress": progress})
+
+    def _place_ship_world(
+        self, job_id: str, job_dir: Any, research: dict[str, Any], biome: dict[str, Any]
+    ) -> Any:
+        """The checkout with the build's new species, for checks (#224.3).
+
+        Check-only scaffolding, never shipped: made animal and
+        plant files plus animal-list entries carrying the tile
+        biome's habitat, so the habitat check reads what the
+        survey researched.
+        """
+        import json
+        import shutil
+
+        assert self.world is not None
+        overlay = job_dir / "ship-world"
+        if overlay.exists():
+            shutil.rmtree(overlay)
+        shutil.copytree(self.world, overlay, ignore=shutil.ignore_patterns(".git"))
+        for src in sorted(job_dir.glob("*/animals/*.json")):
+            shutil.copy(src, overlay / "animals" / src.name)
+        greens = overlay / "models" / "plants"
+        greens.mkdir(parents=True, exist_ok=True)
+        for src in sorted(job_dir.glob("*/models/plants/*.json")):
+            shutil.copy(src, greens / src.name)
+        for src in sorted(job_dir.glob("*/models/plants/*.glb")):
+            shutil.copy(src, greens / src.name)
+        habitat = biome.get("habitat") if isinstance(biome, dict) else None
+        try:
+            listing_path = overlay / "animal-list.json"
+            listing = json.loads(listing_path.read_text(encoding="utf-8"))
+            have = {entry.get("id") for entry in listing.get("animals", [])}
+            for entry in research.get("animals", []):
+                sid = entry.get("id") if isinstance(entry, dict) else None
+                if not sid or sid in have:
+                    continue
+                if not (overlay / "animals" / f"{sid}.json").is_file():
+                    continue
+                listing["animals"].append(
+                    {"id": sid, "habitats": [habitat] if habitat else []}
+                )
+                have.add(sid)
+            listing_path.write_text(json.dumps(listing, indent=2), encoding="utf-8")
+        except (OSError, ValueError) as error:
+            print(f"build job {job_id}: ship-world list: {error}", file=sys.stderr)
+        return overlay
+
+    def _run_place_check(
+        self,
+        job_id: str,
+        ship_world: Any,
+        place_path: Any,
+        tile_paths: list[Any],
+        check_dir: Any,
+    ) -> list[str]:
+        """`tools/check_place.py` over the place and its tiles (#224.4).
+
+        [] when every check passes; the tool's report lands in
+        the check dir for the job report. Without the tool
+        (tests with fake worlds) there is nothing to run.
+        """
+        import json
+        import subprocess
+
+        tool = ship_world / "tools" / "check_place.py"
+        if not tool.is_file():
+            return []
+        try:
+            done = subprocess.run(
+                ["python3", "tools/check_place.py", str(place_path)]
+                + [str(path) for path in tile_paths],
+                cwd=ship_world,
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return [f"check_place.py did not run: {error}"]
+        try:
+            report = json.loads(done.stdout or "{}")
+        except ValueError:
+            return [f"check_place.py said no JSON: {(done.stdout or '')[:200]}"]
+        checks = check_dir / "checks"
+        checks.mkdir(parents=True, exist_ok=True)
+        (checks / "check_place.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8"
+        )
+        problems = []
+        for entry in report.get("results", []) or []:
+            if not isinstance(entry, dict) or entry.get("status") != "fail":
+                continue
+            for line in entry.get("problems", []) or []:
+                problems.append(f"{entry.get('check')}: {line}")
+        for tile in report.get("tiles", []) or []:
+            if isinstance(tile, dict) and not tile.get("ok", True):
+                problems.append(f"{tile.get('tile')}: fails with the place over it")
+        if report.get("error"):
+            problems.append(str(report["error"]))
+        return problems
+
+    def _place_publish(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        research: dict[str, Any],
+        biome: dict[str, Any],
+        made: dict[str, dict[str, Any]],
+    ) -> None:
+        """The place file, its checks, pack, wanted and publish (#222.6, #224)."""
+        import json
+
+        from . import build as build_mod
+        from . import history as history_mod
+        from . import packs as packs_mod
+        from . import place as place_mod
+
+        assert self.world is not None
+        job_dir = self.jobs_dir / job_id
+        try:
+            place = place_mod.write_job_place(
+                research,
+                job_dir,
+                self.world,
+                made,
+                self._habitat_grid(),
+                self.builder_root,
+            )
+        except ValueError as error:
+            print(f"build job {job_id}: {error}", file=sys.stderr)
+            self._fail(job_id, "no_short")
+            return
+        place_id = place["id"]
+        ship_world = self._place_ship_world(job_id, job_dir, research, biome)
+        check_dir = job_dir / "place-check"
+        check_dir.mkdir(parents=True, exist_ok=True)
+        place_path = check_dir / f"{place_id}.json"
+        place_path.write_text(json.dumps(place, indent=2), encoding="utf-8")
+        tile_paths = []
+        for tile, tile_made in made.items():
+            tile_path = check_dir / f"{tile}.json"
+            tile_path.write_text(json.dumps(tile_made, indent=2), encoding="utf-8")
+            tile_paths.append(tile_path)
+        if (ship_world / "schemas" / "place.schema.json").is_file():
+            problems = place_mod.check_place_file(place_path, ship_world)
+            if problems:
+                print(
+                    f"build job {job_id}: place schema: {'; '.join(problems)}",
+                    file=sys.stderr,
+                )
+                self._fail(job_id, "place_check")
+                return
+        problems = self._run_place_check(
+            job_id, ship_world, place_path, tile_paths, check_dir
+        )
+        if problems:
+            print(
+                f"build job {job_id}: place check: {'; '.join(problems)}",
+                file=sys.stderr,
+            )
+            self._fail(job_id, "place_check")
+            return
+        from .report import build_report
+
+        build_report(check_dir)
+        report = build_mod.upload_bundle(
+            self.store, f"review/{job_id}/place", check_dir
+        )
+        pack_id = f"place_{place_id}"
+        version = packs_mod.next_pack_version(self.store, pack_id)
+        try:
+            packed = packs_mod.assemble_place_pack(
+                pack_id, version, place_id, place_path.read_bytes()
+            )
+            pack_problems = packs_mod.check_pack(packed)
+        except ValueError as error:
+            pack_problems = [str(error)]
+        if pack_problems:
+            print(
+                f"build job {job_id}: pack: {'; '.join(pack_problems)}", file=sys.stderr
+            )
+            self._fail(job_id, "bad_pack")
+            return
+        try:
+            prefix = packs_mod.publish_pack(self.store, pack_id, version, packed)
+        except packs_mod.PackExists as error:
+            print(f"build job {job_id}: pack: {error}", file=sys.stderr)
+            self._fail(job_id, "bad_pack")
+            return
+        self._place_file_wanted(job_id, job, research, place_id)
+        history_mod.record(
+            self.store,
+            history_mod.row(
+                research["tiles"][0],
+                "placed",
+                job=job_id,
+                kind="place",
+                world=self.world_commit or "unknown",
+                version=version,
+            ),
+        )
+        progress = [
+            entry
+            for entry in (self.store.get_build_job(job_id) or {}).get("progress", [])
+            if entry.get("id") != "place"
+        ]
+        progress.append(
+            {
+                "id": "place",
+                "status": "published",
+                "place": place_id,
+                "pack": prefix,
+                "report": report,
+            }
+        )
+        self._update(job_id, {"progress": progress, "pack": prefix})
+        self._set_status(job_id, "published")
+
+    def _place_file_wanted(
+        self, job_id: str, job: dict[str, Any], research: dict[str, Any], place_id: str
+    ) -> None:
+        """Found-but-unmade species onto the tiles' wanted lists (#224.5).
+
+        The research's animals and plants this build didn't
+        make, plus the request's `--want` ids still missing,
+        in the tile `wanted` shape with the research's part,
+        under each of the place's own tiles. Wanted is found
+        minus made by construction, so an empty list means
+        the research found nothing more — the bug #224.5
+        names (found but unfiled) cannot happen.
+        """
+        from datetime import date
+
+        from . import place as place_mod
+        from .animal_list import find_list, load_list
+        from .build import publish_places
+
+        assert self.world is not None
+        job_dir = self.jobs_dir / job_id
+        job_made = {src.stem for src in sorted(job_dir.glob("*/animals/*.json"))} | {
+            src.stem for src in sorted(job_dir.glob("*/models/plants/*.json"))
+        }
+        survey_missing = place_mod.missing_species(
+            research.get("animals", []),
+            research.get("plants", []),
+            self.world,
+            str(research.get("biome", "")),
+        )
+        wanted = [drop for drop in survey_missing if drop["what"] not in job_made]
+        filed_animals = {
+            src.stem
+            for src in sorted((self.world / "animals").glob("*.json"))
+            if src.is_file()
+        }
+        filed_plants = {
+            src.stem
+            for src in sorted((self.world / "models" / "plants").glob("*.json"))
+            if src.is_file()
+        }
+        listed = {
+            entry["id"]
+            for entry in load_list(find_list(self.world))["animals"]
+            if isinstance(entry.get("id"), str)
+        }
+        part = str(research.get("biome", ""))
+        for want in job.get("want", []) or []:
+            if not isinstance(want, str) or not want:
+                continue
+            if (
+                want in job_made
+                or want in filed_animals
+                or want in filed_plants
+                or any(item["what"] == want for item in wanted)
+            ):
+                continue
+            if want in listed:
+                wanted.append({"kind": "animal", "what": want, "part": part})
+            else:
+                print(
+                    f"build job {job_id}: wanted {want} is no listed "
+                    "animal; left off the list"
+                )
+        entry = {
+            "region": place_id,
+            "wanted": wanted,
+            "surveyed_at": date.today().isoformat(),
+        }
+        commit = self.world_commit or "unknown"
+        for tile in research.get("tiles", []):
+            if isinstance(tile, str):
+                publish_places(tile, entry, self.store, commit)
+        print(
+            f"build job {job_id}: wanted {len(wanted)} species "
+            f"on {len(research.get('tiles', []))} tiles"
+        )
+
     def remake_job(self, job_id: str, job: dict[str, Any]) -> None:
         """One ready tile again, exactly as a new border request (#243).
 
@@ -967,7 +1632,6 @@ class Worker:
 
         from .build import publish_group
         from .grid import group_path
-        from .prices import SURVEY_ESTIMATE_USD
         from .tiles import make_tile, survey_needs_call
 
         assert self.world is not None
@@ -1004,10 +1668,15 @@ class Worker:
             Path(source.cache_dir),
             self.builder_root,
         ):
-            if not self._remake_covers(job, SURVEY_ESTIMATE_USD):
+            survey_usd, survey_from = self._median_estimates()["survey"]
+            if not self._remake_covers(job, survey_usd):
                 self._update(
                     job_id,
-                    {"price_usd": SURVEY_ESTIMATE_USD, "status": "waiting_yes"},
+                    {
+                        "price_usd": survey_usd,
+                        "price_from": survey_from,
+                        "status": "waiting_yes",
+                    },
                 )
                 print(f"build job {job_id}: the survey would spend; waiting for yes")
                 return
@@ -1022,6 +1691,7 @@ class Worker:
                 builder_root=self.builder_root,
                 species=self.species,
                 species_source=source,
+                estimates=self._median_estimates(),
             )
         except (ValueError, RuntimeError, FileNotFoundError, ConnectionError) as error:
             print(f"build job {job_id}: cannot plan: {error}", file=sys.stderr)
@@ -1126,8 +1796,8 @@ class Worker:
             self._update(job_id, {"survey_cached": True})
 
     @staticmethod
-    def _remake_cap(job: dict[str, Any]) -> float:
-        """The remake's approved spend: its budget or its yes cap."""
+    def _approved_spend(job: dict[str, Any]) -> float:
+        """The job's approved spend: its budget or its yes cap."""
         cap = 0.0
         for key in ("budget_usd", "cap_usd"):
             value = job.get(key)
@@ -1139,7 +1809,25 @@ class Worker:
 
     def _remake_covers(self, job: dict[str, Any], amount: float) -> bool:
         """The cap covers this step's price, or there is no price."""
-        return amount <= 0 or self._remake_cap(job) >= amount
+        return amount <= 0 or self._approved_spend(job) >= amount
+
+    def _median_estimates(self) -> dict[str, tuple[float, str]]:
+        """Live quotes read the cost log's medians (#259.4)."""
+        from . import costs as costs_mod
+
+        try:
+            return costs_mod.median_estimates(self.store)
+        except Exception:  # noqa: BLE001 - unreadable log quotes fixed
+            from .prices import (
+                ITEM_ESTIMATES,
+                PLACE_BUILD_USD_PER_TILE,
+                SURVEY_ESTIMATE_USD,
+            )
+
+            out = {k: (v, "fixed") for k, v in ITEM_ESTIMATES.items()}
+            out["survey"] = (SURVEY_ESTIMATE_USD, "fixed")
+            out["tile"] = (PLACE_BUILD_USD_PER_TILE, "fixed")
+            return out
 
     def _remake_answer(self, job_id: str, job: dict[str, Any]) -> None:
         """The yes or no to a priced remake, consumed once (#243.2)."""
@@ -1415,7 +2103,7 @@ class Worker:
         from . import build as build_mod
         from .jobs import make_context
         from .ledger import CapExceeded, LedgerError, receipt_refs
-        from .meta import MetaAuthError, SpendUncertain
+        from .meta import MetaAuthError, SpendUncertain, cost_part
         from .pipeline import BudgetExceeded, OffSwitch
 
         assert self.world is not None
@@ -1441,9 +2129,10 @@ class Worker:
                     enrich_tiles = [t for t in job.get("tiles", []) or [tile]]
                     self._write_enrich_places(job_id, item_dir, enrich_tiles, item)
                     self._label_enrich_item(item_dir, tile)
-                self._run_stages(
-                    ctx, job_id, tile, plan, item, item_dir, cast, enrich_tiles
-                )
+                with cost_part(f"{item['kind']}:{item['what']}"):
+                    self._run_stages(
+                        ctx, job_id, tile, plan, item, item_dir, cast, enrich_tiles
+                    )
         except BudgetExceeded as error:
             self._close_item(
                 job_id,
@@ -2156,11 +2845,78 @@ class Worker:
         self, job_id: str, status: str, extra: dict[str, Any] | None = None
     ) -> None:
         self._update(job_id, {"status": status, **(extra or {})})
+        if status == "published":
+            self._record_cost(job_id)
 
     def _fail(self, job_id: str, error: str) -> None:
         print(f"build job {job_id}: failed ({error})", file=sys.stderr)
         self._update(job_id, {"status": "failed", "error": error})
+        self._record_cost(job_id)
         self.alert({"kind": "job_failed", "id": job_id, "error": error})
+
+    def _record_cost(self, job_id: str) -> None:
+        """`cost` onto the ended job, and its `cost_log` row (#259.2, #259.3).
+
+        Never breaks the ending: a costing failure still leaves a
+        stub, and the log row id gains `_2` on a re-run rather
+        than overwriting.
+        """
+        from . import costs as costs_mod
+        from .history import BUILDER_COMMIT
+
+        job = self.store.get_build_job(job_id) or {}
+        ended_at = now_iso()
+        try:
+            cost = costs_mod.rollup_cost(
+                job_id,
+                job,
+                self.jobs_dir,
+                self.config.ledger_path,
+                self.config.baseten_ledger_path(),
+                ended_at,
+            )
+        except Exception as error:  # noqa: BLE001 - costing never breaks endings
+            print(f"build job {job_id}: cost rollup: {error}", file=sys.stderr)
+            cost = {"estimate": {}, "actual": 0.0, "parts": {}, "wall_s": None}
+        species = self._cost_species(job)
+        record = {
+            "job": job_id,
+            "kind": job.get("kind"),
+            "tiles": [t for t in job.get("tiles", []) or [] if isinstance(t, str)],
+            "species": species,
+            "builder_commit": BUILDER_COMMIT,
+            "worker_version": BUILDER_COMMIT,
+            "date": ended_at[:10],
+            "cost": cost,
+        }
+        try:
+            doc_id, suffix = job_id, 2
+            while self.store.get_cost_log(doc_id) is not None:
+                doc_id = f"{job_id}_{suffix}"
+                suffix += 1
+            self.store.write_cost_log(doc_id, record)
+        except Exception as error:  # noqa: BLE001 - the doc keeps the cost anyway
+            print(f"build job {job_id}: cost_log: {error}", file=sys.stderr)
+        self._update(job_id, {"cost": cost, "ended_at": ended_at})
+
+    @staticmethod
+    def _cost_species(job: dict[str, Any]) -> list[str]:
+        """The cost row's species labels: enrich and research only."""
+        found: list[str] = []
+        enrich = job.get("enrich") or {}
+        if isinstance(enrich.get("what"), str):
+            found.append(enrich["what"])
+        research = job.get("research") or {}
+        for group in ("animals", "plants"):
+            entries = research.get(group, [])
+            if isinstance(entries, list):
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    label = entry.get("id", entry.get("name"))
+                    if isinstance(label, str):
+                        found.append(label)
+        return sorted(set(found))
 
     def _history_context(
         self, job_id: str, kind: str, tile: str | None = None

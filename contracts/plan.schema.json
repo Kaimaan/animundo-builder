@@ -31,7 +31,8 @@
           "kind": {"enum": ["home", "animal", "plant", "food"]},
           "what": {"type": "string", "minLength": 1},
           "from": {"type": "string", "minLength": 1},
-          "estimate_usd": {"type": "number", "minimum": 0}
+          "estimate_usd": {"type": "number", "minimum": 0},
+          "estimate_from": {"type": "string", "minLength": 1}
         }
       }
     },
@@ -47,7 +48,8 @@
           "kind": {"enum": ["home", "animal", "plant", "food"]},
           "what": {"type": "string", "minLength": 1},
           "from": {"type": "string", "minLength": 1},
-          "estimate_usd": {"type": "number", "minimum": 0}
+          "estimate_usd": {"type": "number", "minimum": 0},
+          "estimate_from": {"type": "string", "minLength": 1}
         }
       }
     },
@@ -114,6 +116,11 @@
     "probe": {
       "description": "The code-only probe left undecided: needs_survey says the tile needs one survey before the plan can say more, and estimate_usd is that survey's cost (#169.3).",
       "enum": ["needs_survey"]
+    },
+    "survey_from": {
+      "description": "Where the probe survey's dollars came from: fixed, or the cost log's rows (#259.4).",
+      "type": "string",
+      "minLength": 1
     }
   }
 }

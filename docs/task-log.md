@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #265 (v36 live; re-plan the 16% tile; Mamirauá's $3.96 quote)
+
+- Worker v36 verified live on `f34f048` via container exec (fresh container). No code in this item — $0 live checks only.
+- #265.1: no re-plan write was needed — v36 had already re-planned `z10_0928_0561` at 16:05 UTC and the doc is exactly right: `code_only: true`, `items: []`, no `blocked`, named open ocean southeast of Green Island, food gaps as a report (dolphin/whale `small_fish`, tern `bottom_bugs` — 0061, never a filter). I verified rather than duplicated: a second write would churn the live plan for an identical result.
+- #265.2: Mamirauá re-priced itself to **$3.96** at 16:05:11 UTC — 7 animals (sloth out), 4 plants (precatoria in, other three as researched). The #264 self-correcting quote worked live with no hand step. Then Kai said yes: the yes is consumed, status `building`/`approved`, no error, no spend yet — stage C is starting on v36 with the corrected set. I started nothing and am touching nothing; C2 is Kai's live build now.
+- #265.3: the N/E reef-sea remake and any Gulf of Finland remake are held — nothing run, nothing queued, waiting for Kai's go.
+
 ## 2026-11-03: inbox #263 (no blend on open-sea tiles; whales and dolphins at sea)
 
 - #263.1: `make_tile` adds no `blend` of either kind when the home is `open_sea` — the world's check refuses any blend there (0047), and since #255 the reef reaches a sea tile through `terrain.reef_mask` alone. (The eco blend is guarded too: no live open-sea tile can carry one past the check, so suppressing it breaks nothing.) Test: the 16% cell `z10_0928_0561` makes as `open_sea` with a 256-mask and no blend and passes `check_tile.py`; the 23% cell `z10_0926_0559` flips to `coral_reef` and passes too. Re-plan `z10_0928_0561` once this deploys; with #255 it carries its mask.

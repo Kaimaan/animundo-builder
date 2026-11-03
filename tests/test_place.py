@@ -45,6 +45,24 @@ def _needs_world() -> Path:
     return world
 
 
+def _needs_built_models(world: Path) -> None:
+    """Skip when no built model and no Blender can build one (#260.2).
+
+    A bare world holds no `.glb` (untracked build outputs); the
+    replayed home build then needs Blender, and without either
+    the recording runs out. Same shape as the compat check's
+    unbuilt-model skips: a clear reason, never a stubbed build.
+    """
+    from builder.compat import missing_models
+
+    if missing_models(world) and shutil.which("blender") is None:
+        pytest.skip(
+            f"bare animundo-world ({len(missing_models(world))} models "
+            "unbuilt here, cannot verify) and no Blender: "
+            "the replayed home build needs one of them"
+        )
+
+
 def _gbr_answer() -> dict[str, Any]:
     entry = json.loads((FIXTURES / "gbr-survey.jsonl").read_text().splitlines()[0])
     texts = [
@@ -1449,6 +1467,7 @@ def test_replayed_reef_home_job_reaches_checking_with_a_passing_place(
     from builder.place import check_place_file, replay_place, take_place_job
 
     world = _needs_world()
+    _needs_built_models(world)
     reports, place_path = replay_place(
         FIXTURES / "reef-home", tmp_path / "out", world, _grid_dir()
     )
@@ -1507,6 +1526,7 @@ def test_replayed_place_files_its_missing_on_ship(tmp_path: Path) -> None:
     from builder.place import replay_place
 
     world = _needs_world()
+    _needs_built_models(world)
     place_dir = tmp_path / "reef-home"
     shutil.copytree(FIXTURES / "reef-home", place_dir)
     survey_path = place_dir / "survey.json"

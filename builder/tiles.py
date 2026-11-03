@@ -928,29 +928,179 @@ def wanted_drops(
     return drops[:WANTED_LIMIT]
 
 
+def _plant_fits(on: list[str], land: float, water: float) -> str | None:
+    """None when the plant fits the tile; else the plain reason (#253)."""
+    wet = "seabed" in on or "reef" in on
+    if wet and water <= 0:
+        bed = "the seabed" if "seabed" in on else "a reef"
+        return f"grows on {bed}; the tile has no sea"
+    if not wet and land <= 0:
+        return "grows on land; the tile has no land"
+    return None
+
+
+def _biome_greens(world: Path, biome: str) -> dict[str, Any] | None:
+    """The biome file's plants, or nothing without one (#253)."""
+    path = world / "biomes" / f"{biome}.json"
+    try:
+        plants = json.loads(path.read_text(encoding="utf-8")).get("plants")
+    except (OSError, ValueError):
+        return None
+    return plants if isinstance(plants, dict) else None
+
+
 def tile_plants(
-    world: Path, answer: dict[str, Any]
-) -> tuple[dict[str, Any] | None, list[str], list[str]]:
-    """The survey's picks as the tile's plants (#147.3).
+    world: Path,
+    answer: dict[str, Any],
+    biome: str | None = None,
+    land: float = 1.0,
+    water: float = 0.0,
+) -> tuple[dict[str, Any] | None, list[str], list[str], list[str]]:
+    """The tile's plants: the biome's, changed or added by the survey.
+
+    Each part starts from the biome's list with its densities and
+    shares; a picked plant the biome has takes the survey's
+    density (never under 0.001), a picked plant it lacks is
+    added after, and an unpicked biome plant stays (0062). Only
+    code leaves a plant out: when its grows can't fit the tile
+    it goes in `plants.left_out` with the reason, always
+    written so the world's check knows the tile is 0062-made.
+    Extras past the 24/6 caps come back for the job's
+    `plants_over_cap`, never on the tile. Returns the plants
+    dict (nothing when nothing grows and no biome), the
+    requires lists, and the over-cap ids. Without a biome file,
+    the survey's picks alone as before #253 (no `left_out`:
+    pre-0062).
+    """
+    picks: dict[str, float] = {}
+    for pick in answer.get("plants", []):
+        if pick["id"] not in picks:
+            picks[pick["id"]] = pick["count"]
+    tree_picks: dict[str, float] = {}
+    for pick in answer.get("trees", []):
+        if pick["id"] not in tree_picks:
+            tree_picks[pick["id"]] = pick["count"]
+    greens = _biome_greens(world, biome) if biome is not None else None
+    if greens is None:
+        return _survey_only_plants(world, picks, tree_picks)
+    sides: dict[str, str] = {}
+    for side in ("cover", "water"):
+        for entry in greens.get(side, []) or []:
+            if isinstance(entry, dict) and entry.get("id"):
+                sides[entry["id"]] = side
+    tops: dict[str, float] = {}
+    for pid, count in picks.items():
+        on = _grows(world, "plants", pid).get("on") or []
+        side = "water" if "seabed" in on or "reef" in on else "cover"
+        tops[side] = max(tops.get(side, 0.0), count)
+    seated: dict[str, list[dict[str, Any]]] = {"cover": [], "water": []}
+    left_out: list[dict[str, str]] = []
+    for side in ("cover", "water"):
+        for entry in greens.get(side, []) or []:
+            if not isinstance(entry, dict) or not entry.get("id"):
+                continue
+            pid = entry["id"]
+            on = _grows(world, "plants", pid).get("on") or []
+            why = _plant_fits(on if isinstance(on, list) else [], land, water)
+            if why is not None:
+                left_out.append({"id": pid, "why": why})
+                continue
+            if pid in picks and tops.get(side, 0.0) > 0:
+                density = _grows(world, "plants", pid).get("density")
+                if not isinstance(density, (int, float)) or not 0 < density <= 1:
+                    density = TILE_PLANT_DENSITY
+                amount = max(0.001, round(density * picks[pid] / tops[side], 3))
+            else:
+                amount = entry["density"]
+            seated[side].append({"id": pid, "density": amount})
+    extras = [
+        (pid, count)
+        for pid, count in picks.items()
+        if pid not in sides and pid not in {e["id"] for e in left_out}
+    ]
+    extras.sort(key=lambda item: (-item[1], item[0]))
+    over_cap: list[str] = []
+    for pid, count in extras:
+        on = _grows(world, "plants", pid).get("on") or []
+        if _plant_fits(on if isinstance(on, list) else [], land, water) is not None:
+            continue
+        side = "water" if "seabed" in on or "reef" in on else "cover"
+        if len(seated["cover"]) + len(seated["water"]) >= MAX_GROUND_PLANTS:
+            over_cap.append(pid)
+            continue
+        density = _grows(world, "plants", pid).get("density")
+        if not isinstance(density, (int, float)) or not 0 < density <= 1:
+            density = TILE_PLANT_DENSITY
+        top = tops.get(side, 0.0)
+        amount = max(0.001, round(density * count / top, 3)) if top > 0 else 0.001
+        seated[side].append({"id": pid, "density": amount})
+    trees: list[dict[str, Any]] = []
+    tree_total = sum(tree_picks.values())
+    for entry in greens.get("trees", []) or []:
+        if not isinstance(entry, dict) or not entry.get("id"):
+            continue
+        pid = entry["id"]
+        on = _grows(world, "trees", pid).get("on") or []
+        why = _plant_fits(on if isinstance(on, list) else [], land, water)
+        if why is not None:
+            left_out.append({"id": pid, "why": why})
+            continue
+        if pid in tree_picks and tree_total > 0:
+            share = max(0.001, round(tree_picks[pid] / tree_total, 3))
+        else:
+            share = entry["share"]
+        trees.append({"id": pid, "share": share})
+    biome_trees = {
+        entry["id"]
+        for entry in greens.get("trees", []) or []
+        if isinstance(entry, dict)
+    }
+    extra_trees = sorted(
+        [pid for pid in tree_picks if pid not in biome_trees],
+        key=lambda pid: (-tree_picks[pid], pid),
+    )
+    for pid in extra_trees:
+        on = _grows(world, "trees", pid).get("on") or []
+        if _plant_fits(on if isinstance(on, list) else [], land, water) is not None:
+            continue
+        if len(trees) >= MAX_TILE_TREES:
+            over_cap.append(pid)
+            continue
+        if tree_total:
+            share = max(0.001, round(tree_picks[pid] / tree_total, 3))
+        else:
+            share = 0.001
+        trees.append({"id": pid, "share": share})
+    entries: dict[str, Any] = {}
+    if seated["cover"]:
+        entries["cover"] = seated["cover"]
+    if seated["water"]:
+        entries["water"] = seated["water"]
+    if trees:
+        entries["trees"] = trees
+    entries["left_out"] = sorted(left_out, key=lambda e: e["id"])
+    needs = sorted({e["id"] for side in ("cover", "water") for e in seated[side]})
+    wants = sorted(e["id"] for e in trees)
+    return entries, needs, wants, over_cap
+
+
+def _survey_only_plants(
+    world: Path, picks: dict[str, float], tree_picks: dict[str, float]
+) -> tuple[dict[str, Any] | None, list[str], list[str], list[str]]:
+    """The survey's picks as the tile's plants, pre-0062 (#147.3).
 
     Cover or water by the spec's grows (seabed and reef grow in water);
     density is the spec's own scaled by the pick's count against
     the part's highest; tree shares split the picks' counts. The
-    phone's limits cap each list in the survey's order. Returns
-    the plants dict (nothing when nothing picked) with the
-    requires lists.
+    phone's limits cap each list in the survey's order.
     """
     cover: list[dict[str, Any]] = []
     water: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for pick in answer.get("plants", []):
-        if pick["id"] in seen:
-            continue
-        seen.add(pick["id"])
-        grows = _grows(world, "plants", pick["id"])
+    for pid, count in picks.items():
+        grows = _grows(world, "plants", pid)
         on = grows.get("on") or []
         part = water if "seabed" in on or "reef" in on else cover
-        part.append(pick)
+        part.append({"id": pid, "count": count})
         if len(cover) + len(water) >= MAX_GROUND_PLANTS:
             break
     entries: dict[str, Any] = {}
@@ -966,26 +1116,18 @@ def tile_plants(
             amount = max(0.001, round(density * pick["count"] / top, 3))
             items.append({"id": pick["id"], "density": amount})
         entries[key] = items
-    picked_trees = []
-    seen = set()
-    for pick in answer.get("trees", []):
-        if pick["id"] in seen:
-            continue
-        seen.add(pick["id"])
-        picked_trees.append(pick)
-        if len(picked_trees) >= MAX_TILE_TREES:
-            break
-    if picked_trees:
-        total = sum(p["count"] for p in picked_trees)
+    picked = list(tree_picks.items())[:MAX_TILE_TREES]
+    if picked:
+        total = sum(count for _, count in picked)
         entries["trees"] = [
-            {"id": p["id"], "share": max(0.001, round(p["count"] / total, 3))}
-            for p in picked_trees
+            {"id": pid, "share": max(0.001, round(count / total, 3))}
+            for pid, count in picked
         ]
     if not entries:
-        return None, [], []
+        return None, [], [], []
     needs = sorted({p["id"] for part in (cover, water) for p in part})
-    wants = sorted(p["id"] for p in picked_trees)
-    return entries, needs, wants
+    wants = sorted(pid for pid, _ in picked)
+    return entries, needs, wants, []
 
 
 def _blocked(
@@ -1638,13 +1780,16 @@ def make_tile(
     builder_root: Path | None = None,
     species: dict[str, Any] | None = None,
     species_source: SpeciesSource | None = None,
+    over_cap: list[str] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Make one tile, or the blocked reason when it can't be made.
 
     Returns (tile, None) or (None, {"reason": ..., "habitat": ...}).
     `presence` overrides with GBIF-style counts (tests and replays);
     `species` overrides with a recorded Muse Spark answer. Otherwise
-    the answer comes from the cache or one model call.
+    the answer comes from the cache or one model call. `over_cap`,
+    when given, collects the survey extras past the 24/6 plant
+    caps for the job's `plants_over_cap` (0062).
     """
     from .schemas import ROOT as BUILDER_ROOT
 
@@ -1781,7 +1926,9 @@ def make_tile(
         present = rank_weights(ordered)
         species_tag = f"{SPECIES_MODEL}:{date}"
         wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
-        greens, needs, wants = tile_plants(world, answer)
+        greens, needs, wants, capped = tile_plants(world, answer, home, land, water)
+        if over_cap is not None:
+            over_cap.extend(capped)
     level = cell_level(habitat, elev)
     edges = tile_edges(tile, habitat_grid)
     provisional: dict[str, Any] = {

@@ -854,7 +854,7 @@ def test_picked_plants_land_on_the_tile(tmp_path: Path) -> None:
         ],
         "trees": [{"id": "pine", "count": 5, "share": 1.0}],
     }
-    plants, requires, tree_ids = tile_plants(world, answer)
+    plants, requires, tree_ids, over = tile_plants(world, answer)
     assert plants is not None
     assert [c["id"] for c in plants["cover"]] == ["bilberry"]
     assert [c["id"] for c in plants["water"]] == ["bladderwrack"]
@@ -876,11 +876,173 @@ def test_picked_reef_plants_land_in_water(tmp_path: Path) -> None:
         json.dumps({"grows": {"on": ["reef"], "density": 0.2}})
     )
     answer = {"plants": [{"id": "table_coral", "count": 4}], "trees": []}
-    plants, requires, _tree_ids = tile_plants(world, answer)
+    plants, requires, _tree_ids, _over = tile_plants(world, answer)
     assert plants is not None
     assert [c["id"] for c in plants["water"]] == ["table_coral"]
     assert "cover" not in plants
     assert requires == ["table_coral"]
+
+
+def _biome(world: Path, name: str, plants: dict[str, Any]) -> None:
+    folder = world / "biomes"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{name}.json").write_text(json.dumps({"plants": plants}))
+
+
+def _spec(world: Path, folder: str, pid: str, grows: dict[str, Any]) -> None:
+    folder_path = world / "models" / folder
+    folder_path.mkdir(parents=True, exist_ok=True)
+    (folder_path / f"{pid}.json").write_text(json.dumps({"grows": grows}))
+
+
+def test_biome_plants_stay_when_the_survey_skips_them(tmp_path: Path) -> None:
+    """#253: an unpicked biome plant stays at the biome's density."""
+    from builder.tiles import tile_plants
+
+    world = _world(tmp_path)
+    _biome(
+        world,
+        "xx_test",
+        {"cover": [{"id": "bilberry", "density": 0.22}], "trees": []},
+    )
+    _spec(world, "plants", "bilberry", {"density": 0.5})
+    plants, needs, _wants, over = tile_plants(
+        world, {"plants": [], "trees": []}, "xx_test", 1.0, 0.0
+    )
+    assert plants is not None
+    assert plants["cover"] == [{"id": "bilberry", "density": 0.22}]
+    assert plants["left_out"] == []
+    assert needs == ["bilberry"]
+    assert over == []
+
+
+def test_survey_density_replaces_with_a_floor(tmp_path: Path) -> None:
+    """#253: a pick takes the survey's density, never under 0.001."""
+    from builder.tiles import tile_plants
+
+    world = _world(tmp_path)
+    _biome(
+        world,
+        "xx_test",
+        {"cover": [{"id": "moss", "density": 0.5}], "trees": []},
+    )
+    _spec(world, "plants", "moss", {"density": 0.008})
+    _spec(world, "plants", "fern", {"density": 0.5})
+    answer = {
+        "plants": [{"id": "moss", "count": 1}, {"id": "fern", "count": 100}],
+        "trees": [],
+    }
+    plants, _needs, _wants, _over = tile_plants(world, answer, "xx_test", 1.0, 0.0)
+    assert plants is not None
+    by_id = {e["id"]: e["density"] for e in plants["cover"]}
+    assert by_id["moss"] == 0.001
+    assert by_id["fern"] == 0.5
+
+
+def test_reef_plant_on_a_dry_tile_goes_to_left_out(tmp_path: Path) -> None:
+    """#253: only code leaves a plant out, with the reason."""
+    from builder.tiles import tile_plants
+
+    world = _world(tmp_path)
+    _biome(
+        world,
+        "xx_test",
+        {
+            "cover": [{"id": "moss", "density": 0.1}],
+            "water": [{"id": "coral", "density": 0.2}],
+            "trees": [],
+        },
+    )
+    _spec(world, "plants", "moss", {"density": 0.1})
+    _spec(world, "plants", "coral", {"on": ["reef"], "density": 0.2})
+    plants, needs, _wants, over = tile_plants(
+        world, {"plants": [], "trees": []}, "xx_test", 1.0, 0.0
+    )
+    assert plants is not None
+    assert [e["id"] for e in plants["cover"]] == ["moss"]
+    assert "water" not in plants
+    assert plants["left_out"] == [
+        {"id": "coral", "why": "grows on a reef; the tile has no sea"}
+    ]
+    assert needs == ["moss"]
+    assert over == []
+
+
+def test_survey_extra_past_the_cap_comes_back_over_cap(tmp_path: Path) -> None:
+    """#253: the 24/6 caps hold; extras come back for the job."""
+    from builder.tiles import tile_plants
+
+    world = _world(tmp_path)
+    cover = [{"id": f"p{i:02d}", "density": 0.01} for i in range(24)]
+    _biome(world, "xx_test", {"cover": cover, "trees": []})
+    for i in range(24):
+        _spec(world, "plants", f"p{i:02d}", {"density": 0.01})
+    _spec(world, "plants", "newcomer", {"density": 0.5})
+    answer = {"plants": [{"id": "newcomer", "count": 9}], "trees": []}
+    plants, needs, _wants, over = tile_plants(world, answer, "xx_test", 1.0, 0.0)
+    assert plants is not None
+    assert len(plants["cover"]) == 24
+    assert "newcomer" not in {e["id"] for e in plants["cover"]}
+    assert "newcomer" not in needs
+    assert over == ["newcomer"]
+
+
+def test_taiga_replay_keeps_its_clover() -> None:
+    """#253: a cloverless survey still grows clover, and checks clean."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+    from builder.tiles import check_with_world
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        load_grid(grid_dir),
+        world,
+        builder_root=ROOT,
+        species={
+            "place": "Boreal forest in southern Finland",
+            "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+            "plants": [{"id": "bilberry", "count": 5}],
+            "trees": [{"id": "norway_spruce", "count": 5}],
+            "outside_animals": [],
+            "outside_plants": [],
+            "name_en": "Fox woods",
+            "name_fi": "Kettumetsä",
+        },
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["biome"] == "boreal_taiga"
+    plants = made["plants"]
+    by_id = {e["id"]: e["density"] for e in plants["cover"]}
+    assert by_id["white_clover"] == 0.008
+    assert by_id["red_clover"] == 0.006
+    assert check_with_world(made, world) == []
+    # The 0062 kept-rules (world a6c7612 kept_problems): every
+    # biome plant on the tile or left out with a reason, nothing
+    # under 0.001.
+    biome = json.loads((world / "biomes" / "boreal_taiga.json").read_text())["plants"]
+    on_tile = {
+        e["id"] for part in ("cover", "water", "trees") for e in plants.get(part, [])
+    }
+    in_biome = {
+        e["id"] for part in ("cover", "water", "trees") for e in biome.get(part, [])
+    }
+    left = plants["left_out"]
+    assert all(set(e) == {"id", "why"} and e["why"].strip() for e in left)
+    assert {e["id"] for e in left} <= in_biome
+    assert {e["id"] for e in left} & on_tile == set()
+    assert in_biome <= on_tile | {e["id"] for e in left}
+    for part, amount in (("cover", "density"), ("water", "density")):
+        for e in plants.get(part, []):
+            assert e[amount] >= 0.001
+    for e in plants.get("trees", []):
+        assert e["share"] >= 0.001
 
 
 def test_ground_keep_treats_reef_as_water() -> None:
@@ -2272,7 +2434,7 @@ def test_helsinki_shore_remakes_from_layered_plants(tmp_path: Path) -> None:
     assert "herring_gull" in made["species"]["playable"]
     plants = made.get("plants") or {}
     cover = {entry["id"] for entry in plants.get("cover", [])}
-    assert cover == {
+    picks = {
         "juniper",
         "crowberry",
         "heather",
@@ -2280,13 +2442,16 @@ def test_helsinki_shore_remakes_from_layered_plants(tmp_path: Path) -> None:
         "wavy_hair_grass",
         "fireweed",
     }
-    assert "lingonberry" not in cover
-    assert "bilberry" not in cover
-    assert {entry["id"] for entry in plants.get("trees", [])} == {
-        "scots_pine",
-        "birch",
-        "rowan",
+    # Since 0062 the survey changes densities but never drops:
+    # its picks stay, and the biome's unpicked plants stay too.
+    assert picks <= cover
+    assert "lingonberry" in cover
+    assert "bilberry" in cover
+    assert len(plants.get("cover", [])) + len(plants.get("water", [])) <= 24
+    assert {"scots_pine", "birch", "rowan"} <= {
+        entry["id"] for entry in plants.get("trees", [])
     }
+    assert plants["left_out"] == []
     assert check_with_world(made, world) == []
 
 

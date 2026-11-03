@@ -782,6 +782,20 @@ def test_set_published_carries_tiles_for_a_remake(tmp_path: Path) -> None:
     assert "tiles" not in store.build_jobs["j2"]
 
 
+def test_set_published_carries_plants_over_cap(tmp_path: Path) -> None:
+    """#253: survey extras past the caps ride the job, sorted."""
+    store = FakeStore()
+    store.build_jobs["j1"] = {"kind": "code", "status": "building"}
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert store.claim_build_job("j1", worker.worker_id) is True
+    worker._set_published(
+        "j1", {"kind": "code"}, "z10_0581_0294", {"version": 2}, ["b", "a", "b"]
+    )
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert job["plants_over_cap"] == ["a", "b"]
+
+
 def test_remake_with_gaps_publishes_by_code(tmp_path: Path, monkeypatch: Any) -> None:
     """#246.3: a gappy remake needs no yes and publishes the next version."""
     monkeypatch.setattr(

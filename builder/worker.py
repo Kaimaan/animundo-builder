@@ -443,6 +443,7 @@ class Worker:
                 return
             if self.pull_world():  # a merged change reaches this tile (#99.4)
                 self.world_commit = git_commit(self.world)
+            over_cap: list[str] = []
             made, blocked = make_tile(
                 tile,
                 self._habitat_grid(),
@@ -450,6 +451,7 @@ class Worker:
                 builder_root=self.builder_root,
                 species=self.species,
                 species_source=self._species_source(tile),
+                over_cap=over_cap,
             )
             if made is None:
                 reason = (blocked or {}).get("reason", "no_home")
@@ -465,7 +467,7 @@ class Worker:
                 self._history_context(job_id, "code", tile),
             )
             print(f"build job {job_id}: published {path}")
-            self._set_published(job_id, job, tile, made)
+            self._set_published(job_id, job, tile, made, over_cap)
             return
         self.build_items(job_id, job, tile)
 
@@ -1030,6 +1032,7 @@ class Worker:
             self._fail(job_id, str(plan["blocked"]))
             return
         if plan.get("code_only"):
+            over_cap: list[str] = []
             try:
                 made, blocked = make_tile(
                     tile,
@@ -1038,6 +1041,7 @@ class Worker:
                     builder_root=self.builder_root,
                     species=self.species,
                     species_source=source,
+                    over_cap=over_cap,
                 )
             except ValueError as error:
                 print(f"build job {job_id}: cannot make: {error}", file=sys.stderr)
@@ -1057,7 +1061,7 @@ class Worker:
                 self._history_context(job_id, "remake", tile),
             )
             print(f"build job {job_id}: published {path}")
-            self._set_published(job_id, job, tile, made)
+            self._set_published(job_id, job, tile, made, over_cap)
             return
         self._remake_build(job_id, job, tile, plan)
 
@@ -1164,17 +1168,21 @@ class Worker:
         job: dict[str, Any],
         tile: str,
         made: dict[str, Any],
+        over_cap: list[str] | None = None,
     ) -> None:
         """Mark the job published: its version, and a remake's tiles.
 
         The policy moves a remake's areas from `tiles` and
         `versions` (#209.1); other kinds keep the version the
-        areas show today (#143.5).
+        areas show today (#143.5). Survey extras past the plant
+        caps ride `plants_over_cap` (0062).
         """
         extra: dict[str, Any] = {"version": made["version"]}
         if job.get("kind") == "remake":
             extra["tiles"] = [tile]
             extra["versions"] = {tile: made["version"]}
+        if over_cap:
+            extra["plants_over_cap"] = sorted(set(over_cap))
         self._set_status(job_id, "published", extra)
 
     def _snapshot_plan(self, job_id: str, job: dict[str, Any], tile: str) -> None:
@@ -1574,6 +1582,7 @@ class Worker:
             return
         if self._tile_refused(tile, job_id, "build"):
             return
+        over_cap: list[str] = []
         made, blocked = make_tile(
             tile,
             self._habitat_grid(),
@@ -1581,6 +1590,7 @@ class Worker:
             builder_root=self.builder_root,
             species=self.species,
             species_source=self._species_source(tile),
+            over_cap=over_cap,
         )
         if made is None:
             reason = (blocked or {}).get("reason", "no_home")
@@ -1596,7 +1606,7 @@ class Worker:
             self._history_context(job_id, "build", tile),
         )
         print(f"build job {job_id}: published {path}")
-        self._set_published(job_id, job, tile, made)
+        self._set_published(job_id, job, tile, made, over_cap)
 
     def review_enrich_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Overlay a shipped enrich item's passing tiles, then publish (#220).

@@ -198,7 +198,19 @@
             }
           }
         },
-        "tree_density": {"type": "number", "minimum": 0, "maximum": 0.05}
+        "tree_density": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "left_out": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "why"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+              "why": {"type": "string", "minLength": 1}
+            }
+          }
+        }
       }
     },
     "edges": {

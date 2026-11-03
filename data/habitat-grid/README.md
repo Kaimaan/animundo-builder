@@ -7,7 +7,9 @@ Which habitat each tile cell holds, baked from public maps with no AI.
 - `z10.json.gz`: the grid. Each `"col,row"` maps to
   `[eco1, share1, eco2, share2, biome, land, water, elevation_m, coast]`
   (baked by `builder habitats bake`; the old `ease2_*` grids are gone).
-- `reef.json.gz`: reef-covered shares for GBR cells (#226).
+- `reef.json.gz`: reef-covered shares for GBR cells (#226), plus
+  per-cell 16x16 reef masks under `masks` (#255).
+- `bake_reef_mask.py`: the reef-mask bake script (#255).
 - `shore.json.gz` + `lakes.json`: 1:10m shores and lake names (#204).
 - `landcover.json.gz`: built-up/cropland shares and wild masks (#238),
   baked by `bake_landcover.py` in this folder.
@@ -124,8 +126,13 @@ columns and rows (`x` 890–960, `y` 530–600, upper end exclusive):
 inside it a missing cell means no reef (#230.2). A cell at or above
 `REEF_TRACT_SHARE` (0.2, calibrated on the live Green Island
 tile's 0.211) builds from the `coral_reef` home; below that the
-reef blends in. The grid habitat stays the sea it is, so live
-places keep their tiles; reef-built tiles name the map in
+reef blends in. `masks` (baked by `bake_reef_mask.py` in this
+folder for #255, same polygons) maps `"col,row"` to 256 reef
+shares, row-major with the first row north, each an exact clip
+rounded to 0.05; only cells with reef are stored, and each
+mask's mean matches its share within 0.01. The grid habitat
+stays the sea it is, so live places keep their tiles;
+reef-built tiles name the map in
 `sources.habitat` (`gbrmpa:torres_strait_features_v1b`).
 
 `landcover.json.gz` was baked separately for #238

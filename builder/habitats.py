@@ -189,12 +189,14 @@ class HabitatGrid:
         reef: dict[str, float] | None = None,
         extent: dict[str, list[int]] | None = None,
         landcover: dict[str, list[Any]] | None = None,
+        masks: dict[str, list[float]] | None = None,
     ) -> None:
         self._cells = cells
         self.grid_dir = grid_dir
         self._reef = reef or {}
         self._extent = extent
         self._landcover = landcover or {}
+        self._masks = masks or {}
 
     @classmethod
     def load(cls, path: Path, *, strict: bool = False) -> HabitatGrid:
@@ -219,10 +221,13 @@ class HabitatGrid:
         reef_path = path.parent / REEF_FILE
         reef: dict[str, float] = {}
         extent: dict[str, list[int]] | None = None
+        masks: dict[str, list[float]] = {}
         if reef_path.is_file():
             reef_data = json.loads(gzip.open(reef_path, "rt", encoding="utf-8").read())
             reef = {k: float(v) for k, v in reef_data.get("cells", {}).items()}
             extent = reef_data.get("extent")
+            for key, mask in (reef_data.get("masks") or {}).items():
+                masks[key] = [float(v) for v in mask]
         cover_path = path.parent / LANDCOVER_FILE
         landcover: dict[str, list[Any]] = {}
         if cover_path.is_file():
@@ -238,6 +243,7 @@ class HabitatGrid:
             reef=reef,
             extent=extent,
             landcover=landcover,
+            masks=masks,
         )
 
     def cells(self) -> list[str]:
@@ -294,6 +300,17 @@ class HabitatGrid:
         except (KeyError, TypeError, ValueError):
             return False
         return x0 <= col < x1 and y0 <= row < y1
+
+    def reef_mask(self, col: int, row: int) -> list[float] | None:
+        """The cell's 16x16 reef shares, or nothing outside the map (#255).
+
+        Row-major with the first row on the north side. Inside
+        the reef extent a missing mask means no reef (all zeros);
+        outside the extent there is no data.
+        """
+        if not self.reef_covered(col, row):
+            return None
+        return list(self._masks.get(f"{col},{row}", [0.0] * 256))
 
     def reef_at(self, tile: str) -> float:
         """The reef-covered share for one tile id."""

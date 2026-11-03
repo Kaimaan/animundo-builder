@@ -612,6 +612,47 @@ def test_code_job_publishes_with_no_model_call(
     assert "tiles/v2/index.json" in store.blobs
 
 
+def test_border_code_job_carries_the_reef_mask(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#256: a mist-made reef tile carries the map's mask; a far one none."""
+    import json
+
+    from builder.habitats import HabitatGrid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "reef.json.gz").is_file():
+        pytest.skip("needs the baked reef map")
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, c: {"common_tern": 9.0}
+    )
+    monkeypatch.setattr(Worker, "pull_world", lambda self: False)
+    store = FakeStore()
+    store.build_jobs["j1"] = {**_code_job(), "tile": "z10_0927_0559"}
+    store.requests["z10_0927_0560"] = {"notes": 2}
+    worker = _worker(tmp_path, store)
+    worker.world = world
+    worker.grid_dir = grid_dir
+    worker.world_commit = "testworld"
+    worker.handle_build_job("j1")
+    assert store.build_jobs["j1"]["status"] == "published"
+    data = json.loads(store.read_blob("tiles/v2/z10/115_069.json")[0].decode("utf-8"))
+    tile = data["tiles"]["z10_0927_0559"]
+    grid = HabitatGrid.load(grid_dir / "z10.json.gz")
+    assert tile["terrain"]["reef_mask"] == grid.reef_mask(927, 559)
+    assert tile["terrain"]["reef"] == round(sum(tile["terrain"]["reef_mask"]) / 256, 3)
+    store.build_jobs["j2"] = {**_code_job(), "tile": "z10_0581_0294"}
+    worker.species = _forest_survey("fox", "vole")
+    worker.handle_build_job("j2")
+    assert store.build_jobs["j2"]["status"] == "published"
+    data = json.loads(store.read_blob("tiles/v2/z10/072_036.json")[0].decode("utf-8"))
+    assert "terrain" not in data["tiles"]["z10_0581_0294"]
+
+
 def test_second_publish_carries_the_newer_version(tmp_path: Path) -> None:
     """#143.5: a tile published twice stamps 1, then 2 with new content."""
     import json

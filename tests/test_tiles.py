@@ -1608,6 +1608,142 @@ def test_deep_coral_sea_cell_still_plans_open_sea() -> None:
     assert made["biome"] == "open_sea"
 
 
+def _reef_world_and_grid():
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    if not (grid_dir / "reef.json.gz").is_file():
+        pytest.skip("needs the baked reef map")
+    return world, load_grid(grid_dir), ROOT
+
+
+def test_reef_masks_sit_on_their_reefs() -> None:
+    """#255: N's and E's non-zero cells sit on the named reefs."""
+    world, grid, _root = _reef_world_and_grid()
+    assert world is not None
+    north = grid.reef_mask(927, 559)
+    east = grid.reef_mask(928, 560)
+    assert north is not None and east is not None
+    assert len(north) == 256 and len(east) == 256
+    # Centroid subcells of the named reefs (row-major, row 0 north).
+    assert north[10 * 16 + 4] > 0  # Hastings Reef (16-057)
+    assert north[13 * 16 + 5] > 0  # Michaelmas Reef (16-060)
+    assert east[6 * 16 + 0] > 0  # Milln Reef (16-067)
+    assert east[13 * 16 + 0] > 0  # Elford Reef (16-073)
+
+
+def test_remade_tiles_carry_their_reef_masks() -> None:
+    """#255: N, E and Green Island carry masks; a far cell has none."""
+    world, grid, root = _reef_world_and_grid()
+    made_n, blocked = make_tile(
+        "z10_0927_0559",
+        grid,
+        world,
+        presence={"common_tern": 30.0},
+        builder_root=root,
+    )
+    assert blocked is None, blocked
+    assert made_n is not None
+    made_e, blocked = make_tile(
+        "z10_0928_0560",
+        grid,
+        world,
+        presence={"common_tern": 30.0},
+        builder_root=root,
+    )
+    assert blocked is None, blocked
+    assert made_e is not None
+    made_g, blocked = make_tile("z10_0927_0560", grid, world, builder_root=root)
+    assert blocked is None, blocked
+    assert made_g is not None
+    for made, key in ((made_n, "927,559"), (made_e, "928,560"), (made_g, "927,560")):
+        terrain = made["terrain"]
+        assert len(terrain["reef_mask"]) == 256
+        mean = sum(terrain["reef_mask"]) / 256
+        assert terrain["reef"] == round(mean, 3)
+        assert abs(mean - grid.reef_share(*map(int, key.split(",")))) <= 0.01
+        assert any(terrain["reef_mask"])
+    # The N/G shared side, pinned: exact clips from one map, so
+    # the reef continues instead of stopping at the tile side.
+    # (Adjacent subcells are independent boxes, so the rows are
+    # continuous, not equal.)
+    assert made_n["terrain"]["reef_mask"][15 * 16 :] == [
+        0.15,
+        0.85,
+        0.35,
+        0.0,
+        0.0,
+        0.0,
+        0.25,
+        0.0,
+        0.8,
+        0.3,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    assert made_g["terrain"]["reef_mask"][:16] == [
+        0.35,
+        1.0,
+        0.55,
+        0.35,
+        0.7,
+        0.15,
+        0.05,
+        0.0,
+        1.0,
+        0.85,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    far, blocked = make_tile(
+        "z10_0581_0294",
+        grid,
+        world,
+        presence={"fox": 5.0, "vole": 9.0},
+        builder_root=root,
+    )
+    assert blocked is None, blocked
+    assert far is not None
+    assert "terrain" not in far
+
+
+def test_open_sea_reef_tile_grows_thin_corals(monkeypatch: Any) -> None:
+    """#255.3: a reef patch grows the corals, thinner by its share."""
+    world, grid, root = _reef_world_and_grid()
+    monkeypatch.setattr(
+        "builder.tiles.fetch_smoothed", lambda tile, candidates: {"common_tern": 9.0}
+    )
+    made, blocked = make_tile("z10_0927_0559", grid, world, builder_root=root)
+    assert blocked is None, blocked
+    assert made is not None
+    waters = made["plants"]["water"]
+    assert {e["id"] for e in waters} == {
+        "branching_staghorn_coral",
+        "closed_brain_coral",
+        "giant_sea_fan",
+        "halimeda",
+        "dugong_grass",
+        "paddle_grass",
+    }
+    assert all(e["density"] >= 0.001 for e in waters)
+    assert sum(e["density"] for e in waters) <= 1.0
+    assert made["requires"]["plants"] == sorted(e["id"] for e in waters)
+
+
 def test_make_tile_builds_the_reviewed_sea_border() -> None:
     """#232.1: z10_0581_0297 builds taiga with a coast, keeping its gull."""
     from builder.schemas import ROOT

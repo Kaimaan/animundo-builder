@@ -89,6 +89,21 @@
     },
     "ecoregion": {"type": "integer", "minimum": 0},
     "sea": {"type": "string", "minLength": 1},
+    "terrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reef", "reef_mask"],
+      "properties": {
+        "reef": {"type": "number", "minimum": 0, "maximum": 1},
+        "reef_mask": {
+          "type": "array",
+          "minItems": 256,
+          "maxItems": 256,
+          "items": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      },
+      "description": "Reef ground (#255): reef_mask is the tile's 16x16 reef shares row-major with the first row on the north side, reef their mean. Only on tiles in the reef map's extent."
+    },
     "name": {
       "type": "object",
       "additionalProperties": false,

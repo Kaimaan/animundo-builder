@@ -928,6 +928,40 @@ def wanted_drops(
     return drops[:WANTED_LIMIT]
 
 
+def _reef_terrain(habitat_grid: HabitatGrid, tile: str) -> dict[str, Any] | None:
+    """The tile's reef ground, or nothing outside the reef map (#255)."""
+    col, row = parse_tile(tile)
+    mask = habitat_grid.reef_mask(col, row)
+    if mask is None:
+        return None
+    return {"reef": round(sum(mask) / len(mask), 3), "reef_mask": mask}
+
+
+def _reef_sea_plants(
+    world: Path, share: float
+) -> tuple[dict[str, Any] | None, list[str], list[str]]:
+    """Coral plants on a sea tile's reef ground (#255.3).
+
+    The coral_reef biome's water plants, each at its biome
+    density scaled by the tile's reef share (never over 1.0,
+    never under 0.001): on a patch of reef the corals grow
+    thinner, the way #221 seats them.
+    """
+    try:
+        waters = json.loads(
+            (world / "biomes" / "coral_reef.json").read_text(encoding="utf-8")
+        )["plants"]["water"]
+    except (OSError, ValueError, KeyError):
+        return None, [], []
+    seated = []
+    for entry in waters:
+        density = max(0.001, round(min(1.0, entry["density"] * share), 3))
+        seated.append({"id": entry["id"], "density": density})
+    if not seated:
+        return None, [], []
+    return {"water": seated, "left_out": []}, sorted(e["id"] for e in seated), []
+
+
 def _plant_fits(on: list[str], land: float, water: float) -> str | None:
     """None when the plant fits the tile; else the plain reason (#253)."""
     wet = "seabed" in on or "reef" in on
@@ -1606,6 +1640,9 @@ def _make_place_tile(
     shore = shore_for_tile(tile, habitat_grid.grid_dir)
     if shore is not None:
         made_tile["shore"] = shore
+    terrain = _reef_terrain(habitat_grid, tile)
+    if terrain is not None:
+        made_tile["terrain"] = terrain
     validate("tile", made_tile)
     failures: list[tuple[str, list[str]]] = []
     for _ in range(3):
@@ -1877,8 +1914,16 @@ def make_tile(
         present = {s: n for s, n in presence.items() if n > 0}
         species_tag = f"gbif:search:{datetime.now(UTC).date().isoformat()}"
     elif habitat == "open_ocean":
+        reef_mask = habitat_grid.reef_mask(col, row)
+        reef_mean = sum(reef_mask) / len(reef_mask) if reef_mask else 0.0
+        # Reef-filed candidates wait on the world: its check
+        # still refuses reef fish on open-sea tiles (see log).
+        # Re-add with the check: animals_for_habitat(animals,
+        # "reef") join candidates at reef_mean >= 0.01 (#255.3).
         present = {s: n for s, n in fetch_smoothed(tile, candidates).items() if n > 0}
         species_tag = "gbif:density"
+        if reef_mask is not None and reef_mean > 0:
+            greens, needs, wants = _reef_sea_plants(world, reef_mean)
     else:
         ids = [a["id"] for a in animals]
         greens_list = list_library(world, "plants")
@@ -2034,6 +2079,9 @@ def make_tile(
         made_tile["plants"] = greens
     if wanted:
         made_tile["wanted"] = wanted
+    terrain = _reef_terrain(habitat_grid, tile)
+    if terrain is not None:
+        made_tile["terrain"] = terrain
     validate("tile", made_tile)
     failures: list[tuple[str, list[str]]] = []
     for _ in range(3):

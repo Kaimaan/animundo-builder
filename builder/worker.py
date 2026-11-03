@@ -532,6 +532,8 @@ class Worker:
                     )
                 except ValueError as error:
                     print(f"build job {job_id}: pack: {error}", file=sys.stderr)
+                    # This run's overlay first: no stale values (#261b).
+                    self._update(job_id, update)
                     self._fail(job_id, "bad_pack")
                     return
             self._update(job_id, update)
@@ -2399,6 +2401,9 @@ class Worker:
                 )
             except (ValueError, KeyError, packs_mod.PackExists) as error:
                 print(f"build job {job_id}: pack: {error}", file=sys.stderr)
+                # This run's overlay first: the doc never keeps the
+                # previous run's values past a bad_pack (#261b).
+                self._update(job_id, update)
                 self._fail_item(job_id, job, item_id or "")
                 self._fail(job_id, "bad_pack")
                 return

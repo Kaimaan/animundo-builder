@@ -1820,6 +1820,9 @@ def test_enrich_review_pack_failure_fails_the_item(
             review={
                 "enrich_table_coral": {"by": "kai", "at": "t", "result": "shipped"}
             },
+            overlay=["z10_0000_0000"],
+            skipped={"z10_0000_0000": "stale"},
+            gaps={"z10_0000_0000": {}},
         )
         with monkeypatch.context() as m:
             m.setattr(
@@ -1843,6 +1846,10 @@ def test_enrich_review_pack_failure_fails_the_item(
         assert job["status"] == "failed"
         assert job["error"] == "bad_pack"
         assert job["progress"] == [{"id": "enrich_table_coral", "status": "failed"}]
+        # #261b: this run's overlay, not the previous run's values.
+        assert job["overlay"] == [A]
+        assert job["skipped"] == {}
+        assert job["gaps"] == {}
 
 
 def test_enrich_review_fails_when_every_tile_skips(

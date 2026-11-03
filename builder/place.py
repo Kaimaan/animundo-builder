@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -255,23 +256,30 @@ def ensure_wild_tiles(
     3 that is wild and keeps the habitat (the same habitat and
     biome number); each move is recorded as {from, to, why}. A
     tile with nothing wild nearby raises NoWildTile. Tiles
-    without land-cover data stay as surveyed.
+    without land-cover data stay as surveyed. No two tiles land
+    on the same target, and none lands on a surveyed tile:
+    repeats collapse and moves skip them (#246).
     """
     out: list[str] = []
     moved: list[dict[str, str]] = []
+    used = set(tiles)
     for tile in tiles:
         if tile_wild(tile, grid) is not False:
-            out.append(tile)
+            if tile not in out:
+                out.append(tile)
             continue
-        target = _nearest_wild(tile, grid)
+        target = _nearest_wild(tile, grid, skip=used)
         if target is None:
             raise NoWildTile(tile)
+        used.add(target)
         out.append(target)
         moved.append({"from": tile, "to": target, "why": _wild_why(tile, grid)})
     return out, moved
 
 
-def _nearest_wild(tile: str, grid: HabitatGrid) -> str | None:
+def _nearest_wild(
+    tile: str, grid: HabitatGrid, skip: Collection[str] = ()
+) -> str | None:
     """The nearest wild tile within range keeping the habitat."""
     col, row = parse_tile(tile)
     habitat = grid.habitat(col, row)
@@ -285,6 +293,8 @@ def _nearest_wild(tile: str, grid: HabitatGrid) -> str | None:
                 if not (0 <= r < N):
                     continue
                 candidate = tile_id(c, r)
+                if candidate in skip:
+                    continue
                 if tile_wild(candidate, grid) is not True:
                     continue
                 if grid.habitat(c, r) != habitat:

@@ -299,13 +299,12 @@ def _pick_animal(
     return next(e for e in buildable if e["id"] == winner)
 
 
-def _probe_gap_foods(world: Path, made: dict[str, Any]) -> list[str]:
-    """The probe tile's missing food kinds, in species order (#241.1).
+def _probe_gaps(world: Path, made: dict[str, Any]) -> dict[str, dict[str, list[str]]]:
+    """The probe tile's food gaps by species, for the report (#246.1).
 
-    Every surveyed animal stays since 0061, so a made probe
-    still plans its gaps as food to build; without the world's
-    food rule there are no gaps to plan. Hunts never need a
-    food item: prey is animals, not kinds.
+    Gaps are normal since 0061 (a diet covers a species' whole
+    range), so they ride the plan as a report, never as items.
+    Without the world's food rule there are no gaps to report.
     """
     import json
 
@@ -314,7 +313,7 @@ def _probe_gap_foods(world: Path, made: dict[str, Any]) -> list[str]:
     try:
         homes = available_biomes(world)
     except (OSError, ValueError):
-        return []
+        return {}
     house = homes.get(made.get("home") or "", {})
     species = made.get("species") or {}
     living: list[str] = []
@@ -324,7 +323,7 @@ def _probe_gap_foods(world: Path, made: dict[str, Any]) -> list[str]:
         fished = entry.get("kind") if isinstance(entry, dict) else entry
         if fished and fished not in living:
             living.append(fished)
-    out: list[str] = []
+    out: dict[str, dict[str, list[str]]] = {}
     for sid in living:
         path = world / "animals" / f"{sid}.json"
         if not path.is_file():
@@ -344,30 +343,121 @@ def _probe_gap_foods(world: Path, made: dict[str, Any]) -> list[str]:
             made.get("plants"),
             others,
         )
-        for kind in gaps.get("diet", []):
-            if kind not in out:
-                out.append(kind)
+        diet = [str(kind) for kind in gaps.get("diet", [])]
+        hunts = [str(tag) for tag in gaps.get("hunts", [])]
+        if diet or hunts:
+            out[sid] = {"diet": diet, "hunts": hunts}
     return out
+
+
+def _real_food_kinds(world: Path, house: dict[str, Any]) -> set[str]:
+    """Food kinds a filed plant or tree gives, or the biome's own.
+
+    A diet kind is real when a filed plant or tree model grows
+    food of that kind, or the house names it in its small life
+    (0043). Rule kinds stay out: they are conditional on water
+    or land the plan cannot promise. Anything else is a word,
+    not food (#200.3): no item can wire it.
+    """
+    import json
+
+    kinds: set[str] = set()
+    for folder in ("plants", "trees"):
+        models = world / "models" / folder
+        if not models.is_dir():
+            continue
+        for spec_path in sorted(models.glob("*.json")):
+            try:
+                grows = json.loads(spec_path.read_text(encoding="utf-8")).get(
+                    "grows", {}
+                )
+            except ValueError:
+                continue
+            if not isinstance(grows, dict):
+                continue
+            food = grows.get("food")
+            kind = food.get("kind") if isinstance(food, dict) else food
+            if kind:
+                kinds.add(str(kind))
+            more = grows.get("more_food", {}) or {}
+            if isinstance(more, dict):
+                kinds.update(str(key) for key in more)
+            if grows.get("bark"):
+                kinds.add("bark")
+    small = house.get("small_life", {}) or {}
+    if isinstance(small, dict):
+        kinds.update(str(key) for key in small)
+    return kinds
 
 
 def _missing_food(
     present: dict[str, float],
     world: Path,
-    home: dict[str, Any],
-) -> str | None:
-    """The first food kind a present filed animal needs and lacks."""
-    from .tiles import tile_food_kinds
+    house: dict[str, Any],
+) -> tuple[str | None, dict[str, dict[str, list[str]]]]:
+    """A real food kind for a starving animal, and the gaps (#246.2).
 
-    kinds = tile_food_kinds(world, home)
-    for species in sorted(present, key=lambda s: (-present[s], s)):
-        path = world / "animals" / f"{species}.json"
+    Since 0061 a present animal that eats anything here needs
+    no food item, however gappy its diet. Only an animal the
+    world's rule says eats nothing gets one, and only for a
+    diet kind a plant or the biome gives; anything else is
+    reported in the gaps, never built.
+    """
+    import json
+
+    from .tiles import tile_food_kinds, world_eats
+
+    kinds = tile_food_kinds(world, house)
+    filed: list[tuple[str, list[str], list[str], set[str]]] = []
+    for sid in sorted(present, key=lambda s: (-present[s], s)):
+        path = world / "animals" / f"{sid}.json"
         if not path.is_file():
             continue
-        diet = json.loads(path.read_text(encoding="utf-8")).get("diet") or []
-        for kind in diet:
-            if kind not in kinds:
-                return kind
-    return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        diet = [str(k) for k in data.get("diet") or []]
+        hunts = [str(t) for t in data.get("hunts") or []]
+        if not diet and not hunts:
+            continue
+        tags = set(str(t) for t in data.get("tags") or [])
+        filed.append((sid, diet, hunts, tags))
+    if not filed:
+        return None, {}
+    queries = [
+        {
+            "diet": diet,
+            "hunts": hunts,
+            "food": sorted(kinds),
+            "prey_tags": sorted(
+                {tag for _, _, _, other in filed for tag in other} - tags
+            ),
+        }
+        for _, diet, hunts, tags in filed
+    ]
+    verdicts = world_eats(world, queries)
+    if verdicts is None:
+        return None, {}
+    real = _real_food_kinds(world, house)
+    gaps: dict[str, dict[str, list[str]]] = {}
+    item: str | None = None
+    for (sid, diet, _hunts, _tags), verdict in zip(filed, verdicts):
+        if not isinstance(verdict, dict):
+            continue
+        missed = verdict.get("gaps") or {}
+        missed_diet = [str(k) for k in missed.get("diet", [])]
+        missed_hunts = [str(t) for t in missed.get("hunts", [])]
+        if missed_diet or missed_hunts:
+            gaps[sid] = {"diet": missed_diet, "hunts": missed_hunts}
+        if item is None and not verdict.get("eats") and diet:
+            for kind in diet:
+                if kind in real:
+                    item = kind
+                    break
+    return item, gaps
 
 
 def plant_slug(name: str) -> str:
@@ -689,22 +779,13 @@ def plan_tile(
                     world,
                 )
         if made is not None:
-            gap_foods = _probe_gap_foods(world, made)
-            gap_items = []
-            if gap_foods:
-                gap_items.append(
-                    {
-                        "id": f"food_{gap_foods[0]}",
-                        "kind": "food",
-                        "what": gap_foods[0],
-                        "from": made.get("home") or home_id,
-                        "estimate_usd": ITEM_ESTIMATES["food"],
-                    }
-                )
+            # A probe that makes is code_only: its gaps are a
+            # report, never food items (0061 forbids fake food).
+            gaps = _probe_gaps(world, made)
             return _finish(
                 tile,
-                not gap_items,
-                gap_items,
+                True,
+                [],
                 unfiled,
                 unfiled_counts,
                 request,
@@ -714,6 +795,7 @@ def plan_tile(
                 world_commit,
                 answer,
                 world=world,
+                gaps=gaps or None,
             )
     # Expanding: each missing thing on its own (spec 04, minimum).
     # The home below is real, or the one the new home adapts from.
@@ -734,7 +816,7 @@ def plan_tile(
             ]
         fetched = fetch_smoothed(tile, candidates)
         present = {s: n for s, n in fetched.items() if n > 0}
-    kind = _missing_food(present, world, house)
+    kind, food_gaps = _missing_food(present, world, house)
     if kind is not None:
         items.append(
             {
@@ -783,6 +865,7 @@ def plan_tile(
         world_commit,
         answer,
         world=world,
+        gaps=food_gaps or None,
     )
 
 
@@ -859,6 +942,7 @@ def _finish(
     blocked: str | None = None,
     world: Path | None = None,
     probe: str | None = None,
+    gaps: dict[str, dict[str, list[str]]] | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items.
 
@@ -908,5 +992,7 @@ def _finish(
         plan["blocked"] = blocked
     if probe is not None:
         plan["probe"] = probe
+    if gaps:
+        plan["gaps"] = gaps
     validate("plan", plan)
     return plan

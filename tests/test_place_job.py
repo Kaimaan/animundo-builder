@@ -336,6 +336,53 @@ def test_wild_spot_snaps_to_wild_land() -> None:
     assert wild_spot(A, lat, lon, HabitatGrid(cells=boreal_3x3())) == (lat, lon)
 
 
+def test_wild_moves_share_no_target(tmp_path: Path) -> None:
+    """#246: two city tiles move to two different wild tiles."""
+    from builder.place import ensure_wild_tiles
+
+    grid = HabitatGrid(
+        cells=_boreal_7x7(),
+        landcover={
+            "581,294": [0.5, 0.0, "b" * 25],
+            "582,294": [0.5, 0.0, "b" * 25],
+            "580,293": [0.5, 0.0, "b" * 25],
+            "581,293": [0.0, 0.0, "l" * 25],
+            "582,293": [0.0, 0.0, "l" * 25],
+        },
+    )
+    out, moved = ensure_wild_tiles(["z10_0581_0294", "z10_0582_0294"], grid)
+    assert out == ["z10_0581_0293", "z10_0582_0293"]
+    assert [m["to"] for m in moved] == out
+
+
+def test_wild_repeats_collapse_to_one(tmp_path: Path) -> None:
+    """#246: the same wild tile twice surveys once."""
+    from builder.place import ensure_wild_tiles
+
+    grid = HabitatGrid(
+        cells=_boreal_7x7(),
+        landcover={"581,293": [0.0, 0.0, "l" * 25]},
+    )
+    out, moved = ensure_wild_tiles(["z10_0581_0293", "z10_0581_0293"], grid)
+    assert out == ["z10_0581_0293"]
+    assert moved == []
+
+
+def test_place_price_follows_final_tiles(tmp_path: Path) -> None:
+    """#246: a repeated survey tile prices once."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.grid_dir is not None
+    _write_landcover(worker.grid_dir, {"581,294": [0.0, 0.0, "l" * 25]})
+    worker.chat = _ScriptRespond([json.dumps(_survey(tiles=[A, A]))])
+    store.build_jobs["j1"] = _place_job()
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["research"]["tiles"] == [A]
+    assert job["price"] == 0.5
+
+
 def test_place_city_tile_moves_to_wild_neighbour(tmp_path: Path) -> None:
     """#238: a built tile moves to the nearest wild one with moved filled."""
     store = FakeStore()

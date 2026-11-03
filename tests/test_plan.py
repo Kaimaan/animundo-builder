@@ -430,17 +430,52 @@ def test_reef_place_plans_from_coral_reef_when_region_names_no_biome() -> None:
             species=answer,
         )
     validate("plan", plan)
-    assert plan["code_only"] is False
-    assert plan["items"] == [
-        {
-            "id": "food_water_plants",
-            "kind": "food",
-            "what": "water_plants",
-            "from": "coral_reef",
-            "estimate_usd": 0.0,
-        }
-    ]
+    assert plan["code_only"] is True
+    assert plan["items"] == []
+    assert plan["gaps"]["clownfish"]["diet"] == ["water_plants"]
     assert "blocked" not in plan
+
+
+def test_hare_probe_on_taiga_reports_clover_without_items() -> None:
+    """#246.3: a gappy hare probe stays code_only with no items."""
+    from pathlib import Path
+
+    import pytest
+
+    world = Path(__file__).resolve().parent.parent.parent / "animundo-world"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs an animundo-world checkout")
+    grid_dir = Path(__file__).resolve().parent.parent / "data" / "habitat-grid"
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    from builder.habitats import load_grid
+
+    habitat_grid = load_grid(grid_dir)
+    answer = {
+        "place": "Boreal forest in southern Finland",
+        "parts": [{"kind": "forest", "species": ["fox", "mountain_hare", "vole"]}],
+        "plants": [],
+        "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
+        "name_en": "Hare woods",
+        "name_fi": "Jänismetsä",
+    }
+    plan = plan_tile(
+        "z10_0581_0294",
+        None,
+        habitat_grid,
+        world,
+        "abc123",
+        presence={"fox": 5.0, "mountain_hare": 9.0, "vole": 20.0},
+        unfiled_presence={},
+        builder_root=grid_dir.parent.parent,
+        species=answer,
+    )
+    validate("plan", plan)
+    assert plan["code_only"] is True
+    assert plan["items"] == []
+    assert "clover" in plan["gaps"]["mountain_hare"]["diet"]
 
 
 def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
@@ -676,7 +711,70 @@ def _link_food_rule(world: Path) -> None:
         rules.write_text(json.dumps({"kinds": {"grass": {"from": "grass"}}}))
 
 
-def test_plan_lists_missing_food_for_filed_animals(tmp_path: Path) -> None:
+def test_missing_food_plans_a_real_kind_for_a_starving_animal(
+    tmp_path: Path,
+) -> None:
+    """#246.2: nothing eaten plus a plant-backed kind plans one item."""
+    from builder.plan import _missing_food
+
+    world = _world(tmp_path)
+    _link_food_rule(world)
+    (world / "animals" / "dormouse.json").write_text(
+        json.dumps({"playable": True, "tags": ["small_mammal"], "diet": ["nuts"]})
+    )
+    (world / "models" / "plants").mkdir(parents=True, exist_ok=True)
+    (world / "models" / "plants" / "hazel.json").write_text(
+        json.dumps({"id": "hazel", "grows": {"food": "nuts"}})
+    )
+    house = {"habitat": "boreal_forest", "food": [{"kind": "berries"}]}
+    kind, gaps = _missing_food({"dormouse": 4.0}, world, house)
+    assert kind == "nuts"
+    assert gaps == {"dormouse": {"diet": ["nuts"], "hunts": []}}
+
+
+def test_missing_food_reports_without_a_real_kind(tmp_path: Path) -> None:
+    """#246.2: a starving animal with only words for food gets no item."""
+    from builder.plan import _missing_food
+
+    world = _world(tmp_path)
+    _link_food_rule(world)
+    (world / "animals" / "dormouse.json").write_text(
+        json.dumps({"playable": True, "tags": ["small_mammal"], "diet": ["pizza"]})
+    )
+    house = {"habitat": "boreal_forest", "food": [{"kind": "berries"}]}
+    kind, gaps = _missing_food({"dormouse": 4.0}, world, house)
+    assert kind is None
+    assert gaps == {"dormouse": {"diet": ["pizza"], "hunts": []}}
+
+
+def test_missing_food_skips_an_animal_that_eats_something(
+    tmp_path: Path,
+) -> None:
+    """#246.2: a partial gap is a report, never a food item."""
+    from builder.plan import _missing_food
+
+    world = _world(tmp_path)
+    _link_food_rule(world)
+    (world / "animals" / "dormouse.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "tags": ["small_mammal"],
+                "diet": ["berries", "pizza"],
+            }
+        )
+    )
+    house = {
+        "habitat": "boreal_forest",
+        "ground_cover": {"grass": 0.0, "plants": [{"food": "berries"}]},
+    }
+    kind, gaps = _missing_food({"dormouse": 4.0}, world, house)
+    assert kind is None
+    assert gaps == {"dormouse": {"diet": ["pizza"], "hunts": []}}
+
+
+def test_plan_reports_gaps_for_starving_animals(tmp_path: Path) -> None:
+    """#246.2: grass no plant gives is a report, never a food item."""
     world = _world(tmp_path)
     _link_food_rule(world)
     (world / "homes" / "boreal_forest.json").write_text(
@@ -698,20 +796,13 @@ def test_plan_lists_missing_food_for_filed_animals(tmp_path: Path) -> None:
         presence={"mountain_hare": 9.0},
         unfiled_presence={},
     )
-    assert plan["code_only"] is False
-    assert plan["items"] == [
-        {
-            "id": "food_grass",
-            "kind": "food",
-            "what": "grass",
-            "from": "boreal_forest",
-            "estimate_usd": 0.0,
-        }
-    ]
+    assert plan["code_only"] is True
+    assert plan["items"] == []
+    assert plan["gaps"] == {"mountain_hare": {"diet": ["grass"], "hunts": []}}
 
 
 def test_plan_lists_food_and_holds_newcomers_in_improve(tmp_path: Path) -> None:
-    """A hungry tile plans its gaps; the serving hare holds the lion (#241.1)."""
+    """A hungry tile reports its gaps; the serving hare holds the lion (#246.2)."""
     world = _world(tmp_path)
     _link_food_rule(world)
     (world / "homes" / "boreal_forest.json").write_text(
@@ -733,16 +824,17 @@ def test_plan_lists_food_and_holds_newcomers_in_improve(tmp_path: Path) -> None:
         presence={"mountain_hare": 9.0},
         unfiled_presence={"lion": 5.0},
     )
-    assert [i["id"] for i in plan["items"]] == ["food_grass"]
+    assert plan["items"] == []
+    assert plan["gaps"]["mountain_hare"] == {"diet": ["grass"], "hunts": []}
     assert [i["id"] for i in plan["improve"]] == ["improve_lion"]
 
 
 def test_plan_skips_animal_when_one_serves(tmp_path: Path) -> None:
-    """A fed playable on the tile means no new animal, only the food.
+    """A fed playable on the tile means no new animal, only the report.
 
     The probe keeps its animals since 0061, so the serving fox
-    holds the newcomer lion in improve: the plan lists the
-    missing food, never a redundant animal.
+    holds the newcomer lion in improve: the plan reports the
+    gaps, never a redundant animal or fake food.
     """
     world = _world(tmp_path)
     _link_food_rule(world)
@@ -765,7 +857,9 @@ def test_plan_skips_animal_when_one_serves(tmp_path: Path) -> None:
         presence={"fox": 5.0, "dormouse": 4.0, "mountain_hare": 9.0},
         unfiled_presence={"lion": 50.0},
     )
-    assert [i["id"] for i in plan["items"]] == ["food_grass"]
+    assert plan["items"] == []
+    assert plan["gaps"]["fox"] == {"diet": ["berries"], "hunts": []}
+    assert plan["gaps"]["mountain_hare"] == {"diet": ["grass"], "hunts": []}
     assert [i["id"] for i in plan["improve"]] == ["improve_lion"]
 
 

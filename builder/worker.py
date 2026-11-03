@@ -877,14 +877,13 @@ class Worker:
             "plants": survey["plants"],
             "missing": survey["missing"],
         }
-        price = round(len(survey["tiles"]) * PLACE_BUILD_USD_PER_TILE, 2)
         update: dict[str, Any] = {
             "research": research,
-            "price": price,
             "spent_usd": round(float(spent), 4),
         }
         if not (self.world / "biomes" / f"{survey['biome']}.json").is_file():
             update["needed_land"] = str(survey["biome"])
+            update["price"] = round(len(survey["tiles"]) * PLACE_BUILD_USD_PER_TILE, 2)
             self._update(job_id, update)
             self._fail(job_id, "no_biome")
             return
@@ -898,6 +897,8 @@ class Worker:
             self._fail(job_id, "no_wild_tile")
             return
         research["tiles"] = wild_tiles
+        # The price follows the final tiles, after wild moves (#246).
+        update["price"] = round(len(wild_tiles) * PLACE_BUILD_USD_PER_TILE, 2)
         if moved:
             research["moved"] = moved
         centre = research["centre"]

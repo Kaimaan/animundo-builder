@@ -115,11 +115,15 @@ reef blends in. The grid habitat stays the sea it is, so live
 places keep their tiles; reef-built tiles name the map in
 `sources.habitat` (`gbrmpa:torres_strait_features_v1b`).
 
-`landcover.json.gz` was baked separately for #238 (one-shot
-script, not committed): every 3° WorldCover tile touching a grid
-land cell read once at 1:2 overview through Planetary Computer
-(free), class pixels counted per z10 cell box (built-up 50,
-cropland 40, water 80), shares over non-water pixels. A first
+`landcover.json.gz` was baked separately for #238
+(`bake_landcover.py` in this folder, committed for #246: every
+3° WorldCover tile touching a grid land cell read once at 1:2
+overview through Planetary Computer (free), class pixels counted
+per z10 cell box (built-up 50, cropland 40, water 80), shares
+over non-water pixels. Redo it with `uv run python
+data/habitat-grid/bake_landcover.py --resume /tmp/wc/bake.pkl
+--out /tmp/wc/landcover.json.gz`, about two and a half hours,
+then move the output here. A first
 pass at 1:16 was thrown away: the coarse overviews lose sparse
 built-up and cropland (verified against full-resolution reads on
 sample cells). The mask comes from the same read: each fifth of

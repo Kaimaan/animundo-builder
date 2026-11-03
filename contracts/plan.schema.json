@@ -74,6 +74,20 @@
     },
     "world": {"type": "string", "minLength": 1},
     "planned_at": {"type": "string", "minLength": 1},
+    "gaps": {
+      "description": "Food gaps by species, a report since 0061: never items, never a filter.",
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["diet", "hunts"],
+        "properties": {
+          "diet": {"type": "array", "items": {"type": "string"}},
+          "hunts": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
     "blocked": {
       "description": "Why nothing can be built here yet: a reason for the game to show, or, for a place plan, the surveyed animals the builder can't make.",
       "anyOf": [

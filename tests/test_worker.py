@@ -750,6 +750,28 @@ def test_set_published_carries_tiles_for_a_remake(tmp_path: Path) -> None:
     assert "tiles" not in store.build_jobs["j2"]
 
 
+def test_remake_with_gaps_publishes_by_code(tmp_path: Path, monkeypatch: Any) -> None:
+    """#246.3: a gappy remake needs no yes and publishes the next version."""
+    monkeypatch.setattr(
+        "builder.plan.fetch_smoothed", lambda tile, candidates: {"fox": 5.0}
+    )
+    store = FakeStore()
+    store.build_jobs["j1"] = _remake_job()
+    _seed_ready_tile(store)
+    worker = _flow_worker(tmp_path, store, boreal_3x3())
+    assert worker.world is not None
+    _link_food_rule(worker.world)
+    (worker.world / "homes" / "boreal_forest.json").write_text(
+        json.dumps({"habitat": "boreal_forest", "ecoregions": [717], "food": []})
+    )
+    worker.species = _forest_survey("fox", "mountain_hare", "vole")
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published"
+    assert _group_version(store) == 2
+    assert job["versions"] == {"z10_0581_0294": 2}
+
+
 def test_remake_build_path_prices_its_items(tmp_path: Path) -> None:
     """#243.3: a remake that needs making waits with the build price."""
     store = FakeStore()

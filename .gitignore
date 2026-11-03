@@ -29,6 +29,8 @@ recordings/raw/
 !examples/*.jsonl
 !examples/**/*.jsonl
 spend-ledger.json
+spend-ledger*.json
+replay-*/
 
 # Agent memory that must stay personal, never committed
 .agents/memory/

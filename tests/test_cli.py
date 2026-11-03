@@ -36,15 +36,11 @@ def _integration_world() -> Path:
 
 
 def test_check_world_against_current_checkout(capsys) -> None:
-    """#160.4: the representative current-World check; absence fails loud."""
-    import os
-
+    """#160.4: the representative current-World check; #250.3 skips it."""
     world = _integration_world()
     if not (world / "tools" / "tile_region.py").is_file():
-        if os.environ.get("BUILDER_WITHOUT_WORLD") == "1":
-            pytest.skip("BUILDER_WITHOUT_WORLD=1 opts out of the world check")
-        pytest.fail(
-            f"no world checkout at {world}: clone animundo-world there "
+        pytest.skip(
+            f"no world checkout at {world}: run scripts/get-world "
             "(or point ANIMUNDO_WORLD at one) so the compat check runs"
         )
     assert main(["check", "--world", str(world)]) == 0
@@ -95,6 +91,52 @@ def test_report_writes_html(tmp_path: Path, monkeypatch, capsys) -> None:
     assert main(["report", "job-1"]) == 0
     assert "report.html" in capsys.readouterr().out
     assert (job_dir / "report.html").is_file()
+
+
+def test_request_plan_runs_from_recorded_answers(tmp_path: Path, capsys) -> None:
+    """#250.3: a recorded plan replays with no key and no network."""
+    from fake_world import boreal_3x3, make_world, write_grids
+
+    world = make_world(tmp_path)
+    grid_dir = write_grids(tmp_path / "grids", boreal_3x3())
+    (tmp_path / "species.json").write_text(
+        json.dumps(
+            {
+                "place": "Boreal forest in southern Finland",
+                "parts": [{"kind": "forest", "species": ["fox", "vole"]}],
+                "plants": [],
+                "trees": [],
+                "outside_animals": [],
+                "outside_plants": [],
+                "name_en": "Fox woods",
+                "name_fi": "Kettumetsä",
+            }
+        )
+    )
+    (tmp_path / "presence.json").write_text(
+        json.dumps({"present": {"fox": 5.0, "vole": 20.0}, "unfiled": {}})
+    )
+    assert (
+        main(
+            [
+                "request",
+                "plan",
+                "z10_0581_0294",
+                "--world",
+                str(world),
+                "--habitat-grid",
+                str(grid_dir),
+                "--species",
+                str(tmp_path / "species.json"),
+                "--presence",
+                str(tmp_path / "presence.json"),
+            ]
+        )
+        == 0
+    )
+    out = capsys.readouterr()
+    assert '"tile": "z10_0581_0294"' in out.out
+    assert "estimate=$" in out.err
 
 
 def test_entry_point_runs() -> None:

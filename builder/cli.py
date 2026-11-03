@@ -236,6 +236,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="data/habitat-grid",
         help="Baked habitat grid (default: data/habitat-grid).",
     )
+    plan.add_argument(
+        "--species",
+        default=None,
+        metavar="FILE",
+        help="A recorded species answer: plan with no model call.",
+    )
+    plan.add_argument(
+        "--presence",
+        default=None,
+        metavar="FILE",
+        help='Recorded GBIF counts {"present": {}, "unfiled": {}}: no network.',
+    )
     build = request_sub.add_parser("build", help="Run one build round for a job.")
     build.add_argument(
         "job",
@@ -961,6 +973,23 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
         ).stdout.strip()
     except OSError:
         commit = ""
+    species = None
+    presence = None
+    unfiled_presence = None
+    if args.species is not None:
+        try:
+            species = json.loads(Path(args.species).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            print(f"error: cannot read --species: {error}", file=sys.stderr)
+            return 1
+    if args.presence is not None:
+        try:
+            counts = json.loads(Path(args.presence).read_text(encoding="utf-8"))
+            presence = counts.get("present", {})
+            unfiled_presence = counts.get("unfiled", {})
+        except (OSError, ValueError, AttributeError) as error:
+            print(f"error: cannot read --presence: {error}", file=sys.stderr)
+            return 1
     try:
         plan = plan_tile(
             args.tile,
@@ -968,6 +997,9 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
             habitat_grid,
             world,
             commit or "unknown",
+            presence=presence,
+            unfiled_presence=unfiled_presence,
+            species=species,
             species_source=source_from_config(load_config()),
         )
     except ValueError as error:
@@ -977,6 +1009,12 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 1
     print(json.dumps(plan, indent=1))
+    kinds = sorted({item["kind"] for item in plan.get("items", [])})
+    print(
+        f"plan: code_only={plan.get('code_only')} items={kinds} "
+        f"estimate=${plan.get('estimate_usd', 0):.2f}",
+        file=sys.stderr,
+    )
     return 0
 
 

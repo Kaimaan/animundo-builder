@@ -10,6 +10,8 @@ Only the `one_bit` encoding is decoded: the builder always requests it
 (`metadata.mask_encoding`), since it is tens of times smaller and all
 the measurements need is a 0/1 raster. A `~` (lossless) payload is
 refused with a message saying so.
+
+Original code written for the SAM 3.1 wire format; no SDK code is copied.
 """
 
 from __future__ import annotations

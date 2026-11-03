@@ -792,6 +792,9 @@ _REAL_TOOLS = (
     "validate_region.py",
     "check_taxa.py",
     "check_models.py",
+    # The food rule module the checks import since 0061 (#250.3);
+    # copied when the checkout has it, like the rest.
+    "food.py",
 )
 
 
@@ -817,6 +820,11 @@ def _real_world(tmp_path: Path) -> Path:
     (world / "animals" / "archetypes.json").write_bytes(
         (sibling / "animals" / "archetypes.json").read_bytes()
     )
+    if (sibling / "food" / "rules.json").is_file():
+        (world / "food").mkdir(parents=True, exist_ok=True)
+        (world / "food" / "rules.json").write_bytes(
+            (sibling / "food" / "rules.json").read_bytes()
+        )
     (world / "models" / "plants").mkdir(parents=True, exist_ok=True)
     (world / "regions").mkdir(parents=True, exist_ok=True)
     (world / "poisonous-plants.json").write_text(json.dumps({"plants": []}))

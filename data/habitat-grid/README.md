@@ -1,17 +1,29 @@
 # The habitat grid
 
 Which habitat each tile cell holds, baked from public maps with no AI.
-Two files, one per grid: `ease2_n25.json.gz` and `ease2_s25.json.gz`.
-Each maps `"col,row"` to
-`[eco1, share1, eco2, share2, biome, land, water, elevation_m, coast]`:
-the two most common RESOLVE ecoregion ids on land with their shares
-of the land points, the biome of the first, the share of sample
-points on land, the share of the cell's land area under any
-HydroLAKES lake, the mean elevation in metres over the cell's land
-points, and the 25 samples as a string in coast order (`1` dry
-land, `0` sea or 1:10m lake): row 0 runs along the `n` side,
-character 0 is west. Lakes count as land for every field but the
-mask; `coast` is land against water, sea or lake.
+
+## Files
+
+- `z10.json.gz`: the grid. Each `"col,row"` maps to
+  `[eco1, share1, eco2, share2, biome, land, water, elevation_m, coast]`
+  (baked by `builder habitats bake`; the old `ease2_*` grids are gone).
+- `reef.json.gz`: reef-covered shares for GBR cells (#226).
+- `shore.json.gz` + `lakes.json`: 1:10m shores and lake names (#204).
+- `landcover.json.gz`: built-up/cropland shares and wild masks (#238),
+  baked by `bake_landcover.py` in this folder.
+- `../seas.json.gz` (in `data/`): named seas per open-ocean cell (#177.2),
+  from Natural Earth's marine areas.
+- `bake_landcover.py`: the WorldCover bake script (#246).
+
+A grid row holds the two most common RESOLVE ecoregion ids on
+land with their shares of the land points, the biome of the
+first, the share of sample points on land, the share of the
+cell's land area under any HydroLAKES lake, the mean elevation
+in metres over the cell's land points, and the 25 samples as a
+string in coast order (`1` dry land, `0` sea or 1:10m lake):
+row 0 runs along the `n` side, character 0 is west. Lakes count
+as land for every field but the mask; `coast` is land against
+water, sea or lake.
 
 ## Sources and licence
 
@@ -77,7 +89,8 @@ by Kai on Oct 28, 2026; HydroLAKES ordered for #202 on Nov 1, 2026;
 Wikidata labels (CC0) ordered for #204 on Nov 1, 2026; the GBR reef
 features (CC BY 3.0 AU) baked for #226 on Nov 2, 2026, confirmed
 by Kai on Nov 2, 2026 (#230); ESA WorldCover 2021 (CC BY 4.0)
-baked for #238 on Nov 2, 2026, awaiting Kai's confirmation. The
+baked for #238 on Nov 2, 2026, confirmed by Kai on Nov 3, 2026
+(#244). The
 game credits it by "Our story" and in the game repo's `CREDITS.md`
 (game-side).
 

@@ -42,7 +42,7 @@ SOURCE: <one URL per line>
 
 Then a SOURCES list as in the land survey. Write only what the search
 results support. Prefer official and scientific sources: park authorities,
-national biodiversity databases, GBIF, the IUCN Red List.
+national biodiversity databases, and GBIF for status.
 
 ## Tools
 

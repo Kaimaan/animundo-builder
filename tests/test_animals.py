@@ -366,6 +366,18 @@ def test_taxon_reaches_the_prompt(tmp_path: Path) -> None:
     assert '"gbif_key": 2' in by_species["zz_owl"]
 
 
+def test_required_texts_reach_the_prompt(tmp_path: Path) -> None:
+    """#275.2: the rounds writer lists the texts the checks demand."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient(
+        {"zz_deer": [_answer("zz_deer")], "zz_owl": [_answer("zz_owl")]}
+    )
+    AnimalsStage().run(_ctx(tmp_path, client, world))
+    assert "menu_sub" in client.prompts[0]
+    assert "rival_bite" in client.prompts[0]
+
+
 def test_cast_tags_reach_the_prompt(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

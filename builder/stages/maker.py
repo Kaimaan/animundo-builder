@@ -410,22 +410,42 @@ class AnimalMakerStage:
 
         animal_id = target["id"]
         if not target["prey"]:
-            places = [
-                json.loads(path.read_text(encoding="utf-8"))
-                for path in enrich_places(ctx.job_dir)
-            ]
-            hunts = self._code_hunts(
-                world, ctx, research, region, animal_id, extra=places
-            )
+            if brief.get("region_id") is not None:
+                hunts = self._code_hunts(
+                    world,
+                    ctx,
+                    research,
+                    region,
+                    animal_id,
+                    place=_place_hunt_scope(ctx, brief),
+                )
+            else:
+                places = [
+                    json.loads(path.read_text(encoding="utf-8"))
+                    for path in enrich_places(ctx.job_dir)
+                ]
+                hunts = self._code_hunts(
+                    world, ctx, research, region, animal_id, extra=places
+                )
         else:
             hunts = []
         diet = None if target["prey"] else _code_diet(research)
         whale = animal_id == "humpback_whale"
-        prompt = self._animal_prompt(world, brief, research, region, target)
+        main = not target["prey"]
+        others = animal_writers._other_tags(world, ctx.job_dir, animal_id)
+        must, flagged = animal_writers._first_texts(main, hunts)
         errors: list[str] | None = None
         previous: str | None = None
         for attempt in range(1, MAX_TRIES + 1):
             ctx.check_budget()
+            prompt = self._animal_prompt(
+                world,
+                brief,
+                research,
+                region,
+                target,
+                animal_writers._required_block(must, flagged),
+            )
             answer = self._ask_animal(ctx, prompt, errors, previous)
             previous = answer
             files, file_errors = self._animal_files(world, answer)
@@ -434,6 +454,15 @@ class AnimalMakerStage:
                     files["animal"]["hunts"] = hunts
                 if diet is not None:
                     files["animal"]["diet"] = diet
+                if main:
+                    # The item's own animal is played; prey keep
+                    # the model's call (#275.2).
+                    files["animal"]["playable"] = True
+                _code_abilities(
+                    world,
+                    files["animal"],
+                    target["entry"].get("file_from") or target["start_from"],
+                )
                 if whale:
                     _code_whale(files["animal"])
                 self._place_animal(ctx, animal_id, files)
@@ -446,6 +475,10 @@ class AnimalMakerStage:
             if not file_errors:
                 return
             errors = file_errors
+            if files is not None:
+                must, flagged = animal_writers._missing_texts(
+                    files["animal"], others, main, bool(hunts)
+                )
         raise _Stopped(
             f"{animal_id}: its file still failing after one fix round "
             f"({'; '.join(errors or [])}); a person makes it"
@@ -733,6 +766,7 @@ class AnimalMakerStage:
         region: dict[str, Any],
         animal_id: str,
         extra: list[dict[str, Any]] | None = None,
+        place: dict[str, Any] | None = None,
     ) -> list[str]:
         """The hunter's hunts, from its seated research prey (#84.2).
 
@@ -745,8 +779,14 @@ class AnimalMakerStage:
         own hunts alone (no prey, or none with a file yet). An
         enrich hunter stands where its prey sits in any of its
         tiles' places; tiles without it fail their place check.
+        A place hunter instead keeps its research prey where
+        that animal is in the place or filed for its habitat
+        (#275.1): tags from the library or the made siblings,
+        never from a seat the scaffold never had.
         """
         entries = load_list(find_animal_list(world))["animals"]
+        if place is not None:
+            return _place_hunts(world, ctx, entries, research, animal_id, place)
         overlay = ctx.job_dir
         tags: set[str] = set()
         unseated: list[str] = []
@@ -784,11 +824,7 @@ class AnimalMakerStage:
                 f"{animal_id}: its prey ({', '.join(unseated)}) isn't seated "
                 f"{where}, so this run stops for a person"
             )
-        if "small_fish" in tags:
-            # `fish` would hunt anything with fins, sharks and
-            # turtle-sized fish included; the small stay small (#173.4).
-            tags.discard("fish")
-        return sorted(tags)
+        return _trim_fish(tags)
 
     def _check_animal(
         self, world: Path, ctx: Any, animal_id: str, attempt: int, excused: set[str]
@@ -1190,13 +1226,13 @@ class AnimalMakerStage:
         errors = [] if built["ok"] else [f"the build failed: {built['log']}"]
         from ..enrich import split_not_built
 
-        verdict_errors = _verdict_errors(
-            _verdicts(world, ctx, animal_id, "edits", attempt), ("models",), animal_id
-        )
+        verdicts = _verdicts(world, ctx, animal_id, "edits", attempt)
+        verdict_errors = _verdict_errors(verdicts, ("models",), animal_id)
         # Plant models their items haven't built yet are unknown,
         # not failures: the rounds fix what's fixable (#181.2).
         real, _unbuilt = split_not_built(verdict_errors)
         errors += real
+        errors += _own_schema_errors(verdicts, animal_id)
         (folder / "errors.json").write_text(
             json.dumps(errors, indent=2), encoding="utf-8"
         )
@@ -1371,6 +1407,7 @@ class AnimalMakerStage:
         research: dict[str, Any],
         region: dict[str, Any],
         target: dict[str, Any],
+        required: str = "",
     ) -> str:
         world = ctx_world
         animal_id = target["id"]
@@ -1404,6 +1441,7 @@ class AnimalMakerStage:
                 "ARCHETYPES": ", ".join(sorted(animal_writers._archetypes(world))),
                 "MODEL_PATH": f"res://assets/animals/{animal_id}.glb",
                 "ANIMAL_RULES": animal_writers._animal_rules(world),
+                "REQUIRED_TEXTS": required,
                 "FOR_CHILDREN": for_children(),
             }
         )
@@ -2787,6 +2825,23 @@ def _verdict_errors(
     return errors
 
 
+def _own_schema_errors(
+    verdicts: dict[str, dict[str, Any]], animal_id: str
+) -> list[str]:
+    """The schema verdict's problems about this animal's own files (#275.3).
+
+    A spec the world refuses (too many triangles for a
+    wildlife file, a key the schema forbids) fails the round
+    like a models problem: the build never walks past it.
+    Anything else the verdict files (places, scaffolds) stays
+    out: the model cannot fix those, and the verdict file
+    already carries them to the report.
+    """
+    lines = _verdict_errors(verdicts, ("schema",), animal_id)
+    keep = (f"models/{animal_id}.json:", f"animals/{animal_id}.json:")
+    return [line for line in lines if line.startswith(keep)]
+
+
 # Text the checks demand, and the flag that demands it (#56.1).
 _TEXT_FLAGS = {
     "dig": "digs",
@@ -2811,10 +2866,16 @@ def _guide(error: str) -> str:
     flags = sorted({_TEXT_FLAGS[text] for text in texts if text in _TEXT_FLAGS})
     if not flags:
         return error
-    picks = " or ".join(f"`{flag}`" for flag in flags)
+    picks = []
+    bools = [flag for flag in flags if flag != "hunts"]
+    if bools:
+        picks.append("set " + " or ".join(f"`{flag}`" for flag in bools) + " false")
+    if "hunts" in flags:
+        picks.append("empty `hunts`")
     return (
-        f"{error} Fix it one of two ways: write the text, or set {picks} "
-        "false when the surveyed animal doesn't do that."
+        f"{error} Fix it one of two ways: write the text, or "
+        + " or ".join(picks)
+        + " when the surveyed animal doesn't do that."
     )
 
 
@@ -2823,6 +2884,114 @@ def _unfence(answer: str) -> str:
     text = answer.strip()
     match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     return match.group(1) if match else text
+
+
+def _code_abilities(world: Path, animal: dict[str, Any], reference_id: str) -> None:
+    """Silent ability flags, filled from the reference, then the archetype (#275.2).
+
+    A flag the model set stays set: it read the survey. One it
+    left out takes the reference animal's, else the archetype's
+    default made explicit, so the file says what the checks
+    read instead of inheriting it quietly.
+    """
+    try:
+        archetypes = json.loads(
+            (world / "animals" / "archetypes.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        archetypes = {}
+    reference = (
+        animal_file(world, reference_id) if isinstance(reference_id, str) else {}
+    )
+    defaults = archetypes.get(animal.get("archetype") or "", {})
+    if not isinstance(defaults, dict):
+        defaults = {}
+    if not isinstance(reference, dict):
+        reference = {}
+    for flag in ("digs", "territorial"):
+        if flag in animal:
+            continue
+        if isinstance(reference.get(flag), bool):
+            animal[flag] = reference[flag]
+        elif isinstance(defaults.get(flag), bool):
+            animal[flag] = defaults[flag]
+
+
+def _trim_fish(tags: set[str]) -> list[str]:
+    """Hunt tags, sorted, the small staying small (#173.4).
+
+    `fish` would hunt anything with fins, sharks and
+    turtle-sized fish included.
+    """
+    if "small_fish" in tags:
+        tags.discard("fish")
+    return sorted(tags)
+
+
+def _place_hunts(
+    world: Path,
+    ctx: Any,
+    entries: list[dict[str, Any]],
+    research: dict[str, Any],
+    animal_id: str,
+    place: dict[str, Any],
+) -> list[str]:
+    """A place hunter's hunts, from its research prey in the place (#275.1).
+
+    Every tag of every research prey kept where that animal is
+    in the place's cast or filed in the library for the tile's
+    habitat. Tags come from the library file or the made
+    sibling under `reference/`; prey without a file yet, or
+    living elsewhere, is dropped (the tile webs gap it, never
+    an error). [] leaves the model's own hunts alone.
+    """
+    cast = {sid for sid in place.get("cast", []) if isinstance(sid, str)}
+    home = place.get("home")
+    by_id = {
+        entry.get("id"): entry for entry in entries if isinstance(entry.get("id"), str)
+    }
+    tags: set[str] = set()
+    dropped: list[str] = []
+    reference = ctx.job_dir / "reference"
+    for food in [research.get("main_food"), *research.get("other_foods", [])]:
+        if not isinstance(food, dict) or food.get("kind") != "prey":
+            continue
+        match, _ = match_entry(entries, world, food)
+        if not isinstance(match, dict):
+            continue
+        stem = match.get("in_library") or match.get("id", "")
+        if not isinstance(stem, str) or not stem:
+            continue
+        data = animal_file(world, stem, reference)
+        if not isinstance(data, dict) or not data:
+            dropped.append(str(food.get("name", stem)))
+            continue
+        sid = match.get("id", "")
+        in_place = stem in cast or sid in cast
+        filed = (world / "animals" / f"{stem}.json").is_file()
+        habitats = set(by_id.get(sid, {}).get("habitats", []) or [])
+        world_fit = filed and isinstance(home, str) and home in habitats
+        if not (in_place or world_fit):
+            dropped.append(str(food.get("name", stem)))
+            continue
+        tags.update(tag for tag in data.get("tags", []) or [] if isinstance(tag, str))
+    if dropped:
+        print(
+            f"{ctx.job_id}: {animal_id} drops prey outside the place: "
+            + ", ".join(sorted(set(dropped)))
+        )
+    return _trim_fish(tags)
+
+
+def _place_hunt_scope(ctx: Any, brief: dict[str, Any]) -> dict[str, Any]:
+    """The hunts' scope: the place's cast and the tile's habitat (#275.1)."""
+    try:
+        cast = json.loads((ctx.job_dir / "place_cast.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cast = []
+    if not isinstance(cast, list):
+        cast = []
+    return {"cast": cast, "home": brief.get("home")}
 
 
 def _code_diet(research: dict[str, Any]) -> list[str]:

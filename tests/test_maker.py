@@ -680,6 +680,218 @@ def test_edit_errors_exclude_unbuilt_plant_models(
     assert filed["model"]["length"] == 3.20
 
 
+def test_edit_errors_catch_own_schema_failure(tmp_path: Path, monkeypatch: Any) -> None:
+    """#275.3: a failing schema verdict on the own spec gates the loop."""
+    from types import SimpleNamespace
+
+    from builder.stages import maker as maker_mod
+    from builder.stages.maker import AnimalMakerStage
+
+    job = tmp_path / "job"
+    animals = job / "animals"
+    animals.mkdir(parents=True)
+    (animals / "anaconda.json").write_text(
+        json.dumps({"id": "anaconda", "model": {"length": 5.5}})
+    )
+    monkeypatch.setattr(
+        maker_mod, "_ensure_sandbox", lambda job_dir, world: tmp_path / "sandbox"
+    )
+    monkeypatch.setattr(
+        maker_mod,
+        "_verdicts",
+        lambda world, ctx, aid, phase, attempt, extra=None: {
+            "models": {"status": "pass", "problems": []},
+            "schema": {
+                "status": "fail",
+                "problems": [
+                    "FAIL models/anaconda.json",
+                    "- skin.triangles is 1400, but animals/anaconda.json "
+                    "isn't playable: wildlife is at most 800 (ART.md)",
+                    "FAIL regions/zz_work.json",
+                    "- a scaffold problem the model cannot fix",
+                ],
+            },
+        },
+    )
+    log = 'for animals/anaconda.json: "length": 5.50 (real size)'
+    stage = AnimalMakerStage(build=lambda sandbox, aid: {"ok": True, "log": log})
+    ctx = SimpleNamespace(job_dir=job, check_budget=lambda: None)
+    errors = stage._build_and_check(ctx, tmp_path / "world", "anaconda", 1, None)
+    assert errors == [
+        "models/anaconda.json: skin.triangles is 1400, but "
+        "animals/anaconda.json isn't playable: wildlife is at most 800 (ART.md)"
+    ]
+
+
+def test_code_facts_playable_and_abilities(tmp_path: Path) -> None:
+    """#275.2: code owns playable; silent flags fill from the reference."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    (world / "animals" / "fox.json").write_text(
+        json.dumps({"latin": "Vulpes vulpes", "digs": False, "territorial": True})
+    )
+    (world / "animals" / "archetypes.json").write_text(
+        json.dumps({"land_mammal": {"digs": True}})
+    )
+    answer = _animal_answer(
+        "lynx", archetype="land_mammal", playable=False, territorial=False
+    )
+    client = ScriptClient([answer, _edits_answer()])
+    _stage().run(_ctx(tmp_path, world, client))
+    saved = json.loads((tmp_path / "animals" / "lynx.json").read_text())
+    assert saved["playable"] is True
+    assert saved["digs"] is False
+    assert saved["territorial"] is False
+
+
+def test_required_texts_follow_the_world_rules() -> None:
+    """#275.2: code lists the texts the checks demand from the file."""
+    from builder.stages.animals import _required_texts
+
+    animal = {
+        "playable": True,
+        "digs": True,
+        "territorial": True,
+        "hunts": ["large_mammal"],
+        "text": {"title": "T"},
+    }
+    need = _required_texts(animal, {"large_mammal", "mammal"})
+    for key in (
+        "menu_sub",
+        "menu_wild",
+        "hungry",
+        "no_food",
+        "dig",
+        "safe_tag",
+        "bite",
+        "caught_you",
+        "rival_bite",
+        "rival_caught_you",
+        "intro_safe",
+        "intro_survival",
+        "intro_wild",
+    ):
+        assert key in need
+    assert "title" in need
+    animal["text"] = {"title": "T", "intro": "Hi."}
+    assert "intro_safe" not in _required_texts(animal, {"large_mammal"})
+    assert "bite" not in _required_texts(animal, {"fish"})
+    wild = {"digs": True, "hunts": ["large_mammal"], "text": {}}
+    assert "menu_sub" not in _required_texts(wild, {"large_mammal"})
+    assert "safe_tag" not in _required_texts(wild, {"large_mammal"})
+    assert "dig" in _required_texts(wild, {"large_mammal"})
+
+
+def test_animal_prompt_lists_required_texts(tmp_path: Path) -> None:
+    """#275.2: the first prompt names every text the file will need."""
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
+    _stage().run(_ctx(tmp_path, world, client))
+    prompt = client.prompts[0]
+    assert "menu_sub" in prompt
+    assert "rival_bite" in prompt
+    assert "`digs` false" in prompt
+
+
+def _place_ctx(tmp_path: Path) -> Any:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(job_id="job-1", job_dir=tmp_path / "job")
+
+
+def test_place_hunts_come_from_the_place_prey(tmp_path: Path) -> None:
+    """#275.1: a place hunter's hunts are its place prey's tags."""
+    from builder.stages.maker import AnimalMakerStage
+
+    world = _world(tmp_path)
+    ref = tmp_path / "job" / "reference" / "animals"
+    ref.mkdir(parents=True)
+    (ref / "capybara.json").write_text(json.dumps({"tags": ["large_mammal"]}))
+    research = {
+        "main_food": {"kind": "prey", "name": "Capybara"},
+        "other_foods": [{"kind": "berries", "name": "Bilberry"}],
+    }
+    tags = AnimalMakerStage()._code_hunts(
+        world,
+        _place_ctx(tmp_path),
+        research,
+        {},
+        "lynx",
+        place={"cast": ["lynx", "capybara"], "home": "rainforest"},
+    )
+    assert tags == ["large_mammal"]
+
+
+def test_place_hunts_drop_prey_outside_the_place(tmp_path: Path) -> None:
+    """#275.1: prey neither in the place nor its habitat is dropped."""
+    from builder.stages.maker import AnimalMakerStage
+
+    world = _world(tmp_path)
+    ref = tmp_path / "job" / "reference" / "animals"
+    ref.mkdir(parents=True)
+    (ref / "capybara.json").write_text(json.dumps({"tags": ["large_mammal"]}))
+    research = {
+        "main_food": {"kind": "prey", "name": "Capybara"},
+        "other_foods": [],
+    }
+    tags = AnimalMakerStage()._code_hunts(
+        world,
+        _place_ctx(tmp_path),
+        research,
+        {},
+        "lynx",
+        place={"cast": ["lynx"], "home": "boreal_forest"},
+    )
+    assert tags == []
+
+
+def test_place_hunts_keep_world_prey_by_habitat(tmp_path: Path) -> None:
+    """#275.1: filed prey of the tile's habitat hunts without the place."""
+    from builder.stages.maker import AnimalMakerStage
+
+    world = _world(tmp_path)
+    (tmp_path / "job").mkdir(parents=True)
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"].append(
+        {
+            "id": "mouse",
+            "name": "Mouse",
+            "latin": "Mus musculus",
+            "gbif_key": 99,
+            "start_from": "fox",
+            "habitats": ["boreal_forest"],
+            "can_make": True,
+        }
+    )
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    (world / "animals" / "mouse.json").write_text(
+        json.dumps({"tags": ["small_mammal"]})
+    )
+    research = {
+        "main_food": {"kind": "prey", "name": "Mouse"},
+        "other_foods": [],
+    }
+    tags = AnimalMakerStage()._code_hunts(
+        world,
+        _place_ctx(tmp_path),
+        research,
+        {},
+        "lynx",
+        place={"cast": ["lynx"], "home": "boreal_forest"},
+    )
+    assert tags == ["small_mammal"]
+    tags = AnimalMakerStage()._code_hunts(
+        world,
+        _place_ctx(tmp_path),
+        research,
+        {},
+        "lynx",
+        place={"cast": ["lynx"], "home": "rainforest"},
+    )
+    assert tags == []
+
+
 def test_animal_prompt_carries_the_species(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)
@@ -842,7 +1054,16 @@ def _real_answer(animal_id: str, latin: str, key: int) -> str:
             "archetype": "land_mammal",
             "taxon": {"gbif_key": key, "rank": "SPECIES", "name": latin},
             "diet": ["grass"],
-            "text": {"dig": f"The {animal_id} digs."},
+            "text": {
+                "title": animal_id.capitalize(),
+                "menu_sub": f"Play as the {animal_id}.",
+                "menu_wild": f"Watch the {animal_id}.",
+                "hungry": f"The {animal_id} is hungry.",
+                "no_food": f"The {animal_id} finds no food.",
+                "dig": f"The {animal_id} digs.",
+                "rival_bite": f"The {animal_id} chases a rival.",
+                "rival_caught_you": f"A rival {animal_id} caught you.",
+            },
             "year": {
                 "winter": "active",
                 "shelter": "It sleeps in a den.",

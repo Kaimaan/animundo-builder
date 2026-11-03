@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import gzip
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fake_store import FakeStore
 from fake_world import boreal_3x3, make_world, write_grids
 
@@ -34,6 +36,31 @@ class _ScriptRespond:
         part = SimpleNamespace(type="output_text", text=self.answers.pop(0))
         message = SimpleNamespace(type="message", phase=None, content=[part])
         return SimpleNamespace(output=[message])
+
+
+class _ResearchRespond:
+    """Canned research answers with usage, spending for real."""
+
+    model = "fake-test-model"
+    replays = False
+
+    def __init__(self, answers: list[str]) -> None:
+        self.answers = list(answers)
+
+    def responses_create(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
+        parts = [
+            SimpleNamespace(
+                type="output_text", text=self.answers.pop(0), annotations=[]
+            )
+        ]
+        output = [SimpleNamespace(type="message", content=parts)]
+        return SimpleNamespace(
+            model="fake-test-model",
+            output=output,
+            usage=SimpleNamespace(
+                prompt_tokens=100, completion_tokens=50, prompt_tokens_details=None
+            ),
+        )
 
 
 def _worker(tmp_path: Path, store: FakeStore) -> Worker:
@@ -141,11 +168,32 @@ def test_place_survey_spend_joins_cost_and_spent(tmp_path: Path) -> None:
     ledger = FileLedger(str(tmp_path / "ledger.json"))
     receipt = ledger.reserve(f"survey:{A}", 0.03, Caps(100.0, 1000.0, 10000.0))
     ledger.settle(receipt, 0.03)
-    worker._record_place_survey_spend("j1", store.build_jobs["j1"])
+    worker._record_place_survey_spend("j1", store.build_jobs["j1"], 0.0)
     job = store.build_jobs["j1"]
     assert job["survey_usd"] == 0.03
     assert job["cost_usd"] == 0.03
     assert job["spent_usd"] == 0.03
+
+
+def test_place_survey_spend_ignores_another_job(tmp_path: Path) -> None:
+    """#275: a rerun that paid nothing adds nothing, even shared tiles."""
+    from builder.ledger import Caps, FileLedger
+
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    store.build_jobs["j1"] = _place_job(
+        status="building", phase="approved", research=_build_research()
+    )
+    assert worker._claim("j1")
+    ledger = FileLedger(str(tmp_path / "ledger.json"))
+    receipt = ledger.reserve(f"survey:{A}", 0.05, Caps(100.0, 1000.0, 10000.0))
+    ledger.settle(receipt, 0.05)
+    worker._record_place_survey_spend("j1", store.build_jobs["j1"], 0.05)
+    job = store.build_jobs["j1"]
+    assert "survey_usd" not in job
+    assert job.get("cost_usd", 0.0) == 0.0
+    assert job["survey_cached"] is True
 
 
 def test_place_no_biome_names_its_land(tmp_path: Path) -> None:
@@ -883,20 +931,29 @@ def _build_research(**over: Any) -> dict[str, Any]:
 
 
 def _stub_make_lion(worker: Worker, job_id: str, item: dict[str, Any]) -> None:
-    """A made lion as run_item would leave it: files plus progress."""
+    """A made species as run_item would leave it: files plus progress."""
     item_dir = worker.jobs_dir / job_id / item["id"]
-    (item_dir / "animals").mkdir(parents=True)
-    (item_dir / "animals" / "lion.json").write_text(
-        json.dumps(
-            {
-                "id": "lion",
-                "playable": True,
-                "habitats": ["boreal_forest"],
-                "hunts": ["vole"],
-                "diet": [],
-            }
+    if item.get("kind") == "plant":
+        greens = item_dir / "models" / "plants"
+        greens.mkdir(parents=True)
+        (greens / "pine.json").write_text(json.dumps({"id": "pine"}))
+        (greens / "pine.glb").write_bytes(b"GLB")
+    else:
+        (item_dir / "animals").mkdir(parents=True)
+        (item_dir / "animals" / "lion.json").write_text(
+            json.dumps(
+                {
+                    "id": "lion",
+                    "playable": True,
+                    "habitats": ["boreal_forest"],
+                    "hunts": ["vole"],
+                    "diet": [],
+                }
+            )
         )
-    )
+        (item_dir / "models").mkdir(parents=True)
+        (item_dir / "models" / "lion.glb").write_bytes(b"GLB")
+        (item_dir / "models" / "lion.png").write_bytes(b"PNG")
     job = worker.store.get_build_job(job_id) or {}
     progress = [e for e in job.get("progress", []) if e.get("id") != item["id"]]
     progress.append({"id": item["id"], "status": "checking", "cost_usd": 0.0})
@@ -942,8 +999,112 @@ def test_place_builds_species_first_then_publishes_together(
     overlay = store.read_blob("packs/animal_lion/1/additions/tiles.json")[0]
     assert overlay is not None
     assert A in json.loads(overlay.decode("utf-8"))["tiles"]
+    assert store.read_blob("packs/animal_lion/1/animals/lion.json")[0] is not None
+    assert store.read_blob("packs/animal_lion/1/models/lion.glb")[0] is not None
+    assert (
+        store.read_blob("packs/animal_lion/1/models/previews/lion.png")[0] is not None
+    )
+    assert store.read_blob("packs/plant_pine/1/models/plants/pine.glb")[0] is not None
+    assert store.read_blob("packs/plant_pine/1/additions/tiles.json")[0] is None
     place_blob = store.read_blob("packs/place_fi_nuuksio/1/places/fi_nuuksio.json")[0]
     assert place_blob is not None
+
+
+def test_place_species_files_ship_own_id_only(tmp_path: Path) -> None:
+    """#275.1: prey copies in the item dir never ship."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    (item_dir / "animals").mkdir(parents=True)
+    (item_dir / "animals" / "lion.json").write_text("{}")
+    (item_dir / "animals" / "vole.json").write_text("{}")
+    (item_dir / "models").mkdir(parents=True)
+    (item_dir / "models" / "lion.glb").write_bytes(b"GLB")
+    item = {"id": "animal_lion", "kind": "animal", "what": "lion"}
+    files = worker._place_species_files("j1", item)
+    assert sorted(files) == ["animals/lion.json", "models/lion.glb"]
+    with pytest.raises(ValueError, match="no animals/tiger.json to ship"):
+        worker._place_species_files(
+            "j1", {"id": "animal_tiger", "kind": "animal", "what": "tiger"}
+        )
+
+
+def test_place_test_build_publishes_nothing_but_reports(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#275: a test build runs cleanly but puts nothing live."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_species", lambda *args, **kwargs: _lion_answer()
+    )
+
+    def fake_run_item(
+        self: Worker,
+        job_id: str,
+        job: dict[str, Any],
+        tile: str,
+        plan: dict[str, Any],
+        item: dict[str, Any],
+        budget: float,
+    ) -> None:
+        _stub_make_lion(self, job_id, item)
+
+    monkeypatch.setattr(Worker, "run_item", fake_run_item)
+    doc = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+    )
+    doc["test_build"] = True
+    store.build_jobs["j1"] = doc
+    assert worker._claim("j1")
+    worker._place_build("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published", job.get("error")
+    assert "pack" not in job
+    assert [n for n in store.blobs if n.startswith("packs/")] == []
+    assert [n for n in store.blobs if n.startswith("tiles/")] == []
+    assert any(n.startswith("review/j1/") for n in store.blobs)
+    assert job.get("cost", {}).get("actual", 0.0) >= 0.0
+    place_entry = next(e for e in job["progress"] if e["id"] == "place")
+    assert place_entry["status"] == "tested"
+
+
+def test_place_wanted_lists_a_prey_no_item_makes(tmp_path: Path) -> None:
+    """#275.2: a researched prey nobody makes lands on wanted."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    listed_path = worker.world / "animal-list.json"
+    listed = json.loads(listed_path.read_text())
+    listed["animals"].append(
+        {"id": "puma", "name": "Mountain lion", "habitats": ["boreal_forest"]}
+    )
+    listed_path.write_text(json.dumps(listed))
+    job = _place_job(want=[])
+    store.build_jobs["j1"] = job
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    item_dir.mkdir(parents=True)
+    (item_dir / "research.json").write_text(
+        json.dumps(
+            {
+                "main_food": {"kind": "prey", "name": "mountain lion"},
+                "other_foods": [],
+            }
+        )
+    )
+    research = {
+        "tiles": [A],
+        "biome": "boreal_forest",
+        "animals": [{"id": "fox", "source": "s"}],
+        "plants": [],
+    }
+    wanted = worker._wanted_drops("j1", job, research)
+    assert wanted == [{"kind": "animal", "what": "puma", "part": "boreal_forest"}]
 
 
 def test_place_build_failing_animal_publishes_nothing(
@@ -1100,6 +1261,253 @@ def test_place_build_no_short_sets_waiting_then_clears(
     worker._place_build("j1", store.build_jobs["j1"])
     job = store.build_jobs["j1"]
     assert "waiting" not in job
+
+
+def test_place_skip_refreshes_stale_checks_failed(tmp_path: Path) -> None:
+    """#275.4: skipping a done item re-reads its checks, not its old label."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    store.build_jobs["j1"] = _place_job(
+        progress=[
+            {
+                "id": "animal_lion",
+                "status": "checking",
+                "report": "review/j1/animal_lion/report.html",
+                "cost_usd": 0.2,
+                "checks_failed": ["oneshot-lion-animal-1"],
+            }
+        ]
+    )
+    checks = tmp_path / "jobs" / "j1" / "animal_lion" / "checks"
+    checks.mkdir(parents=True)
+    (checks / "oneshot-lion-animal-1.json").write_text(
+        json.dumps({"results": [{"check": "animals"}], "ok": False})
+    )
+    (checks / "oneshot-lion-animal-2.json").write_text(
+        json.dumps({"results": [{"check": "animals"}], "ok": True})
+    )
+    assert worker._claim("j1")
+    job = store.build_jobs["j1"]
+    worker._refresh_done_item("j1", job, "animal_lion")
+    (entry,) = store.build_jobs["j1"]["progress"]
+    assert "checks_failed" not in entry
+    assert entry["status"] == "checking"
+    assert entry["cost_usd"] == 0.2
+    (checks / "oneshot-lion-edits-2.json").write_text(
+        json.dumps({"results": [{"check": "schema"}], "ok": False})
+    )
+    worker._refresh_done_item("j1", store.build_jobs["j1"], "animal_lion")
+    (entry,) = store.build_jobs["j1"]["progress"]
+    assert entry["checks_failed"] == ["oneshot-lion-edits-2"]
+    shutil.rmtree(tmp_path / "jobs" / "j1" / "animal_lion")
+    worker._refresh_done_item("j1", store.build_jobs["j1"], "animal_lion")
+    (entry,) = store.build_jobs["j1"]["progress"]
+    assert entry["checks_failed"] == ["oneshot-lion-edits-2"]
+
+
+def test_place_run_item_brief_names_the_place(tmp_path: Path, monkeypatch: Any) -> None:
+    """#275.1: a place item's brief carries region_id, never prey."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    store.build_jobs["j1"] = _place_job(
+        status="building", research={"region_id": "fi_nuuksio"}
+    )
+    assert worker._claim("j1")
+
+    class _Pipe:
+        def run(self, ctx: Any) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.setattr("builder.build.item_pipeline", lambda **kwargs: _Pipe())
+    item = {
+        "id": "animal_lion",
+        "kind": "animal",
+        "what": "lion",
+        "from": "fox",
+        "estimate_usd": 0.42,
+    }
+    worker.run_item(
+        "j1",
+        store.build_jobs["j1"],
+        A,
+        {"items": [item], "world": "test", "region_id": "fi_nuuksio"},
+        item,
+        10.0,
+    )
+    brief = json.loads(
+        (tmp_path / "jobs" / "j1" / "animal_lion" / "home.json").read_text()
+    )
+    assert brief["region_id"] == "fi_nuuksio"
+
+
+def test_place_run_item_keeps_earlier_stage_cost(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#275.1: the entry counts stages an earlier call finished."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    store.build_jobs["j1"] = _place_job(
+        status="building", research={"region_id": "fi_nuuksio"}
+    )
+    assert worker._claim("j1")
+
+    class _Pipe:
+        def run(self, ctx: Any) -> dict[str, Any]:
+            return {}
+
+    monkeypatch.setattr("builder.build.item_pipeline", lambda **kwargs: _Pipe())
+    item = {
+        "id": "animal_lion",
+        "kind": "animal",
+        "what": "lion",
+        "from": "fox",
+        "estimate_usd": 0.42,
+    }
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    item_dir.mkdir(parents=True)
+    (item_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research", "minimum"],
+                "results": {
+                    "research": {"cost_usd": 0.05},
+                    "minimum": {"minset_file": "minset.json"},
+                },
+                "failed": None,
+            }
+        )
+    )
+    worker.run_item(
+        "j1",
+        store.build_jobs["j1"],
+        A,
+        {"items": [item], "world": "test"},
+        item,
+        10.0,
+    )
+    (entry,) = store.build_jobs["j1"]["progress"]
+    assert entry["cost_usd"] == 0.05
+
+
+def test_place_intake_sweeps_siblings_and_lays_reference(
+    tmp_path: Path,
+) -> None:
+    """#275.1: each animal starts clean, with its prey as reference."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    (item_dir / "animals").mkdir(parents=True)
+    (item_dir / "animals" / "lion.json").write_text("{}")
+    (item_dir / "animals" / "vole.json").write_text("{}")
+    (item_dir / "models").mkdir(parents=True)
+    (item_dir / "models" / "lion.json").write_text("{}")
+    (item_dir / "models" / "vole.json").write_text("{}")
+    (item_dir / "models" / "vole.glb").write_bytes(b"GLB")
+    (item_dir / "models" / "previews").mkdir(parents=True)
+    (item_dir / "models" / "previews" / "vole.png").write_bytes(b"PNG")
+    sib = tmp_path / "jobs" / "j1" / "animal_vole" / "animals"
+    sib.mkdir(parents=True)
+    (sib / "vole.json").write_text(json.dumps({"id": "vole", "tags": ["vole"]}))
+    job = {"research": {"animals": [{"id": "lion"}, {"id": "vole"}]}}
+    item = {"id": "animal_lion", "kind": "animal", "what": "lion"}
+    worker._lay_place_references("j1", job, item_dir, item)
+    assert (item_dir / "animals" / "lion.json").is_file()
+    assert not (item_dir / "animals" / "vole.json").exists()
+    assert (item_dir / "models" / "lion.json").is_file()
+    assert not (item_dir / "models" / "vole.json").exists()
+    assert not (item_dir / "models" / "vole.glb").exists()
+    assert not (item_dir / "models" / "previews" / "vole.png").exists()
+    ref = json.loads((item_dir / "reference" / "animals" / "vole.json").read_text())
+    assert ref["tags"] == ["vole"]
+    assert not (item_dir / "reference" / "animals" / "lion.json").exists()
+    cast = json.loads((item_dir / "place_cast.json").read_text())
+    assert cast == ["lion", "vole"]
+
+
+def test_place_orders_hunters_after_their_prey(tmp_path: Path) -> None:
+    """#275.1: prey-first order from the items' own research."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    lion_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    lion_dir.mkdir(parents=True)
+    (lion_dir / "research.json").write_text(
+        json.dumps(
+            {
+                "main_food": {"kind": "prey", "name": "Vole"},
+                "other_foods": [{"kind": "berries", "name": "Bilberry"}],
+            }
+        )
+    )
+    vole_dir = tmp_path / "jobs" / "j1" / "animal_vole"
+    vole_dir.mkdir(parents=True)
+    (vole_dir / "research.json").write_text(
+        json.dumps(
+            {
+                "main_food": {"kind": "grass", "name": "Grass"},
+                "other_foods": [],
+            }
+        )
+    )
+    items = [
+        {"id": "animal_lion", "kind": "animal", "what": "lion"},
+        {"id": "animal_vole", "kind": "animal", "what": "vole"},
+        {"id": "plant_pine", "kind": "plant", "what": "pine"},
+    ]
+    ordered = worker._place_order_species("j1", items)
+    assert [i["id"] for i in ordered] == [
+        "animal_vole",
+        "animal_lion",
+        "plant_pine",
+    ]
+
+
+def test_place_research_pass_runs_before_making(tmp_path: Path) -> None:
+    """#275.1: research and minimum land before any animal is made."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        research={"region_id": "fi_nuuksio", "tiles": [A], "biome": "boreal_forest"},
+    )
+    assert worker._claim("j1")
+    answer = {
+        "main_food": {"name": "Vole", "kind": "prey", "size_cm": 30},
+        "other_foods": [{"name": "Bilberries", "kind": "berries"}],
+        "surroundings": [
+            {"name": "Norway spruce", "kind": "tree"},
+            {"name": "Bilberry", "kind": "plant", "food_kind": "berries"},
+            {"name": "Timothy grass", "kind": "plant", "food_kind": "grass"},
+        ],
+        "size": {"length_cm": 110, "largest_cm": 130, "weight_kg": 22},
+        "year": {
+            "winter": "active",
+            "shelter": "Sleeps in a den.",
+            "young": "Born in spring.",
+            "food": "Hunts all year.",
+        },
+        "sources": ["https://example.org/lion"],
+    }
+    worker.chat = _ResearchRespond([json.dumps(answer)])
+    item = {
+        "id": "animal_lion",
+        "kind": "animal",
+        "what": "lion",
+        "from": "fox",
+        "estimate_usd": 0.42,
+    }
+    plan = {"items": [item], "world": "test", "region_id": "fi_nuuksio"}
+    assert worker._place_research_species(
+        "j1", store.build_jobs["j1"], A, plan, [item], 10.0
+    )
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    saved = json.loads((item_dir / "research.json").read_text())
+    assert saved["main_food"]["name"] == "Vole"
+    minset = json.loads((item_dir / "minset.json").read_text())
+    assert minset["prey"] is None
+    assert "place item never makes prey" in minset["prey_reason"]
+    state = json.loads((item_dir / "state.json").read_text())
+    assert state["completed"] == ["research", "minimum"]
+    assert state["results"]["research"]["cost_usd"] > 0
 
 
 def test_place_job_validates() -> None:

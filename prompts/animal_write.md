@@ -123,6 +123,10 @@ None. Write from the inputs only.
   carry it.
 - Numbers stay inside the rules' ranges.
 
+## Required texts
+
+$REQUIRED_TEXTS
+
 $FOR_CHILDREN
 
 ## Stop

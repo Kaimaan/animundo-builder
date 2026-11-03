@@ -129,6 +129,20 @@ class AnimalsStage:
         role = roles.get(species["species"], species.get("role", "playable"))
         template = (PROMPTS_DIR / "animal_write.md").read_text(encoding="utf-8")
         template = _with_examples(template, world, role)
+        main = role == "playable"
+        others = _other_tags(world, ctx.job_dir, species["species"])
+        prior: dict[str, Any] = {}
+        if previous is not None:
+            try:
+                parsed = json.loads(previous)
+            except ValueError:
+                parsed = {}
+            if isinstance(parsed, dict):
+                prior = parsed
+        if prior:
+            must, flagged = _missing_texts(prior, others, main, False)
+        else:
+            must, flagged = _first_texts(main, [])
         prompt = Template(template).substitute(
             {
                 "SPECIES_JSON": json.dumps(species, indent=2),
@@ -143,6 +157,7 @@ class AnimalsStage:
                 "ARCHETYPES": ", ".join(sorted(_archetypes(world))),
                 "MODEL_PATH": f"res://assets/animals/{species['species']}.glb",
                 "ANIMAL_RULES": _animal_rules(world),
+                "REQUIRED_TEXTS": _required_block(must, flagged),
                 "FOR_CHILDREN": for_children(),
             }
         )
@@ -437,3 +452,165 @@ def _file_owner(file: str, texts: dict[str, str]) -> str | None:
 def _missing_model(line: str) -> bool:
     """The world's own unbuilt models: known red state, not the draft."""
     return "model file not found" in line or ".glb is missing" in line
+
+
+#: Texts a playable animal carries, from the world's check (#275.2).
+_REQUIRED_PLAYABLE = (
+    "title",
+    "menu_sub",
+    "menu_wild",
+    "night_hint",
+    "too_exposed",
+    "sheltered",
+    "hungry",
+    "no_food",
+    "rain_start",
+    "rain_stop",
+)
+
+#: The intro wording, one per game mode (#275.2).
+_INTRO_MODES = ("intro_safe", "intro_survival", "intro_wild")
+
+#: Texts a hunter carries (#275.2).
+_HUNT_TEXTS = ("safe_tag", "bite", "caught_you")
+
+
+def _required_texts(animal: dict[str, Any], others: set[str]) -> list[str]:
+    """The text keys the world's check demands from this file (#275.2).
+
+    Playable, digs, hunts and territorial each pull their keys;
+    `bite` and `caught_you` only when a hunts tag matches
+    another animal's tags. Species wording wins over the
+    archetype's defaults, so defaults never excuse a key.
+    """
+    need: list[str] = []
+    text = animal.get("text") or {}
+    if not isinstance(text, dict):
+        text = {}
+    hunts = [tag for tag in animal.get("hunts") or [] if isinstance(tag, str)]
+    if animal.get("playable"):
+        need.extend(_REQUIRED_PLAYABLE)
+        if "intro" not in text:
+            need.extend(key for key in _INTRO_MODES if key not in text)
+    if animal.get("digs"):
+        need.append("dig")
+    if hunts and animal.get("playable"):
+        need.append("safe_tag")
+    if animal.get("territorial"):
+        need.extend(("rival_bite", "rival_caught_you"))
+    if hunts and any(tag in others for tag in hunts):
+        need.extend(("bite", "caught_you"))
+    return need
+
+
+def _other_tags(world: Path, job_dir: Path, animal_id: str) -> set[str]:
+    """Every other animal's tags: the library's and the job's (#275.2)."""
+    tags: set[str] = set()
+    for folder in (world / "animals", job_dir / "animals"):
+        try:
+            paths = sorted(folder.glob("*.json"))
+        except OSError:
+            continue
+        for path in paths:
+            if folder == job_dir / "animals" and path.stem == animal_id:
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                tags.update(
+                    tag for tag in data.get("tags", []) or [] if isinstance(tag, str)
+                )
+    return tags
+
+
+def _required_block(must: list[str], flagged: list[tuple[str, str]]) -> str:
+    """The prompt's required-texts block from code's lists (#275.2)."""
+    lines = []
+    if must:
+        lines.append(
+            "Your `text` MUST include these keys, worded for a child: "
+            + ", ".join(must)
+            + "."
+        )
+    if flagged:
+        groups: dict[str, list[str]] = {}
+        for key, flag in flagged:
+            groups.setdefault(flag, []).append(key)
+        parts = []
+        for flag, keys in groups.items():
+            if flag == "hunts":
+                parts.append(f"{', '.join(keys)} (or empty `hunts`)")
+            else:
+                parts.append(f"{', '.join(keys)} (or set `{flag}` false)")
+        head = "It MUST also include" if must else "Include"
+        lines.append(
+            f"{head} each key below, or take its escape "
+            "when the surveyed animal does not do that: " + "; ".join(parts) + "."
+        )
+    if not lines:
+        return "All required texts are present; keep them."
+    return "\n".join(lines)
+
+
+def _first_texts(
+    main: bool, hunts: list[str]
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """The first try's required texts, preemptive (#275.2).
+
+    The file does not exist yet, so every conditional key is
+    listed: the keys code locks go on the must list, the rest
+    carry their flag's escape. Unused keys are legal; a fix
+    round narrows to what the file still lacks.
+    """
+    must: list[str] = []
+    flagged: list[tuple[str, str]] = []
+    if main:
+        must.extend(_REQUIRED_PLAYABLE)
+        must.extend(_INTRO_MODES)
+    else:
+        flagged.extend((key, "playable") for key in _REQUIRED_PLAYABLE)
+        flagged.extend((key, "playable") for key in _INTRO_MODES)
+    flagged.append(("dig", "digs"))
+    if hunts:
+        must.extend(_HUNT_TEXTS)
+    else:
+        flagged.extend((key, "hunts") for key in _HUNT_TEXTS)
+    flagged.extend((key, "territorial") for key in ("rival_bite", "rival_caught_you"))
+    return must, flagged
+
+
+def _missing_texts(
+    animal: dict[str, Any], others: set[str], main: bool, hunts_locked: bool
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """The still-missing required texts, split by escape (#275.2).
+
+    Keys code locks (the main animal's playable set, hunts the
+    research set) must be written; the rest carry the flag that
+    excuses them.
+    """
+    present = animal.get("text") or {}
+    if not isinstance(present, dict):
+        present = {}
+    must: list[str] = []
+    flagged: list[tuple[str, str]] = []
+    playables = set(_REQUIRED_PLAYABLE) | set(_INTRO_MODES)
+    for key in _required_texts(animal, others):
+        if key in present:
+            continue
+        if key in playables:
+            if main:
+                must.append(key)
+            else:
+                flagged.append((key, "playable"))
+        elif key in _HUNT_TEXTS:
+            if hunts_locked:
+                must.append(key)
+            else:
+                flagged.append((key, "hunts"))
+        elif key == "dig":
+            flagged.append((key, "digs"))
+        else:
+            flagged.append((key, "territorial"))
+    return must, flagged

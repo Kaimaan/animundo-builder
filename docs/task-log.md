@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-03: inbox #246 (planner gaps are a report, never items — ready to deploy)
+
+- Done. The made-probe branch no longer turns gaps into `food_*` items: a probe that makes is `code_only` with no items, and its gaps ride the plan as a `gaps: {species: {diet, hunts}}` report field (added to the plan contract). The reef test is back to `code_only: True, items: []`, pinning the clownfish water-plants gap in the report.
+- The expanding path's `_missing_food` follows 0061 now: one batched `world_eats` call over the present filed animals; an animal that eats anything here gets no item however gappy its diet; only a starving animal (`eats` false) with a diet kind a filed plant/tree model grows or the house names in small life gets a food item — rule kinds (water/land-conditional) and bare words get no item and land in the gaps report. No food rule in the checkout means no items, as before.
+- Tests: hare probe on taiga → `code_only`, no items, clover in the hare's report; a gappy #243 remake publishes v2 by code with no yes (verified it waits pre-fix); `_missing_food` units for the real-kind item, the word-only report, and the partial-gap report. Four old-rule tests updated to the report. Full suite 1204 passed; the 2 maker failures are the known pre-existing world drift.
+- Follow-ups in the same commit: `ensure_wild_tiles` dedupes (repeats collapse, moves skip surveyed and taken tiles; price now counts the final tiles) with three tests; the WorldCover bake script committed as `data/habitat-grid/bake_landcover.py` (repo-relative, smoke-run for 2 tiles: resumes and writes a valid file) with the README pointing at it.
+- Commit e0e4438, CI green. Ready to deploy: builder `e0e4438`. No remake or reef ring runs until this is live, per the item.
+
 ## 2026-11-02: inbox #238 (wild-land check + WorldCover bake — done, ready to deploy)
 
 - Done. Place surveys now check wild land: a tile is wild when built-up < 2% and built+crop < 25% of its non-water pixels; a non-wild tile moves to the nearest wild tile within 3 keeping habitat+biome, each move recorded as {from, to, why} in the research, and nothing wild nearby fails the job as `no_wild_tile`. The start point drops to the nearest wild mask cell (`wild_spot`). Tiles without land-cover data (sea, polar) pass through as surveyed. Wild shares and the 5×5 wild mask come from the baked `data/habitat-grid/landcover.json.gz`.

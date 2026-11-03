@@ -373,31 +373,49 @@ def write_state_params(item_dir: Path, params: dict[str, Any]) -> None:
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
-def _refresh_maker_state(item_dir: Path) -> None:
-    """Drop an oneshot pass the maker has outgrown (#269.4).
+def _maker_pass_stale(item_dir: Path) -> bool:
+    """An oneshot animal pass older than the maker, worth remaking (#269.4).
 
-    A pass stamped under an older maker version remakes: its
-    files never saw the new checks. Downstream of a real make
-    (plants, ship) refreshes with it; downstream of a no-op
-    pass (a plant item's empty oneshot) keeps its work.
+    The pass completed under an older maker version, so its
+    files never saw the new checks. A no-op pass (a plant
+    item's empty oneshot) is never stale: the maker change
+    touches nothing it made.
     """
     from .stages.maker import MAKER_VERSION
 
+    try:
+        state = json.loads((item_dir / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(state, dict):
+        return False
+    if "oneshot" not in (state.get("completed") or []):
+        return False
+    if state.get("maker_version") == MAKER_VERSION:
+        return False
+    made = (state.get("results") or {}).get("oneshot") or {}
+    return isinstance(made, dict) and bool(made.get("animal_files"))
+
+
+def _refresh_maker_state(item_dir: Path) -> None:
+    """Drop an oneshot pass the maker has outgrown (#269.4).
+
+    A stale pass remakes with everything downstream of it
+    (plants, ship); a current or no-op pass keeps its work.
+    """
     state_path = item_dir / "state.json"
+    if not _maker_pass_stale(item_dir):
+        return
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
     if not isinstance(state, dict):
         return
-    completed = state.get("completed") or []
-    if "oneshot" not in completed or state.get("maker_version") == MAKER_VERSION:
-        return
-    made = (state.get("results") or {}).get("oneshot") or {}
-    drop = {"oneshot"}
-    if isinstance(made, dict) and made.get("animal_files"):
-        drop |= {"plants", "ship"}
-    state["completed"] = [name for name in completed if name not in drop]
+    drop = {"oneshot", "plants", "ship"}
+    state["completed"] = [
+        name for name in (state.get("completed") or []) if name not in drop
+    ]
     results = state.get("results")
     if isinstance(results, dict):
         for name in drop:

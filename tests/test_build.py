@@ -351,7 +351,7 @@ def test_run_item_stages_keeps_a_current_oneshot(tmp_path: Path) -> None:
 
 
 def test_run_item_stages_refresh_reaches_past_a_real_make(tmp_path: Path) -> None:
-    """#269.4: downstream of a real stale make refreshes; else it keeps."""
+    """#269.4: downstream of a real stale make refreshes; a no-op keeps."""
     from builder.pipeline import Pipeline
 
     calls: list[str] = []
@@ -377,7 +377,7 @@ def test_run_item_stages_refresh_reaches_past_a_real_make(tmp_path: Path) -> Non
         [Named("oneshot"), Named("plants")], state_path=tmp_path / "state.json"
     )  # type: ignore[list-item]
     build_mod.run_item_stages(_counting_ctx(tmp_path), tmp_path, pipeline)
-    assert calls == ["oneshot"]
+    assert calls == []
 
 
 def test_build_food_item_patches_home_copy(tmp_path: Path) -> None:

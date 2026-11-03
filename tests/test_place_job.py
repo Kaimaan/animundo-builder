@@ -1013,6 +1013,59 @@ def test_place_make_species_skips_a_checking_item(
     assert [item["id"] for item in items] == ["animal_lion", "plant_pine"]
 
 
+def test_place_make_species_remakes_a_stale_checking_item(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#269.4: a checking pass older than the maker remakes on rerun."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    job = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+    )
+    job["progress"] = [
+        {"id": "animal_lion", "status": "checking", "cost_usd": 0.42},
+        {"id": "plant_pine", "status": "checking", "cost_usd": 0.13},
+    ]
+    store.build_jobs["j1"] = job
+    assert worker._claim("j1")
+    lion_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    lion_dir.mkdir(parents=True)
+    (lion_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": ["research", "oneshot", "plants"],
+                "results": {
+                    "oneshot": {
+                        "animal_files": ["animals/lion.json"],
+                        "cost_usd": 0.42,
+                    }
+                },
+                "failed": None,
+            }
+        )
+    )
+    calls: list[str] = []
+
+    def record_run(self: Worker, job_id: str, job: dict[str, Any], *rest: Any) -> None:
+        calls.append(job_id)
+        _stub_make_lion(self, job_id, rest[2])
+
+    monkeypatch.setattr(Worker, "run_item", record_run)
+    biome = {
+        "plants": {"trees": [{"id": "pine", "share": 1.0}], "cover": [], "water": []}
+    }
+    items = worker._place_make_species(
+        "j1", store.build_jobs["j1"], job["research"], biome, "z10_0581_0294", 10.0
+    )
+    assert items is not None
+    assert calls == ["j1"]
+
+
 def test_place_build_no_short_sets_waiting_then_clears(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

@@ -1275,7 +1275,7 @@ class Worker:
             )
         plan = {"items": items, "world": self.world_commit or "unknown"}
         for item in items:
-            if self._item_done(job, item["id"]):
+            if self._item_done(job, item["id"], job_id):
                 continue
             if not self._fits_budget(item, job, approved):
                 self._fail(job_id, "budget")
@@ -2228,7 +2228,7 @@ class Worker:
         budget = float(job.get("budget_usd", 0.0))
         stopped: str | None = None
         for item in [*expand, *improve]:
-            if self._item_done(job, item["id"]):
+            if self._item_done(job, item["id"], job_id):
                 continue
             if not self._fits_budget(item, job, budget):
                 stopped = "budget"
@@ -3218,12 +3218,35 @@ class Worker:
                 return None
         return tile
 
-    def _item_done(self, job: dict[str, Any], item_id: str) -> bool:
-        """An item with a finished progress entry builds no more."""
-        return any(
-            e["id"] == item_id and e["status"] in ("checking", "failed", "skipped")
-            for e in job.get("progress", [])
+    def _item_done(
+        self, job: dict[str, Any], item_id: str, job_id: str | None = None
+    ) -> bool:
+        """An item with a finished progress entry builds no more.
+
+        Except a `checking` animal pass older than the maker:
+        its files never saw the new checks, so it remakes
+        (#269.4). Failed and skipped entries keep their rest
+        either way.
+        """
+        from .build import _maker_pass_stale
+
+        entry = next(
+            (e for e in job.get("progress", []) if e.get("id") == item_id),
+            None,
         )
+        if entry is None or entry.get("status") not in (
+            "checking",
+            "failed",
+            "skipped",
+        ):
+            return False
+        if (
+            job_id is not None
+            and entry.get("status") == "checking"
+            and _maker_pass_stale(self.jobs_dir / job_id / item_id)
+        ):
+            return False
+        return True
 
     def _fits_budget(
         self, item: dict[str, Any], job: dict[str, Any], budget: float

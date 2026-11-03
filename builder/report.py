@@ -152,22 +152,50 @@ def _thing_line(kind: str, name: str, cost: Any) -> str:
     return f"{html.escape(kind)}: {html.escape(str(name))} — {amount}"
 
 
+_RETRY_FAMILIES = ("oneshot-", "models-", "plants-")
+
+
+def _retry_group(stem: str) -> tuple[str, int] | None:
+    """A retry file's family key and attempt, else nothing (#269.1)."""
+    for family in _RETRY_FAMILIES:
+        if not stem.startswith(family):
+            continue
+        head, dash, tail = stem.rpartition("-")
+        if dash and tail.isdigit():
+            return head, int(tail)
+    return None
+
+
 def failed_checks(job_dir: Path) -> list[str]:
     """Check files with failing verdicts, sorted (#173.2).
 
     A checking item with these failed something its stages
     survived (the place's checks, not the model's): the report
     and the progress entry say so instead of looking clean.
+    Within a retry family (`oneshot-`, `models-`, `plants-`
+    with a trailing attempt number) only the last attempt
+    counts: an earlier attempt the retry replaced must not
+    fail the item (#269.1).
     """
     checks = job_dir / "checks"
     if not checks.is_dir():
         return []
-    failed = []
+    last: dict[str, tuple[int, str]] = {}
+    singletons: list[str] = []
     for path in sorted(checks.glob("*.json")):
-        data = _read_json(path)
+        grouped = _retry_group(path.stem)
+        if grouped is None:
+            singletons.append(path.stem)
+        else:
+            head, attempt = grouped
+            if head not in last or attempt > last[head][0]:
+                last[head] = (attempt, path.stem)
+    failed = []
+    for stem in singletons + [stem for _, stem in last.values()]:
+        data = _read_json(checks / f"{stem}.json")
         if data.get("results") is not None and not data.get("ok"):
-            failed.append(path.stem)
-    return failed
+            failed.append(stem)
+    return sorted(failed)
 
 
 def build_report(

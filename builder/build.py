@@ -373,17 +373,71 @@ def write_state_params(item_dir: Path, params: dict[str, Any]) -> None:
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
+def _refresh_maker_state(item_dir: Path) -> None:
+    """Drop an oneshot pass the maker has outgrown (#269.4).
+
+    A pass stamped under an older maker version remakes: its
+    files never saw the new checks. Downstream of a real make
+    (plants, ship) refreshes with it; downstream of a no-op
+    pass (a plant item's empty oneshot) keeps its work.
+    """
+    from .stages.maker import MAKER_VERSION
+
+    state_path = item_dir / "state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(state, dict):
+        return
+    completed = state.get("completed") or []
+    if "oneshot" not in completed or state.get("maker_version") == MAKER_VERSION:
+        return
+    made = (state.get("results") or {}).get("oneshot") or {}
+    drop = {"oneshot"}
+    if isinstance(made, dict) and made.get("animal_files"):
+        drop |= {"plants", "ship"}
+    state["completed"] = [name for name in completed if name not in drop]
+    results = state.get("results")
+    if isinstance(results, dict):
+        for name in drop:
+            results.pop(name, None)
+    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def _stamp_maker_state(item_dir: Path) -> None:
+    """A completed oneshot carries the maker's version (#269.4)."""
+    from .stages.maker import MAKER_VERSION
+
+    state_path = item_dir / "state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(state, dict):
+        return
+    if "oneshot" not in (state.get("completed") or []):
+        return
+    state["maker_version"] = MAKER_VERSION
+    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
 def run_item_stages(ctx: Any, item_dir: Path, pipeline: Pipeline) -> dict[str, Any]:
     """The item's stages, one try and at most one fix round.
 
     The pipeline resumes after completed stages, so the second run
     retries only what failed, with the checks' errors on disk. An
-    item that fails twice is failed.
+    item that fails twice is failed. An oneshot pass older than
+    the maker's version remakes first, then restamps (#269.4).
     """
+    _refresh_maker_state(item_dir)
     try:
-        return pipeline.run(ctx)
+        results = pipeline.run(ctx)
     except StageFailedError:
-        return pipeline.run(ctx)
+        _stamp_maker_state(item_dir)
+        results = pipeline.run(ctx)
+    _stamp_maker_state(item_dir)
+    return results
 
 
 def build_food_item(item_dir: Path, item: dict[str, Any], home: dict[str, Any]) -> Path:

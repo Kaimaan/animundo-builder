@@ -285,6 +285,101 @@ def test_run_item_stages_does_not_retry_ledger_errors(tmp_path: Path) -> None:
     assert calls == ["run"]
 
 
+def _stale_state(made_animals: bool) -> dict[str, Any]:
+    files = ["animals/capybara.json"] if made_animals else []
+    return {
+        "completed": ["research", "oneshot", "plants"],
+        "results": {"oneshot": {"animal_files": files, "cost_usd": 0.2}},
+        "failed": None,
+    }
+
+
+def _counting_ctx(tmp_path: Path) -> Any:
+    from builder.pipeline import BudgetTracker
+
+    return SimpleNamespace(
+        job_dir=tmp_path,
+        tracker=BudgetTracker(budget_usd=8.0),
+        check_budget=lambda: None,
+        client=None,
+        open_client=None,
+    )
+
+
+def test_run_item_stages_remakes_a_stale_oneshot(tmp_path: Path) -> None:
+    """#269.4: a maker bump remakes the animal, then restamps."""
+    from builder.pipeline import Pipeline
+    from builder.stages.maker import MAKER_VERSION
+
+    calls: list[str] = []
+
+    class Oneshot:
+        name = "oneshot"
+
+        def run(self, ctx: Any) -> dict[str, Any]:
+            calls.append("oneshot")
+            return {"animal_files": ["animals/capybara.json"], "cost_usd": 0.0}
+
+    (tmp_path / "state.json").write_text(json.dumps(_stale_state(True)))
+    pipeline = Pipeline([Oneshot()], state_path=tmp_path / "state.json")  # type: ignore[list-item]
+    build_mod.run_item_stages(_counting_ctx(tmp_path), tmp_path, pipeline)
+    assert calls == ["oneshot"]
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert state["maker_version"] == MAKER_VERSION
+
+
+def test_run_item_stages_keeps_a_current_oneshot(tmp_path: Path) -> None:
+    """#269.4: a stamped pass is reused, not remade."""
+    from builder.pipeline import Pipeline
+    from builder.stages.maker import MAKER_VERSION
+
+    calls: list[str] = []
+
+    class Oneshot:
+        name = "oneshot"
+
+        def run(self, ctx: Any) -> dict[str, Any]:
+            calls.append("oneshot")
+            return {}
+
+    state = _stale_state(True)
+    state["maker_version"] = MAKER_VERSION
+    (tmp_path / "state.json").write_text(json.dumps(state))
+    pipeline = Pipeline([Oneshot()], state_path=tmp_path / "state.json")  # type: ignore[list-item]
+    build_mod.run_item_stages(_counting_ctx(tmp_path), tmp_path, pipeline)
+    assert calls == []
+
+
+def test_run_item_stages_refresh_reaches_past_a_real_make(tmp_path: Path) -> None:
+    """#269.4: downstream of a real stale make refreshes; else it keeps."""
+    from builder.pipeline import Pipeline
+
+    calls: list[str] = []
+
+    class Named:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def run(self, ctx: Any) -> dict[str, Any]:
+            calls.append(self.name)
+            return {}
+
+    (tmp_path / "state.json").write_text(json.dumps(_stale_state(True)))
+    pipeline = Pipeline(
+        [Named("oneshot"), Named("plants")], state_path=tmp_path / "state.json"
+    )  # type: ignore[list-item]
+    build_mod.run_item_stages(_counting_ctx(tmp_path), tmp_path, pipeline)
+    assert calls == ["oneshot", "plants"]
+
+    calls.clear()
+    (tmp_path / "state.json").write_text(json.dumps(_stale_state(False)))
+    pipeline = Pipeline(
+        [Named("oneshot"), Named("plants")], state_path=tmp_path / "state.json"
+    )  # type: ignore[list-item]
+    build_mod.run_item_stages(_counting_ctx(tmp_path), tmp_path, pipeline)
+    assert calls == ["oneshot"]
+
+
 def test_build_food_item_patches_home_copy(tmp_path: Path) -> None:
     home = {"id": "tundra", "food": [{"kind": "grass", "names": []}]}
     item = {"id": "food_berries", "kind": "food", "what": "berries", "from": "tundra"}

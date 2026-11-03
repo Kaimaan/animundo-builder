@@ -894,6 +894,7 @@ class Worker:
         update: dict[str, Any] = {
             "research": research,
             "spent_usd": round(float(spent), 4),
+            "cost_usd": round(float(spent), 4),
         }
         if not (self.world / "biomes" / f"{survey['biome']}.json").is_file():
             update["needed_land"] = str(survey["biome"])
@@ -1163,18 +1164,31 @@ class Worker:
         job = self.store.get_build_job(job_id) or job
         self._place_publish(job_id, job, research, biome, made, ship_world)
 
-    def _record_place_survey_spend(
-        self, job_id: str, job: dict[str, Any], survey_before: float
-    ) -> None:
-        """This build's tile-survey dollars onto the job, once (#259.2)."""
-        if "survey_usd" in job or "survey_cached" in job:
-            return
+    def _record_place_survey_spend(self, job_id: str, job: dict[str, Any]) -> None:
+        """The tiles' survey dollars onto the job, converging (#259.2, #269.2).
+
+        `survey_usd` is the ledger's cumulative survey total
+        for the tiles, so a rerun neither double-counts nor
+        loses it; the running totals move with it through the
+        spend baseline, which the cap reads. A survey that
+        cost nothing says cached instead.
+        """
         tiles = [t for t in (job.get("research") or {}).get("tiles", []) if t]
-        survey_after = sum(self._survey_spent(t) for t in tiles)
-        if survey_after > survey_before:
-            self._update(job_id, {"survey_usd": round(survey_after - survey_before, 6)})
-        else:
-            self._update(job_id, {"survey_cached": True})
+        survey_after = round(sum(self._survey_spent(t) for t in tiles), 6)
+        fresh = self.store.get_build_job(job_id) or job
+        if survey_after <= 0:
+            if "survey_cached" not in fresh and "survey_usd" not in fresh:
+                self._update(job_id, {"survey_cached": True})
+            return
+        running = self._spent_baseline(job_id, fresh)
+        update: dict[str, Any] = {}
+        if fresh.get("survey_usd") != survey_after:
+            update["survey_usd"] = survey_after
+        if fresh.get("cost_usd") != running or fresh.get("spent_usd") != running:
+            update["cost_usd"] = running
+            update["spent_usd"] = running
+        if update:
+            self._update(job_id, update)
 
     def _place_make_species(
         self,
@@ -1280,14 +1294,10 @@ class Worker:
                 self._fail(job_id, error.code)
                 return None
             job = self.store.get_build_job(job_id) or job
-            if not self._ship_completed(job_id, item["id"]):
-                entry = next(
-                    (e for e in job.get("progress", []) if e.get("id") == item["id"]),
-                    {},
-                )
+            reason = self._place_item_failed(job, item["id"])
+            if reason is not None:
                 print(
-                    f"build job {job_id}: {item['id']} failed: "
-                    f"{entry.get('error', 'its make failed')}",
+                    f"build job {job_id}: {item['id']} failed: {reason}",
                     file=sys.stderr,
                 )
                 self._fail(job_id, "item_failed")
@@ -1310,7 +1320,6 @@ class Worker:
         """
         from .tiles import check_with_world, make_tile
 
-        survey_before = sum(self._survey_spent(t) for t in tiles)
         made: dict[str, dict[str, Any]] = {}
         over_cap: list[str] = []
         for tile in tiles:
@@ -1334,7 +1343,7 @@ class Worker:
                 self._fail(job_id, "tile_check")
                 return None
             made[tile] = tile_made
-        self._record_place_survey_spend(job_id, job, survey_before)
+        self._record_place_survey_spend(job_id, job)
         if over_cap:
             self._update(job_id, {"plants_over_cap": sorted(set(over_cap))})
         return made
@@ -1397,6 +1406,28 @@ class Worker:
             for tile in made.values()
         )
 
+    @staticmethod
+    def _place_item_failed(job: dict[str, Any], item_id: str) -> str | None:
+        """Why the built place item failed, or nothing when it passed (#269.1).
+
+        A place item passes when its pipeline ran clean
+        (progress `checking`): the make's last attempt is the
+        verdict. A `ship` stage the place pipeline never runs
+        must not gate it — that gate failed every place item,
+        including a capybara whose retry had already passed.
+        Failed, skipped, or never-run items fail with the
+        entry's own reason.
+        """
+        entry = next(
+            (e for e in job.get("progress", []) if e.get("id") == item_id),
+            None,
+        )
+        if entry is None:
+            return "it never ran"
+        if entry.get("status") in ("failed", "skipped"):
+            return str(entry.get("error") or f"its make {entry.get('status')}")
+        return None
+
     def _place_ship_species(
         self, job_id: str, job: dict[str, Any], item: dict[str, Any], world: Any = None
     ) -> bool:
@@ -1417,14 +1448,10 @@ class Worker:
         assert self.world is not None
         if world is None:
             world = self.world
-        if not self._ship_completed(job_id, item["id"]):
-            entry = next(
-                (e for e in job.get("progress", []) if e.get("id") == item["id"]),
-                {},
-            )
+        reason = self._place_item_failed(job, item["id"])
+        if reason is not None:
             print(
-                f"build job {job_id}: {item['id']} failed: "
-                f"{entry.get('error', 'its make failed')}",
+                f"build job {job_id}: {item['id']} failed: {reason}",
                 file=sys.stderr,
             )
             self._fail(job_id, "item_failed")
@@ -1940,6 +1967,32 @@ class Worker:
         except OSError:
             return 0.0
 
+    def _spent_baseline(self, job_id: str, job: dict[str, Any]) -> float:
+        """Everything the job spent so far, across its reruns (#269.2).
+
+        The doc's running totals first; the ledgers behind
+        them, so a reset that wipes the doc still counts every
+        settled call, plus the tiles' surveys, which live
+        outside the job's namespaces. The cap reads this
+        through `cost_usd`, never a partial number.
+        """
+        from . import costs as costs_mod
+
+        doc = 0.0
+        for key in ("cost_usd", "spent_usd"):
+            value = job.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                doc = max(doc, float(value))
+        research = job.get("research") or {}
+        tiles = [t for t in research.get("tiles", []) if t]
+        if not tiles:
+            tiles = [t for t in job.get("tiles", []) if t]
+        surveys = sum(self._survey_spent(t) for t in tiles)
+        ledgers = costs_mod.ledger_actual(
+            job_id, self.config.ledger_path, self.config.baseten_ledger_path()
+        )
+        return round(max(doc, ledgers + surveys), 6)
+
     def _record_remake_survey_spend(
         self, job_id: str, tile: str, survey_before: float
     ) -> None:
@@ -1957,9 +2010,14 @@ class Worker:
         if diff > 0:
             before = job.get("cost_usd", 0.0)
             before = before if isinstance(before, (int, float)) else 0.0
+            total = round(before + diff, 6)
             self._update(
                 job_id,
-                {"cost_usd": round(before + diff, 6), "survey_usd": round(diff, 6)},
+                {
+                    "cost_usd": total,
+                    "spent_usd": total,
+                    "survey_usd": round(diff, 6),
+                },
             )
         else:
             self._update(job_id, {"survey_cached": True})
@@ -2278,7 +2336,7 @@ class Worker:
         assert self.world is not None
         item_dir = self.jobs_dir / job_id / item["id"]
         item_dir.mkdir(parents=True, exist_ok=True)
-        before = float((self.store.get_build_job(job_id) or {}).get("cost_usd", 0.0))
+        before = self._spent_baseline(job_id, job)
         left = max(0.0, budget - before)
         config = dataclasses.replace(self.config, job_budget_usd=left)
         ctx = make_context(config, f"{job_id}/{item['id']}", item_dir, self.world)
@@ -2336,7 +2394,9 @@ class Worker:
             raise _BudgetOut(code) from error
         except OffSwitch:
             spent = round(ctx.tracker.spent_usd - start, 6)
-            self._update(job_id, {"cost_usd": before + spent})
+            self._update(
+                job_id, {"cost_usd": before + spent, "spent_usd": before + spent}
+            )
             raise _Off()
         except SpendUncertain as error:
             self._close_item(
@@ -3486,7 +3546,9 @@ class Worker:
             entry.update(extra)
         progress.append(entry)
         total = round(before + cost, 6)
-        self._update(job_id, {"progress": progress, "cost_usd": total})
+        self._update(
+            job_id, {"progress": progress, "cost_usd": total, "spent_usd": total}
+        )
         if budget > 0:
             for pct in (50, 80, 100):
                 if before < budget * pct / 100 <= total:

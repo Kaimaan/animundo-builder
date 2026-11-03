@@ -185,6 +185,19 @@ def test_median_estimates_read_the_log_after_three_rows(tmp_path: Path) -> None:
     assert median_estimates(store)["tile"] == (0.04, "log, 3 rows")
 
 
+def test_spent_baseline_recovers_from_ledger_after_wipe(tmp_path: Path) -> None:
+    """#269.2: a reset that wipes the doc still counts settled spend."""
+    store = FakeStore()
+    store.build_jobs["j1"] = _place_job()
+    worker = _worker(tmp_path, store)
+    ledger_path = str(tmp_path / "ledger.json")
+    _settle(ledger_path, "j1", 0.22)
+    _settle(ledger_path, "j1/animal_capybara", 0.197)
+    assert worker._spent_baseline("j1", store.build_jobs["j1"]) == 0.417
+    store.build_jobs["j1"]["cost_usd"] = 1.0
+    assert worker._spent_baseline("j1", store.build_jobs["j1"]) == 1.0
+
+
 def test_search_and_image_dollars_split_to_own_parts(tmp_path: Path) -> None:
     """#259.5: search and image spend leaves the semantic part."""
     job_dir = tmp_path / "jobs" / "j4"

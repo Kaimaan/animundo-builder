@@ -114,6 +114,40 @@ def test_place_research_stops_at_waiting_yes(tmp_path: Path) -> None:
     assert saved["wikidata"] == "Q1"
 
 
+def test_place_research_seeds_cost_with_spend(tmp_path: Path) -> None:
+    """#269.2: stage A starts cost_usd where spent_usd starts."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    worker.chat = _ScriptRespond([json.dumps(_survey())])
+    store.build_jobs["j1"] = _place_job()
+    del store.build_jobs["j1"]["cost_usd"]
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    assert job["cost_usd"] == job["spent_usd"]
+
+
+def test_place_survey_spend_joins_cost_and_spent(tmp_path: Path) -> None:
+    """#269.2: tile surveys join both running totals, once each."""
+    from builder.ledger import Caps, FileLedger
+
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    store.build_jobs["j1"] = _place_job(
+        status="building", phase="approved", research=_build_research()
+    )
+    assert worker._claim("j1")
+    ledger = FileLedger(str(tmp_path / "ledger.json"))
+    receipt = ledger.reserve(f"survey:{A}", 0.03, Caps(100.0, 1000.0, 10000.0))
+    ledger.settle(receipt, 0.03)
+    worker._record_place_survey_spend("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert job["survey_usd"] == 0.03
+    assert job["cost_usd"] == 0.03
+    assert job["spent_usd"] == 0.03
+
+
 def test_place_no_biome_names_its_land(tmp_path: Path) -> None:
     """#222.4: the research lands, then the job fails naming its land."""
     store = FakeStore()
@@ -781,6 +815,24 @@ def test_place_ship_species_fails_a_failed_item(tmp_path: Path) -> None:
     assert store.build_jobs["j1"]["error"] == "item_failed"
 
 
+def test_place_item_failed_reads_the_progress_verdict() -> None:
+    """#269.1: a checking item passes the gate; failed or missing fails."""
+    assert (
+        Worker._place_item_failed(
+            {"progress": [{"id": "a", "status": "checking"}]}, "a"
+        )
+        is None
+    )
+    assert (
+        Worker._place_item_failed(
+            {"progress": [{"id": "a", "status": "failed", "error": "maker: x"}]},
+            "a",
+        )
+        == "maker: x"
+    )
+    assert Worker._place_item_failed({"progress": []}, "a") == "it never ran"
+
+
 def _lion_answer() -> dict[str, Any]:
     """A tile survey with only the unfiled lion present (#266.3)."""
     return {
@@ -831,7 +883,7 @@ def _build_research(**over: Any) -> dict[str, Any]:
 
 
 def _stub_make_lion(worker: Worker, job_id: str, item: dict[str, Any]) -> None:
-    """A made lion as run_item would leave it: files plus ship state."""
+    """A made lion as run_item would leave it: files plus progress."""
     item_dir = worker.jobs_dir / job_id / item["id"]
     (item_dir / "animals").mkdir(parents=True)
     (item_dir / "animals" / "lion.json").write_text(
@@ -845,9 +897,10 @@ def _stub_make_lion(worker: Worker, job_id: str, item: dict[str, Any]) -> None:
             }
         )
     )
-    (item_dir / "state.json").write_text(
-        json.dumps({"completed": ["ship"], "results": {"ship": {"pack": None}}})
-    )
+    job = worker.store.get_build_job(job_id) or {}
+    progress = [e for e in job.get("progress", []) if e.get("id") != item["id"]]
+    progress.append({"id": item["id"], "status": "checking", "cost_usd": 0.0})
+    worker.store.update_build_job(job_id, {"progress": progress})
 
 
 def test_place_builds_species_first_then_publishes_together(
@@ -924,6 +977,40 @@ def test_place_build_failing_animal_publishes_nothing(
     assert job["error"] == "item_failed"
     assert store.read_blob(group_path(A))[0] is None
     assert [n for n in store.blobs if n.startswith("packs/")] == []
+
+
+def test_place_make_species_skips_a_checking_item(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#269.3: a rerun reuses the passed item's files, spending nothing."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    job = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+    )
+    job["progress"] = [
+        {"id": "animal_lion", "status": "checking", "cost_usd": 0.42},
+        {"id": "plant_pine", "status": "checking", "cost_usd": 0.13},
+    ]
+    store.build_jobs["j1"] = job
+
+    def no_remake(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("a checking item must not remake")
+
+    monkeypatch.setattr(Worker, "run_item", no_remake)
+    biome = {
+        "plants": {"trees": [{"id": "pine", "share": 1.0}], "cover": [], "water": []}
+    }
+    items = worker._place_make_species(
+        "j1", store.build_jobs["j1"], job["research"], biome, "z10_0581_0294", 10.0
+    )
+    assert items is not None
+    assert [item["id"] for item in items] == ["animal_lion", "plant_pine"]
 
 
 def test_place_build_no_short_sets_waiting_then_clears(

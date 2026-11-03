@@ -3140,6 +3140,36 @@ def test_close_item_alerts_on_spending_crossings(tmp_path: Path) -> None:
     assert [a["pct"] for a in store.alerts] == [50, 80, 100]
 
 
+def test_close_item_keeps_spent_and_cost_together(tmp_path: Path) -> None:
+    """#269.2: closing an item moves spent_usd with cost_usd."""
+    from types import SimpleNamespace
+
+    from builder.pipeline import BudgetTracker
+
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "area": "a",
+        "budget_usd": 10.0,
+        "kind": "build",
+        "status": "building",
+        "items": ["animal_lion"],
+        "progress": [],
+        "cost_usd": 4.0,
+        "spent_usd": 4.0,
+    }
+    worker = _worker(tmp_path, store)
+    assert store.claim_build_job("j1", worker.worker_id) is True
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    item_dir.mkdir(parents=True)
+    tracker = BudgetTracker(budget_usd=10.0)
+    tracker.spent_usd = 9.0
+    ctx = SimpleNamespace(tracker=tracker)
+    worker._close_item("j1", {"id": "animal_lion"}, item_dir, ctx, 0.0, 4.0, 10.0, None)
+    job = store.build_jobs["j1"]
+    assert job["cost_usd"] == 13.0
+    assert job["spent_usd"] == 13.0
+
+
 def test_poll_resumes_builds_on_reenable(tmp_path: Path, monkeypatch: Any) -> None:
     store = FakeStore()
     store.build_jobs["j1"] = {

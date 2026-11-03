@@ -21,6 +21,7 @@ from builder.stages.maker import (
     AnimalMakerStage,
     HomeMakerStage,
     _ask_with_room,
+    _belly_errors,
     _choices_files,
     _closest_home,
     _code_choices,
@@ -2161,6 +2162,59 @@ def test_measure_errors_flags_drifted_leg_ratio(tmp_path: Path) -> None:
     assert len(errors) == 1
     assert errors[0].startswith("legs are 1.3x the body's depth")
     assert "the fox's are 0.7x" in errors[0]
+
+
+def _barrel(**over: Any) -> dict[str, Any]:
+    """A barrel on hidden legs: the belly sits on the ground."""
+    spec = _spec(
+        parts=[
+            {
+                "name": "body",
+                "shape": "ball",
+                "size": [0.5, 0.5, 1.0],
+                "at": [0, 0.25, 0],
+                "bone": "body",
+            },
+            {
+                "name": "arm_l",
+                "shape": "ball",
+                "size": [0.06, 0.2, 0.07],
+                "at": [0.06, 0.1, 0.2],
+                "bone": "leg_f_l",
+            },
+        ]
+    )
+    spec.update(over)
+    return spec
+
+
+def test_belly_errors_flags_legs_hidden_under_the_body() -> None:
+    """#269.4: a belly on the ground hides the legs; slim the body."""
+    found = _measure_spec(_barrel())
+    (error,) = _belly_errors(found, _barrel())
+    assert "belly" in error
+    assert "body_girth below 1" in error
+
+
+def test_belly_errors_passes_clear_legs_and_legless_specs() -> None:
+    """#269.4: showing legs pass, and snakes skip quietly."""
+    found = _measure_spec(_spec())
+    assert _belly_errors(found, _spec()) == []
+    legless = _barrel(
+        bones=[
+            {"name": "body", "head": [0, 0.25, -0.45], "tail": [0, 0.25, 0.45]},
+        ],
+        parts=[
+            {
+                "name": "body",
+                "shape": "ball",
+                "size": [0.5, 0.5, 1.0],
+                "at": [0, 0.25, 0],
+                "bone": "body",
+            },
+        ],
+    )
+    assert _belly_errors(_measure_spec(legless), legless) == []
 
 
 def test_measure_errors_skips_what_the_spec_does_not_name(

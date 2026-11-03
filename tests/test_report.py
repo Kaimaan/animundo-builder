@@ -222,6 +222,37 @@ def test_report_flags_failing_checks_at_the_top(tmp_path: Path) -> None:
     assert "enrich_places" not in text.split("Checks failing")[1].split("</p>")[0]
 
 
+def test_failed_checks_counts_only_the_last_attempt(tmp_path: Path) -> None:
+    """#269.1: a retry that passes clears its family's failed attempt."""
+    from builder.report import failed_checks
+
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    bad = {"ok": False, "results": [{"check": "x", "status": "fail"}]}
+    good = {"ok": True, "results": [{"check": "x", "status": "pass"}]}
+    (checks / "oneshot-capybara-animal-1.json").write_text(json.dumps(bad))
+    (checks / "oneshot-capybara-animal-2.json").write_text(json.dumps(good))
+    (checks / "models-capybara-1.json").write_text(json.dumps(bad))
+    (checks / "models-capybara-2.json").write_text(json.dumps(good))
+    (checks / "plants-pine-1.json").write_text(json.dumps(bad))
+    (checks / "plants-pine-2.json").write_text(json.dumps(good))
+    (checks / "places.json").write_text(json.dumps(bad))
+    assert failed_checks(tmp_path) == ["places"]
+
+
+def test_failed_checks_keeps_a_failing_last_attempt(tmp_path: Path) -> None:
+    """#269.1: the last attempt failing still fails its family."""
+    from builder.report import failed_checks
+
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    bad = {"ok": False, "results": [{"check": "x", "status": "fail"}]}
+    good = {"ok": True, "results": [{"check": "x", "status": "pass"}]}
+    (checks / "oneshot-capybara-animal-1.json").write_text(json.dumps(good))
+    (checks / "oneshot-capybara-animal-2.json").write_text(json.dumps(bad))
+    assert failed_checks(tmp_path) == ["oneshot-capybara-animal-2"]
+
+
 def test_report_marks_unrun_checks_on_a_stopped_job(tmp_path: Path) -> None:
     """#217.3: verdictless checks say not run, never failing with no why."""
     (tmp_path / "state.json").write_text(

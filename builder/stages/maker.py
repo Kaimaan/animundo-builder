@@ -82,6 +82,12 @@ EDITS_BIRD_FACTORS = ("neck", "bill", "bill_depth")
 #: The free-spec loop's rounds for a `newshape` animal (D19).
 NEWSHAPE_ROUNDS = 3
 
+#: The animal maker's version, stamped on a passed oneshot (#269.4).
+#: Bump it when the maker's checks or prompts change what a pass
+#: means: a rerun whose oneshot passed under an older version
+#: remakes instead of reusing files the new checks never saw.
+MAKER_VERSION = "2026-11-03"
+
 
 def _offered_factors(ref: dict[str, Any]) -> tuple[str, ...]:
     """The base factors plus the bird ones this reference can take."""
@@ -566,7 +572,7 @@ class AnimalMakerStage:
                         found = _measure_spec(spec)
                         misses = _size_misses(found, sourced, spec)
                         file_errors += _size_errors(found, sourced, spec)
-                        file_errors += _ratio_errors(found, target, world)
+                        file_errors += _shape_errors(found, spec, target, world)
                         if (
                             code_fixed
                             and misses
@@ -2113,12 +2119,16 @@ def _measure_errors(
 
     Length, shoulder, tail and height within 20% of the research;
     legs-against-depth within 30% of the reference's ratio (ratios
-    shift between species). Each miss names exact numbers for the
-    fix round. Missing numbers on either side skip quietly.
+    shift between species), unless the legs hide under the belly,
+    which slims the body instead (#269.4). Each miss names exact
+    numbers for the fix round. Missing numbers on either side
+    skip quietly.
     """
     found = _measure_spec(spec)
     sourced = _sourced_sizes(research, target)
-    return _size_errors(found, sourced, spec) + _ratio_errors(found, target, world)
+    return _size_errors(found, sourced, spec) + _shape_errors(
+        found, spec, target, world
+    )
 
 
 def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:
@@ -2658,6 +2668,59 @@ def _size_errors(
             f"sourced {sourced[key] * 100:.0f} cm: size it to the source"
         )
     return errors
+
+
+def _belly_errors(found: dict[str, float], spec: dict[str, Any]) -> list[str]:
+    """Legs hidden under the belly must show (#269.4).
+
+    The belly is the body part's underside; legs reach the
+    ground, so a belly at the ground hides them. Within 2% of
+    the spec's height counts as the ground. Legless specs
+    (snakes) and specs without a body part skip quietly.
+    """
+    if "leg_m" not in found or "top_m" not in found or not found["top_m"]:
+        return []
+    body = next(
+        (
+            part
+            for part in spec.get("parts", [])
+            if isinstance(part, dict)
+            and part.get("name") == "body"
+            and isinstance(part.get("at"), list)
+            and isinstance(part.get("size"), list)
+        ),
+        None,
+    )
+    if body is None:
+        return []
+    belly = float(body["at"][1]) - float(body["size"][1]) / 2
+    if belly > 0.02 * found["top_m"]:
+        return []
+    return [
+        f"the belly sits at {max(belly, 0.0) * 100:.0f} cm; the legs hide "
+        "underneath it: slim the body (body_girth below 1) until the legs "
+        "show below the belly"
+    ]
+
+
+def _shape_errors(
+    found: dict[str, float],
+    spec: dict[str, Any],
+    target: dict[str, Any],
+    world: Path,
+) -> list[str]:
+    """Belly clearance, else legs-against-depth (#269.4).
+
+    When the legs hide, slimming the body is the fix, and the
+    reference's own leg ratio — the disease when the reference
+    is a vole and the target a capybara — must not argue for
+    deepening it back. With the legs showing, the ratio guards
+    drift as before.
+    """
+    belly = _belly_errors(found, spec)
+    if belly:
+        return belly
+    return _ratio_errors(found, target, world)
 
 
 def _ratio_errors(

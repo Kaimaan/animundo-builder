@@ -1676,6 +1676,85 @@ def test_enrich_review_seats_the_items_own_plant(
     assert tiles_doc["tiles"] == [A]
 
 
+def test_enrich_review_skips_an_animal_where_its_habitat_mismatches(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#258.2: the animal's habitats must hold the tile's biome."""
+    import json
+
+    from builder.grid import group_path
+    from builder.species import Source as SpeciesSource
+    from builder.tiles import make_tile
+
+    A = "z10_0581_0294"
+
+    def run(job_id: str, habitats: list[str]) -> dict[str, Any]:
+        base = tmp_path / job_id
+        store = FakeStore()
+        worker = _flow_worker(base, store, boreal_3x3())
+        assert worker.world is not None
+        _named_list(worker.world)
+        listed = json.loads((worker.world / "animal-list.json").read_text())
+        next(e for e in listed["animals"] if e["id"] == "lion")["habitats"] = habitats
+        (worker.world / "animal-list.json").write_text(json.dumps(listed))
+        cache = base / "cache"
+        made, blocked = make_tile(
+            A,
+            worker._habitat_grid(),
+            worker.world,
+            builder_root=base,
+            species_source=SpeciesSource(
+                client=_AnswerClient(_forest_survey("fox", "vole")), cache_dir=cache
+            ),
+        )
+        assert blocked is None and made is not None
+        assert made["biome"] == "boreal_forest"
+        store.blobs[group_path(A)] = json.dumps(
+            {
+                "format": 1,
+                "grid": "z10",
+                "group": [72, 36],
+                "version": 1,
+                "tiles": {A: made},
+                "blocked": {},
+            }
+        ).encode("utf-8")
+        _file_lion(worker.world, ["grass"])
+        regions = base / "jobs" / job_id / "enrich_lion" / "regions"
+        regions.mkdir(parents=True)
+        (regions / f"tl_{A}.json").write_text(
+            json.dumps(
+                {
+                    "id": f"tl_{A}",
+                    "biome": "boreal_forest",
+                    "species": {"playable": ["fox", "vole", "lion"]},
+                }
+            )
+        )
+        store.build_jobs[job_id] = _enrich_job(
+            tile=A,
+            tiles=[A],
+            status="checking",
+            progress=[{"id": "enrich_lion", "status": "checking"}],
+            review={"enrich_lion": {"by": "kai", "at": "t", "result": "shipped"}},
+        )
+        with monkeypatch.context() as m:
+            m.setattr(
+                worker,
+                "_species_source",
+                lambda: SpeciesSource(client=_SilentClient(), cache_dir=cache),
+            )
+            worker.handle_build_job(job_id)
+        return store.build_jobs[job_id]
+
+    bad = run("j1", ["coral_reef"])
+    assert bad["status"] == "failed"
+    assert bad["skipped"] == {A: "habitat_mismatch"}
+    good = run("j2", ["boreal_forest"])
+    assert good["status"] == "published"
+    assert good["overlay"] == [A]
+
+
 def test_enrich_review_pack_failure_fails_the_item(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

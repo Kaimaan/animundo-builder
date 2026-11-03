@@ -973,6 +973,13 @@ def _plant_fits(on: list[str], land: float, water: float) -> str | None:
     return None
 
 
+def _animal_fits(habitats: list[str], biome: str | None) -> str | None:
+    """None when the animal fits the tile; else the skip reason (#258.2)."""
+    if biome is None or biome in habitats:
+        return None
+    return "habitat_mismatch"
+
+
 def _biome_greens(world: Path, biome: str) -> dict[str, Any] | None:
     """The biome file's plants, or nothing without one (#253)."""
     path = world / "biomes" / f"{biome}.json"

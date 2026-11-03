@@ -1955,14 +1955,16 @@ class Worker:
 
         With per-tile place verdicts only the passed tiles judge.
         A tile whose remake raises, blocks or comes back empty
-        skips with the reason; the job carries on (#227.2).
+        skips with the reason; the job carries on (#227.2). A
+        listed animal whose habitats don't hold the tile's
+        biome skips as a habitat mismatch, unlisted as now (#258.2).
         """
         import dataclasses
         import json
 
         from . import build as build_mod
         from .grid import group_path
-        from .tiles import make_tile
+        from .tiles import _animal_fits, make_tile
 
         assert self.world is not None
         source = dataclasses.replace(self._species_source(), client=None)
@@ -1996,6 +1998,16 @@ class Worker:
                 skipped[tile] = f"remake raised: {error}"
                 print(f"{tile} skipped: remake raised: {error}")
                 continue
+            if kind == "animal" and made is not None:
+                entry = self._spread_entry(what)
+                if entry is not None:
+                    mismatch = _animal_fits(
+                        entry.get("habitats") or [], made.get("biome")
+                    )
+                    if mismatch is not None:
+                        skipped[tile] = mismatch
+                        print(f"{tile} skipped: {what} {mismatch}")
+                        continue
             if made is not None:
                 made = self._seat_enrich_item(job_id, item, tile, kind, what, made)
             verdict, why = build_mod.overlay_decision(

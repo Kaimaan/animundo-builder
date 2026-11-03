@@ -940,13 +940,20 @@ def _reef_terrain(habitat_grid: HabitatGrid, tile: str) -> dict[str, Any] | None
 def _reef_sea_plants(
     world: Path, share: float
 ) -> tuple[dict[str, Any] | None, list[str], list[str]]:
-    """Coral plants on a sea tile's reef ground (#255.3).
+    """Reef growers on a sea tile's reef ground, at biome density (#261a).
 
-    The coral_reef biome's water plants, each at its biome
-    density scaled by the tile's reef share (never over 1.0,
-    never under 0.001): on a patch of reef the corals grow
-    thinner, the way #221 seats them.
+    Only biome water plants whose model grows on `reef` seat:
+    seabed growers stay out (their ground is the whole floor,
+    not the reef), as do entries with no model to read grows
+    from. No share scaling: the game already limits reef
+    plants to the mask's reef cells, so scaling would thin the
+    corals twice — the biome's own density is the number, the
+    mask decides where. No `left_out`: 0062 keeps it to the
+    tile biome's plants, and the open sea names none, so the
+    seabed growers it skips are said here, not on the tile.
     """
+    if share <= 0:
+        return None, [], []
     try:
         waters = json.loads(
             (world / "biomes" / "coral_reef.json").read_text(encoding="utf-8")
@@ -955,11 +962,19 @@ def _reef_sea_plants(
         return None, [], []
     seated = []
     for entry in waters:
-        density = max(0.001, round(min(1.0, entry["density"] * share), 3))
-        seated.append({"id": entry["id"], "density": density})
+        pid = entry["id"]
+        grows = _grows(world, "plants", pid)
+        on = grows.get("on") or []
+        if "reef" not in (on if isinstance(on, list) else []):
+            continue
+        seated.append({"id": pid, "density": entry["density"]})
     if not seated:
         return None, [], []
-    return {"water": seated, "left_out": []}, sorted(e["id"] for e in seated), []
+    return (
+        {"water": seated},
+        sorted(e["id"] for e in seated),
+        [],
+    )
 
 
 def _plant_fits(on: list[str], land: float, water: float) -> str | None:

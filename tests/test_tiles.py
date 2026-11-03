@@ -1721,8 +1721,10 @@ def test_remade_tiles_carry_their_reef_masks() -> None:
     assert "terrain" not in far
 
 
-def test_open_sea_reef_tile_grows_thin_corals(monkeypatch: Any) -> None:
-    """#255.3: a reef patch grows the corals, thinner by its share."""
+def test_open_sea_reef_tile_seats_reef_growers_at_biome_density(
+    monkeypatch: Any,
+) -> None:
+    """#261a.1: N's remade tile carries no seagrass; corals at biome density."""
     world, grid, root = _reef_world_and_grid()
     monkeypatch.setattr(
         "builder.tiles.fetch_smoothed", lambda tile, candidates: {"common_tern": 9.0}
@@ -1730,18 +1732,23 @@ def test_open_sea_reef_tile_grows_thin_corals(monkeypatch: Any) -> None:
     made, blocked = make_tile("z10_0927_0559", grid, world, builder_root=root)
     assert blocked is None, blocked
     assert made is not None
-    waters = made["plants"]["water"]
-    assert {e["id"] for e in waters} == {
-        "branching_staghorn_coral",
-        "closed_brain_coral",
-        "giant_sea_fan",
-        "halimeda",
-        "dugong_grass",
-        "paddle_grass",
+    biome = {
+        entry["id"]: entry["density"]
+        for entry in json.loads(
+            (world / "biomes" / "coral_reef.json").read_text(encoding="utf-8")
+        )["plants"]["water"]
     }
-    assert all(e["density"] >= 0.001 for e in waters)
-    assert sum(e["density"] for e in waters) <= 1.0
-    assert made["requires"]["plants"] == sorted(e["id"] for e in waters)
+    waters = {entry["id"]: entry["density"] for entry in made["plants"]["water"]}
+    assert "dugong_grass" not in waters and "paddle_grass" not in waters
+    assert waters
+    for pid, density in waters.items():
+        assert density == biome[pid]
+        model = json.loads(
+            (world / "models" / "plants" / f"{pid}.json").read_text(encoding="utf-8")
+        )
+        assert "reef" in ((model.get("grows") or {}).get("on") or [])
+    assert "left_out" not in made["plants"]
+    assert made["requires"]["plants"] == sorted(waters)
 
 
 def test_make_tile_builds_the_reviewed_sea_border() -> None:

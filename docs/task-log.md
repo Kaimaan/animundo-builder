@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #275 + #276 (fix-forward live as v42)
+
+- Test build #1 (`place_20261103_mamiraua_test_1`, publish-off, cap $4) reached `failed` 23:43 UTC at the first plant: the ceiba scaffold missed schema-required `density`, and the plant reviewer stopped after 2 empty tries. Fix (`c9cda17`): the scaffold seats `density: 0.5`, the review reader tries 4 times. CI caught one stale scaffold expectation (`a15da77`), then green (run 41747076921).
+- Deploy, 00:40 UTC: worker v42 on builder `a15da77`. Single live container `ta-01M6J00YXN2N06Y61CABAVZV5R`, old container stopped, deploy script confirms code `a15da77`. The real job waits for a clean test run per #275/#276.
+- Retry, 00:55 UTC: test #1 reset to `building`, ceiba entry dropped (failed entries rest), 7 `checking` animals kept for $0 reuse. Spend $2.48 of $4 cap. Later #280+ deploys are safe mid-retry: the volume persists and the resolver is identical for listed-home cells (verified 12/12).
+- $0 on the fix and deploy.
+
 ## 2026-11-03: inbox #275 + #276 (Mamirauá end to end)
 
 - Deploy, 23:05 UTC: worker v41 on builder 598cfaa (`#275` + place-id fallback), CI green both commits (runs 41728601735, 41734813146). Single live container `ta-01M6HTNF6Y20VB21DTBNV1QWBR`, code hash matches, old container stopped. The run-2 kinds it fixes: prey remade per hunter (jaguar dir held capybara's files + 4 verdicts), model-owned facts (playable/abilities/texts), the unread schema verdict (anaconda's 1400-triangle spec walked past), and stale progress labels. Test build #1 (`place_20261103_mamiraua_test_1`, same research, publish-off, cap $4) created 23:07 UTC, picked up 23:12 UTC. Running total still $0.73 of $6.

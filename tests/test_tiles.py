@@ -1024,6 +1024,17 @@ def test_survey_extra_past_the_cap_comes_back_over_cap(tmp_path: Path) -> None:
     assert over == ["newcomer"]
 
 
+def test_tile_has_sea_reads_habitat_not_fresh_water() -> None:
+    """#299.2: sea and coasts have sea; land and lakes don't."""
+    from builder.tiles import _tile_has_sea
+
+    assert _tile_has_sea("sea", 0.0, None) is True
+    assert _tile_has_sea("open_ocean", 0.04, None) is True
+    assert _tile_has_sea("savanna", 0.7, ["11110"] * 5) is True
+    assert _tile_has_sea("savanna", 1.0, None) is False
+    assert _tile_has_sea("lake", 1.0, ["00000"] * 5) is False
+
+
 def test_taiga_replay_keeps_its_clover() -> None:
     """#253: a cloverless survey still grows clover, and checks clean."""
     from builder.habitats import load_grid
@@ -1080,6 +1091,51 @@ def test_taiga_replay_keeps_its_clover() -> None:
             assert e[amount] >= 0.001
     for e in plants.get("trees", []):
         assert e["share"] >= 0.001
+
+
+def test_reef_replay_keeps_its_water_plants() -> None:
+    """#299: a sea tile seats its corals; fresh water never meant sea."""
+    from builder.habitats import load_grid
+    from builder.schemas import ROOT
+    from builder.tiles import check_with_world
+
+    world = ROOT.parent / "animundo-world"
+    grid_dir = ROOT / "data" / "habitat-grid"
+    if not (world / "animal-list.json").is_file():
+        pytest.skip("needs the world checkout next to the builder")
+    if not (grid_dir / "z10.json.gz").is_file():
+        pytest.skip("needs the baked habitat grid")
+    made, blocked = make_tile(
+        "z10_0928_0562",
+        load_grid(grid_dir),
+        world,
+        builder_root=ROOT,
+        species={
+            "place": "Coral reef off Cairns",
+            "parts": [{"kind": "reef", "species": ["clownfish", "blue_tang"]}],
+            "plants": [
+                {"id": plant, "count": 5}
+                for plant in (
+                    "branching_staghorn_coral",
+                    "closed_brain_coral",
+                    "giant_sea_fan",
+                    "halimeda",
+                    "dugong_grass",
+                    "paddle_grass",
+                )
+            ],
+            "trees": [],
+            "outside_animals": [],
+            "outside_plants": [],
+            "name_en": "Reef",
+            "name_fi": "Riutta",
+        },
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert len(made["plants"]["water"]) == 6
+    assert made["plants"]["left_out"] == []
+    assert check_with_world(made, world) == []
 
 
 def test_ground_keep_treats_reef_as_water() -> None:
@@ -1673,6 +1729,21 @@ def test_reef_masks_sit_on_their_reefs() -> None:
     assert north[13 * 16 + 5] > 0  # Michaelmas Reef (16-060)
     assert east[6 * 16 + 0] > 0  # Milln Reef (16-067)
     assert east[13 * 16 + 0] > 0  # Elford Reef (16-073)
+
+
+def test_reef_terrain_publishes_an_all_zero_mask() -> None:
+    """#299: an all-zero mask still publishes, so the game keeps its seabed."""
+    from types import SimpleNamespace
+
+    from builder.tiles import _reef_terrain
+
+    grid = SimpleNamespace(reef_mask=lambda col, row: [0.0] * 256)
+    terrain = _reef_terrain(grid, "z10_0928_0562")
+    assert terrain is not None
+    assert terrain["reef"] == 0.0
+    assert terrain["reef_mask"] == [0.0] * 256
+    bare = SimpleNamespace(reef_mask=lambda col, row: None)
+    assert _reef_terrain(bare, "z10_0581_0294") is None
 
 
 def test_remade_tiles_carry_their_reef_masks() -> None:

@@ -1188,10 +1188,28 @@ def _reef_sea_plants(
     )
 
 
-def _plant_fits(on: list[str], land: float, water: float) -> str | None:
-    """None when the plant fits the tile; else the plain reason (#253)."""
+def _tile_has_sea(habitat: str, land: float, coast: list[str] | None) -> bool:
+    """Whether the tile's cell holds sea water (#299.2).
+
+    Sea and open ocean always do; a coastal cell does when
+    part of it isn't land. Fresh water never counts: a cell
+    all under a lake still reads land 1.0, so 1 - land stays
+    0 for it. (Lake shores read as sea, as before: the coast
+    mask can't tell lake water from the sea.)
+    """
+    if habitat in ("sea", "open_ocean"):
+        return True
+    return coast is not None and 1 - land > 0
+
+
+def _plant_fits(on: list[str], land: float, sea: float) -> str | None:
+    """None when the plant fits the tile; else the plain reason (#253).
+
+    A reef or seabed grower wants the sea, never the cell's
+    fresh water (#299.2).
+    """
     wet = "seabed" in on or "reef" in on
-    if wet and water <= 0:
+    if wet and sea <= 0:
         bed = "the seabed" if "seabed" in on else "a reef"
         return f"grows on {bed}; the tile has no sea"
     if not wet and land <= 0:
@@ -1221,7 +1239,7 @@ def tile_plants(
     answer: dict[str, Any],
     biome: str | None = None,
     land: float = 1.0,
-    water: float = 0.0,
+    sea: float = 0.0,
 ) -> tuple[dict[str, Any] | None, list[str], list[str], list[str]]:
     """The tile's plants: the biome's, changed or added by the survey.
 
@@ -1268,7 +1286,7 @@ def tile_plants(
                 continue
             pid = entry["id"]
             on = _grows(world, "plants", pid).get("on") or []
-            why = _plant_fits(on if isinstance(on, list) else [], land, water)
+            why = _plant_fits(on if isinstance(on, list) else [], land, sea)
             if why is not None:
                 left_out.append({"id": pid, "why": why})
                 continue
@@ -1289,7 +1307,7 @@ def tile_plants(
     over_cap: list[str] = []
     for pid, count in extras:
         on = _grows(world, "plants", pid).get("on") or []
-        if _plant_fits(on if isinstance(on, list) else [], land, water) is not None:
+        if _plant_fits(on if isinstance(on, list) else [], land, sea) is not None:
             continue
         side = "water" if "seabed" in on or "reef" in on else "cover"
         if len(seated["cover"]) + len(seated["water"]) >= MAX_GROUND_PLANTS:
@@ -1308,7 +1326,7 @@ def tile_plants(
             continue
         pid = entry["id"]
         on = _grows(world, "trees", pid).get("on") or []
-        why = _plant_fits(on if isinstance(on, list) else [], land, water)
+        why = _plant_fits(on if isinstance(on, list) else [], land, sea)
         if why is not None:
             left_out.append({"id": pid, "why": why})
             continue
@@ -1328,7 +1346,7 @@ def tile_plants(
     )
     for pid in extra_trees:
         on = _grows(world, "trees", pid).get("on") or []
-        if _plant_fits(on if isinstance(on, list) else [], land, water) is not None:
+        if _plant_fits(on if isinstance(on, list) else [], land, sea) is not None:
             continue
         if len(trees) >= MAX_TILE_TREES:
             over_cap.append(pid)
@@ -2219,7 +2237,8 @@ def make_tile(
         present = rank_weights(ordered)
         species_tag = f"{SPECIES_MODEL}:{date}"
         wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
-        greens, needs, wants, capped = tile_plants(world, answer, home, land, water)
+        sea = 1.0 if _tile_has_sea(habitat, land, coast) else 0.0
+        greens, needs, wants, capped = tile_plants(world, answer, home, land, sea)
         if over_cap is not None:
             over_cap.extend(capped)
     level = cell_level(habitat, elev)

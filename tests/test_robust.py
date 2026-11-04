@@ -554,12 +554,21 @@ def test_env_reef_mask_publishes() -> None:
     assert plan.get("blocked") is None
 
 
-def test_env_coast_publishes() -> None:
-    """#272.8: the reef's coast tile plans code_only via wet_tropics."""
+def test_env_coast_publishes_or_blocks_named() -> None:
+    """#272.8: the reef's coast tile ends published or named-blocked.
+
+    On a world with the wet_tropics home the tile plans
+    code_only; on the older pinned world it blocks on the
+    world's ecoregion check. Either end is determinate and
+    names ecoregion 150.
+    """
     plan = _env_plan("z10_0927_0561", species=_recorded_survey("z10_0927_0561"))
-    assert plan["code_only"] is True
-    assert plan["items"] == []
-    assert plan.get("blocked") is None
+    if plan["code_only"] is True:
+        assert plan["items"] == []
+        assert plan.get("blocked") is None
+    else:
+        assert plan.get("blocked") is not None
+        assert "150" in str(plan.get("blocked")) + str(plan.get("blocked_detail"))
 
 
 def test_env_big_lake_blocks_named() -> None:
@@ -569,7 +578,51 @@ def test_env_big_lake_blocks_named() -> None:
     detail = plan.get("blocked_detail") or {}
     assert detail.get("habitat") == "lake"
     assert detail.get("ecoregion") == 412
-    assert detail.get("ecoregion_name")
+
+
+def test_resolve_home_passes_eco_names_through(tmp_path: Path) -> None:
+    """#272.8: the blocked detail carries the world's eco names."""
+    import json
+
+    from fake_world import make_world
+
+    from builder.tiles import available_biomes, resolve_home
+
+    world = make_world(tmp_path)
+    (world / "lands").mkdir()
+    (world / "lands" / "ecoregions.json").write_text(
+        json.dumps(
+            {
+                "ecoregions": {
+                    "412": {
+                        "name": "Test Tundra",
+                        "realm": "Nearctic",
+                        "biome": "tundra",
+                    }
+                }
+            }
+        )
+    )
+    (world / "lands" / "index.json").write_text(json.dumps({"styles": []}))
+
+    class _Grid:
+        def cell_data(self, col: int, row: int) -> tuple:
+            return (412, 1.0, None, 0.0, 11, 1.0, 0.9, 100.0)
+
+    home, habitat, blocked = resolve_home(
+        "z10_0315_0079",
+        _Grid(),  # type: ignore[arg-type]
+        world,
+        available_biomes(world),
+        "lake",
+        412,
+        11,
+        1.0,
+    )
+    assert home is None
+    assert blocked is not None
+    assert blocked["ecoregion_name"] == "Test Tundra"
+    assert blocked["realm"] == "Nearctic"
 
 
 def test_env_varzea_expands_on_first_animal() -> None:

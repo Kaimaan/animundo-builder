@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
+import tempfile
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -221,7 +223,13 @@ class FileLedger:
 
 
 class _LockedFile:
-    """The ledger file, held under an exclusive lock. Unreadable is fatal."""
+    """The ledger file, held under an exclusive lock. Unreadable is fatal.
+
+    The lock lives on a sidecar, and every write swaps in a
+    whole file: rewrites in place corrupted the Baseten ledger
+    on the Volume (seek + truncate, then the append write
+    landed at the stale end of file over NULs, #298).
+    """
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -231,10 +239,14 @@ class _LockedFile:
     def __enter__(self) -> _LockedFile:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.handle = self.path.open("a+", encoding="utf-8")
+            self.handle = self.path.with_name(self.path.name + ".lock").open(
+                "a+", encoding="utf-8"
+            )
             fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
-            self.handle.seek(0)
-            text = self.handle.read()
+            if not self.path.is_file():
+                text = ""
+            else:
+                text = self.path.read_text(encoding="utf-8")
         except OSError as error:
             raise LedgerError(f"cannot lock the ledger: {error}") from error
         if not text.strip():
@@ -253,13 +265,25 @@ class _LockedFile:
         return self
 
     def write(self, data: dict[str, Any]) -> None:
+        tmp: str | None = None
         try:
-            self.handle.seek(0)
-            self.handle.truncate()
-            self.handle.write(json.dumps(data, indent=2))
-            self.handle.flush()
+            fd, tmp = tempfile.mkstemp(
+                dir=str(self.path.parent), prefix=self.path.name + "."
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(data, indent=2))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, self.path)
+            tmp = None
         except OSError as error:
             raise LedgerError(f"cannot write the ledger: {error}") from error
+        finally:
+            if tmp is not None:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
 
     def __exit__(self, *exc: Any) -> None:
         try:

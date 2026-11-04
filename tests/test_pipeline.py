@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from builder.ledger import CapExceeded
+from builder.ledger import CapExceeded, LedgerError
 from builder.meta import MetaError, SpendUncertain, Usage
 from builder.pipeline import (
     BudgetExceeded,
@@ -134,6 +134,22 @@ def test_chat_does_not_mask_open_host_uncertainty(tmp_path: Path) -> None:
     with pytest.raises(SpendUncertain):
         ctx.chat([{"role": "user", "content": "hi"}])
     assert meta.calls == 0, "no fallback may hide the open host's unknown spend"
+
+
+class UnreadableLedgerClient(FakeClient):
+    """An open host whose ledger file is broken (#298.3)."""
+
+    def chat(self, *args: Any, **kwargs: Any) -> Any:
+        raise LedgerError("cannot read the ledger: line 1 column 1 (char 0)")
+
+
+def test_chat_stops_loud_on_a_broken_open_ledger(tmp_path: Path) -> None:
+    """#298.3: a broken ledger is not a refusal; Meta never runs."""
+    ctx, meta = make_ctx(tmp_path)
+    ctx.open_client = UnreadableLedgerClient()  # type: ignore[assignment]
+    with pytest.raises(LedgerError, match="cannot read the ledger"):
+        ctx.chat([{"role": "user", "content": "hi"}])
+    assert meta.calls == 0
 
 
 def test_spend_uncertain_passes_through_unwrapped(tmp_path: Path) -> None:

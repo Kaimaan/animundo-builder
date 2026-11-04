@@ -104,9 +104,12 @@ class JobContext:
         if self.open_client is not None:
             try:
                 return self._chat_via(self.open_client, *args, **kwargs)
-            except (CapExceeded, LedgerError):
-                pass  # spent or unreadable: fall through to Meta
+            except CapExceeded:
+                pass  # spent: fall through to Meta
             except Exception as error:  # noqa: BLE001 - sorted by refusal
+                # A broken ledger is not a refusal: it stays loud
+                # like the Meta ledger's, never a quiet fallback
+                # (#298.3).
                 if not is_open_host_refusal(error):
                     raise
         return self._chat_via(self._client(), *args, **kwargs)

@@ -45,7 +45,7 @@ def test_each_cap_refuses(tmp_path: Path) -> None:
         ledger.reserve("job-1", 20.01, Caps(100.0, 20.0, 1000.0))
     with pytest.raises(CapExceeded, match="total cap"):
         ledger.reserve("job-1", 120.01, Caps(1000.0, 1000.0, 120.0))
-    assert ledger.path.read_text().strip() == ""
+    assert not ledger.path.is_file()
 
 
 def test_caps_count_settled_spend(tmp_path: Path) -> None:
@@ -65,6 +65,49 @@ def test_corrupt_ledger_refuses(tmp_path: Path) -> None:
     ledger = FileLedger(path)
     with pytest.raises(LedgerError, match="cannot read"):
         ledger.reserve("job-1", 0.01, CAPS)
+
+
+def test_nul_padded_ledger_refuses(tmp_path: Path) -> None:
+    """#298.5: leading NULs (the Baseten file) raise, never parse."""
+    from builder.ledger import _LockedFile
+
+    path = tmp_path / "spend.json"
+    path.write_bytes(b"\x00" * 64 + b'{"jobs": {}, "days": {}, "total": 0.0}')
+    with pytest.raises(LedgerError, match="cannot read"):
+        with _LockedFile(path):
+            pass
+
+
+def test_write_after_a_longer_write_leaves_exact_json(tmp_path: Path) -> None:
+    """#298.5: a rewrite lands whole, never padded with NULs."""
+    from builder.ledger import _LockedFile
+
+    path = tmp_path / "spend.json"
+    path.write_bytes(
+        b'{"jobs": {"j": {"spent": 123456.78}}, "days": {}, "total": 1.0}' + b" " * 5000
+    )
+    short = {"jobs": {}, "days": {}, "total": 0.0}
+    with _LockedFile(path) as locked:
+        locked.write(short)
+    raw = path.read_bytes()
+    assert b"\x00" not in raw
+    assert raw == json.dumps(short, indent=2).encode("utf-8")
+
+
+def test_write_replaces_the_file_atomically(tmp_path: Path) -> None:
+    """#298.2: each write swaps in a whole file, never rewrites in place."""
+    from builder.ledger import _LockedFile
+
+    path = tmp_path / "spend.json"
+    path.write_text('{"jobs": {}, "days": {}, "total": 0.0}', encoding="utf-8")
+    before = path.stat().st_ino
+    with _LockedFile(path) as locked:
+        locked.write({"jobs": {}, "days": {}, "total": 0.01})
+    assert path.stat().st_ino != before
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "spend.json",
+        "spend.json.lock",
+    ]
 
 
 def test_total_spent_reads_the_pool(tmp_path: Path) -> None:

@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #278, new tiles keep survey animals — worker v53 live
+
+- `258f2dd` + `57cf895` (#278). CI green on the second (the first read the gitignored local species cache; the replays now read committed fixtures). Deployed per standing go (tile-queue order overrides #279's together-deploy: #277 comes later in the queue): worker **v53** on `57cf895`, single container `ta-01M6KPD649NRJEB76TP2Z24Q5R` (old v52 stopped).
+- `builder/tiles.py`: wet land cells also take their land habitat when the cell has any land (#278.1); the survey's part kinds widen a land cell's labels — lake/shore add the wet habitat, river adds `river`, shore on a coast adds `sea`, town adds `sea` with cell sea or a lake/river/sea part, town alone on a dry cell adds nothing (#278.2, `_candidate_habitats` stays pure, candidates now build after the survey). Filed survey animals that still don't ship are reported as `survey_left_out: [{what, part, why}]` on the tile, on blocked entries, and on the job doc (single-tile copy, place merge deduped); `habitat` for label drops, `not_candidate` for select drops; `wanted` still means unfiled (#278.3). Schemas updated (`tile`, `tile-group` blocked, `build-job`). Only new tiles and remakes change; no remakes run.
+- Readings: the gull is filed under `sea`/`boreal_lake` (not `river`) while the taiga survey has town + river parts and no lake part, so "the gull comes in through a lake, river or sea part" must mean town + water part adds `sea` — implemented exactly that set ({lake, river, sea}, not shore). `not_candidate` covers the select stage (in the survey branch every label drop is a habitat mismatch, so the code can't mean anything else there).
+- Tests: new `tests/test_survey_kept.py`, 11 tests (6 pure label rules, 2 live replays from committed Nov-1 survey fixtures, dry-town negative with `habitat` report, merge dedupe, job-doc copy). Focused 11 pass; `test_tiles/plan/build` 242 pass; `test_place_job/worker/lab/replan` 197 pass; `test_schemas` + focused 87 pass; ruff clean.
+- Cost: $0 (no live runs; replays run the recorded answers with no model calls).
+
 ## 2026-11-04: inbox #283, ring ahead — built, worker v52 live
 
 - `bf27f08` (#283: ring ahead plans the eight neighbours of a published tile). CI green, deployed per standing go: worker **v52** on `bf27f08`, single container `ta-01M6KJMMFTE1EAMCNXWN7G69QR` (old v51 stopped).

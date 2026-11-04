@@ -9,6 +9,7 @@ job ids, species, tiles and dollars only.
 
 from __future__ import annotations
 
+from collections.abc import Container
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -181,14 +182,19 @@ def job_estimate(job: dict[str, Any]) -> dict[str, Any]:
     return {"total": 0.0, "parts": {}, "from": "none"}
 
 
-def median_estimates(store: Any) -> dict[str, tuple[float, str]]:
+def median_estimates(
+    store: Any, new_shapes: Container[str] | None = None
+) -> dict[str, tuple[float, str]]:
     """Per-part estimates from measured medians (#259.4).
 
     Each part medians its matching `cost_log` rows once 3 have
     it, else today's fixed number. The source rides along so
     the quote says which it used. The per-tile survey median
     reads single-tile rows only, so cached tiles can't dilute
-    it; the place tile price shares that source.
+    it; the place tile price shares that source. Animals with
+    `shape: "new"` in the list median their own `animal_new`
+    kind; without the list every animal counts as an edit and
+    `animal_new` stays fixed (#293.1).
     """
     import statistics
 
@@ -203,8 +209,37 @@ def median_estimates(store: Any) -> dict[str, tuple[float, str]]:
     except Exception:  # noqa: BLE001 - unreadable log reads fixed
         rows = []
     out: dict[str, tuple[float, str]] = {}
+    animal_entries: list[tuple[str, float, int]] = []
+    for index, record in enumerate(rows):
+        if not isinstance(record, dict):
+            continue
+        group = ((record.get("cost") or {}).get("parts") or {}).get("animals")
+        if not isinstance(group, dict):
+            continue
+        for what, entry in group.items():
+            if isinstance(entry, dict) and isinstance(entry.get("usd"), (int, float)):
+                animal_entries.append((what, float(entry["usd"]), index))
+    for part, fixed, want_new in (
+        ("animal", ITEM_ESTIMATES["animal"], False),
+        ("animal_new", ITEM_ESTIMATES["animal_new"], True),
+    ):
+        if new_shapes:
+            picked = [
+                (usd, index)
+                for what, usd, index in animal_entries
+                if (what in new_shapes) == want_new
+            ]
+        elif want_new:
+            picked = []
+        else:
+            picked = [(usd, index) for _, usd, index in animal_entries]
+        samples = [usd for usd, _ in picked]
+        hit_rows = len({index for _, index in picked})
+        if hit_rows >= 3 and samples:
+            out[part] = (round(statistics.median(samples), 4), f"log, {hit_rows} rows")
+        else:
+            out[part] = (fixed, "fixed")
     for part, fixed in (
-        ("animal", ITEM_ESTIMATES["animal"]),
         ("plant", ITEM_ESTIMATES["plant"]),
         ("home", ITEM_ESTIMATES["home"]),
     ):

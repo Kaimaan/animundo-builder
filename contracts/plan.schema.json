@@ -32,7 +32,8 @@
           "what": {"type": "string", "minLength": 1},
           "from": {"type": "string", "minLength": 1},
           "estimate_usd": {"type": "number", "minimum": 0},
-          "estimate_from": {"type": "string", "minLength": 1}
+          "estimate_from": {"type": "string", "minLength": 1},
+          "estimate_kind": {"enum": ["animal", "animal_new"]}
         }
       }
     },
@@ -49,7 +50,8 @@
           "what": {"type": "string", "minLength": 1},
           "from": {"type": "string", "minLength": 1},
           "estimate_usd": {"type": "number", "minimum": 0},
-          "estimate_from": {"type": "string", "minLength": 1}
+          "estimate_from": {"type": "string", "minLength": 1},
+          "estimate_kind": {"enum": ["animal", "animal_new"]}
         }
       }
     },

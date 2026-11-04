@@ -889,7 +889,8 @@ def plan_tile(
             )
         picked = _pick_animal(unfiled, unfiled_counts, request, survey_ids, entries)
         if picked is not None:
-            animal_usd, animal_from = quote("animal", ITEM_ESTIMATES["animal"])
+            kind = "animal_new" if picked.get("shape") == "new" else "animal"
+            animal_usd, animal_from = quote(kind, ITEM_ESTIMATES[kind])
             items.append(
                 {
                     "id": f"animal_{picked['id']}",
@@ -898,6 +899,7 @@ def plan_tile(
                     "from": picked["start_from"],
                     "estimate_usd": animal_usd,
                     "estimate_from": animal_from,
+                    "estimate_kind": kind,
                 }
             )
     picks = answer.get("plants") if answer else None
@@ -1058,7 +1060,8 @@ def _finish(
             entry = by_id[species]
             if not entry.get("start_from"):
                 continue
-            animal_usd, animal_from = quote("animal", ITEM_ESTIMATES["animal"])
+            kind = "animal_new" if entry.get("shape") == "new" else "animal"
+            animal_usd, animal_from = quote(kind, ITEM_ESTIMATES[kind])
             improve.append(
                 {
                     "id": f"improve_{species}",
@@ -1067,6 +1070,7 @@ def _finish(
                     "from": entry["start_from"],
                     "estimate_usd": animal_usd,
                     "estimate_from": animal_from,
+                    "estimate_kind": kind,
                 }
             )
             if len(improve) >= 2:

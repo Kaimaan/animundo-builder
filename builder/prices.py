@@ -76,9 +76,13 @@ def prices_for(model: str) -> Prices:
 #: median $0.42, 5 plants median $0.13; home and food keep their
 #: old values for lack of new data. The job's budget is the plan's
 #: estimate, so an estimate below reality fails builds on `budget`.
+#: `animal_new` quotes entries with `shape: "new"`: the whale's
+#: measured $1.44 until the cost log medians three of its own
+#: (#293.1).
 ITEM_ESTIMATES: dict[str, float] = {
     "home": 0.20,
     "animal": 0.42,
+    "animal_new": 1.44,
     "plant": 0.13,
     "food": 0.0,
 }

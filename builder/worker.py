@@ -2376,8 +2376,18 @@ class Worker:
         """Live quotes read the cost log's medians (#259.4)."""
         from . import costs as costs_mod
 
+        shapes: set[str] | None = None
+        if self.world is not None:
+            from .species import list_animals
+
+            try:
+                shapes = {
+                    a["id"] for a in list_animals(self.world) if a.get("shape") == "new"
+                }
+            except (OSError, ValueError):
+                shapes = None
         try:
-            return costs_mod.median_estimates(self.store)
+            return costs_mod.median_estimates(self.store, shapes)
         except Exception:  # noqa: BLE001 - unreadable log quotes fixed
             from .prices import (
                 ITEM_ESTIMATES,

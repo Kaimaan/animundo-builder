@@ -212,3 +212,28 @@ def test_search_and_image_dollars_split_to_own_parts(tmp_path: Path) -> None:
     assert parts["research"]["input_tokens"] == 100
     assert parts["search"]["input_tokens"] == 0
     assert _parts_total(parts) == 0.10
+
+
+def test_median_estimates_split_new_shape_animals() -> None:
+    """#293.1: new-shape rows median their own kind; edits stay edits."""
+    store = FakeStore()
+    for n, usd in enumerate((0.80, 0.90, 1.00)):
+        store.write_cost_log(
+            f"n{n}",
+            {
+                "tiles": [TILE],
+                "cost": {"parts": {"animals": {"whale": {"usd": usd}}}},
+            },
+        )
+    for n, usd in enumerate((0.08, 0.09, 0.10)):
+        store.write_cost_log(
+            f"e{n}",
+            {
+                "tiles": [TILE],
+                "cost": {"parts": {"animals": {"fox": {"usd": usd}}}},
+            },
+        )
+    estimates = median_estimates(store, {"whale"})
+    assert estimates["animal"] == (0.09, "log, 3 rows")
+    assert estimates["animal_new"] == (0.90, "log, 3 rows")
+    assert median_estimates(store)["animal_new"] == (1.44, "fixed")

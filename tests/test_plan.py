@@ -651,6 +651,7 @@ def test_plan_picks_most_recorded_unfiled_animal(tmp_path: Path) -> None:
             "from": "mountain_hare",
             "estimate_usd": 0.42,
             "estimate_from": "fixed",
+            "estimate_kind": "animal",
         }
     ]
     assert [i["id"] for i in plan["improve"]] == ["improve_lion", "improve_okapi"]
@@ -1862,6 +1863,7 @@ def test_cairns_replay_makes_a_survey_animal(tmp_path: Path, monkeypatch: Any) -
             "from": "moose",
             "estimate_usd": plan["items"][0]["estimate_usd"],
             "estimate_from": plan["items"][0]["estimate_from"],
+            "estimate_kind": plan["items"][0]["estimate_kind"],
         }
     ]
     assert plan["items"][0]["estimate_usd"] > 0
@@ -1889,3 +1891,51 @@ def test_cairns_replay_prefers_a_native_survey_animal(
     )
     plan = _cairns_plan(tmp_path, monkeypatch, world)
     assert [i["what"] for i in plan["items"]] == ["monarch"]
+
+
+def test_plan_new_shape_animal_quotes_animal_new(tmp_path: Path) -> None:
+    """#293.1: a picked animal with shape new quotes the new-shape kind."""
+    world = _world(tmp_path)
+    listed = json.loads((world / "animal-list.json").read_text())
+    for entry in listed["animals"]:
+        if entry["id"] == "zebra":
+            entry["shape"] = "new"
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
+    plan = plan_tile(
+        "z10_0581_0294",
+        None,
+        habitat_grid,
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={"lion": 5.0, "zebra": 9.0, "okapi": 2.0},
+    )
+    assert plan["items"] == [
+        {
+            "id": "animal_zebra",
+            "kind": "animal",
+            "what": "zebra",
+            "from": "mountain_hare",
+            "estimate_usd": 1.44,
+            "estimate_from": "fixed",
+            "estimate_kind": "animal_new",
+        }
+    ]
+
+
+def test_plan_edits_animal_still_quotes_animal(tmp_path: Path) -> None:
+    """#293.2: a picked animal without shape new quotes the edits kind."""
+    world = _world(tmp_path)
+    habitat_grid = _habitat_grid(tmp_path, _boreal())
+    plan = plan_tile(
+        "z10_0581_0294",
+        None,
+        habitat_grid,
+        world,
+        "abc123",
+        presence={},
+        unfiled_presence={"lion": 5.0, "zebra": 9.0, "okapi": 2.0},
+    )
+    assert plan["items"][0]["estimate_kind"] == "animal"
+    assert plan["items"][0]["estimate_usd"] == 0.42

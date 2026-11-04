@@ -3,6 +3,10 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #295 (Mamirauá to $10, quality first)
+
+- Answered: envelope is $10 ($2.92 true spent), stop-and-ask moves from $5 to $9, no test build 2 until the rosettes/blotches/crest tool-marks follow-up lands (then map the shape words to the new marks and rebuild). Raised the real job's `cap_usd` 6 → 10, verified by read-back (the cap tracks the envelope; the $9 total is now the operative guard, held agent-side — no hardcoded budget in code, so no code change). Test-1's $4.0 cap still covers test 2 (~$3.93 doc dollars), left alone.
+
 ## 2026-11-04: inbox #292 + #294 (Apache-2.0; docs match the code)
 
 - Commit `edf50b1` (one commit for both, docs only, no code), CI green run 41814814907. No deploy (docs don't ship to the worker).

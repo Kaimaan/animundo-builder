@@ -260,6 +260,7 @@ class ModelsStage:
                         "type": "json_schema",
                         "json_schema": {"name": "ReferencePick", "schema": PICK_SCHEMA},
                     },
+                    reasoning_effort="low",
                 )
             )
 
@@ -377,7 +378,7 @@ class ModelsStage:
             if problems and previous is not None
             else [first]
         )
-        return chat(messages, response_format=response_format)
+        return chat(messages, response_format=response_format, reasoning_effort="low")
 
     def _save_round(
         self,

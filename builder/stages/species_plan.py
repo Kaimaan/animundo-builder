@@ -399,6 +399,7 @@ class SpeciesPlanStage:
                     "type": "json_schema",
                     "json_schema": {"name": "SpeciesPlan", "schema": schema},
                 },
+                reasoning_effort="low",
             )
             text = (response.choices[0].message.content or "").strip()
             previous = text
@@ -432,6 +433,7 @@ class SpeciesPlanStage:
                     "type": "json_schema",
                     "json_schema": {"name": "ReferencePick", "schema": PICK_SCHEMA},
                 },
+                reasoning_effort="low",
             )
             return (response.choices[0].message.content or "").strip()
 

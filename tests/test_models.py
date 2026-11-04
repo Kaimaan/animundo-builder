@@ -129,12 +129,14 @@ class ScriptChat:
         self.answers = [_answer(text) for text in answers]
         self.prompts: list[str] = []
         self.images: list[int] = []
+        self.options: list[dict[str, Any]] = []
 
     def __call__(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         first = messages[0]["content"]
         last = messages[-1]["content"]
         text = last if isinstance(last, str) else last[0]["text"]
         self.prompts.append(text)
+        self.options.append(kwargs)
         if isinstance(first, str):
             self.images.append(0)
         else:
@@ -282,6 +284,7 @@ def test_fix_round_then_pass(tmp_path: Path) -> None:
     )
     assert result == {"model_files": ["models/golden_eagle.json"]}
     assert len(chat.prompts) == 5, "spec, review, fix, review, verify"
+    assert [o["reasoning_effort"] for o in chat.options] == ["low"] * 5  # #289
     assert "A very large eagle" in chat.prompts[0]
     assert "kestrel" in chat.prompts[0]
     assert "900 triangles" in chat.prompts[1], "review sees the build stats"

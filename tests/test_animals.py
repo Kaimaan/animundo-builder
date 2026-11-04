@@ -180,11 +180,13 @@ class ScriptClient:
     def __init__(self, scripts: dict[str, list[dict]]) -> None:
         self.scripts = {k: list(v) for k, v in scripts.items()}
         self.prompts: list[str] = []
+        self.options: list[dict[str, Any]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         content = messages[0]["content"]
         last = messages[-1]["content"]
         self.prompts.append(last if isinstance(last, str) else last[0]["text"])
+        self.options.append(kwargs)
         species_id = re.search(r'"species": "([^"]+)"', content).group(1)  # type: ignore[union-attr]
         answer = self.scripts[species_id].pop(0)
         message = SimpleNamespace(content=json.dumps(answer), tool_calls=None)
@@ -222,6 +224,7 @@ def test_writes_valid_animals(tmp_path: Path) -> None:
         json.loads((tmp_path / "animals" / "zz_deer.json").read_text())["name"]
         == "Good"
     )
+    assert [o["reasoning_effort"] for o in client.options] == ["low", "low"]  # #289
 
 
 def test_checker_error_fixed_per_species(tmp_path: Path) -> None:

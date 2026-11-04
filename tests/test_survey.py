@@ -63,10 +63,12 @@ class ScriptClient:
         self.answers = list(answers)
         self.prompts: list[str] = []
         self.calls: list[dict[str, Any]] = []
+        self.chat_options: list[dict[str, Any]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         content = messages[-1]["content"]
         self.prompts.append(content if isinstance(content, str) else content[0]["text"])
+        self.chat_options.append(kwargs)
         return self.answers.pop(0)
 
     def responses_create(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
@@ -160,6 +162,7 @@ def test_research_write_and_validate(tmp_path: Path) -> None:
     assert (tmp_path / "research_land.md").read_text() == "LAND ..."
     assert (tmp_path / "research_species.md").read_text() == "SPECIES ..."
     assert len(client.prompts) == 3, "no gaps call with three sites"
+    assert [o["reasoning_effort"] for o in client.chat_options] == ["low"]  # #289
 
 
 def test_gaps_call_when_too_few_sites(tmp_path: Path) -> None:

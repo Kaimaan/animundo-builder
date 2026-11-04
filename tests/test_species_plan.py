@@ -168,9 +168,11 @@ class ScriptClient:
         self.plans = list(plans)
         self.auto_pick = auto_pick
         self.calls = 0
+        self.options: list[dict[str, Any]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         self.calls += 1
+        self.options.append(kwargs)
         content = messages[0]["content"]
         if self.auto_pick and "reference-table row" in content:
             answer: dict[str, Any] = {"row": 1, "kind": "mammal"}
@@ -276,6 +278,9 @@ def test_match_rewrite_and_plan(tmp_path: Path, monkeypatch: Any) -> None:
     assert region["food"] == [
         {"kind": "water_bugs", "amount": 10, "names": ["common mosquito"]}
     ]
+    assert client.options and all(
+        o["reasoning_effort"] == "low" for o in client.options
+    )  # #289: plan and picks cap reasoning
 
 
 def test_over_cap_demotes_in_order(tmp_path: Path, monkeypatch: Any) -> None:

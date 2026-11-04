@@ -176,6 +176,7 @@ class SurveyStage:
                     "type": "json_schema",
                     "json_schema": {"name": "Survey", "schema": schema},
                 },
+                reasoning_effort="low",
             )
             text = (response.choices[0].message.content or "").strip()
             previous = text

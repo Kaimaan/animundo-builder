@@ -153,11 +153,13 @@ class ScriptChat:
     def __init__(self, answers: list[str]) -> None:
         self.answers = list(answers)
         self.prompts: list[str] = []
+        self.options: list[dict[str, Any]] = []
 
     def __call__(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         content = messages[-1]["content"]
         text = content if isinstance(content, str) else content[0]["text"]
         self.prompts.append(text)
+        self.options.append(kwargs)
         message = SimpleNamespace(content=self.answers.pop(0), tool_calls=None)
         return SimpleNamespace(
             model="fake-test-model", choices=[SimpleNamespace(message=message)]
@@ -213,6 +215,20 @@ def test_animal_item_builds_no_plants(tmp_path: Path) -> None:
     }
     assert chat.prompts == []
     assert not (tmp_path / "sandbox").exists()
+
+
+def test_plant_calls_cap_reasoning_low(tmp_path: Path) -> None:
+    """#289: the draft and the review cap reasoning, like the maker.
+
+    Test 1's ceiba burned the whole open-host cap thinking and
+    answered empty, twice; uncapped calls must not go out again.
+    """
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    chat = ScriptChat([json.dumps(SPEC), json.dumps(REVIEW_CLEAN)])
+    PlantsStage(match=_match_new, chat=chat, build=_build_ok).run(_ctx(tmp_path, world))
+    assert len(chat.options) == 2
+    assert [o.get("reasoning_effort") for o in chat.options] == ["low", "low"]
 
 
 def test_builds_one_new_plant(tmp_path: Path) -> None:

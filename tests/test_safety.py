@@ -102,10 +102,12 @@ class ScriptChat:
     def __init__(self, answers: list[str]) -> None:
         self.answers = list(answers)
         self.prompts: list[str] = []
+        self.options: list[dict[str, Any]] = []
 
     def chat(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
         content = messages[0]["content"]
         self.prompts.append(content if isinstance(content, str) else content[0]["text"])
+        self.options.append(kwargs)
         message = SimpleNamespace(content=self.answers.pop(0), tool_calls=None)
         return SimpleNamespace(
             model="fake-test-model",
@@ -145,6 +147,7 @@ def test_all_pass(tmp_path: Path) -> None:
     chat = ScriptChat([_pass_all(KEYS)])
     result = SafetyStage().run(_ctx(tmp_path, chat, world))
     assert result == {"reviewed": 8, "rewritten": [], "failed": []}
+    assert [o["reasoning_effort"] for o in chat.options] == ["low"]  # #289
     saved = json.loads((tmp_path / "checks" / "safety.json").read_text())
     assert saved["reviewed"] == 8
     assert saved["failed"] == []

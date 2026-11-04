@@ -126,10 +126,38 @@ def test_research_habitat_mode_without_species(tmp_path: Path) -> None:
     assert saved == answer
 
 
+def test_research_retries_an_unparsable_answer(tmp_path: Path) -> None:
+    """#289: one bad research answer retries instead of stopping."""
+    (tmp_path / "home.json").write_text(json.dumps(_brief()))
+    client = ScriptClient([_response("nope"), _response(json.dumps(VALID))])
+    result = ResearchStage().run(_ctx(tmp_path, client))
+    assert result["main_food"] == "mountain hare"
+    assert len(client.prompts) == 2
+
+
+def test_research_retries_an_empty_answer(tmp_path: Path) -> None:
+    """#289: a cut-off empty answer retries like an unparsable one."""
+    (tmp_path / "home.json").write_text(json.dumps(_brief()))
+    empty = SimpleNamespace(
+        model="fake-test-model",
+        status="incomplete",
+        output=[],
+        usage=SimpleNamespace(
+            prompt_tokens=100, completion_tokens=50, prompt_tokens_details=None
+        ),
+    )
+    client = ScriptClient([empty, _response(json.dumps(VALID))])
+    result = ResearchStage().run(_ctx(tmp_path, client))
+    assert result["main_food"] == "mountain hare"
+    assert len(client.prompts) == 2
+
+
 def test_research_bad_answer_stops(tmp_path: Path) -> None:
     (tmp_path / "home.json").write_text(json.dumps(_brief()))
     with pytest.raises(Exception, match="unparsable"):
-        ResearchStage().run(_ctx(tmp_path, ScriptClient([_response("nope")])))
+        ResearchStage().run(
+            _ctx(tmp_path, ScriptClient([_response("nope"), _response("nope")]))
+        )
 
 
 def test_research_keeps_a_good_answer_past_its_round(tmp_path: Path) -> None:

@@ -67,7 +67,8 @@ class SafetyStage:
 
         def ask(messages: list[dict[str, Any]], schema: dict[str, Any] | None) -> Any:
             ctx.check_budget()
-            kwargs: dict[str, Any] = {}
+            # Capped thinking, like the maker's JSON calls (#289).
+            kwargs: dict[str, Any] = {"reasoning_effort": "low"}
             if schema is not None:
                 kwargs["response_format"] = {
                     "type": "json_schema",

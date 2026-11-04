@@ -129,22 +129,30 @@ class ResearchStage:
             )
             text_format = RESEARCH_FORMAT
             schema = "research"
-        response = ctx.respond(
-            prompt,
-            tools=SEARCH_TOOL,
-            timeout=180,
-            max_tool_calls=SEARCHES + SEARCH_SLACK,
-            text_format=text_format,
-        )
-        searches = count_search_calls(response)
-        text = final_text(response)
-        if is_cut_off(response, 0) and not text.strip():
-            raise _Stopped("the research came back empty")
-        try:
-            data = strip_nulls(json.loads(text))
-            if isinstance(data, dict):
-                data["sources"] = _source_urls(data.get("sources"))
-            validate(schema, data)
-        except ValueError as error:
-            raise _Stopped(f"the research came back unparsable: {error}")
-        return data, data["sources"], searches
+        # One retry on an empty or unparsable answer: a single
+        # bad reply must not fail the item (#289's backstop).
+        searches = 0
+        problem = ""
+        for _ in range(2):
+            response = ctx.respond(
+                prompt,
+                tools=SEARCH_TOOL,
+                timeout=180,
+                max_tool_calls=SEARCHES + SEARCH_SLACK,
+                text_format=text_format,
+            )
+            searches += count_search_calls(response)
+            text = final_text(response)
+            if is_cut_off(response, 0) and not text.strip():
+                problem = "the research came back empty"
+                continue
+            try:
+                data = strip_nulls(json.loads(text))
+                if isinstance(data, dict):
+                    data["sources"] = _source_urls(data.get("sources"))
+                validate(schema, data)
+            except ValueError as error:
+                problem = f"the research came back unparsable: {error}"
+                continue
+            return data, data["sources"], searches
+        raise _Stopped(problem)

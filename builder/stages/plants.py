@@ -286,7 +286,11 @@ class PlantsStage:
         else:
             messages = [first]
         chat = self._chat or ctx.chat
-        response = chat(messages)
+        # Capped thinking, like the maker's JSON calls: test 1's
+        # ceiba burned the whole open-host cap reasoning and
+        # answered empty, twice (#289). Doubled room cannot fix
+        # that; the host holds max_tokens at 8000 either way.
+        response = chat(messages, reasoning_effort="low")
         text = (response.choices[0].message.content or "").strip()
         if not text and is_cut_off(response, 0):
             # Reasoned past the cap on a big fix prompt: one more
@@ -301,12 +305,16 @@ class PlantsStage:
                     or getattr(usage, "completion_tokens", 0)
                     or 0
                 )
-            response = chat(messages, max_tokens=max(DEFAULT_MAX_TOKENS, used * 2))
+            response = chat(
+                messages,
+                max_tokens=max(DEFAULT_MAX_TOKENS, used * 2),
+                reasoning_effort="low",
+            )
             text = (response.choices[0].message.content or "").strip()
         if not text:
             # An empty answer retries once, like a cut one
             # (#140.4): the kelp draft came back with nothing.
-            response = chat(messages)
+            response = chat(messages, reasoning_effort="low")
             text = (response.choices[0].message.content or "").strip()
         try:
             return json.loads(text), text
@@ -519,6 +527,7 @@ class PlantsStage:
                 "type": "json_schema",
                 "json_schema": {"name": "Review", "schema": load_schema("review")},
             },
+            reasoning_effort="low",
         )
         return (response.choices[0].message.content or "").strip()
 

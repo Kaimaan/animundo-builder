@@ -170,8 +170,8 @@ class AnimalsStage:
         # Plain JSON mode, not structured output: the API's schema compiler
         # silently drops this schema's `$ref` properties (`diet` vanishes and
         # every round fails the same way). The schema checks every draft, in
-        # code, in `_validate` below.
-        response = ctx.chat(messages)
+        # code, in `_validate` below. Capped thinking, like the maker (#289).
+        response = ctx.chat(messages, reasoning_effort="low")
         return (response.choices[0].message.content or "").strip()
 
     def _validate(

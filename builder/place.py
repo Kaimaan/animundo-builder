@@ -184,22 +184,29 @@ def ask_survey(
 
     ids = [a["id"] for a in animals]
     prompt = survey_prompt(place, animals, homes, want, improve)
-    response = ctx.respond(
-        prompt,
-        tools=SEARCH_TOOL,
-        timeout=180,
-        max_tool_calls=SEARCHES + SEARCH_SLACK,
-        text_format=survey_format(ids),
-    )
-    searches = count_search_calls(response)
-    text = final_text(response)
-    if is_cut_off(response, 0) and not text.strip():
-        raise SurveyError("the survey came back empty")
-    try:
-        data = json.loads(text)
-    except ValueError as error:
-        raise SurveyError(f"the survey came back unparsable: {error}") from error
-    return data, searches
+    # One retry on an empty or unparsable answer: a single bad
+    # reply must not fail the survey (#289's backstop).
+    searches = 0
+    problem = ""
+    for _ in range(2):
+        response = ctx.respond(
+            prompt,
+            tools=SEARCH_TOOL,
+            timeout=180,
+            max_tool_calls=SEARCHES + SEARCH_SLACK,
+            text_format=survey_format(ids),
+        )
+        searches += count_search_calls(response)
+        text = final_text(response)
+        if is_cut_off(response, 0) and not text.strip():
+            problem = "the survey came back empty"
+            continue
+        try:
+            return json.loads(text), searches
+        except ValueError as error:
+            problem = f"the survey came back unparsable: {error}"
+            continue
+    raise SurveyError(problem)
 
 
 class SurveyError(Exception):
@@ -670,22 +677,29 @@ def ask_job_survey(
     from .stages.survey import SEARCH_TOOL, final_text
 
     prompt = job_survey_prompt(place, animals, biomes, want)
-    response = ctx.respond(
-        prompt,
-        tools=SEARCH_TOOL,
-        timeout=180,
-        max_tool_calls=SEARCHES + SEARCH_SLACK,
-        text_format=job_survey_format(),
-    )
-    searches = count_search_calls(response)
-    text = final_text(response)
-    if is_cut_off(response, 0) and not text.strip():
-        raise SurveyError("the survey came back empty")
-    try:
-        data = json.loads(text)
-    except ValueError as error:
-        raise SurveyError(f"the survey came back unparsable: {error}") from error
-    return data, searches
+    # One retry on an empty or unparsable answer: a single bad
+    # reply must not fail the survey (#289's backstop).
+    searches = 0
+    problem = ""
+    for _ in range(2):
+        response = ctx.respond(
+            prompt,
+            tools=SEARCH_TOOL,
+            timeout=180,
+            max_tool_calls=SEARCHES + SEARCH_SLACK,
+            text_format=job_survey_format(),
+        )
+        searches += count_search_calls(response)
+        text = final_text(response)
+        if is_cut_off(response, 0) and not text.strip():
+            problem = "the survey came back empty"
+            continue
+        try:
+            return json.loads(text), searches
+        except ValueError as error:
+            problem = f"the survey came back unparsable: {error}"
+            continue
+    raise SurveyError(problem)
 
 
 def check_job_survey(

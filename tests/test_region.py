@@ -185,6 +185,7 @@ def test_writes_validated_region(tmp_path: Path) -> None:
     assert written["center"] == {"lat": 57.0, "lon": -3.0}
     assert written["terrain"]["seed"] == seed_for_area("gb_test")
     assert "response_format" not in client.calls[0]
+    assert client.calls[0]["reasoning_effort"] == "low"  # #289: capped thinking
     saved = json.loads((tmp_path / "checks" / "region.json").read_text())
     assert [entry["check"] for entry in saved["results"]] == [
         "locale",

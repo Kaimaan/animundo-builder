@@ -1764,3 +1764,76 @@ def test_job_survey_keeps_short_and_country_when_answered(tmp_path: Path) -> Non
         [],
     )
     assert "short" not in plain and "country" not in plain
+
+
+def _survey_ctx(tmp_path: Path, answers: list[str]) -> Any:
+    """A ctx whose respond plays back canned survey texts."""
+    from types import SimpleNamespace
+
+    from builder.pipeline import BudgetTracker, JobContext
+
+    class _Client:
+        model = "fake-test-model"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def responses_create(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
+            self.calls += 1
+            part = SimpleNamespace(
+                type="output_text", text=answers.pop(0), annotations=[]
+            )
+            output = [SimpleNamespace(type="message", content=[part])]
+            return SimpleNamespace(
+                model="fake-test-model",
+                output=output,
+                usage=SimpleNamespace(
+                    prompt_tokens=100,
+                    completion_tokens=50,
+                    prompt_tokens_details=None,
+                ),
+            )
+
+    client = _Client()
+    ctx = JobContext(
+        job_id="survey-1",
+        job_dir=tmp_path,
+        client=client,  # type: ignore[arg-type]
+        tracker=BudgetTracker(budget_usd=8.0),
+        world_path=tmp_path,
+    )
+    return ctx, client
+
+
+def test_ask_survey_retries_an_unparsable_answer(tmp_path: Path) -> None:
+    """#289: one bad place survey retries instead of stopping."""
+    ctx, client = _survey_ctx(tmp_path, ["nope", '{"tile": "z10_0001_0001"}'])
+    data, _searches = ask_survey(ctx, "Nowhere", [], ["reef"], [], None)
+    assert data == {"tile": "z10_0001_0001"}
+    assert client.calls == 2
+
+
+def test_ask_survey_stops_after_two_bad_answers(tmp_path: Path) -> None:
+    """#289: two bad place surveys still stop the survey."""
+    ctx, _client = _survey_ctx(tmp_path, ["nope", "nope"])
+    with pytest.raises(SurveyError, match="unparsable"):
+        ask_survey(ctx, "Nowhere", [], ["reef"], [], None)
+
+
+def test_ask_job_survey_retries_an_unparsable_answer(tmp_path: Path) -> None:
+    """#289: one bad job survey retries instead of stopping."""
+    from builder.place import ask_job_survey
+
+    ctx, client = _survey_ctx(tmp_path, ["nope", '{"tile": "z10_0001_0001"}'])
+    data, _searches = ask_job_survey(ctx, "Nowhere", [], ["reef"], [])
+    assert data == {"tile": "z10_0001_0001"}
+    assert client.calls == 2
+
+
+def test_ask_job_survey_stops_after_two_bad_answers(tmp_path: Path) -> None:
+    """#289: two bad job surveys still stop the survey."""
+    from builder.place import ask_job_survey
+
+    ctx, _client = _survey_ctx(tmp_path, ["nope", "nope"])
+    with pytest.raises(SurveyError, match="unparsable"):
+        ask_job_survey(ctx, "Nowhere", [], ["reef"], [])

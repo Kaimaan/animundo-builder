@@ -193,7 +193,9 @@ class RegionStage:
             if problems and previous is not None
             else [first]
         )
-        response = ctx.chat(messages)
+        # Capped thinking: uncapped, the open model can fill
+        # the whole cap reasoning and answer empty (#289).
+        response = ctx.chat(messages, reasoning_effort="low")
         return (response.choices[0].message.content or "").strip()
 
     def _mechanical(

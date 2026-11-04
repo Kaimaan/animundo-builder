@@ -548,6 +548,39 @@ def test_empty_draft_twice_stops(tmp_path: Path) -> None:
     assert len(chat.prompts) == 2
 
 
+def test_cut_draft_retries_with_doubled_room(tmp_path: Path) -> None:
+    """#275: a length-cut draft retries once with room, like #166.1."""
+
+    class CutChat:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def __call__(self, messages: list[dict], **kwargs: Any) -> SimpleNamespace:
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                message = SimpleNamespace(content="", tool_calls=None)
+                choice = SimpleNamespace(message=message, finish_reason="length")
+                usage = SimpleNamespace(completion_tokens=8000, output_tokens=0)
+                return SimpleNamespace(
+                    model="fake-test-model", choices=[choice], usage=usage
+                )
+            text = (
+                json.dumps(SPEC) if len(self.calls) == 2 else json.dumps(REVIEW_CLEAN)
+            )
+            message = SimpleNamespace(content=text, tool_calls=None)
+            choice = SimpleNamespace(message=message, finish_reason="stop")
+            return SimpleNamespace(model="fake-test-model", choices=[choice])
+
+    world = _world(tmp_path)
+    _inputs(tmp_path)
+    chat = CutChat()
+    result = PlantsStage(match=_match_new, chat=chat, build=_build_ok).run(
+        _ctx(tmp_path, world)
+    )
+    assert result["plant_files"] == ["models/plants/wood_sorrel.json"]
+    assert chat.calls[1]["max_tokens"] == 16384
+
+
 def test_poison_notes_flagged_for_expert(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

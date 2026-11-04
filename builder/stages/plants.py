@@ -26,6 +26,7 @@ from typing import Any
 import jsonschema
 from referencing import Registry, Resource
 
+from ..meta import DEFAULT_MAX_TOKENS, is_cut_off
 from ..prompts import PROMPTS_DIR, fix_messages, for_children, load_prompt
 from ..schemas import load_schema, validate
 from ..world import check_draft, mentions, problems_by_file
@@ -284,13 +285,31 @@ class PlantsStage:
             messages = fix_messages(first, previous, notes)
         else:
             messages = [first]
-        response = self._ask_text(ctx, messages)
-        if not response:
+        chat = self._chat or ctx.chat
+        response = chat(messages)
+        text = (response.choices[0].message.content or "").strip()
+        if not text and is_cut_off(response, 0):
+            # Reasoned past the cap on a big fix prompt: one more
+            # try with doubled room, like the maker's #166.1, not
+            # a blind same-budget retry. Only an explicit length
+            # signal retries, never a guess from usage.
+            usage = getattr(response, "usage", None)
+            used = 0
+            if usage is not None:
+                used = (
+                    getattr(usage, "output_tokens", 0)
+                    or getattr(usage, "completion_tokens", 0)
+                    or 0
+                )
+            response = chat(messages, max_tokens=max(DEFAULT_MAX_TOKENS, used * 2))
+            text = (response.choices[0].message.content or "").strip()
+        if not text:
             # An empty answer retries once, like a cut one
             # (#140.4): the kelp draft came back with nothing.
-            response = self._ask_text(ctx, messages)
+            response = chat(messages)
+            text = (response.choices[0].message.content or "").strip()
         try:
-            return json.loads(response), response
+            return json.loads(text), text
         except json.JSONDecodeError as error:
             raise _Stopped(f"{plant_id}: the draft was not JSON: {error}")
 

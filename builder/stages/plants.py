@@ -445,10 +445,14 @@ class PlantsStage:
         prompt: str,
         images: list[Path],
     ) -> dict[str, Any]:
-        """One review read, valid or a clean stop. Two tries, no saving."""
+        """One review read, valid or a clean stop. Four tries, no saving.
+
+        Empty answers are a model flake, even under a strict
+        schema: they retry like any invalid review (#275.5).
+        """
         problems = ""
         previous: str | None = None
-        for _ in range(2):
+        for _ in range(4):
             answer = self._ask(ctx, prompt, images, problems, previous)
             previous = answer
             try:

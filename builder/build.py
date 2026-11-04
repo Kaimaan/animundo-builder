@@ -340,7 +340,7 @@ def prepare_item(
             write_scaffold(
                 item_dir,
                 home,
-                [{"model": item["what"], "names": names}],
+                [{"model": item["what"], "names": names, "density": 0.5}],
                 lat=lat,
                 lon=lon,
                 species=species,

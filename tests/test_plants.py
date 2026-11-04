@@ -410,6 +410,32 @@ def test_review_blocking_fixed_next_round(tmp_path: Path) -> None:
     assert "never `blocking`" in chat.prompts[1]
 
 
+def test_review_survives_empty_answers(tmp_path: Path) -> None:
+    """#275.5: an empty review answer retries instead of failing the plant."""
+    world = _world(tmp_path)
+    preview = tmp_path / "preview.png"
+    preview.write_bytes(_png())
+    chat = ScriptChat(["", "", json.dumps(REVIEW_CLEAN)])
+    review = PlantsStage(chat=chat)._read_review(
+        _ctx(tmp_path, world), "wood_sorrel", 1, "prompt", [preview]
+    )
+    assert review["issues"] == []
+    assert len(chat.prompts) == 3
+
+
+def test_review_gives_up_after_repeated_empties(tmp_path: Path) -> None:
+    """#275.5: the reviewer still stops, naming the last failure."""
+    world = _world(tmp_path)
+    preview = tmp_path / "preview.png"
+    preview.write_bytes(_png())
+    chat = ScriptChat(["", "", "", ""])
+    with pytest.raises(_Stopped, match="never wrote a valid review"):
+        PlantsStage(chat=chat)._read_review(
+            _ctx(tmp_path, world), "wood_sorrel", 1, "prompt", [preview]
+        )
+    assert len(chat.prompts) == 4
+
+
 def test_rounds_cap(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path)

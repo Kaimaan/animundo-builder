@@ -183,6 +183,30 @@ def test_write_plant_brief_carries_names(tmp_path: Path) -> None:
     assert json.loads((tmp_path / "home.json").read_text()) == brief
 
 
+def test_plant_intake_seats_a_valid_scaffold_plant(tmp_path: Path) -> None:
+    """#275.5: the scaffold's plant carries density, as the schema demands."""
+    import json
+
+    from builder.build import prepare_item
+
+    item_dir = tmp_path / "item"
+    prepare_item(
+        item_dir,
+        {"id": "plant_ceiba", "kind": "plant", "what": "ceiba_pentandra"},
+        "rainforest",
+        0.0,
+        0.0,
+        None,
+        {"food": []},
+    )
+    scaffold = json.loads(
+        (item_dir / "regions" / "zz_work.json").read_text(encoding="utf-8")
+    )
+    (seated,) = scaffold["ground_cover"]["plants"]
+    assert seated["model"] == "ceiba_pentandra"
+    assert seated["density"] == 0.5
+
+
 def test_write_scaffold_names_ground_cover_plants(tmp_path: Path) -> None:
     home: dict[str, Any] = {"food": [], "fish": []}
     path = build_mod.write_scaffold(

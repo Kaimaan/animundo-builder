@@ -3,6 +3,23 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #298, Baseten ledger repaired — open calls back on Baseten
+
+- Kai said go; repair done per #298.4. The live file was byte-identical to the diagnosis (23,924 bytes, 11,962 leading NULs, untouched since 14:06:19 EET — nothing could write it). Backed it up in-volume (`spend-ledger-baseten.json.corrupt-20261104`), stripped the NULs locally, verified the JSON parses to the same bytes, and put it back (`put -f`; plain `put` refuses overwrites). Re-downloaded and `cmp`-verified: 11,962 bytes, zero NULs.
+- Wrinkle: the running v55 container kept seeing the old bytes (stale volume mount), so the repair took effect at the #277 deploy below — fresh v56 container reads it clean: total **$3.461061**, today $0.499707, capybara namespace $0.0888 intact. Nothing lost.
+- #298.6 window: open-model calls went to Meta from **14:06 EET** (file write) until this repair (~19:57 EET). Ledger-attributed: test-2's six post-capybara animals ($0.60 Meta; capybara kept $0.089 Baseten from before the break), all of test-3 ($2.12 Meta, $0 Baseten), platypus build $0.128 + enrich $0.105 + auto $0.154 Meta (auto also holds $0.054 pre-break Baseten), fish enriches tuna_2 $0.206 + flying_fish_2 $0.153 Meta (then failed on the unreadable ledger). Baseten total after repair: **$3.461061** (30 jobs).
+- #298 is now fully done (code `4dc0128` + this repair). Claude can re-add the two fish jobs; their open calls will land on Baseten again.
+- Cost: $0.
+
+## 2026-11-04: inbox #277, range jobs — worker v56 live
+
+- `5fc4cd7` (#277: range jobs seat a new animal on its published tiles). CI green, deployed per standing go (tile queue overrides #279's together-deploy; #278 shipped earlier as v53): worker **v56** on `5fc4cd7`, single container `ta-01M6KVAMRNNETWW87P89JT6VQR` (old v55 stopped; the restart also mounted the repaired Baseten ledger above).
+- New `range` job kind: judges the border's listed tiles (up to 5000) in 100-tile chunks — published (group blob), homed (`_resolve_home`), habitat labels vs the animal's `habitats` (no survey, with #278.1's land rule), single-taxon smoothed GBIF presence (counts only, each cell fetched once per job via a worker-level cache). Food never removes (0061); gaps ride the job via `_overlay_gaps`. Seating mirrors a remake (playable/hunts from the file, prey by tile hunters or the neither rule), unioned into one `additions/tiles.json` pack (id = job id, min_game 2, checked). Skips: `no_records`, `habitat`, `no_home` (no home or no grid cell), `not_published` (also bad ids and excluded tiles). Fails loud: `no_gbif_key`, `no_file`, `bad_range`.
+- Fairness: a chunk runs only when no other job is queued, nothing dispatches, no earlier range waits, and no request needs a plan; the 5-minute poll queues the lowest priority (0 when missing), then oldest id. Progress `{done, of}` + lease renewal every chunk; resume continues past `done` without redoing. Operator-action progress reads are dict-safe; `build-job` schema now describes range docs (`spread`, `priority`, `seated`, `skipped`, dict-or-list `progress`, `range` kind).
+- Tests: new `tests/test_range.py`, 14 tests (seat/skip × codes, gaps, prey-by-hunters, smoothing, fetch-once across chunks, deferral, poll order, resume, pack check, loud failures) + `fetch_taxon_counts` unit + range schema test. Suites: range+presence+schemas 105+1, worker+packs+costs 158, place+build+enrich 122 pass; ruff clean.
+- Not starting range jobs myself — over to the reviewer for `node admin.mjs range <animal>` and the in-game pack check.
+- Cost: $0.
+
 ## 2026-11-04: inbox #302, enrich ledger/world fixes — worker v55 live
 
 - `926fb48` (#302: enrich jobs pull the world on claim). CI green, deployed per standing reef go: worker **v55** on `926fb48`, single container `ta-01M6KS6VQXME92AHBYV6B877CR` (old v54 stopped).

@@ -1416,12 +1416,17 @@ def _survey_only_plants(
 
 
 def _blocked(
-    reason: str, habitat: str, wanted: list[dict[str, str]] | None
+    reason: str,
+    habitat: str,
+    wanted: list[dict[str, str]] | None,
+    left_out: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """A blocked entry, carrying `wanted` when the survey named any."""
     blocked: dict[str, Any] = {"reason": reason, "habitat": habitat}
     if wanted:
         blocked["wanted"] = wanted
+    if left_out:
+        blocked["survey_left_out"] = left_out
     return blocked
 
 
@@ -1524,7 +1529,12 @@ def select_species(
 
 
 def _candidate_habitats(
-    habitat: str, eco1: Any, biome: Any, land: float, water: float
+    habitat: str,
+    eco1: Any,
+    biome: Any,
+    land: float,
+    water: float,
+    part_kinds: tuple[str, ...] | list[str] = (),
 ) -> set[str]:
     """Habitats a tile takes candidates from: its own and its other side.
 
@@ -1532,9 +1542,17 @@ def _candidate_habitats(
     animals: the dry habitat its ecoregion's biome would give it
     with more land, and the wet one where the cell has lakes
     (#153). An inland cell with a coast or lakes also takes sea
-    or lake animals. Sea tiles take open-ocean swimmers and vice
-    versa, as before. The survey and the food check decide from
-    there, as now.
+    or lake animals. A wet land cell also takes its land
+    habitat wherever the cell has any land (#278.1). Sea tiles
+    take open-ocean swimmers and vice versa, as before. The
+    survey's part kinds widen a land cell's labels: lake and
+    shore parts add the wet habitat, a river part adds river, a
+    shore part on a coast adds sea, and a town part adds sea
+    where the cell has any sea or the survey names water
+    (lake, river or sea); a town part on a dry inland cell
+    adds nothing by itself (#278.2). Pure, so it stays easy
+    to test. The survey and the food check decide from there,
+    as now.
     """
     out = {habitat}
     if habitat in ("sea", "open_ocean"):
@@ -1543,12 +1561,84 @@ def _candidate_habitats(
             out.add(habitat_for(eco1, biome, 1.0, 0.0))
             if water > 0:
                 out.add(habitat_for(eco1, biome, 1.0, 1.0))
-    else:
-        if land < 1.0:
-            out.add("sea")
-        if water > 0:
-            out.add(habitat_for(eco1, biome, 1.0, 1.0))
+        return out
+    if land < 1.0:
+        out.add("sea")
+    if water > 0:
+        out.add(habitat_for(eco1, biome, 1.0, 1.0))
+    if land > 0:
+        out.add(habitat_for(eco1, biome, 1.0, 0.0))
+    parts = set(part_kinds)
+    if "lake" in parts or "shore" in parts:
+        out.add(habitat_for(eco1, biome, 1.0, 1.0))
+    if "river" in parts:
+        out.add("river")
+    if "shore" in parts and land < 1.0:
+        out.add("sea")
+    if "town" in parts and (land < 1.0 or parts & {"lake", "river", "sea"}):
+        out.add("sea")
     return out
+
+
+def _label_candidates(
+    animals: list[dict[str, Any]], labels: set[str]
+) -> list[dict[str, Any]]:
+    """Animals filed under any of these labels, each once (#278.2)."""
+    candidates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for label in sorted(labels):
+        for entry in animals_for_habitat(animals, label):
+            if entry["id"] not in seen:
+                seen.add(entry["id"])
+                candidates.append(entry)
+    return candidates
+
+
+def _part_of(answer: dict[str, Any]) -> dict[str, str]:
+    """Each surveyed species' first part kind (#278.3)."""
+    part_of: dict[str, str] = {}
+    for part in answer["parts"]:
+        for species_id in part.get("species", []):
+            part_of.setdefault(species_id, part["kind"])
+    return part_of
+
+
+def survey_label_drops(
+    answer: dict[str, Any],
+    candidate_ids: set[str],
+    animals_dir: Path,
+) -> list[dict[str, str]]:
+    """Filed survey animals the labels didn't keep, in survey order (#278.3).
+
+    A survey animal with a file that never became a candidate
+    went out on its habitat; `wanted` stays the unfiled ones.
+    """
+    part_of = _part_of(answer)
+    drops: list[dict[str, str]] = []
+    for species_id in answer["present"]:
+        if species_id in candidate_ids:
+            continue
+        if not (animals_dir / f"{species_id}.json").is_file():
+            continue
+        if species_id not in part_of:
+            continue
+        drops.append(
+            {"what": species_id, "part": part_of[species_id], "why": "habitat"}
+        )
+    return drops
+
+
+def merge_survey_left_out(made: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
+    """Its tiles' left-out lists as one, each entry once (#278.3)."""
+    merged: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for tile in sorted(made):
+        for entry in made[tile].get("survey_left_out") or []:
+            key = (entry["what"], entry["part"], entry["why"])
+            if key not in seen:
+                seen.add(key)
+                merged.append({"what": key[0], "part": key[1], "why": key[2]})
+    return merged
 
 
 def _split_species(
@@ -2160,21 +2250,13 @@ def make_tile(
             coast = [mask[r * 5 : (r + 1) * 5] for r in range(5)]
     lat, lon = center(tile)
     animals = list_animals(world)
-    candidates = []
-    seen: set[str] = set()
-    labels = _candidate_habitats(habitat, eco1, biome, land, water)
-    if home == "coral_reef":
-        # Reef-filed animals live on reef tiles, not plain sea ones.
-        labels.add("reef")
-    for label in sorted(labels):
-        for entry in animals_for_habitat(animals, label):
-            if entry["id"] not in seen:
-                seen.add(entry["id"])
-                candidates.append(entry)
+    candidates: list[dict[str, Any]] = []
     if habitat == "open_ocean":
         # Open sea: only animals that live at sea, by code (#177.3).
         candidates = open_sea_entries(world, animals)
     wanted: list[dict[str, str]] | None = None
+    left_out: list[dict[str, str]] = []
+    part_of: dict[str, str] = {}
     greens: dict[str, Any] | None = None
     if presence is not None:
         present = {s: n for s, n in presence.items() if n > 0}
@@ -2233,10 +2315,19 @@ def make_tile(
             except SpeciesPlaceError:
                 return None, {"reason": "species_place", "habitat": habitat}
             date = answer["date"]
-        ordered = [s for s in answer["present"] if s in {a["id"] for a in candidates}]
+        part_kinds = [p.get("kind", "") for p in answer["parts"]]
+        labels = _candidate_habitats(habitat, eco1, biome, land, water, part_kinds)
+        if home == "coral_reef":
+            # Reef-filed animals live on reef tiles, not plain sea ones.
+            labels.add("reef")
+        candidates = _label_candidates(animals, labels)
+        candidate_ids = {a["id"] for a in candidates}
+        ordered = [s for s in answer["present"] if s in candidate_ids]
         present = rank_weights(ordered)
         species_tag = f"{SPECIES_MODEL}:{date}"
-        wanted = wanted_drops(answer, {a["id"] for a in candidates}, world)
+        wanted = wanted_drops(answer, candidate_ids, world)
+        part_of = _part_of(answer)
+        left_out = survey_label_drops(answer, candidate_ids, world / "animals")
         sea = 1.0 if _tile_has_sea(habitat, land, coast) else 0.0
         greens, needs, wants, capped = tile_plants(world, answer, home, land, sea)
         if over_cap is not None:
@@ -2270,8 +2361,19 @@ def make_tile(
         kept, fish_hunts = converted
         candidates = {s: _animal(animals_dir / f"{s}.json") for s in filed}
         playable, prey, predators = _split_species(ranked, kept, candidates, fish_hunts)
+    if part_of:
+        kept_final = set(playable) | set(prey) | set(predators)
+        for species_id in filed:
+            if species_id not in kept_final and species_id in part_of:
+                left_out.append(
+                    {
+                        "what": species_id,
+                        "part": part_of[species_id],
+                        "why": "not_candidate",
+                    }
+                )
     if not playable:
-        return None, _blocked("no_animal", habitat, wanted)
+        return None, _blocked("no_animal", habitat, wanted, left_out)
     maker, commit = _versions(builder_root or BUILDER_ROOT, world)
     needed = sorted({home} | ({blend["home"]} if blend else set()))
     requires: dict[str, Any] = {
@@ -2346,6 +2448,8 @@ def make_tile(
         made_tile["plants"] = greens
     if wanted:
         made_tile["wanted"] = wanted
+    if left_out:
+        made_tile["survey_left_out"] = left_out
     terrain = _reef_terrain(habitat_grid, tile)
     if terrain is not None:
         made_tile["terrain"] = terrain

@@ -1519,6 +1519,11 @@ class Worker:
         self._record_place_survey_spend(job_id, job, survey_before)
         if over_cap:
             self._update(job_id, {"plants_over_cap": sorted(set(over_cap))})
+        from .tiles import merge_survey_left_out
+
+        merged = merge_survey_left_out(made)
+        if merged:
+            self._update(job_id, {"survey_left_out": merged})
         return made
 
     def _place_ship_all_species(
@@ -2431,6 +2436,8 @@ class Worker:
             extra["versions"] = {tile: made["version"]}
         if over_cap:
             extra["plants_over_cap"] = sorted(set(over_cap))
+        if made.get("survey_left_out"):
+            extra["survey_left_out"] = made["survey_left_out"]
         self._set_status(job_id, "published", extra)
         self._plan_ring(tile)
 

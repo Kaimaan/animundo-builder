@@ -57,6 +57,11 @@
             "description": "What the survey found living here that the world doesn't have yet, at most 12, in the survey's order. A playable animal wanted in a no_animal tile would open it.",
             "maxItems": 12,
             "items": {"$ref": "#/$defs/wanted_entry"}
+          },
+          "survey_left_out": {
+            "type": "array",
+            "description": "What the survey found that has a file but still isn't on the tile: the tile's labels or the select dropped it. Each names its first part and a short why. A report, never a request (#278.3).",
+            "items": {"$ref": "#/$defs/left_out_entry"}
           }
         }
       }
@@ -93,6 +98,16 @@
           "pattern": "^([a-z][a-z0-9_]*|gbif:[0-9]+)$"
         },
         "part": {"type": "string", "minLength": 1}
+      }
+    },
+    "left_out_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["what", "part", "why"],
+      "properties": {
+        "what": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "part": {"type": "string", "minLength": 1},
+        "why": {"type": "string", "minLength": 1}
       }
     }
   }

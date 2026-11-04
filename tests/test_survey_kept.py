@@ -153,24 +153,12 @@ def _live_world_and_grid() -> tuple[Path, Any]:
     return world, load_grid(grid_dir)
 
 
-def _cached_survey(tile: str) -> dict[str, Any]:
+def _recorded_survey(tile: str) -> dict[str, Any]:
+    """The tile's survey, recorded from the Nov 1 cached answer."""
     from builder.schemas import ROOT
 
-    cached = json.loads((ROOT / "data" / "species" / f"{tile}.json").read_text())
-    return {
-        key: cached[key]
-        for key in (
-            "place",
-            "parts",
-            "plants",
-            "trees",
-            "outside_animals",
-            "outside_plants",
-            "name_en",
-            "name_fi",
-        )
-        if key in cached
-    }
+    path = ROOT / "tests" / "fixtures" / "species" / f"{tile}.json"
+    return json.loads(path.read_text())
 
 
 def _kept(made: dict[str, Any]) -> set[str]:
@@ -188,7 +176,7 @@ def test_taiga_replay_keeps_gull_perch_pike() -> None:
         habitat_grid,
         world,
         builder_root=ROOT,
-        species=_cached_survey("z10_0583_0295"),
+        species=_recorded_survey("z10_0583_0295"),
     )
     assert blocked is None, blocked
     assert made is not None
@@ -207,7 +195,7 @@ def test_saimaa_replay_keeps_forest_animals() -> None:
         habitat_grid,
         world,
         builder_root=ROOT,
-        species=_cached_survey("z10_0592_0284"),
+        species=_recorded_survey("z10_0592_0284"),
     )
     assert blocked is None, blocked
     assert made is not None

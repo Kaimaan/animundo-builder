@@ -1,0 +1,299 @@
+{
+  "name_en": "Pine Forest Town by the Winding River",
+  "name_fi": "M\u00e4ntymets\u00e4n kaupunki mutkajoen varrella",
+  "parts": [
+    {
+      "kind": "forest",
+      "species": [
+        "fox",
+        "moose",
+        "mountain_hare",
+        "squirrel",
+        "flying_squirrel",
+        "vole",
+        "lynx",
+        "pine_marten",
+        "badger",
+        "stoat",
+        "raccoon_dog",
+        "roe_deer",
+        "white_tailed_deer",
+        "wild_boar",
+        "hedgehog",
+        "brown_hare",
+        "shrew",
+        "wood_mouse",
+        "ural_owl",
+        "eagle_owl",
+        "buzzard",
+        "goshawk",
+        "raven",
+        "magpie",
+        "jay",
+        "robin",
+        "great_tit",
+        "blue_tit",
+        "chaffinch",
+        "bullfinch",
+        "blackbird",
+        "great_spotted_woodpecker",
+        "black_woodpecker",
+        "crossbill",
+        "waxwing",
+        "cuckoo",
+        "capercaillie",
+        "black_grouse",
+        "frog",
+        "common_toad",
+        "moor_frog",
+        "smooth_newt",
+        "adder",
+        "grass_snake",
+        "slow_worm",
+        "lizard",
+        "bee",
+        "wasp",
+        "peacock_butterfly",
+        "brimstone",
+        "swallowtail",
+        "small_tortoiseshell",
+        "bat",
+        "dragonfly",
+        "ladybird",
+        "ant",
+        "spider",
+        "snail"
+      ]
+    },
+    {
+      "kind": "town",
+      "species": [
+        "fox",
+        "squirrel",
+        "vole",
+        "badger",
+        "stoat",
+        "hedgehog",
+        "brown_hare",
+        "shrew",
+        "wood_mouse",
+        "kestrel",
+        "great_tit",
+        "blue_tit",
+        "chaffinch",
+        "bullfinch",
+        "blackbird",
+        "magpie",
+        "robin",
+        "swallow",
+        "great_spotted_woodpecker",
+        "herring_gull",
+        "frog",
+        "common_toad",
+        "lizard",
+        "bee",
+        "wasp",
+        "peacock_butterfly",
+        "brimstone",
+        "small_tortoiseshell",
+        "bat",
+        "dragonfly",
+        "ladybird",
+        "ant",
+        "spider",
+        "snail"
+      ]
+    },
+    {
+      "kind": "farmland",
+      "species": [
+        "fox",
+        "mountain_hare",
+        "vole",
+        "stoat",
+        "badger",
+        "raccoon_dog",
+        "roe_deer",
+        "white_tailed_deer",
+        "wild_boar",
+        "brown_hare",
+        "shrew",
+        "wood_mouse",
+        "kestrel",
+        "buzzard",
+        "raven",
+        "magpie",
+        "great_tit",
+        "chaffinch",
+        "blackbird",
+        "swallow",
+        "cuckoo",
+        "whooper_swan",
+        "canada_goose",
+        "common_crane",
+        "grey_heron",
+        "herring_gull",
+        "frog",
+        "common_toad",
+        "moor_frog",
+        "bee",
+        "wasp",
+        "peacock_butterfly",
+        "brimstone",
+        "swallowtail",
+        "small_tortoiseshell",
+        "ladybird",
+        "ant",
+        "spider",
+        "snail"
+      ]
+    },
+    {
+      "kind": "river",
+      "species": [
+        "vole",
+        "otter",
+        "beaver",
+        "muskrat",
+        "shrew",
+        "mallard",
+        "whooper_swan",
+        "canada_goose",
+        "goldeneye",
+        "grey_heron",
+        "kingfisher",
+        "dipper",
+        "perch",
+        "pike",
+        "roach",
+        "bream",
+        "brown_trout",
+        "burbot",
+        "eel",
+        "frog",
+        "common_toad",
+        "moor_frog",
+        "smooth_newt",
+        "grass_snake",
+        "bee",
+        "dragonfly",
+        "ladybird",
+        "ant",
+        "spider"
+      ]
+    }
+  ],
+  "place": "Inland boreal forest with suburbs, fields and a small river",
+  "plants": [
+    {
+      "count": 500,
+      "id": "bilberry"
+    },
+    {
+      "count": 400,
+      "id": "lingonberry"
+    },
+    {
+      "count": 150,
+      "id": "heather"
+    },
+    {
+      "count": 100,
+      "id": "crowberry"
+    },
+    {
+      "count": 200,
+      "id": "fireweed"
+    },
+    {
+      "count": 300,
+      "id": "wood_anemone"
+    },
+    {
+      "count": 150,
+      "id": "lily_of_the_valley"
+    },
+    {
+      "count": 120,
+      "id": "wild_raspberry"
+    },
+    {
+      "count": 150,
+      "id": "bracken"
+    },
+    {
+      "count": 200,
+      "id": "spiny_wood_fern"
+    },
+    {
+      "count": 250,
+      "id": "wavy_hair_grass"
+    },
+    {
+      "count": 400,
+      "id": "red_stemmed_feathermoss"
+    },
+    {
+      "count": 80,
+      "id": "juniper"
+    },
+    {
+      "count": 60,
+      "id": "goat_willow"
+    },
+    {
+      "count": 100,
+      "id": "red_clover"
+    },
+    {
+      "count": 100,
+      "id": "white_clover"
+    },
+    {
+      "count": 60,
+      "id": "chanterelle"
+    },
+    {
+      "count": 50,
+      "id": "porcini"
+    },
+    {
+      "count": 60,
+      "id": "fly_agaric"
+    },
+    {
+      "count": 40,
+      "id": "cottongrass"
+    },
+    {
+      "count": 60,
+      "id": "peat_moss"
+    },
+    {
+      "count": 50,
+      "id": "reindeer_lichen"
+    }
+  ],
+  "trees": [
+    {
+      "count": 120,
+      "id": "norway_spruce"
+    },
+    {
+      "count": 100,
+      "id": "scots_pine"
+    },
+    {
+      "count": 90,
+      "id": "birch"
+    },
+    {
+      "count": 25,
+      "id": "aspen"
+    },
+    {
+      "count": 20,
+      "id": "rowan"
+    }
+  ]
+}

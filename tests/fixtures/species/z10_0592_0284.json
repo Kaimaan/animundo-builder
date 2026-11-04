@@ -1,0 +1,202 @@
+{
+  "name_en": "Sealy Sparkling Lake Islands",
+  "name_fi": "Norppaj\u00e4rven saaret",
+  "parts": [
+    {
+      "kind": "forest",
+      "species": [
+        "fox",
+        "moose",
+        "mountain_hare",
+        "squirrel",
+        "flying_squirrel",
+        "vole",
+        "kestrel",
+        "great_tit",
+        "chaffinch",
+        "bee",
+        "lynx",
+        "wolf",
+        "brown_bear",
+        "wolverine",
+        "pine_marten",
+        "badger",
+        "stoat",
+        "raccoon_dog",
+        "roe_deer",
+        "white_tailed_deer",
+        "wild_boar",
+        "hedgehog",
+        "brown_hare",
+        "shrew",
+        "wood_mouse",
+        "ural_owl",
+        "eagle_owl",
+        "buzzard",
+        "goshawk",
+        "raven",
+        "magpie",
+        "jay",
+        "robin",
+        "blue_tit",
+        "bullfinch",
+        "blackbird",
+        "great_spotted_woodpecker",
+        "black_woodpecker",
+        "crossbill",
+        "waxwing",
+        "cuckoo",
+        "capercaillie",
+        "black_grouse",
+        "wasp",
+        "peacock_butterfly",
+        "brimstone",
+        "swallowtail",
+        "small_tortoiseshell",
+        "ladybird",
+        "ant",
+        "spider"
+      ]
+    },
+    {
+      "kind": "shore",
+      "species": [
+        "frog",
+        "lizard",
+        "common_toad",
+        "moor_frog",
+        "smooth_newt",
+        "adder",
+        "grass_snake",
+        "slow_worm",
+        "common_crane",
+        "grey_heron",
+        "swallow",
+        "dipper",
+        "dragonfly"
+      ]
+    },
+    {
+      "kind": "lake",
+      "species": [
+        "saimaa_seal",
+        "mallard",
+        "perch",
+        "pike",
+        "roach",
+        "bream",
+        "otter",
+        "beaver",
+        "muskrat",
+        "white_tailed_eagle",
+        "osprey",
+        "whooper_swan",
+        "mute_swan",
+        "canada_goose",
+        "goldeneye",
+        "black_throated_loon",
+        "common_tern",
+        "herring_gull",
+        "atlantic_salmon",
+        "brown_trout",
+        "arctic_char",
+        "zander",
+        "burbot",
+        "eel"
+      ]
+    }
+  ],
+  "place": "Lake Saimaa island labyrinth in eastern Finland",
+  "plants": [
+    {
+      "count": 60,
+      "id": "bilberry"
+    },
+    {
+      "count": 60,
+      "id": "lingonberry"
+    },
+    {
+      "count": 20,
+      "id": "crowberry"
+    },
+    {
+      "count": 20,
+      "id": "heather"
+    },
+    {
+      "count": 15,
+      "id": "fireweed"
+    },
+    {
+      "count": 20,
+      "id": "wood_anemone"
+    },
+    {
+      "count": 15,
+      "id": "lily_of_the_valley"
+    },
+    {
+      "count": 30,
+      "id": "wavy_hair_grass"
+    },
+    {
+      "count": 40,
+      "id": "red_stemmed_feathermoss"
+    },
+    {
+      "count": 10,
+      "id": "reindeer_lichen"
+    },
+    {
+      "count": 10,
+      "id": "peat_moss"
+    },
+    {
+      "count": 8,
+      "id": "cottongrass"
+    },
+    {
+      "count": 10,
+      "id": "wild_raspberry"
+    },
+    {
+      "count": 8,
+      "id": "juniper"
+    },
+    {
+      "count": 5,
+      "id": "chanterelle"
+    },
+    {
+      "count": 5,
+      "id": "porcini"
+    },
+    {
+      "count": 5,
+      "id": "fly_agaric"
+    }
+  ],
+  "trees": [
+    {
+      "count": 120,
+      "id": "norway_spruce"
+    },
+    {
+      "count": 100,
+      "id": "scots_pine"
+    },
+    {
+      "count": 80,
+      "id": "birch"
+    },
+    {
+      "count": 12,
+      "id": "aspen"
+    },
+    {
+      "count": 10,
+      "id": "rowan"
+    }
+  ]
+}

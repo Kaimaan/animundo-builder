@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #298 (Baseten ledger NULs + silent Meta fallback) — ready to deploy
+
+- Commit `4dc0128`, CI green run 41837869708. Fix and say "ready to deploy"; Kai decides the deploy (not self-deployed: test 3 is running, and this item reserves the deploy to Kai).
+- Cause: the append side, not the truncate. `truncate()` shrinks fine on the Volume (proven by experiment: size 0 after truncate, locally and on the Volume), and a non-shrinking truncate would have left old JSON, not NULs — so the O_APPEND write landed at the stale pre-truncate EOF over a zero-filled hole. A 300-cycle 12 KB stress run on the Volume could not trip it again: a metadata race, not steady behavior. (Scratch files removed after each experiment.)
+- Fix: every file ledger (Meta, Baseten, allowance) now locks a `.lock` sidecar and writes by temp file + flush + fsync + `os.replace`, so a rewrite always lands whole. `JobContext.chat` falls back to Meta only on refusal and `CapExceeded`; a `LedgerError` stays loud through the standard ledger path (progress error, alert, `_BudgetOut("ledger")`), like the Meta ledger's. Log rows keep naming the host per call, as now.
+- Fallback window: open (chat) calls went to Meta from **12:06:28 UTC / 14:06 EET** (test-2 capybara: last Baseten chat 12:06:11, `settle_failed` 12:06:28, first Meta chat 12:06:39). Affected: test-2's final close call + all of test-3's chats (10/10 Meta so far — test-3 runs on the fallback; its sheets still judge the tool's shapes, both models being Meta's). Correction to the item: test-2's anaconda/jaguar/tapir/macaw/piranha/iguana Meta spend is by-design research (`respond` is Meta-only: one `muse-spark-1.3` call each, 11:59–12:01 UTC), not fallback — as are the enrich-platypus and #293-job Meta rows (08:42–08:54 UTC, `responses` only) and the `survey:*` rows.
+- Repair: pending test-3's end plus this deploy, in that order. Any write by the old code re-corrupts the file at once, so repairing now (writer racing) or before the deploy (first old write after) would lose. The intact JSON parses to $3.461061 / 30 jobs (verified from a read-only download); the repair strips the 11,962 NULs, preserves the spend, and re-verifies by worker read-back. Baseten total after the repair follows here.
+- Tests: NUL-padded file raises; broken-open-ledger chat raises without calling Meta; rewrite-after-longer leaves exact JSON; writes swap inodes atomically with no temp leftovers. The racing-caps test still passes under the sidecar lock. Full suite 1370 passed + 12 skipped, ruff clean. $0.
+
 ## 2026-11-04: inbox #297 (legs hidden-or-absurd; test builds run to the end), live as v50, test 3 running
 
 - Commit `44ac66a`, CI green run 41830402165. Worker v50 deployed 12:49 UTC (single container `ta-01M6K9PEV8DWYHYVP3KF3TXRSR`, `BUILDER_COMMIT=44ac66a`, world `f0d042d`, verified by exec). Deploy authority: #275 owns Mamirauá end to end, and #297.3 orders test build 3.

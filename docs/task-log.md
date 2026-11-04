@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #283, ring ahead — built, worker v52 live
+
+- `bf27f08` (#283: ring ahead plans the eight neighbours of a published tile). CI green, deployed per standing go: worker **v52** on `bf27f08`, single container `ta-01M6KJMMFTE1EAMCNXWN7G69QR` (old v51 stopped).
+- The ring runs at the end of `_set_published` (code/remake/build publishes) and per tile in the place publish loop, after the publish's own spend settled, so it only spends what's left.
+- Per neighbour it skips excluded/published (group blob)/planned-for-this-commit (blocked included; #280.5's re-plan runs separately), writes a `request` doc `ahead_<tile>` in `build_jobs`, and plans now while the day allows: `ahead_per_day` (default 200, 0 stops the ring) counted from `ahead:true` plans stamped `ahead_day`, and `auto_daily_usd` (default 20.0, new `Config` field) checked against the ledger's day spend plus a $0.05 plan estimate. Open ocean plans $0 past a spent budget (no survey). A note on a ring-planned tile on the same world commit reuses the plan; the listener never queues `kind: request` docs. One ring only: plan writes start nothing.
+- Readings: no off-switch re-enqueue status exists in either repo (#158 deals in `queued`), so waiting docs carry `status: pending` + `requested_by: ring`, `planned` once planned; no auto-resume exists builder-side yet, so `auto_daily_usd` is the shared automatic-work day cap by name. One-line changes if Kai wants other strings.
+- Tests: new `tests/test_ring.py`, 10 tests (eight planned on publish, four skip kinds, 201st waits, 0 stops, spent budget stops, open-sea $0, no chain, same-commit reuse, old-commit replan, listener skip). Focused 10 pass; related suites 210 pass (`test_worker/config/plan/replan`); `test_place_job` 54 pass; ruff clean.
+- Cost: $0 (no live runs; the survey-price evidence in the entry below came from the ledger's existing namespaces).
+
 ## 2026-11-04: inbox #283, ring ahead — cost first (code follows)
 
 - A ring plan is one survey; the plan itself is $0 (cached species answer + pure code; GBIF presence is a free API, Firestore writes negligible). Measured from today's `survey:<tile>` ledger namespaces (survey spend attributes per tile, species call included):

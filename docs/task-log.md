@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #293, new-shape pricing — worker v54 live, platypus tile rebuilt
+
+- `1009968` (#293: new-shape animals quote animal_new with its own median). CI green, deployed per standing go: worker **v54** on `1009968`, single container `ta-01M6KQTNTJ6X9RV13XBGMPW5SR` (old v53 stopped).
+- Entries with `shape: "new"` now quote kind `animal_new`: fixed $1.44 (the whale's measured full new-shape item, #191.3 — above #180's $0.29 round-1 floor) until the cost log medians 3 new-shape rows of its own; the edits `animal` median excludes new-shape rows once the list is known. Every animal plan item (items + improve) carries `estimate_kind`; `_pick_animal` untouched; place pricing untouched (out of scope).
+- Tests: 2 plan tests (shape-new quotes `animal_new`/$1.44, edits still `animal`/$0.42) + 1 median test (split medians, fixed without the list); updated 2 exact item assertions. Suites: plan+costs 63, schemas+cli+build 152, worker+place_job 189 pass; ruff clean.
+- Rebuild (per Kai's order, overriding #293's "don't rebuild"): the platypus was already filed (world `0d6911e`) and v18 already seated it playable, so `node admin.mjs remake z10_0926_0561` → job `remake_20261104_z10_0926_0561` **published** at $0 with identical content (v18 kept, platypus still playable, no `survey_left_out`). Note `approve` would have refused (`code_only` plan) — remake was the only path.
+- The remake's publish fired the live ring: 7 neighbours ring-planned (4 clean, 3 `no_home`), 1 skipped as published (v17) — all as designed, $0 (surveys cached, cache files predate the remake).
+- Cost: $0 total (remake $0, ring $0). The old failures stand as history: build job $0.128 (budget), enrich $0.105 (no place converted), auto wild-boar $0.182 (nothing shipped).
+
 ## 2026-11-04: inbox #278, new tiles keep survey animals — worker v53 live
 
 - `258f2dd` + `57cf895` (#278). CI green on the second (the first read the gitignored local species cache; the replays now read committed fixtures). Deployed per standing go (tile-queue order overrides #279's together-deploy: #277 comes later in the queue): worker **v53** on `57cf895`, single container `ta-01M6KPD649NRJEB76TP2Z24Q5R` (old v52 stopped).

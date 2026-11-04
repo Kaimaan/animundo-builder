@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #296 (shape words to the new marks), live as v49, test 2 running
+
+- Commit `f76656e`, CI green run 41822850464. Worker v49 deployed 11:52 UTC (single container `ta-01M6K6FKX9HNJWR62M01T0R68R`, `BUILDER_COMMIT=f76656e`, world `f0d042d` with rosettes in the tool, verified by exec). Deploy authority: #275 owns Mamirauá end to end, and #296's ordered test build 2 needs the mapping live.
+- #296.1–3: `_tool_marks` maps ring spots/rosettes/open rings → `rosettes`, blotches/patches/saddles → `blotches` on snakes and lizards only (giraffe-safe: unmapped elsewhere), crest/dorsal spines/spiky ridge + any lizard spines → `crest`; `spines` stays the hedgehog's coat, fin spines stay unmapped. Taxon tags come from the reference name (`_ref_tags`: `grass_snake` → snake), threaded through both seeding sites and `_mark_miss`. `TOOL_MARKS` mirrors the tool's new MARKS (fix rounds may ask them). The marks judge prompt maps the same shape words to their render shapes (round rings with the coat's colour inside; spaced patches down the back and sides; one row of spikes mid-back).
+- #296.4: the edits schema and prompt run `tail_width` down to 0.2 (rest stays 0.4–2.5). #296.5: `big_cat` resolves from `models/examples/` like the grass snake (animal-list starts the six cats from it); the world's worked jaguar asks only `rosettes`, a tool mark. #296.6: the edits prompt heavies long thin animals (`body_girth` 1.6–2.0, as a green anaconda must) — prompt permission, no measured-girth loop (research emits no `girth_cm`, so a sourced loop would be dead code; the item's "is fine" asks permission, not enforcement).
+- No maker stamp bump: `2026-11-04` already remakes all 7 for test 2 (test-1 files are `2026-11-03`).
+- Tests: 17 new (9 mapping + ref-tags + TOOL_MARKS, mark-miss keeps, judge legend, 3 edits-prompt lines, schema 0.2, big_cat fallback, worked-jaguar contract). The #288.3 ring test now expects `rosettes` (its expectation died with the tool change). One fixture completed along the way (`_marks_errors` target gains production-realistic `start_from`). Full suite 1361 passed + 12 skipped, ruff clean. $0.
+- Test build 2 (`place_20261104_mamiraua_test_2`, publish-off, cap $4, doc-only copy like test 1) created 11:58 UTC, picked up 11:58:03 UTC on v49. #276 entry follows when it ends. Expected ~$2.21 (full fresh re-run); running total $2.92 + this run stays under the $9 stop.
+
 ## 2026-11-04: inbox #295 (Mamirauá to $10, quality first)
 
 - Answered: envelope is $10 ($2.92 true spent), stop-and-ask moves from $5 to $9, no test build 2 until the rosettes/blotches/crest tool-marks follow-up lands (then map the shape words to the new marks and rebuild). Raised the real job's `cap_usd` 6 → 10, verified by read-back (the cap tracks the envelope; the $9 total is now the operative guard, held agent-side — no hardcoded budget in code, so no code change). Test-1's $4.0 cap still covers test 2 (~$3.93 doc dollars), left alone.

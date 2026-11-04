@@ -111,20 +111,33 @@ class ShoreData:
     def nearest(self, lon: float, lat: float) -> tuple[float, str | None]:
         """Real metres to the nearest shore, and its lake (sea: None).
 
-        The point's own longitude and its ±360 twins, so shores
-        across the date line count.
+        The segment nearest in degrees is often not the nearest
+        in metres (at 60°N a longitude degree is half a latitude
+        degree), so the degree-nearest only sizes a search box in
+        real metres, and every segment in the box is measured
+        (#290). The point's own longitude and its ±360 twins, so
+        shores across the date line count.
         """
+        from shapely.geometry import box as _box
+
         best = math.inf
         lake: str | None = None
+        kx = LON_METRES * math.cos(math.radians(lat))
+        dx_full = 360.0 if kx <= 1e-6 else None
         for shift in (-360.0, 0.0, 360.0):
-            found = self._segments.nearest(self._point(lon + shift, lat))
+            qx = lon + shift
+            found = self._segments.nearest(self._point(qx, lat))
             if found is None:
                 continue
-            index = int(found)
-            dist = _seg_metres(self._seg_geoms[index], lon + shift, lat)
-            if dist < best:
-                best = dist
-                lake = self._seg_lakes[index]
+            first = _seg_metres(self._seg_geoms[int(found)], qx, lat)
+            dx = dx_full if dx_full is not None else first / kx
+            dy = first / LAT_METRES
+            grown = _box(qx - dx, lat - dy, qx + dx, lat + dy)
+            for index in self._segments.query(grown):
+                dist = _seg_metres(self._seg_geoms[int(index)], qx, lat)
+                if dist < best:
+                    best = dist
+                    lake = self._seg_lakes[int(index)]
         return best, lake
 
 

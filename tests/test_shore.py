@@ -135,3 +135,51 @@ def test_shore_and_side_wrap_at_the_date_line(tmp_path: Path) -> None:
     data = ShoreData(grid_dir)
     assert data.side(179.7, 0.0) is True
     assert data.side(180.0, 0.0) is False
+
+
+def _metre_grid(tmp_path: Path) -> Path:
+    """Two shores at 60°N: one 0.01° east, one 0.008° north."""
+    import gzip
+    import json
+
+    grid_dir = tmp_path / "metres"
+    grid_dir.mkdir()
+    east = [[0.01, 59.9], [0.02, 59.9], [0.02, 60.1], [0.01, 60.1]]
+    east.append(east[0])
+    north = [[-0.1, 60.008], [0.1, 60.008], [0.1, 60.02], [-0.1, 60.02]]
+    north.append(north[0])
+    raw = {"land": [[east]], "lakes": {"L1": [[north]]}}
+    with gzip.open(grid_dir / "shore.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump(raw, handle)
+    (grid_dir / "lakes.json").write_text(json.dumps({"lakes": {}}))
+    return grid_dir
+
+
+def test_nearest_shore_measures_metres_not_degrees(tmp_path: Path) -> None:
+    """#290: at 60°N the 0.01°-east shore beats the 0.008°-north one."""
+    from builder.shore import ShoreData
+
+    data = ShoreData(_metre_grid(tmp_path))
+    dist, lake = data.nearest(0.0, 60.0)
+    assert lake is None, "the east land shore, not the north lake"
+    assert 500 < dist < 620, f"east shore ~557 m away, got {dist}"
+
+
+def test_fixed_tile_within_32m_of_record() -> None:
+    """#290: z10_0593_0285 stays within 32 m (game) of record."""
+    import json
+
+    _need_grid()
+    from builder.shore import shore_for_tile
+
+    record = json.loads(
+        (Path(__file__).resolve().parent / "fixtures" / "shore" / "z10_0593_0285.json")
+        .read_text()
+        .strip()
+    )
+    shore = shore_for_tile("z10_0593_0285", GRID)
+    assert shore is not None
+    d, _lake = _decode(shore)
+    assert len(d) == len(record)
+    worst = max(abs(got - want) for got, want in zip(d, record))
+    assert worst <= 32, f"off record by {worst} m"

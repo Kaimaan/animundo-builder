@@ -10,7 +10,14 @@ models are simple, never realistic: a mark is met when a
 child would see its shape, not its fine detail. But
 shape words still bind: hollow rings are not solid dots,
 one named spot is not many, and a mark named on a part
-shows only there.
+shows only there. The new marks set their shapes:
+"rosettes", "ring spots" and "open rings" are round rings
+with the coat's colour inside (rosettes), never solid
+dots; "blotches", "saddles" and "patches" on a snake or
+lizard are spaced patches down the back and sides
+(blotches); a "crest", "dorsal spines" or "spiky ridge"
+is one row of spikes along the middle of the back
+(crest).
 
 ## Input
 

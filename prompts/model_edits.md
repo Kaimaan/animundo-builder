@@ -32,11 +32,12 @@ The schema arrives with the call; its shape:
   none.
 - `new_colors`: more colours the animal needs, as
   `{"name", "hex"}` pairs; usually empty.
-- Seven factors, numbers 0.4 to 2.5, 1 meaning as the
-  reference: `head` (the head, whole), `muzzle` (the face in
-  front of the eyes), `ears`, `leg_thickness` (legs' width,
-  never length), `paws` (the lowest part of each leg),
-  `body_girth` (the body's width and depth), `tail_width`.
+- Seven factors, numbers 0.4 to 2.5 but `tail_width`
+  down to 0.2, 1 meaning as the reference: `head` (the
+  head, whole), `muzzle` (the face in front of the eyes),
+  `ears`, `leg_thickness` (legs' width, never length),
+  `paws` (the lowest part of each leg), `body_girth` (the
+  body's width and depth), `tail_width`.
   `muzzle` is a mammal's face; a bird's is its `bill`. A bird
   reference offers three more, only when the schema names them:
   `neck` (the neck's length; the head rides along), `bill` (the
@@ -62,8 +63,9 @@ The schema arrives with the call; its shape:
   adds the mark that makes its missing shape here.
 
 Marks need no entry on the first round: code adds ear tufts,
-ruffs, tail tips, bands and stripes, spots, spines and hammer
-heads from the research's own words and the animal's name.
+ruffs, tail tips, bands and stripes, spots, rosettes,
+blotches, spines, crests and hammer heads from the
+research's own words and the animal's name.
 Few wide bars are bands (a clownfish's three white bands);
 many thin stripes are stripes (a zebra, a tiger). A fish that
 is mostly its colour keeps the colour: bands only when the
@@ -81,6 +83,9 @@ None. Write from the input only.
   differences from the reference read clear at game distance
   (big paws and thick legs want 1.4–1.6, not 1.2). Small
   factors keep the reference's look.
+- The long and thin read as a line: a snake at `body_girth`
+  1 still looks thin at game distance; 1.6–2.0 looks heavy,
+  as a green anaconda must.
 - Never invent marks, and never fake one with factors or
   repaints: what the research names, code adds; the rest goes
   in `unmakable`.

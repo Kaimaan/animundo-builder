@@ -542,13 +542,14 @@ class AnimalMakerStage:
                         for mark in (research.get("looks") or {}).get("marks", [])
                         if isinstance(mark, dict) and "mark" in mark
                     ]
-                marks, unmatched = _tool_marks(words)
+                tags = _ref_tags(target["start_from"])
+                marks, unmatched = _tool_marks(words, tags)
                 key_marks = [
                     mark
                     for mark in (edits.get("key_marks") or [])
                     if isinstance(mark, str) and mark.strip()
                 ][:2]
-                keyed, _ = _tool_marks(key_marks)
+                keyed, _ = _tool_marks(key_marks, tags)
                 marks = [*marks, *[m for m in keyed if m not in marks]]
                 # A name that is a shape seeds its tool mark, always (#183.3).
                 seeded = [m for m in _name_shapes(target) if m in SHAPE_MARKS]
@@ -721,7 +722,12 @@ class AnimalMakerStage:
             ),
             encoding="utf-8",
         )
-        return [_mark_miss(mark) for mark in review["missing"] if isinstance(mark, str)]
+        tags = _ref_tags(target["start_from"])
+        return [
+            _mark_miss(mark, tags)
+            for mark in review["missing"]
+            if isinstance(mark, str)
+        ]
 
     def _animal_files(
         self, world: Path, answer: str
@@ -2248,7 +2254,8 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
 
     Colours and part names come from the reference spec itself,
     so the answer can only name what exists; factors stay in the
-    tool's 0.4–2.5 (bill depth to 4.0). Bird factors join only
+    tool's 0.4–2.5 (bill depth to 4.0, tail width down to 0.2
+    for a cat's thin tail, #296.4). Bird factors join only
     when the reference has such parts. Every key required,
     nothing extra, flat.
     """
@@ -2258,7 +2265,7 @@ def _edits_schema(ref: dict[str, Any]) -> dict[str, Any]:
     factors = {
         name: {
             "type": "number",
-            "minimum": 0.4,
+            "minimum": 0.2 if name == "tail_width" else 0.4,
             "maximum": 4.0 if name == "bill_depth" else 2.5,
             "description": f"{name}, 1 meaning as the reference",
         }
@@ -2504,7 +2511,10 @@ TOOL_MARKS = (
     "bands",
     "hammer",
     "spots",
+    "rosettes",
+    "blotches",
     "spines",
+    "crest",
 )
 
 #: Marks that add or reshape parts, rather than painting (#183.2).
@@ -2559,22 +2569,39 @@ def _shape_part_errors(
     return errors
 
 
-def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
+def _ref_tags(start_from: str) -> tuple[str, ...]:
+    """The reference name's words, as taxon tags (#296).
+
+    `grass_snake` gives `("grass", "snake")`, so the
+    shape-word mapping reads `snake` and `lizard` off the
+    reference the animal starts from.
+    """
+    return tuple(Path(start_from).stem.split("_"))
+
+
+def _tool_marks(
+    words: list[str], tags: tuple[str, ...] = ()
+) -> tuple[list[str], list[str]]:
     """Look-mark words to the tool's marks (#63.1).
 
     "ruff" gives `ruff`, "tuft" gives `ear_tufts`, "tail"
     plus "tip" gives `tail_tip`; few wide bars or bands give
     `bands`, many thin stripes give `stripes` (#149.1), spots
-    give `spots`, a hammer head gives `hammer`, and spines
-    give `spines` unless they are fin spines, which the
-    tool's hedgehog coat can't make (#146.3). Rings and
-    rosettes are not the tool's solid diamonds, and one
-    named spot is not its whole-coat scatter: both stay
-    unmapped, for the report (#288.3). The rest go
-    unmakable, for the report.
+    give `spots`, a hammer head gives `hammer`. Ring spots,
+    rosettes and open rings give `rosettes`; blotches,
+    patches and saddles give `blotches` on a snake or a
+    lizard, and stay unmapped anywhere else (#296.1-2).
+    A crest, dorsal spines or a spiky ridge give `crest`,
+    and a lizard's other spines do too: `spines` stays the
+    hedgehog's coat, never a lizard's (#296.3). Fin spines
+    stay unmapped, which the tool's coats can't make
+    (#146.3), and one named spot is not the whole-coat
+    scatter: it stays unmapped, for the report (#288.3).
+    The rest go unmakable, for the report.
     """
     marks: list[str] = []
     unmatched: list[str] = []
+    scaly = "snake" in tags or "lizard" in tags
     for text in words:
         low = text.lower()
         found = []
@@ -2588,18 +2615,36 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
             found.append("bands")
         if re.search(r"\b(stripes?|striped)\b", low):
             found.append("stripes")
-        ringed = re.search(r"ring\s+spots?|rosettes?", low) is not None
+        ringed = re.search(r"ring\s+spots?|rosettes?|open\s+rings?", low) is not None
         single = re.search(r"\bspot\b", low) is not None and (
             re.search(r"\bspots\b|\bspotted\b", low) is None
         )
-        if re.search(r"\bspots?\b|\bspotted\b", low) and not ringed and not single:
+        blotched = (
+            re.search(r"\b(blotch(?:es|ed)?|patch(?:es|y)?|saddles?)\b", low)
+            is not None
+        )
+        if ringed:
+            found.append("rosettes")
+        elif blotched and scaly:
+            found.append("blotches")
+        elif re.search(r"\bspots?\b|\bspotted\b", low) and not single:
             found.append("spots")
         if "hammer" in low:
             found.append("hammer")
+        crested = (
+            re.search(
+                r"\bcrests?(?:ed)?\b|dorsal\s+spines?|spik(?:y|ed)\s+"
+                r"(?:dorsal\s+)?ridges?",
+                low,
+            )
+            is not None
+        )
         spiny = re.search(r"\bspines?\b|\bspiny\b", low) is not None
         finny = "fin" in low or re.search(r"\brays?\b", low) is not None
-        if spiny and not finny:
-            found.append("spines")
+        if crested and not finny:
+            found.append("crest")
+        elif spiny and not finny:
+            found.append("crest" if "lizard" in tags else "spines")
         if found:
             marks.extend(mark for mark in found if mark not in marks)
         else:
@@ -2607,7 +2652,7 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
     return marks, unmatched
 
 
-def _mark_miss(mark: str) -> str:
+def _mark_miss(mark: str, tags: tuple[str, ...] = ()) -> str:
     """A missing key mark as a fix-round error (#146.3).
 
     When a tool mark paints it, the fix keeps the mark and
@@ -2615,7 +2660,7 @@ def _mark_miss(mark: str) -> str:
     it: a shape the reference lacks takes its tool mark in
     `marks`, as the animal round can (#183.2).
     """
-    tools, _ = _tool_marks([mark])
+    tools, _ = _tool_marks([mark], tags)
     if not tools:
         return (
             f"the render shows no {mark}: add the part or paint it. "

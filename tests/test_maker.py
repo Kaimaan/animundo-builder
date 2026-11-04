@@ -44,6 +44,7 @@ from builder.stages.maker import (
     _part_axis_along,
     _part_list,
     _pruned_regions,
+    _ref_tags,
     _reference_line,
     _reference_looks,
     _reference_path,
@@ -2549,6 +2550,28 @@ def test_reference_spec_falls_back_to_examples(tmp_path: Path) -> None:
     )
 
 
+def test_reference_path_finds_big_cat_in_examples(tmp_path: Path) -> None:
+    """#296.5: big_cat resolves from models/examples like the grass snake."""
+    world = _world(tmp_path)
+    example = world / "models" / "examples"
+    example.mkdir()
+    (example / "big_cat.json").write_text(json.dumps({"id": "big_cat"}))
+    assert _reference_path(world, "big_cat") == example / "big_cat.json"
+
+
+def test_worked_jaguar_asks_only_tool_marks() -> None:
+    """#296.5: the world's worked jaguar asks rosettes, a tool mark."""
+    from builder.stages.maker import TOOL_MARKS
+
+    sibling = _sibling_world()
+    worked = sibling / "models" / "examples" / "edits" / "jaguar.json"
+    if not (sibling / "models" / "examples" / "big_cat.json").is_file():
+        pytest.skip("needs world f0d042d with the big cat")
+    edits = json.loads(worked.read_text(encoding="utf-8"))
+    assert set(edits["marks"]) <= set(TOOL_MARKS)
+    assert "rosettes" in edits["marks"]
+
+
 def test_guide_turns_a_missing_text_into_guidance() -> None:
     guided = _guide('lynx: digs, so it needs text "dig"')
     assert "write the text" in guided
@@ -2751,7 +2774,7 @@ def test_marks_review_caps_reasoning(tmp_path: Path) -> None:
     ctx = SimpleNamespace(job_dir=tmp_path, check_budget=lambda: None)
     animal = AnimalMakerStage()
     animal._chat = chat
-    target = {"entry": {"name": "Lynx"}}
+    target = {"entry": {"name": "Lynx"}, "start_from": "fox"}
     assert animal._marks_errors(ctx, "lynx", target, ["tufted ears"], 1) == []
     assert calls[0]["reasoning_effort"] == "low"
 
@@ -3135,16 +3158,13 @@ def test_tool_marks_skip_a_single_placed_spot() -> None:
     assert unmatched == ["dark spot behind the gills"]
 
 
-def test_tool_marks_skip_ring_spots() -> None:
-    """#288.3: hollow rings are not the tool's solid diamonds."""
+def test_tool_marks_map_rings_to_rosettes() -> None:
+    """#296.1: ring spots and rosettes are the tool's round rings (#288.3)."""
     marks, unmatched = _tool_marks(
         ["big black ring spots with little dots inside", "dark rosettes"]
     )
-    assert marks == []
-    assert unmatched == [
-        "big black ring spots with little dots inside",
-        "dark rosettes",
-    ]
+    assert marks == ["rosettes"]
+    assert unmatched == []
 
 
 def test_tool_marks_keep_plain_spotted_coats() -> None:
@@ -3152,6 +3172,67 @@ def test_tool_marks_keep_plain_spotted_coats() -> None:
     marks, unmatched = _tool_marks(["dark spots", "spotted flanks"])
     assert marks == ["spots"]
     assert unmatched == []
+
+
+def test_tool_marks_map_blotches_for_snakes_and_lizards() -> None:
+    """#296.2: blotches, patches and saddles on a snake or lizard."""
+    marks, unmatched = _tool_marks(
+        ["dark saddle blotches", "olive mottled patches"], ("grass", "snake")
+    )
+    assert marks == ["blotches"]
+    assert unmatched == []
+    marks, _ = _tool_marks(["dark saddle blotches"], ("lizard",))
+    assert marks == ["blotches"]
+
+
+def test_tool_marks_skip_blotches_off_snakes() -> None:
+    """#296.2: patches off a snake stay unmapped; plain spots is unchanged."""
+    marks, unmatched = _tool_marks(["dark patches", "saddle blotches"], ("big", "cat"))
+    assert marks == []
+    assert unmatched == ["dark patches", "saddle blotches"]
+
+
+def test_tool_marks_map_crest_for_iguanas() -> None:
+    """#296.3: a crest, dorsal spines or a spiky ridge is the crest."""
+    marks, unmatched = _tool_marks(
+        ["a tall crest", "row of pointy dorsal spines", "spiky ridge"],
+        ("lizard",),
+    )
+    assert marks == ["crest"]
+    assert unmatched == []
+
+
+def test_tool_marks_redirect_lizard_spines_to_crest() -> None:
+    """#296.3: never the hedgehog's spines for a lizard."""
+    marks, _ = _tool_marks(["spiny coat"], ("lizard",))
+    assert marks == ["crest"]
+
+
+def test_tool_marks_keep_hedgehog_spines() -> None:
+    """#296.3: spines stay the hedgehog's coat."""
+    marks, _ = _tool_marks(["spiny coat"], ("hedgehog",))
+    assert marks == ["spines"]
+
+
+def test_tool_marks_skip_crest_words_on_fins() -> None:
+    """#296.3: fin spines are neither the crest nor the coat (#146.3)."""
+    marks, unmatched = _tool_marks(["venomous dorsal fin spines"])
+    assert marks == []
+    assert unmatched == ["venomous dorsal fin spines"]
+
+
+def test_ref_tags_split_reference_names() -> None:
+    """#296: the reference name's words feed the shape-word mapping."""
+    assert _ref_tags("grass_snake") == ("grass", "snake")
+    assert _ref_tags("lizard") == ("lizard",)
+    assert _ref_tags("models/examples/big_cat") == ("big", "cat")
+
+
+def test_tool_marks_allow_the_new_marks() -> None:
+    """#296: rosettes, blotches and crest are tool marks."""
+    from builder.stages.maker import TOOL_MARKS
+
+    assert {"rosettes", "blotches", "crest"} <= set(TOOL_MARKS)
 
 
 def test_mark_miss_points_at_the_tool_mark() -> None:
@@ -3167,6 +3248,14 @@ def test_mark_miss_points_at_the_tool_mark() -> None:
         "that makes it in `marks` (hammer, horns, spines, ear_tufts, "
         "ruff); otherwise paint it with colours and repaints, never "
         "with factors"
+    )
+
+
+def test_mark_miss_points_at_the_crest_and_blotches() -> None:
+    """#296.2-3: a missing crest or blotches keeps what paints it."""
+    assert "the crest mark paints it" in _mark_miss("spiky ridge", ("lizard",))
+    assert "the blotches mark paints it" in _mark_miss(
+        "dark saddle blotches", ("grass", "snake")
     )
 
 
@@ -3643,6 +3732,15 @@ def test_marks_prompt_judges_shape_count_and_place() -> None:
     assert "one named spot is not many" in text
 
 
+def test_marks_prompt_maps_shape_words_to_the_new_marks() -> None:
+    """#296: the judge knows rosettes, blotches and crest shapes."""
+    text = (PROMPTS_DIR / "model_marks.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    assert "round rings with the coat's colour inside" in flat
+    assert "spaced patches down the back and sides" in flat
+    assert "one row of spikes along the middle of the back" in flat
+
+
 def test_research_prompt_writes_marks_a_child_sees() -> None:
     """#193.2: research marks are shapes, never fine detail."""
     text = (PROMPTS_DIR / "research.md").read_text(encoding="utf-8")
@@ -4021,6 +4119,38 @@ def test_model_edits_prompt_names_muzzle_and_bill() -> None:
     text = (PROMPTS_DIR / "model_edits.md").read_text(encoding="utf-8")
     assert "`muzzle` is a mammal's face" in text
     assert "a bird's is its `bill`" in text
+
+
+def test_model_edits_prompt_runs_tail_width_to_point_two() -> None:
+    """#296.4: the prompt lets a cat's tail run thinner than the rest."""
+    text = (PROMPTS_DIR / "model_edits.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    assert "`tail_width` down to 0.2" in flat
+
+
+def test_model_edits_prompt_names_the_new_marks() -> None:
+    """#296: code seeds rosettes, blotches and crests from the research."""
+    text = (PROMPTS_DIR / "model_edits.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    assert "rosettes" in flat
+    assert "blotches" in flat
+    assert "crests" in flat
+
+
+def test_model_edits_prompt_heavies_long_thin_animals() -> None:
+    """#296.6: a snake at girth 1 reads as a line; 1.6-2.0 looks heavy."""
+    text = (PROMPTS_DIR / "model_edits.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    assert "1.6–2.0 looks heavy" in flat
+    assert "green anaconda" in flat
+
+
+def test_edits_schema_runs_tail_width_to_point_two() -> None:
+    """#296.4: tail_width runs to 0.2; the rest stays 0.4."""
+    schema = _edits_schema({"colors": {}, "parts": []})
+    props = schema["properties"]
+    assert props["tail_width"]["minimum"] == 0.2
+    assert props["body_girth"]["minimum"] == 0.4
 
 
 def _newshape_target() -> dict[str, Any]:

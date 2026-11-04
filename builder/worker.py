@@ -435,6 +435,11 @@ class Worker:
         if not self._claim(job_id):
             return
         job = self.store.get_build_job(job_id) or job
+        if job.get("kind") == "enrich" and self.pull_world():
+            # An enrich job intakes against the list as of the
+            # last poll; a listing pushed minutes ago must be
+            # there, as for a place job (#302.2).
+            self.world_commit = git_commit(self.world)
         if job.get("kind") == "spread":
             self.spread_job(job_id, job)
             return

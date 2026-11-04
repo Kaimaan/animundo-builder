@@ -4940,3 +4940,51 @@ def test_enrich_label_takes_the_live_place_name(tmp_path: Path) -> None:
     worker._label_enrich_item(item_dir, "z10_0927_0560")
     state = json.loads((item_dir / "state.json").read_text())
     assert state["params"]["area"] == "z10_0927_0560 (Test Reef)"
+
+
+def test_enrich_claim_pulls_the_world(tmp_path: Path, monkeypatch: Any) -> None:
+    """#302.2: a claimed enrich job pulls before its intake reads the list."""
+    store = FakeStore()
+    store.build_jobs["e1"] = {
+        "kind": "enrich",
+        "status": "queued",
+        "tile": "z10_0581_0294",
+        "tiles": ["z10_0581_0294"],
+        "items": ["enrich_fox"],
+        "enrich": {"kind": "animal", "what": "fox", "from": "wolf"},
+    }
+    worker = _worker(tmp_path, store)
+    worker.world = make_world(tmp_path)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        Worker, "pull_world", lambda self: calls.append("pull") or False
+    )
+    monkeypatch.setattr(
+        Worker, "build_items", lambda self, *args: calls.append("build")
+    )
+    worker.build_job("e1", store.build_jobs["e1"])
+    assert calls == ["pull", "build"]
+
+
+def test_build_claim_leaves_the_world(tmp_path: Path, monkeypatch: Any) -> None:
+    """#302.2: only enrich pulls on claim; a build job keeps its world."""
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "kind": "build",
+        "status": "queued",
+        "tile": "z10_0581_0294",
+        "tiles": ["z10_0581_0294"],
+        "items": [],
+    }
+    store.plans["z10_0581_0294"] = {"world": "abc123"}
+    worker = _worker(tmp_path, store)
+    worker.world = make_world(tmp_path)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        Worker, "pull_world", lambda self: calls.append("pull") or False
+    )
+    monkeypatch.setattr(
+        Worker, "build_items", lambda self, *args: calls.append("build")
+    )
+    worker.build_job("j1", store.build_jobs["j1"])
+    assert calls == ["build"]

@@ -3,6 +3,15 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #290, shores in metres — ready to deploy
+
+- `3296919` (#290: nearest shore in metres, not degrees). CI green on run `41895550120`. Ready to deploy; Kai decides the deploy, and per #290.4 nothing is re-published yet.
+- Fix exactly as prescribed: `ShoreData.nearest` keeps the degree-nearest only to size a real-metres box (`dx = first / (LON_METRES * cos(lat))`, `dy = first / LAT_METRES`), then takes the smallest `_seg_metres` of every segment in the box with its lake, for each ±360 shift (the #272.8 twins stay).
+- Cost of the fix: `shore_for_tile("z10_0593_0285")` went 0.10s → 0.37s (+0.27s a tile, noise next to model time).
+- Tests: synthetic 60°N pair (0.01°-east land beats 0.008°-north lake: ~557 m, lake None) + golden record `tests/fixtures/shore/z10_0593_0285.json` (tile stays within 32 m of record). Full suite 1459 passed, 12 skipped; tile/shore suites green; ruff clean.
+- #290.4, in the game's own unit (game metres — `check_shore_parity.gd` compares `d` arrays with GAP 32): 20 published tiles carry shores; 16 would change by more than 32 m: z10_0579_0295 (82), z10_0580_0295 (106), z10_0582_0295 (105), z10_0583_0295 (163), z10_0580_0296 (117), z10_0581_0296 (223), z10_0581_0297 (132), z10_0582_0296 (186), z10_0582_0297 (151), z10_0583_0296 (212), z10_0584_0295 (239), z10_0592_0284 (118), z10_0593_0283 (187), z10_0593_0284 (148), z10_0593_0285 (233), z10_0594_0284 (118). Unchanged (≤32): z10_0581_0295 (0), z10_0582_0291 (20), z10_0926_0561 (14), z10_0927_0560 (8). One more than the expected 15: z10_0584_0295 sits outside the guessed x-range. Worst is 239 m ≈ 4.5 real km at 60°N (a degree-nearest 9.9 km south beats a true-nearest 5.5 km east/west on far-from-shore points) — the old error, now fixed in code; the published bytes wait on Kai's re-publish call.
+- Shore-only; no overlap with #275/#280–#283. Cost: $0.
+
 ## 2026-11-04: inbox #272 (+#273, #274), never fail silently or stay stuck — ready to deploy
 
 - `d3d288b` + `aad457e` (all eight points). CI green on run `41891661473`. Ready to deploy; Kai decides the deploy, so nothing is live yet (worker still v56). Reply covers #272, #273 (hold obeyed, lifted by #274) and #274 (go) together.

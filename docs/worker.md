@@ -64,8 +64,7 @@ nothing paused is ignored and cleared.
 
 ## Shipping a checking enrich item (#221)
 
-A plant (or animal) whose `ship` stage passed waits in
-`checking`: nothing is live yet. To ship it, look at its
+This is the border-build path: enrich items and places ship themselves once every check passes (above), while a border build's plant (or animal) waits in `checking` for a person's verdict. Nothing is live yet. To ship it, look at its
 build report (`review/<job>/<item>/report.html` in Storage,
 laid out locally by `builder take <job>`) and at the item in
 the game, then write the verdict on its `build_jobs/{id}`

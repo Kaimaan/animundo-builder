@@ -17,10 +17,7 @@ children start at a few hand-made places and walk outwards.
 - **The request builder** works where the tile maker can't: at the border of
   the known world, where a habitat has no home yet or no animal a child can
   play lives with its food. When a player gets near such a border, the game
-  sends an anonymous border request. An admin approves it in the admin panel
-  (animundo.app/admin), then agents build the minimum the border needs (a
-  home, an animal, its food, one thing to find) and species missing nearby,
-  in small batches. People review every new thing before children see it.
+  sends an anonymous border request. A code-only tile is made at once. A plan that needs new things builds by itself when a signed-in grown-up noted the tile, within the game's caps; a child's anonymous request waits for an admin. Border build items are reviewed by a person in the game's admin console. An enrich item or a place goes live as a content pack only when every automatic check passes (decision 0049).
 
 The builder never sees players. It sees border requests (a tile and the
 animals played near it, nothing else) and the published known world.
@@ -43,8 +40,7 @@ working schemas live in `schemas/`. Read them before changing a format.
   provider's model, not even as a fallback.
 - The game (`animundo`) and its content (`animundo-world`) are separate
   repositories. **Never change them from here.** The builder reads an
-  animundo-world checkout and writes only through the pipeline's pull
-  request step.
+  animundo-world checkout and writes packs and tiles to Storage.
 - **The game repository is private.** Readers of this repository
   (contributors, judges) can't open it, so never link to it or to its
   files, and never name its internals. Links

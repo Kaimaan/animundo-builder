@@ -12,19 +12,16 @@ Every model the builder calls is a Meta model, and every call goes through one f
 |---|---|---|---|
 | Muse Spark | `muse-spark-1.3` | Meta Model API | Research with web search and sources; the tile's animals from the game's list (structured output, one call a tile, cached) |
 | Muse Spark Open | `meta-models/muse-spark-open-1026` | Baseten | The strict forms (animal edits, home choices, plants), the words, and the render and text reviews — [`builder/pipeline.py`](builder/pipeline.py) sends them to the open host first, falling back to Muse Spark inside the same caps |
-| SAM 3.1 | `sam-3.1` | Meta Model API | Masks for measuring reference sheets — reference sheets, command-line path only (`ReferencesStage`, run from `builder`); not in the live worker ([`builder/sam.py`](builder/sam.py) decodes the wire format; original code, no SDK copied) |
+| SAM 3.1 | `sam-3.1` | Meta Model API | Masks the reference sheet for measuring; command-line path only (`ReferencesStage`, run from `builder`); not in the live worker ([`builder/sam.py`](builder/sam.py) decodes the wire format; original code, no SDK copied) |
+| Muse Image | `muse-image-1.0` | Meta Model API | Draws the reference sheet that SAM 3.1 masks; command-line path only, not in the live worker |
 
 The transport is the `openai` Python package pointed at Meta's endpoint, Meta's own documented pattern. No OpenAI service, key or model is used. `grep -rn "BASE_URL =" builder/meta.py` shows the only two hosts. Each call's usage record says which host ran it. Caps are checked before every model call: each call reserves its worst-case cost against the job, the day and the total, and isn't sent if that would cross a cap or if the ledger can't be read ([`builder/ledger.py`](builder/ledger.py), [`builder/meta.py`](builder/meta.py)). Each build job also carries its own budget, set by the game.
 
 ## Quick check
 
-From a fresh clone, with no key and no account (all $0):
+A 10-minute check on a fresh clone (Nov 4):
 
-```
-uv sync && uv run pytest
-```
-
-Installs the environment, then prints `1135 passed, 111 skipped`: the full suite green with no key, no animundo-world and no Blender (Nov 3). The skips are tests that need a world checkout; each says so.
+- without the world: `uv run pytest` → **1226 passed, 131 skipped** (~3 min, no keys, no Blender)
 
 ```
 ./scripts/get-world
@@ -32,7 +29,7 @@ Installs the environment, then prints `1135 passed, 111 skipped`: the full suite
 
 Clones public animundo-world at the pinned commit CI uses (`2178899`) into the folder next to this one. Needs network to GitHub, no key. Prints `animundo-world at 2178899 in .../animundo-world`.
 
-With the world next to the clone, `uv run pytest` prints `1243 passed, 20 skipped` (Nov 3): the world tests run against the bare checkout, and only the Blender/asset tests skip. CI runs the same and stays green.
+- with the world: `uv run pytest` → **1320 passed, 37 skipped** (~7 min), only the Blender/asset tests skip
 
 ```
 uv run builder request plan z10_0581_0294 --world ../animundo-world --species examples/plan-z10_0581_0294/species.json --presence examples/plan-z10_0581_0294/presence.json
@@ -70,7 +67,7 @@ Research per tile comes from this repository's task log: the second reef survey 
 | Criterion | Where to see it |
 |---|---|
 | Theme: Build for Your World | [Try it](#try-it): a real-Earth world that grows where children explore, from real habitat and species data |
-| Use of Meta AI | [Meta's models](#metas-models): every call in [`builder/meta.py`](builder/meta.py); written with Muse Code from written briefs (each quoted in [`docs/task-log.md`](docs/task-log.md); exported sessions are [release assets](https://github.com/Kaimaan/animundo-builder/releases/tag/muse-logs-2026-10-28), not in git) |
+| Use of Meta AI | [Meta's models](#metas-models): every call in [`builder/meta.py`](builder/meta.py); written with Muse Code from written briefs (each quoted in [`docs/task-log.md`](docs/task-log.md); the Oct 26–28 sessions are a [release asset](https://github.com/Kaimaan/animundo-builder/releases/tag/muse-logs-2026-10-28), not in git) |
 | Technical depth | [How it works](#how-it-works): a tile maker that is code plus one AI call, a planner, makers where code does the geometry from short strict AI forms; [`tests/`](tests/) |
 | It works | The live game at animundo.app; [Quick check](#quick-check); [Measured numbers](#measured-numbers) |
 | Safety | [Safety](#safety): the builder receives the tile and the species only, with no player id; start gates before any AI build; automatic checks before anything reaches children, and one switch to withdraw a pack |
@@ -219,14 +216,8 @@ Every source with its licence, attributions as in [`data/habitat-grid/README.md`
 
 This repository is public from its first commit. Never commit API keys, tokens, `.env` files, service-account JSON, job folders, downloaded pages or photos, or anything about a player or a family. Recorded API responses are scrubbed before they are committed. The secret scan runs before every commit and in CI; a finding stops the commit.
 
-## To finish
-
-- [ ] `builder eval` and its results (T40) — a scored quality gate; judges can read the suite instead.
-- [ ] `examples/`: real border builds from the event, with their reports and preview sheets (T41) — nice-to-have evidence; the live game and Quick check show the same path working.
-- [ ] Later Muse session exports as release assets (Oct 26–28 are up; Nov 2 is exported and scanned, awaiting Kai's review) — provenance only, not needed to judge the entry.
-
 ## Licence
 
-© Animundo (Kai Lemmetty). The code in this repository is source-available under [PolyForm Strict 1.0.0](LICENSE), so anyone may read, clone and run it for noncommercial purposes, including judging; no changes or redistribution. The hackathon's organisers and judges may clone, run and evaluate it for judging. Versions published before 2026-11-01 stay under Apache-2.0.
+© Animundo (Kai Lemmetty). The code in this repository is open source under the [Apache License 2.0](LICENSE).
 
 Third-party data keeps its own licences: see [Data and credits](#data-and-credits).

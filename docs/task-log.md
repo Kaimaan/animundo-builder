@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #289 (empty-reply cause + JSON backstop), live as v47
+
+- #276 entry — found its cause, from the raw responses (no new trees run): test 1's ceiba `log.jsonl` shows 9 of 16 Baseten chat calls returning exactly 8000 output tokens (the open-host cap) with empty content — the model burned the whole budget on `reasoning_content` and never answered. Same inputs sometimes answer (5176, 4197 tokens) and sometimes burn, so two empties in two runs is a flaky systematic, not luck. The #275 doubled-room retry cannot help: the host holds `max_tokens` at 8000 (the retry logged 8000 again). Not a timeout (all `result: ok`, 17–42 s), not a refusal.
+- Fix, commit `530c263`, CI green run 41796961713: `reasoning_effort="low"` on every chat call that parses JSON (plants draft + review, region, safety, species plan + pick, survey, models spec + review + pick, animals) — the #166.1 rule the plants never got. Maker/words/species already had it: their calls complete at 462–1835 tokens in 2–9 s. Backstop: research and both place surveys retry once on an empty or unparsable answer; every other JSON site already loops (fix rounds, TRIES, SPEC_RETRIES, pick_row × 2, note re-ask). Audit: `tiles.excluded` reads a file, not a reply.
+- Deploy, 08:31 UTC: worker v47 on builder `530c263`. Single container `ta-01M6JTZ05PM8YV80N07BAZA2BR`, script-verified.
+- Tests: plants draft+review cap; research retry empty + unparsable, stop on two bad; place + job survey retry + stop; one cap assert each in region/safety/plan/survey/models/animals (bad-answer-stops now feeds two bad answers). Focused 249 green, full 1340 passed + 12 skipped, ruff clean. $0.
+
 ## 2026-11-04: inbox #287 (capybara legs kind + failed-try check-in), live as v46
 
 - #276 entry — which it was: neither. The #269.4 belly check fails this sheet (belly 0 cm, "belly sits at 0 cm"). The model is test 1's attempt-2 try, which failed its checks and should never have checked in: attempt 1 (belly 4.75 cm, legs hidden) passed belly but drew ratio "shorten or deepen"; attempt 2 deepened to 0 cm and raised `_Stopped`; the v40→v41 cutover raced two workers on the shared volume and one's `_made` file-existence skip overwrote the failure, so the retry skipped the remake. 6 of 7 animals show the same failing-final-try-but-checked-in pattern.

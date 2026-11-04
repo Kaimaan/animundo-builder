@@ -102,3 +102,36 @@ def test_shore_matches_the_game_shape() -> None:
     ]
     assert set(lake) <= {0, 1, 255}
     assert 1 in set(lake)
+
+
+def _line_grid(tmp_path: Path) -> Path:
+    """A grid dir with one landmass just west of the date line."""
+    import gzip
+    import json
+
+    grid_dir = tmp_path / "grids"
+    grid_dir.mkdir()
+    ring = [[-180.1, -1.0], [-179.9, -1.0], [-179.9, 1.0], [-180.1, 1.0]]
+    ring.append(ring[0])
+    raw = {"land": [[ring]], "lakes": {}}
+    with gzip.open(grid_dir / "shore.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump(raw, handle)
+    (grid_dir / "lakes.json").write_text(json.dumps({"lakes": {}}))
+    return grid_dir
+
+
+def test_shore_and_side_wrap_at_the_date_line(tmp_path: Path) -> None:
+    """#272.8: a tile east of the line sees the coast west of it."""
+    from builder.grid import tile_at
+    from builder.shore import ShoreData, shore_for_tile
+
+    grid_dir = _line_grid(tmp_path)
+    tile = tile_at(0.0, 179.9)
+    assert tile.startswith("z10_1023_")
+    shore = shore_for_tile(tile, grid_dir)
+    assert shore is not None, "the reject box missed the cross-line coast"
+    d, _lake = _decode(shore)
+    assert min(d) < 0 < max(d), "no water-to-land crossing in the tile"
+    data = ShoreData(grid_dir)
+    assert data.side(179.7, 0.0) is True
+    assert data.side(180.0, 0.0) is False

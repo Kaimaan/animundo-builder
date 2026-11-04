@@ -350,7 +350,9 @@ def test_handle_request_alerts_when_unplannable(
     store.requests["xx"] = {"tile": "xx"}
     worker = _planned_worker(tmp_path, store, monkeypatch)
     worker.handle_request("xx")
-    assert "xx" not in store.plans
+    # #272.4: the crash writes a plan error (retried with backoff),
+    # never silence; the alert stays.
+    assert store.plans["xx"]["error"]["reason"] == "crash"
     assert store.alerts[-1]["kind"] == "plan_failed"
 
 
@@ -1106,7 +1108,7 @@ def test_pending_request_builds_nothing(tmp_path: Path, monkeypatch: Any) -> Non
 def test_request_alerts_plan_failed_when_gbif_is_down(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """A GBIF outage is a plan failure, loud and unretried."""
+    """A GBIF outage is a plan failure, loud, retried with backoff (#272.4)."""
     store = FakeStore()
     store.requests["z10_0581_0294"] = {"tile": "z10_0581_0294"}
 
@@ -1116,7 +1118,7 @@ def test_request_alerts_plan_failed_when_gbif_is_down(
     monkeypatch.setattr("builder.worker.plan_tile", down)
     worker = _flow_worker(tmp_path, store, boreal_3x3())
     worker.handle_request("z10_0581_0294")
-    assert "z10_0581_0294" not in store.plans
+    assert store.plans["z10_0581_0294"]["error"]["reason"] == "crash"
     assert store.alerts[-1]["kind"] == "plan_failed"
 
 

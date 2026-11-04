@@ -141,7 +141,7 @@ def test_has_records_near_counts_wild_records(monkeypatch: Any) -> None:
 
 
 def test_near_wkt_grows_the_cell_and_clamps_at_edges() -> None:
-    """#196.3: ±2 cells by default; the map's edges clamp the box."""
+    """#196.3: ±2 cells by default; poles clamp, the date line wraps (#272.8)."""
     import builder.presence as presence
 
     assert presence.near_wkt("z10_0581_0294", span=0) == presence.cell_wkt(
@@ -163,7 +163,10 @@ def test_near_wkt_grows_the_cell_and_clamps_at_edges() -> None:
     assert min(grown_lats) < min(cell_lats)
     assert max(grown_lats) > max(cell_lats)
     edge = presence.near_wkt("z10_0000_0000")
-    assert "-180.000000" in edge
+    assert edge.startswith("MULTIPOLYGON")
+    assert "-180.000000" in edge and "180.000000" in edge
+    pole = presence.near_wkt("z10_0512_0000")
+    assert pole.startswith("POLYGON")
 
 
 def _fish_world(tmp_path: Path) -> Path:

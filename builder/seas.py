@@ -24,6 +24,20 @@ def load_seas(path: Path) -> dict[str, str]:
     return dict(data.get("cells", {}))
 
 
+def require_seas(builder_root: Path) -> None:
+    """The baked sea names exist, else loud at startup (#272.5).
+
+    `data/seas.json.gz` is builder data, not a grid sibling, so
+    it gets its own gate beside `require_grid`: without it every
+    open-sea tile would block as `open_water`, looking real.
+    """
+    path = builder_root / "data" / "seas.json.gz"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"{path} is missing: open-sea tiles cannot name their sea"
+        )
+
+
 def sea_at(cells: dict[str, str], tile: str) -> str | None:
     """The named sea covering the cell, or nothing when unnamed."""
     return cells.get(tile)

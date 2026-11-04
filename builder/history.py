@@ -29,8 +29,9 @@ def commit(path: Path | None) -> str:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         ).stdout.strip()
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return "unknown"
     return out or "unknown"
 

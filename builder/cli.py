@@ -992,8 +992,9 @@ def cmd_request_plan(args: argparse.Namespace) -> int:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         ).stdout.strip()
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         commit = ""
     species = None
     presence = None

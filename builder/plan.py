@@ -44,6 +44,7 @@ from .tiles import (
     make_tile,
     open_sea_entries,
     pick_species,
+    place_layer_for,
     resolve_home,
     ring_cells,
     tile_facts,
@@ -675,6 +676,12 @@ def plan_tile(
         # The plan surveys the reef tile the maker would make (#226.1).
         habitat = "sea"
         home = "coral_reef"
+    if habitat == "open_ocean" and home is not None:
+        # The same live-place branch the maker takes (#272.8): a
+        # biomeless place raises here too, before any survey
+        # work, so plan and maker never disagree. A placed tile
+        # needs nothing more: the probe below runs the maker.
+        place_layer_for(tile, habitat_grid, world, homes, biomes, home)
     entries = library_animals(world)
     unfiled = _unfiled(world, habitat, entries)
     if unfiled_presence is None:
@@ -1006,7 +1013,15 @@ def _resolve_species(
         )
     except SpeciesPlaceError:
         return None, None, True
-    except Exception:  # noqa: BLE001 - the compass names it instead
+    except Exception as error:  # noqa: BLE001 - the compass names it instead
+        from .ledger import CapExceeded, LedgerError
+        from .meta import MetaError
+
+        if isinstance(error, (MetaError, LedgerError, CapExceeded, TimeoutError)):
+            # Auth, caps, spend and timeouts are never "no
+            # answer": they raise, so the plan error (#272.4)
+            # carries them instead of a silent probe (#272.5).
+            raise
         return None, None, False
     if fetched.get("name_en") and fetched.get("name_fi"):
         probe = {

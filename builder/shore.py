@@ -92,14 +92,20 @@ class ShoreData:
         self._point = Point
 
     def side(self, lon: float, lat: float) -> bool:
-        """Whether the point is in water: the sea or a 1:10m lake."""
-        point = self._point(lon, lat)
-        for index in self._lakes.query(point):
-            if self._lake_geoms[int(index)].covers(point):
-                return True
-        for index in self._land.query(point):
-            if self._land_geoms[int(index)].covers(point):
-                return False
+        """Whether the point is in water: the sea or a 1:10m lake.
+
+        The point's own longitude and its ±360 twins, like
+        `nearest`, so land stored across the date line counts
+        (#272.8).
+        """
+        for shift in (-360.0, 0.0, 360.0):
+            point = self._point(lon + shift, lat)
+            for index in self._lakes.query(point):
+                if self._lake_geoms[int(index)].covers(point):
+                    return True
+            for index in self._land.query(point):
+                if self._land_geoms[int(index)].covers(point):
+                    return False
         return True
 
     def nearest(self, lon: float, lat: float) -> tuple[float, str | None]:
@@ -183,13 +189,17 @@ def shore_for_tile(tile: str, grid_dir: str | Path | None) -> dict[str, Any] | N
     col, row = parse_tile(tile)
     west, east = lon_of(col), lon_of(col + 1)
     north, south = lat_of(row), lat_of(row + 1)
-    grown = _box(
-        west - REJECT_DEGREES,
-        south - REJECT_DEGREES,
-        east + REJECT_DEGREES,
-        north + REJECT_DEGREES,
-    )
-    if len(data._segments.query(grown)) == 0:
+    boxes = [
+        _box(
+            west - REJECT_DEGREES + shift,
+            south - REJECT_DEGREES,
+            east + REJECT_DEGREES + shift,
+            north + REJECT_DEGREES,
+        )
+        for shift in (-360.0, 0.0, 360.0)
+    ]
+    # The twins catch shores stored across the date line (#272.8).
+    if all(len(data._segments.query(grown)) == 0 for grown in boxes):
         return None
     ds: list[int] = []
     lake_bytes: list[int] = []

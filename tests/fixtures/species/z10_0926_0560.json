@@ -1,0 +1,89 @@
+{
+  "place": "Coral reef by a tropical coastal city",
+  "parts": [
+    {
+      "kind": "reef",
+      "species": [
+        "clownfish",
+        "blue_tang",
+        "butterflyfish",
+        "lionfish",
+        "reef_shark",
+        "green_sea_turtle",
+        "manta_ray"
+      ]
+    },
+    {
+      "kind": "sea",
+      "species": [
+        "bottlenose_dolphin",
+        "humpback_whale",
+        "whale_shark",
+        "hammerhead",
+        "manta_ray",
+        "green_sea_turtle",
+        "jellyfish"
+      ]
+    },
+    {
+      "kind": "shore",
+      "species": [
+        "green_sea_turtle"
+      ]
+    },
+    {
+      "kind": "mangrove",
+      "species": [
+        "crocodile"
+      ]
+    },
+    {
+      "kind": "river",
+      "species": [
+        "crocodile",
+        "platypus"
+      ]
+    },
+    {
+      "kind": "forest",
+      "species": [
+        "koala",
+        "monarch"
+      ]
+    }
+  ],
+  "plants": [
+    {
+      "id": "branching_staghorn_coral",
+      "count": 15
+    },
+    {
+      "id": "closed_brain_coral",
+      "count": 8
+    },
+    {
+      "id": "giant_sea_fan",
+      "count": 6
+    },
+    {
+      "id": "halimeda",
+      "count": 10
+    },
+    {
+      "id": "dugong_grass",
+      "count": 12
+    },
+    {
+      "id": "paddle_grass",
+      "count": 12
+    }
+  ],
+  "trees": [
+    {
+      "id": "coconut_palm",
+      "count": 8
+    }
+  ],
+  "name_en": "Clownfish Reef and Palm Shores",
+  "name_fi": "Klovnikalojen riutta ja palmurannat"
+}

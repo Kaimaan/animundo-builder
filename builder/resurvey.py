@@ -98,8 +98,13 @@ def first_seen(world: Path) -> dict[str, str]:
             capture_output=True,
             text=True,
             check=True,
+            timeout=300,
         )
-    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        FileNotFoundError,
+    ) as error:
         raise RuntimeError(f"cannot read the list's history: {error}") from error
     seen: dict[str, str] = {}
     day = ""

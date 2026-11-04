@@ -1,0 +1,68 @@
+{
+  "place": "outer coral reef with a sandy cay",
+  "parts": [
+    {
+      "kind": "sea",
+      "species": [
+        "bottlenose_dolphin",
+        "humpback_whale",
+        "sperm_whale",
+        "whale_shark",
+        "manta_ray",
+        "swordfish",
+        "jellyfish"
+      ]
+    },
+    {
+      "kind": "reef",
+      "species": [
+        "hammerhead",
+        "reef_shark",
+        "manta_ray",
+        "green_sea_turtle",
+        "clownfish",
+        "blue_tang",
+        "butterflyfish",
+        "lionfish",
+        "jellyfish"
+      ]
+    },
+    {
+      "kind": "shore",
+      "species": [
+        "osprey",
+        "common_tern",
+        "green_sea_turtle"
+      ]
+    }
+  ],
+  "plants": [
+    {
+      "id": "branching_staghorn_coral",
+      "count": 300
+    },
+    {
+      "id": "closed_brain_coral",
+      "count": 200
+    },
+    {
+      "id": "giant_sea_fan",
+      "count": 60
+    },
+    {
+      "id": "halimeda",
+      "count": 500
+    },
+    {
+      "id": "dugong_grass",
+      "count": 300
+    },
+    {
+      "id": "paddle_grass",
+      "count": 200
+    }
+  ],
+  "trees": [],
+  "name_en": "Coral Reef Sand Cay",
+  "name_fi": "Koralliriutan hiekkasaari"
+}

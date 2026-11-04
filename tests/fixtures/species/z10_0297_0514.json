@@ -1,0 +1,49 @@
+{
+  "place": "Amazon rainforest in eastern Ecuador",
+  "parts": [
+    {
+      "kind": "forest",
+      "species": [
+        "jaguar",
+        "tapir",
+        "giant_anteater",
+        "sloth",
+        "scarlet_macaw",
+        "harpy_eagle",
+        "green_iguana",
+        "anaconda",
+        "blue_morpho"
+      ]
+    },
+    {
+      "kind": "river",
+      "species": [
+        "capybara",
+        "tapir",
+        "anaconda",
+        "green_iguana",
+        "piranha"
+      ]
+    }
+  ],
+  "plants": [],
+  "trees": [],
+  "name_en": "Jaguar Jungle River",
+  "name_fi": "Jaguarin viidakkojoki",
+  "outside_animals": [
+    "Panthera onca",
+    "Tayassu pecari",
+    "Ateles belzebuth",
+    "Alouatta seniculus",
+    "Melanosuchus niger",
+    "Potos flavus"
+  ],
+  "outside_plants": [
+    "Ceiba pentandra",
+    "Theobroma cacao",
+    "Euterpe precatoria",
+    "Oenocarpus bataua",
+    "Hevea brasiliensis",
+    "Mauritia flexuosa"
+  ]
+}

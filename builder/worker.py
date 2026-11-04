@@ -8,12 +8,14 @@ jobs the game creates. Planning (T74), building (T76), previews
 
 from __future__ import annotations
 
+import logging
 import os
 import queue
 import socket
 import subprocess
 import sys
 import threading
+import traceback
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -34,8 +36,16 @@ RING_PLAN_ESTIMATE_USD = 0.05
 #: Tiles one range dispatch judges before yielding (#277.2).
 RANGE_CHUNK = 100
 
+#: Seconds between lease renewals while a job runs (#272.3): well
+#: under the 30-minute TTL, so a long stage never looks dead.
+HEARTBEAT_SECONDS = 600
+
 #: A document update value that deletes the field.
 DELETE = object()
+
+#: Failures log here with their tracebacks, so Modal's stderr
+#: carries the stack, not just the code (#272.2).
+logger = logging.getLogger(__name__)
 
 
 class Store(Protocol):
@@ -96,6 +106,45 @@ def lease_expired(lease_until: Any) -> bool:
     return not isinstance(lease_until, str) or lease_until <= now_iso()
 
 
+def _plan_error_due(plan: dict[str, Any] | None) -> bool:
+    """A plan error whose backoff has passed, ready to retry (#272.4)."""
+    if not isinstance(plan, dict):
+        return False
+    error = plan.get("error")
+    if not isinstance(error, dict):
+        return False
+    next_try = error.get("next_try")
+    return isinstance(next_try, str) and next_try <= now_iso()
+
+
+def _error_detail(
+    worker_id: str,
+    builder_commit: str,
+    world: str,
+    stage: str,
+    tile: Any,
+    message: str,
+    exc: BaseException | None,
+) -> dict[str, Any]:
+    """One failure's detail for the job and its alert (#272.2)."""
+    trace: str | None = None
+    if exc is not None:
+        trace = "\n".join(
+            "".join(traceback.format_exception(exc)).strip().splitlines()[-40:]
+        )
+    return {
+        "stage": stage,
+        "tile": tile,
+        "type": type(exc).__name__ if exc is not None else "error",
+        "message": message,
+        "traceback": trace,
+        "worker_id": worker_id,
+        "builder_commit": builder_commit,
+        "world": world,
+        "at": now_iso(),
+    }
+
+
 class _Off(Exception):
     """The off switch stopped this item; resume when enabled."""
 
@@ -131,8 +180,9 @@ def git_commit(world: Path | None) -> str:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         ).stdout.strip()
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return "unknown"
     return out or "unknown"
 
@@ -245,13 +295,56 @@ class Worker:
                 species_source=self._species_source(tile),
                 estimates=self._median_estimates(),
             )
-        except (ValueError, RuntimeError, FileNotFoundError, ConnectionError) as error:
-            print(f"request {tile}: cannot plan: {error}", file=sys.stderr)
-            self.alert({"kind": "plan_failed", "tile": tile, "error": str(error)[:200]})
+        except Exception as error:  # noqa: BLE001 - a crash writes a plan error
+            self._note_plan_error(tile, error)
             return
         self.store.set_plan(tile, plan)
         blocked = f" blocked={plan['blocked']}" if plan.get("blocked") else ""
         print(f"request {tile}: planned code_only={plan['code_only']}{blocked}")
+
+    def _note_plan_error(self, tile: str, error: Exception) -> None:
+        """A planning crash writes `plans/{tile}.error`, and retries (#272.4).
+
+        The request never waits silently: the error carries the
+        reason, detail, time and attempt count, and the poll
+        requeues it once its backoff (2^n minutes, capped at two
+        hours) has passed — no world commit needed.
+        """
+        from .history import BUILDER_COMMIT
+
+        old = (self.store.get_plan(tile) or {}).get("error") or {}
+        try:
+            attempts = int(old.get("attempts", 0)) + 1
+        except (TypeError, ValueError):
+            attempts = 1
+        wait = min(2**attempts, 120)
+        entry = {
+            "reason": "crash",
+            "detail": {
+                "type": type(error).__name__,
+                "message": str(error),
+                "traceback": "\n".join(
+                    "".join(traceback.format_exception(error))
+                    .strip()
+                    .splitlines()[-40:]
+                ),
+                "worker_id": self.worker_id,
+                "builder_commit": BUILDER_COMMIT or "unknown",
+                "world": self.world_commit or "unknown",
+            },
+            "at": now_iso(),
+            "attempts": attempts,
+            "next_try": (datetime.now(UTC) + timedelta(minutes=wait)).isoformat(),
+        }
+        logger.error(
+            "request %s: cannot plan (attempt %d): %s",
+            tile,
+            attempts,
+            error,
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        self.store.set_plan(tile, {"tile": tile, "error": entry})
+        self.alert({"kind": "plan_failed", "tile": tile, "error": entry})
 
     def handle_build_job(self, job_id: str) -> None:
         """Build one job, or ship its reviewed items (T76)."""
@@ -268,16 +361,46 @@ class Worker:
         job = self.store.get_build_job(job_id)
         if job is None or job.get("status") in ("published", "failed"):
             return
+        phase = "operator"
         try:
             if not self._operator_action(job_id, job):
                 return
             job = self.store.get_build_job(job_id) or job
-            if job.get("status") == "checking":
-                self.review_job(job_id, job)
-            else:
-                self.build_job(job_id, job)
+            stop = threading.Event()
+            beat = threading.Thread(
+                target=self._heartbeat, args=(job_id, stop), daemon=True
+            )
+            beat.start()
+            try:
+                if job.get("status") == "checking":
+                    phase = "review"
+                    self.review_job(job_id, job)
+                else:
+                    phase = "build"
+                    self.build_job(job_id, job)
+            finally:
+                stop.set()
+                beat.join(timeout=30)
         except StaleOwner:
             print(f"build job {job_id}: another worker owns it; stopping")
+        except Exception as error:  # noqa: BLE001 - a crash ends the job
+            self._fail_crash(job_id, job, phase, error)
+
+    def _heartbeat(
+        self, job_id: str, stop: threading.Event, interval: float = HEARTBEAT_SECONDS
+    ) -> None:
+        """Renew this job's lease until told to stop (#272.3).
+
+        A live worker in a long stage keeps its lease: only a
+        truly dead owner lets it lapse for the sweep. Stops when
+        the lease is no longer ours, or the store is unreachable.
+        """
+        while not stop.wait(interval):
+            try:
+                if not self.store.renew_build_job(job_id, self.worker_id):
+                    return
+            except Exception:  # noqa: BLE001 - a dead store ends the beat
+                return
 
     def _operator_action(self, job_id: str, job: dict[str, Any]) -> bool:
         """Run an operator resume or give-up on a paused job (#166.3).
@@ -376,6 +499,15 @@ class Worker:
         claimed = self.store.claim_build_job(job_id, self.worker_id)
         if claimed and "started_at" not in job:
             self._update(job_id, {"started_at": now_iso()})
+        if not claimed:
+            live = self.store.get_build_job(job_id) or {}
+            logger.warning(
+                "build job %s: claim refused: owner %s lease %s status %s",
+                job_id,
+                live.get("worker_id"),
+                live.get("lease_until"),
+                live.get("status"),
+            )
         return claimed
 
     def _takeover_if_dead(self, job_id: str, job: dict[str, Any]) -> None:
@@ -1456,19 +1588,8 @@ class Worker:
             print(
                 f"build job {job_id}: test build: {len(made)} tiles made, not published"
             )
-        else:
-            from . import build as build_mod
-
-            commit = self.world_commit or "unknown"
-            for tile, tile_made in made.items():
-                build_mod.publish_group(
-                    tile,
-                    tile_made,
-                    self.store,
-                    commit,
-                    history={"job": job_id, "kind": "place"},
-                )
-                self._plan_ring(tile)
+        # Real builds publish inside _place_publish, after every
+        # check passed, so a half place never goes live (#272.7).
         job = self.store.get_build_job(job_id) or job
         self._place_publish(job_id, job, research, biome, made, ship_world)
         self._place_close_test_build(job_id, items)
@@ -1976,8 +2097,9 @@ class Worker:
 
         The enrich review's ship tail without its verdicts: the
         place checks gate the tiles, the remake seats the
-        species, and a new pack version carries the species
-        plus `additions/tiles.json` (#220). An item whose make
+        species, and a new pack version stages the species
+        plus `additions/tiles.json` (#220) for the publish
+        phase, after every place check passes. An item whose make
         failed, or a species that can't ship, fails the job
         first (0049-style: a half place never goes live) —
         unless the build is a test, which records the failure
@@ -2049,7 +2171,7 @@ class Worker:
                     "assembles, not published"
                 )
                 return True
-            prefix = packs_mod.publish_pack(self.store, pack_id, version, packed)
+            marker = self._stage_pack(job_id, item["id"], pack_id, version, packed)
         except (ValueError, KeyError, packs_mod.PackExists) as error:
             print(f"build job {job_id}: pack: {error}", file=sys.stderr)
             self._fail_item(job_id, job, item["id"], f"its pack broke: {error}")
@@ -2060,8 +2182,76 @@ class Worker:
             print(f"build job {job_id}: {item['id']} overlaid {len(passing)} tiles")
         else:
             print(f"build job {job_id}: {item['id']} rides its tile; species only")
-        self._note_item_pack(job_id, item["id"], prefix)
+        self._note_item_pack(job_id, item["id"], marker)
         return True
+
+    def _staged_root(
+        self, job_id: str, item_id: str, pack_id: str, version: str
+    ) -> Path:
+        """The staged pack's folder in the job dir (#272.7)."""
+        return self.jobs_dir / job_id / "staged_packs" / item_id / pack_id / version
+
+    def _stage_pack(
+        self,
+        job_id: str,
+        item_id: str,
+        pack_id: str,
+        version: int,
+        packed: dict[str, bytes],
+    ) -> str:
+        """The assembled pack to the job folder, for the publish phase (#272.7).
+
+        Species packs stage during the ship and go live only
+        after every place check passes, so a later failure
+        leaves nothing published. Returns the staged marker
+        for the item's progress.
+        """
+        root = self._staged_root(job_id, item_id, pack_id, str(version))
+        for rel, data in packed.items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        print(f"build job {job_id}: {item_id} staged {pack_id} v{version}")
+        return f"staged:{pack_id}/{version}"
+
+    def _place_publish_staged(self, job_id: str) -> list[str]:
+        """The staged species packs live, resuming our own retry (#272.7).
+
+        Entries already carrying a real prefix keep it; staged
+        ones publish (finishing an interrupted publish) and take
+        the real prefix. Raises PackExists on a genuine conflict,
+        ValueError when a staged pack went missing.
+        """
+        from . import packs as packs_mod
+
+        job = self.store.get_build_job(job_id) or {}
+        prefixes: list[str] = []
+        progress = job.get("progress", [])
+        changed = False
+        for entry in progress:
+            marker = entry.get("pack") or ""
+            if not marker.startswith("staged:"):
+                if marker.startswith("packs/"):
+                    prefixes.append(marker)
+                continue
+            pack_id, _, version = marker.removeprefix("staged:").partition("/")
+            root = self._staged_root(job_id, entry["id"], pack_id, version)
+            files = {
+                path.relative_to(root).as_posix(): path.read_bytes()
+                for path in sorted(root.rglob("*"))
+                if path.is_file()
+            }
+            if not files:
+                raise ValueError(f"staged pack {pack_id} v{version} is gone")
+            prefix = packs_mod.publish_pack_resumed(
+                self.store, pack_id, int(version), files
+            )
+            entry["pack"] = prefix
+            prefixes.append(prefix)
+            changed = True
+        if changed:
+            self._update(job_id, {"progress": progress})
+        return prefixes
 
     def _note_item_pack(self, job_id: str, item_id: str, prefix: str) -> None:
         """The item's progress entry names its newest pack (#222.5)."""
@@ -2267,8 +2457,8 @@ class Worker:
             )
         else:
             try:
-                prefix = packs_mod.publish_pack(self.store, pack_id, version, packed)
-            except packs_mod.PackExists as error:
+                prefix = self._place_publish_all(job_id, made, pack_id, version, packed)
+            except (packs_mod.PackExists, ValueError) as error:
                 print(f"build job {job_id}: pack: {error}", file=sys.stderr)
                 self._fail(job_id, "bad_pack")
                 return
@@ -2304,6 +2494,43 @@ class Worker:
             update["pack"] = prefix
         self._update(job_id, update)
         self._set_status(job_id, "published")
+
+    def _place_publish_all(
+        self,
+        job_id: str,
+        made: dict[str, dict[str, Any]],
+        pack_id: str,
+        version: int,
+        packed: dict[str, bytes],
+    ) -> str:
+        """Groups, staged species packs and the place pack, live (#272.7).
+
+        Runs only after every place check passed, so no failure
+        past the species leaves a half place live. Each phase
+        records `published_parts` on the job as it lands, and
+        each publish resumes our own interrupted retry.
+        """
+        from . import build as build_mod
+        from . import packs as packs_mod
+
+        commit = self.world_commit or "unknown"
+        groups = []
+        for tile, tile_made in made.items():
+            build_mod.publish_group(
+                tile,
+                tile_made,
+                self.store,
+                commit,
+                history={"job": job_id, "kind": "place"},
+            )
+            self._plan_ring(tile)
+            groups.append(tile)
+        self._update(job_id, {"published_parts": {"groups": groups, "packs": []}})
+        packs = self._place_publish_staged(job_id)
+        prefix = packs_mod.publish_pack_resumed(self.store, pack_id, version, packed)
+        packs.append(prefix)
+        self._update(job_id, {"published_parts": {"groups": groups, "packs": packs}})
+        return prefix
 
     def _wanted_drops(
         self, job_id: str, job: dict[str, Any], research: dict[str, Any]
@@ -3984,11 +4211,142 @@ class Worker:
         if status == "published":
             self._record_cost(job_id)
 
-    def _fail(self, job_id: str, error: str) -> None:
-        print(f"build job {job_id}: failed ({error})", file=sys.stderr)
-        self._update(job_id, {"status": "failed", "error": error})
+    def _fail(
+        self,
+        job_id: str,
+        error: str,
+        *,
+        stage: str | None = None,
+        tile: str | None = None,
+        message: str | None = None,
+        exc: BaseException | None = None,
+    ) -> None:
+        """Fail the job with its `error_detail`, and log the stack (#272.2).
+
+        Every failure carries stage, tile, type, message, the
+        traceback's last lines, worker, builder commit, world and
+        time, on the job and in the alert, uncut; the game's logs
+        pick the detail up from there. A coded failure without an
+        exception keeps the code as its message.
+        """
+        from .history import BUILDER_COMMIT
+
+        job = self.store.get_build_job(job_id) or {}
+        detail = _error_detail(
+            self.worker_id,
+            BUILDER_COMMIT or "unknown",
+            self.world_commit or "unknown",
+            stage or f"{job.get('kind', '?')}/{job.get('status', '?')}",
+            tile if tile is not None else job.get("tile"),
+            message or (str(exc) if exc is not None else error),
+            exc,
+        )
+        logger.error(
+            "build job %s: failed (%s): %s",
+            job_id,
+            error,
+            detail["message"],
+            exc_info=(type(exc), exc, exc.__traceback__) if exc is not None else None,
+        )
+        self._update(
+            job_id, {"status": "failed", "error": error, "error_detail": detail}
+        )
         self._record_cost(job_id)
-        self.alert({"kind": "job_failed", "id": job_id, "error": error})
+        self.alert(
+            {"kind": "job_failed", "id": job_id, "error": error, "error_detail": detail}
+        )
+
+    def _fail_crash(
+        self, job_id: str, job: dict[str, Any], phase: str, error: Exception
+    ) -> None:
+        """An uncaught job error ends the job, never hangs it (#272.1).
+
+        The job fails `crash` with the full detail, even when this
+        worker never owned it (the write then goes unconditional:
+        a crash must not leave `building` forever). A job that
+        already ended keeps its verdict; the crash only alerts.
+        """
+        live = self.store.get_build_job(job_id) or job
+        if live.get("status") in ("published", "failed"):
+            logger.error(
+                "build job %s: crashed after %s: %s",
+                job_id,
+                live.get("status"),
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            self.alert(
+                {
+                    "kind": "job_failed",
+                    "id": job_id,
+                    "error": "crash_after_" + str(live.get("status")),
+                    "message": str(error),
+                }
+            )
+            return
+        kind = live.get("kind") or job.get("kind") or "?"
+        try:
+            self._fail(
+                job_id,
+                "crash",
+                stage=f"{kind}/{phase}",
+                tile=live.get("tile") or job.get("tile"),
+                exc=error,
+            )
+        except StaleOwner:
+            logger.error(
+                "build job %s: crashed without the lease, failing anyway: %s",
+                job_id,
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            self._fail_unowned(
+                job_id,
+                live,
+                "crash",
+                f"{kind}/{phase}",
+                str(error),
+                error,
+            )
+
+    def _fail_unowned(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        error: str,
+        stage: str,
+        message: str,
+        exc: BaseException | None = None,
+    ) -> None:
+        """Fail a job this worker doesn't own, unconditionally (#272).
+
+        The crash path and the stuck sweep use this: ending a dead
+        job matters more than holding its lease.
+        """
+        from .history import BUILDER_COMMIT
+
+        detail = _error_detail(
+            self.worker_id,
+            BUILDER_COMMIT or "unknown",
+            self.world_commit or "unknown",
+            stage,
+            job.get("tile"),
+            message,
+            exc,
+        )
+        self.store.update_build_job(
+            job_id,
+            {
+                "status": "failed",
+                "error": error,
+                "error_detail": detail,
+                "updated_at": now_iso(),
+            },
+        )
+        self._record_cost(job_id)
+        self.alert(
+            {"kind": "job_failed", "id": job_id, "error": error, "error_detail": detail}
+        )
 
     def _record_cost(self, job_id: str) -> None:
         """`cost` onto the ended job, and its `cost_log` row (#259.2, #259.3).
@@ -4033,7 +4391,15 @@ class Worker:
             self.store.write_cost_log(doc_id, record)
         except Exception as error:  # noqa: BLE001 - the doc keeps the cost anyway
             print(f"build job {job_id}: cost_log: {error}", file=sys.stderr)
-        self._update(job_id, {"cost": cost, "ended_at": ended_at})
+        try:
+            self._update(job_id, {"cost": cost, "ended_at": ended_at})
+        except StaleOwner:
+            # A crash fail without the lease still records its
+            # cost: the ending matters more than the owner (#272.1).
+            self.store.update_build_job(
+                job_id,
+                {"cost": cost, "ended_at": ended_at, "updated_at": now_iso()},
+            )
 
     @staticmethod
     def _cost_species(job: dict[str, Any]) -> list[str]:
@@ -4693,8 +5059,9 @@ class Worker:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=300,
             )
-        except OSError as error:
+        except (OSError, subprocess.TimeoutExpired) as error:
             print(f"world pull failed: {error}", file=sys.stderr)
             return False
         if proc.returncode != 0:
@@ -4714,8 +5081,74 @@ class Worker:
         if enabled and not self._was_enabled:
             self._reconcile(queued)
         self._was_enabled = enabled
+        if enabled:
+            for tile, _doc in self.store.list_requests():
+                if ("request", tile) in queued:
+                    continue
+                if _plan_error_due(self.store.get_plan(tile)):
+                    queued.append(("request", tile))
+            self._sweep_stuck(queued)
         queued.extend(self._range_due(queued))
         return queued
+
+    def _sweep_stuck(self, queued: list[tuple[str, str]]) -> None:
+        """Pick up jobs a dead worker left behind (#272.3).
+
+        A `building` or `queued` job whose lease passed — a dead
+        container, on any host — goes back to `queued` with its
+        `attempts` raised, and runs again at once; after 3 dead
+        pickups it fails `crash_loop`. Fresh queued jobs (no
+        lease yet), live leases, paused jobs and jobs this
+        worker is running now stay put.
+        """
+        for job_id, doc in self.store.pending_build_jobs():
+            status = doc.get("status") or "queued"
+            if status not in ("building", "queued"):
+                continue
+            key = ("build_job", job_id)
+            if key in queued or key in self.in_flight:
+                continue
+            if self._job_paused(doc):
+                continue
+            lease = doc.get("lease_until")
+            if lease is None or not lease_expired(lease):
+                continue
+            try:
+                attempts = int(doc.get("attempts") or 0) + 1
+            except (TypeError, ValueError):
+                attempts = 1
+            if attempts > 3:
+                logger.error(
+                    "build job %s: lease dead %d times, failing crash_loop",
+                    job_id,
+                    attempts - 1,
+                )
+                self._fail_unowned(
+                    job_id,
+                    doc,
+                    "crash_loop",
+                    f"{doc.get('kind', '?')}/{status}",
+                    f"its owner died {attempts - 1} times with the lease expired",
+                )
+                continue
+            logger.warning(
+                "build job %s: owner %s dead (lease %s), requeueing (attempt %d)",
+                job_id,
+                doc.get("worker_id"),
+                lease,
+                attempts,
+            )
+            self.store.update_build_job(
+                job_id,
+                {
+                    "status": "queued",
+                    "worker_id": DELETE,
+                    "lease_until": DELETE,
+                    "attempts": attempts,
+                    "updated_at": now_iso(),
+                },
+            )
+            queued.append(("build_job", job_id))
 
     def _reconcile(self, queued: list[tuple[str, str]]) -> None:
         """Re-enqueue work skipped while disabled, from the store (#158).
@@ -4926,10 +5359,13 @@ def listen(
     )
     if grid_dir is not None:
         from .habitats import describe_grid, require_grid
+        from .schemas import ROOT as BUILDER_ROOT
+        from .seas import require_seas
 
         print(describe_grid(grid_dir))
         try:
             require_grid(grid_dir)
+            require_seas(worker.builder_root or BUILDER_ROOT)
         except (FileNotFoundError, ValueError) as error:
             print(f"error: {error}", file=sys.stderr)
             return 1

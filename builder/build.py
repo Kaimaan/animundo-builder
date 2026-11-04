@@ -538,8 +538,10 @@ def publish_group(
     if fresh_raw is not None:
         try:
             fresh = json.loads(fresh_raw.decode("utf-8"))
-        except ValueError:
-            fresh = {}
+        except ValueError as error:
+            raise ValueError(
+                f"cannot read the published group {blob_path}: {error}"
+            ) from error
         old_tile = (fresh.get("tiles") or {}).get(tile)
         if isinstance(old_tile, dict) and _content(made_tile) == _content(old_tile):
             made_tile["version"] = int(

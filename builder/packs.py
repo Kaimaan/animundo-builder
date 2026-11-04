@@ -386,6 +386,34 @@ def publish_pack(
     return prefix
 
 
+def publish_pack_resumed(
+    store: Any, pack_id: str, version: int, files: dict[str, bytes]
+) -> str:
+    """Publish the pack, finishing our own interrupted publish (#272.7).
+
+    A retry after a crash mid-publish finds the version partly
+    (or fully) written: bytes that match ours are ours, so the
+    missing files are written and the prefix returned. Bytes
+    that differ, or files we don't stage, are someone else's
+    pack and still refuse.
+    """
+    try:
+        return publish_pack(store, pack_id, version, files)
+    except PackExists:
+        pass
+    prefix = f"packs/{pack_id}/{version}/"
+    for name in store.list_blobs(prefix):
+        rel = name.removeprefix(prefix)
+        raw, _ = store.read_blob(name)
+        if rel not in files or files[rel] != raw:
+            raise PackExists(f"{prefix} holds another pack") from None
+    for rel in sorted(files):
+        raw, _ = store.read_blob(prefix + rel)
+        if raw is None:
+            store.write_blob(prefix + rel, files[rel], _content_type(rel))
+    return prefix
+
+
 def _content_type(rel: str) -> str:
     if rel.endswith(".png"):
         return "image/png"

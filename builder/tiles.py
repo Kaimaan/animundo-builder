@@ -195,11 +195,16 @@ def _open_sea_name(tile: str, builder_root: Path, world: Path) -> dict[str, Any]
 
     The baked `data/seas.json.gz` names the sea; `seas/names.json`
     gives the entry's own `en` (and `fi` where the table has it).
+    A missing baked file raises: every open-sea tile blocking as
+    `open_water` would look real, so a broken install must fail
+    loudly instead (#272.5).
     """
     path = builder_root / "data" / "seas.json.gz"
     if path not in _SEAS_CELLS:
         if not path.is_file():
-            return None
+            raise FileNotFoundError(
+                f"{path} is missing: open-sea tiles cannot name their sea"
+            )
         from .seas import load_seas
 
         _SEAS_CELLS[path] = load_seas(path)
@@ -1036,8 +1041,11 @@ def world_eats(
 
     One subprocess for the batch, like the tile check: the world
     owns the rule (decision 0061), the builder only reads its
-    verdicts. None when the checkout has no food rule, so tests
-    with fake worlds keep every animal and report no gaps.
+    verdicts. None only when the checkout has no food rule, so
+    tests with fake worlds keep every animal and report no
+    gaps. A rule that crashes, times out or answers wrong
+    raises: silence would keep every animal and skip the food
+    rule on a real checkout (#272.5).
     """
     tools = world / "tools"
     if not (tools / "food.py").is_file():
@@ -1051,20 +1059,26 @@ def world_eats(
             check=False,
             timeout=120,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(f"the world's food rule did not run: {error}") from error
     if proc.returncode == 2:
         raise RuntimeError(
             "the world's food rule predates decision 0061 "
             "(tools/food.py has no eats_here/food_gaps); update the checkout"
         )
     if proc.returncode != 0:
-        return None
+        raise RuntimeError(
+            f"the world's food rule failed: {(proc.stdout + proc.stderr).strip()[:300]}"
+        )
     try:
         out = json.loads(proc.stdout)
     except ValueError:
-        return None
-    return out if isinstance(out, list) else None
+        raise RuntimeError(
+            f"the world's food rule gave no JSON: {proc.stdout.strip()[:200]}"
+        )
+    if not isinstance(out, list):
+        raise RuntimeError("the world's food rule gave no list")
+    return out
 
 
 def tile_gaps_for(
@@ -1463,6 +1477,7 @@ def _blocked(
     habitat: str,
     wanted: list[dict[str, str]] | None,
     left_out: list[dict[str, str]] | None = None,
+    problems: list[str] | None = None,
 ) -> dict[str, Any]:
     """A blocked entry, carrying `wanted` when the survey named any."""
     blocked: dict[str, Any] = {"reason": reason, "habitat": habitat}
@@ -1470,6 +1485,8 @@ def _blocked(
         blocked["wanted"] = wanted
     if left_out:
         blocked["survey_left_out"] = left_out
+    if problems:
+        blocked["problems"] = problems
     return blocked
 
 
@@ -1534,22 +1551,28 @@ def select_species(
         return None
     kept = set(ranked)
     while True:
-        proc = subprocess.run(
-            [sys.executable, "-c", _SELECT_ROUND, str(tools)],
-            input=json.dumps(
-                {
-                    **tile,
-                    "species": {
-                        "playable": sorted(kept),
-                        "prey": [],
-                        "predators": [],
-                    },
-                }
-            ),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-c", _SELECT_ROUND, str(tools)],
+                input=json.dumps(
+                    {
+                        **tile,
+                        "species": {
+                            "playable": sorted(kept),
+                            "prey": [],
+                            "predators": [],
+                        },
+                    }
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=300,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise RuntimeError(
+                f"the world's food-web check did not run: {error}"
+            ) from error
         if proc.returncode != 0:
             raise RuntimeError(
                 f"the world's food-web check refused {tile.get('id')}: "
@@ -1760,9 +1783,14 @@ def _versions(builder_root: Path, world: Path) -> tuple[str, str]:
     def run(args: list[str], cwd: Path) -> str | None:
         try:
             out = subprocess.run(
-                args, cwd=cwd, capture_output=True, text=True, check=False
+                args,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
             )
-        except OSError:
+        except (OSError, subprocess.TimeoutExpired):
             return None
         return out.stdout.strip() or None
 
@@ -1780,17 +1808,26 @@ def check_with_world(
 ) -> list[tuple[str, list[str]]]:
     """The world's tile check over one made tile, failing checks with problems.
 
-    Empty when the tile passes, and when the world has no tile check
-    (tests with fake worlds). The check runs in the world checkout,
-    which owns it; the builder only reads its verdict. The checkout
-    must carry the converter too: a tile check that predates it
-    validates against an old copy, so the maker refuses it loudly
-    instead of drifting from the game (#161.3).
+    Empty when the tile passes, and when the world has neither
+    check nor converter (tests with fake worlds). The check runs
+    in the world checkout, which owns it; the builder only reads
+    its verdict. The checkout must carry the converter too: a
+    tile check that predates it validates against an old copy,
+    so the maker refuses it loudly instead of drifting from the
+    game (#161.3). A checkout with the converter but no check is
+    broken the other way, and refuses just as loudly (#272.5).
     """
     tool = world / "tools" / "check_tile.py"
-    if not tool.is_file():
+    converter = world / "tools" / "tile_region.py"
+    if not tool.is_file() and not converter.is_file():
         return []
-    if not (world / "tools" / "tile_region.py").is_file():
+    if not tool.is_file():
+        raise RuntimeError(
+            "the world's tile check is missing "
+            "(tools/check_tile.py is gone but the converter is here); "
+            "update the checkout"
+        )
+    if not converter.is_file():
         raise RuntimeError(
             "the world's tile check predates the converter "
             "(tools/tile_region.py is missing); update the checkout"
@@ -1807,7 +1844,10 @@ def check_with_world(
             capture_output=True,
             text=True,
             check=False,
+            timeout=300,
         )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(f"the world's tile check did not run: {error}") from error
     finally:
         Path(path).unlink(missing_ok=True)
     if proc.returncode == 2:
@@ -1894,6 +1934,50 @@ def _place_biome(
     if not isinstance(biome, str) or (biome not in homes and biome not in biomes):
         return None
     return biome
+
+
+def place_layer_for(
+    tile: str,
+    habitat_grid: HabitatGrid,
+    world: Path,
+    homes: dict[str, dict[str, Any]],
+    biomes: dict[str, dict[str, Any]],
+    home: str | None,
+) -> tuple[dict[str, Any], str] | None:
+    """The live place laying this open-sea tile, planner and maker (#272.8).
+
+    One branch for both, so they can never disagree: a place
+    whose region names a biome lays the tile (place, biome); a
+    biomeless place with no all-open-sea cast raises for a
+    person, unless the reef map claims the cell (#233). None
+    when no live place covers the tile, or it builds as open
+    sea.
+    """
+    place = live_place_for_tile(tile, world)
+    if place is None:
+        return None
+    placed = _place_biome(place, world, homes, biomes)
+    if placed is not None:
+        return place, placed
+    col, row = parse_tile(tile)
+    reef_claims = (
+        home in ("open_sea", "coral_reef")
+        and habitat_grid.reef_share(col, row) >= REEF_TRACT_SHARE
+        and "coral_reef" in biomes
+        and not biomes["coral_reef"].get("retired")
+    )
+    # The reef map decides a mostly-reef cell even under a live
+    # place whose region names no biome (#233): the flip builds
+    # coral_reef, so the mixed species need no person. Any other
+    # open-sea tile without a biome still raises.
+    if not _all_open_sea(place, world) and not reef_claims:
+        pid = place.get("id")
+        raise ValueError(
+            f"{tile}: live place {pid} names no biome for "
+            "its open-sea tile, and its species are not "
+            "all open-sea animals; a person decides"
+        )
+    return None
 
 
 def _all_open_sea(place: dict[str, Any], world: Path) -> bool:
@@ -2038,7 +2122,11 @@ def _make_place_tile(
         if not failures:
             return made_tile, None
         if all(check == "food" for check, _ in failures):
-            return None, _blocked("no_animal", habitat, None)
+            dropped = [
+                f"{check}: {', '.join(problems) or 'failed'}"
+                for check, problems in failures
+            ]
+            return None, _blocked("no_animal", habitat, None, None, dropped)
         if not _budget_failure(failures):
             break
         _thin_densities(made_tile)
@@ -2082,35 +2170,14 @@ def _resolve_home(
         }
     house = homes.get(home, biomes[home])
     if habitat == "open_ocean":
-        place = live_place_for_tile(tile, world)
-        if place is not None:
-            placed = _place_biome(place, world, homes, biomes)
-            if placed is None:
-                reef_claims = (
-                    home in ("open_sea", "coral_reef")
-                    and habitat_grid.reef_share(col, row) >= REEF_TRACT_SHARE
-                    and "coral_reef" in biomes
-                    and not biomes["coral_reef"].get("retired")
-                )
-                # The reef map decides a mostly-reef cell even under
-                # a live place whose region names no biome (#233):
-                # the flip below builds coral_reef, so the mixed
-                # species need no person. Any other open-sea tile
-                # without a biome still raises.
-                if not _all_open_sea(place, world) and not reef_claims:
-                    pid = place.get("id")
-                    raise ValueError(
-                        f"{tile}: live place {pid} names no biome for "
-                        "its open-sea tile, and its species are not "
-                        "all open-sea animals; a person decides"
-                    )
-            else:
-                return {
-                    "blocked": None,
-                    "place": (place, placed),
-                    "homes": homes,
-                    "biomes": biomes,
-                }
+        layered = place_layer_for(tile, habitat_grid, world, homes, biomes, home)
+        if layered is not None:
+            return {
+                "blocked": None,
+                "place": layered,
+                "homes": homes,
+                "biomes": biomes,
+            }
     if (
         habitat == "open_ocean"
         and home in ("open_sea", "coral_reef")

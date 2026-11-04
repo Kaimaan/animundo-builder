@@ -1014,6 +1014,77 @@ def test_place_builds_species_first_then_publishes_together(
     assert place_blob is not None
 
 
+def _stub_run_item(
+    self: Worker,
+    job_id: str,
+    job: dict[str, Any],
+    tile: str,
+    plan: dict[str, Any],
+    item: dict[str, Any],
+    budget: float,
+) -> None:
+    _stub_make_lion(self, job_id, item)
+
+
+def test_place_check_failure_publishes_nothing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#272.7: a failing place check leaves no groups or packs live."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_species", lambda *args, **kwargs: _lion_answer()
+    )
+    monkeypatch.setattr(Worker, "run_item", _stub_run_item)
+    monkeypatch.setattr(
+        Worker, "_run_place_check", lambda *args, **kwargs: ["the place broke"]
+    )
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+    )
+    assert worker._claim("j1")
+    worker._place_build("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert job["status"] == "failed", job.get("status")
+    assert job["error"] == "place_check"
+    assert [n for n in store.blobs if n.startswith("tiles/")] == []
+    assert [n for n in store.blobs if n.startswith("packs/")] == []
+
+
+def test_place_publish_records_parts(tmp_path: Path, monkeypatch: Any) -> None:
+    """#272.7: a published place records its groups and packs."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    monkeypatch.setattr(
+        "builder.tiles.fetch_species", lambda *args, **kwargs: _lion_answer()
+    )
+    monkeypatch.setattr(Worker, "run_item", _stub_run_item)
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+    )
+    assert worker._claim("j1")
+    worker._place_build("j1", store.build_jobs["j1"])
+    job = store.build_jobs["j1"]
+    assert job["status"] == "published", job.get("error")
+    parts = job.get("published_parts") or {}
+    assert parts.get("groups") == [A]
+    assert sorted(parts.get("packs") or []) == [
+        "packs/animal_lion/1/",
+        "packs/place_fi_nuuksio/1/",
+        "packs/plant_pine/1/",
+    ]
+
+
 def test_place_species_files_ship_own_id_only(tmp_path: Path) -> None:
     """#275.1: prey copies in the item dir never ship."""
     store = FakeStore()

@@ -102,14 +102,26 @@ def family_key(gbif_key: int) -> int | None:
 def near_wkt(tile: str, span: int = 2) -> str:
     """The tile's box grown by `span` cells each way, as WKT (#196.3).
 
-    Clamped at the map's edges (and the antimeridian), where a
-    grown box would wrap.
+    Clamped at the poles; across the antimeridian the box wraps
+    into two halves, which GBIF reads as one MULTIPOLYGON, so
+    date-line tiles keep their far-side neighbours (#272.8).
     """
     x, y = parse_tile(tile)
     south = lat_of(min(y + 1 + span, N))
     north = lat_of(max(y - span, 0))
-    west = lon_of(max(x - span, 0))
-    east = lon_of(min(x + 1 + span, N))
+    west_i, east_i = x - span, x + 1 + span
+    if west_i >= 0 and east_i <= N:
+        return _polygon_wkt(lon_of(west_i), lon_of(east_i), north, south)
+    halves = [
+        (lon_of(west_i % N), 180.0),
+        (-180.0, lon_of(east_i % N)),
+    ]
+    rings = ", ".join(f"(({_ring(west, east, north, south)}))" for west, east in halves)
+    return f"MULTIPOLYGON ({rings})"
+
+
+def _ring(west: float, east: float, north: float, south: float) -> str:
+    """One box ring, counter-clockwise for GBIF's geometry filter."""
     corners = [
         (west, north),
         (west, south),
@@ -117,8 +129,12 @@ def near_wkt(tile: str, span: int = 2) -> str:
         (east, north),
         (west, north),
     ]
-    ring = ", ".join(f"{lon:.6f} {lat:.6f}" for lon, lat in corners)
-    return f"POLYGON (({ring}))"
+    return ", ".join(f"{lon:.6f} {lat:.6f}" for lon, lat in corners)
+
+
+def _polygon_wkt(west: float, east: float, north: float, south: float) -> str:
+    """One box as a POLYGON."""
+    return f"POLYGON (({_ring(west, east, north, south)}))"
 
 
 def has_records_near(key: int, tile: str, span: int = 2) -> bool:

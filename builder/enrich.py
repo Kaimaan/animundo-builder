@@ -127,7 +127,10 @@ def tile_place(
             capture_output=True,
             text=True,
             check=False,
+            timeout=300,
         )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ConvertError(f"tile_region.py did not run: {error}") from error
     finally:
         Path(tile_path).unlink(missing_ok=True)
     if proc.returncode != 0:

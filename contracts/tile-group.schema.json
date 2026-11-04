@@ -62,6 +62,11 @@
             "type": "array",
             "description": "What the survey found that has a file but still isn't on the tile: the tile's labels or the select dropped it. Each names its first part and a short why. A report, never a request (#278.3).",
             "items": {"$ref": "#/$defs/left_out_entry"}
+          },
+          "problems": {
+            "type": "array",
+            "description": "Why the tile blocked, one line per failing check, when the reason alone would drop them (a food-only failure keeps its problems on its no_animal, #272.5).",
+            "items": {"type": "string", "minLength": 1}
           }
         }
       }

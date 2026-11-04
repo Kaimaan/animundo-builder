@@ -3,6 +3,18 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #300 (Mamirauá parked) — parked
+
+- Parked per the item; nothing started. Running total confirmed $5.64 of $10 (test 3: $2.12). Notes for resume: the item's judge-strictness rule, the 4 real failures, test-build file-based plant checks, and the `no_short` packaging cause (`data/country-names.json` not deployed — found in test-3 analysis) are all recorded.
+
+## 2026-11-04: inbox #299 (sea plants read the sea) — live as v51
+
+- Commit `ffd555e`, CI green run 41848004844. Worker v51 deployed 14:49 UTC (single container `ta-01M6KGJA51Q4HX6RJY7NA2MHTR`, `BUILDER_COMMIT=ffd555e`, world `fa9a618` — the reef session moved it past `f0d042d`; the worker pulls latest by design). Deploy authority: #286's go (named in the item) + Kai's standing go for the tile queue.
+- Fix: `_tile_has_sea` (habitat sea/open_ocean, or a coastal cell that isn't all land); `_plant_fits`/`tile_plants` take `sea` instead of the HydroLAKES fresh-water share. Survey facts already separate sea (1−land) from lake, food rules use home habitat + terrain, and candidate habitats use fresh water only for lake synthesis — no mix-up there. Known corner, unchanged from today: lake shores still read as sea (the mask can't tell lake from sea); big-lake interiors read as sea by habitat. Strictly fewer wrong cells than before (all sea + all-lake + land fixed).
+- Tests: reef replay of `z10_0928_0562` seats all 6 water plants with `left_out: []` and a clean world check (reproduced the bug first: all 6 left out with "no sea"); `_tile_has_sea` unit (sea, ocean, coast, land, all-lake); all-zero reef masks still publish. Full suite 1373 passed + 12 skipped, ruff clean.
+- Live verified on v51 (read-only replay): 6 water plants, `left_out: []`, world check `[]`.
+- Remakes: NOT run by me — `node admin.mjs remake` refuses all three ("isn't a ready tile (area: none)"; `show` confirms no area/plan/jobs — the border never tracked these tiles). Per the item's opt-out, the reviewer does them (or Kai deletes the ring and swims out); `check_tile.py` on the three live tiles falls to that remake. Cost: $0 (code + read-only probes; no live spend).
+
 ## 2026-11-04: inbox #298 (Baseten ledger NULs + silent Meta fallback) — ready to deploy
 
 - Commit `4dc0128`, CI green run 41837869708. Fix and say "ready to deploy"; Kai decides the deploy (not self-deployed: test 3 is running, and this item reserves the deploy to Kai).

@@ -3207,7 +3207,7 @@ def test_open_sea_tile_names_its_sea_from_the_image_layout(
 
 
 def test_open_sea_tile_without_coast_style_has_no_land(tmp_path: Path) -> None:
-    """#177.1: a coast biome with no land style blocks the tile as no_land."""
+    """#282.1 replaces #177.1: with no styled coast the islets default lush."""
     world = _open_sea_world(tmp_path)
     _seas_file(tmp_path, {"z10_0581_0294": "gulf_of_finland"})
     cells = _open_sea_cells(581, 294)
@@ -3223,9 +3223,10 @@ def test_open_sea_tile_without_coast_style_has_no_land(tmp_path: Path) -> None:
         presence={"herring_gull": 5.0},
         builder_root=tmp_path,
     )
-    assert made is None
-    assert blocked is not None
-    assert blocked["reason"] == "no_land"
+    assert blocked is None
+    assert made is not None
+    assert made["land"] == "tropical_moist"
+    assert made["sources"]["land"] == "lands/index.json:default_coast"
 
 
 def test_near_made_or_noted_reaches_three_cells() -> None:
@@ -3446,3 +3447,116 @@ def test_place_cells_come_out_as_code_tiles() -> None:
         assert made["kind"] == "code", tile
         assert made["sources"]["water"] == "hydrolakes:v1", tile
         assert made["name"]["en"] and made["name"]["fi"], tile
+
+
+def _styled_coast_world(tmp_path: Path) -> Path:
+    """An open-sea world whose index styles boreal and tropical_moist."""
+    world = _open_sea_world(tmp_path)
+    (world / "lands" / "index.json").write_text(
+        json.dumps(
+            {
+                "styles": [
+                    {"land": "boreal", "biome": 6},
+                    {"land": "tropical_moist", "biome": 1},
+                    {"land": "tropical_savanna", "biome": 7},
+                ]
+            }
+        )
+    )
+    return world
+
+
+def _gull_fetch(monkeypatch: Any) -> None:
+    def fake_fetch(tile: str, candidates: list[dict[str, Any]]) -> dict[str, float]:
+        return {"herring_gull": 5.0}
+
+    monkeypatch.setattr("builder.tiles.fetch_smoothed", fake_fetch)
+
+
+def test_open_sea_falls_back_to_a_styled_coast(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#282.1: a desert foreshore yields to the styled coast behind it."""
+    _gull_fetch(monkeypatch)
+    world = _styled_coast_world(tmp_path)
+    _seas_file(tmp_path, {"z10_0581_0294": "gulf_of_finland"})
+    desert = [839, 1.0, None, 0.0, 13, 1.0, 0.0, 20.0]
+    cells = {f"{c},{r}": list(desert) for r in (293, 294, 295) for c in (580, 581, 582)}
+    cells["581,294"] = [None, 0.0, None, 0.0, None, 0.0, 1.0, -5.0]
+    cells["583,294"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        _habitat_grid(tmp_path, cells),
+        world,
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["land"] == "boreal"
+    assert made["sources"]["land"] == "lands/index.json:nearest_styled_coast:717"
+
+
+def test_open_sea_fallback_takes_the_nearest_styled_coast(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#282.1: of two styled coasts the nearer one colours the islets."""
+    _gull_fetch(monkeypatch)
+    world = _styled_coast_world(tmp_path)
+    _seas_file(tmp_path, {"z10_0581_0294": "gulf_of_finland"})
+    desert = [839, 1.0, None, 0.0, 13, 1.0, 0.0, 20.0]
+    cells = {f"{c},{r}": list(desert) for r in (293, 294, 295) for c in (580, 581, 582)}
+    cells["581,294"] = [None, 0.0, None, 0.0, None, 0.0, 1.0, -5.0]
+    cells["583,294"] = [54, 1.0, None, 0.0, 7, 1.0, 0.0, 600.0]
+    cells["584,294"] = [717, 1.0, None, 0.0, 6, 1.0, 0.0, 80.0]
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        _habitat_grid(tmp_path, cells),
+        world,
+        builder_root=tmp_path,
+    )
+    assert blocked is None
+    assert made is not None
+    assert made["land"] == "tropical_savanna"
+    assert made["sources"]["land"] == "lands/index.json:nearest_styled_coast:54"
+
+
+def test_open_sea_atlantic_falls_back_to_savanna(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#282.3: Western Sahara's sea takes savanna from eco 53."""
+    from builder.schemas import ROOT
+
+    world = _real_world()
+    if world is None:
+        pytest.skip("needs the committed grid and a real world checkout")
+    _gull_fetch(monkeypatch)
+    habitat_grid = HabitatGrid.load(ROOT / "data" / "habitat-grid" / "z10.json.gz")
+    made, blocked = make_tile("z10_0459_0449", habitat_grid, world, builder_root=ROOT)
+    assert blocked is None
+    assert made is not None
+    validate("tile", made)
+    assert made["home"] == "open_sea"
+    assert made["sea"] == "atlantic_ocean"
+    assert made["land"] == "tropical_savanna"
+    assert made["sources"]["land"] == "lands/index.json:nearest_styled_coast:53"
+
+
+def test_open_sea_galapagos_falls_back_to_moist(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#282.3: the Galápagos sea takes moist forest from eco 458."""
+    from builder.schemas import ROOT
+
+    world = _real_world()
+    if world is None:
+        pytest.skip("needs the committed grid and a real world checkout")
+    _gull_fetch(monkeypatch)
+    habitat_grid = HabitatGrid.load(ROOT / "data" / "habitat-grid" / "z10.json.gz")
+    made, blocked = make_tile("z10_0248_0508", habitat_grid, world, builder_root=ROOT)
+    assert blocked is None
+    assert made is not None
+    validate("tile", made)
+    assert made["home"] == "open_sea"
+    assert made["sea"] == "pacific_ocean"
+    assert made["land"] == "tropical_moist"
+    assert made["sources"]["land"] == "lands/index.json:nearest_styled_coast:458"

@@ -175,15 +175,21 @@ def _open_sea_name(tile: str, builder_root: Path, world: Path) -> dict[str, Any]
     return {"sea": sea, "name": name, "source": table.get("source", "")}
 
 
+#: The islets' colour when no coast has a land style (#282.1):
+#: lush green reads best for a bare ocean rock.
+DEFAULT_COAST_STYLE = "tropical_moist"
+
+
 def _nearest_land(
-    tile: str, habitat_grid: HabitatGrid
+    tile: str, habitat_grid: HabitatGrid, world: Path | None = None
 ) -> tuple[int | None, int | None]:
     """The nearest land cell's ecoregion and biome number (#177.1).
 
     Expanding rings around the cell, wrapping at the date
     line; the first cell with an ecoregion wins, so the Gulf
     of Finland takes the boreal coast's. Nothing when the
-    grid holds no land cell.
+    grid holds no land cell. With a world, only a coast whose
+    biome has a land style wins (#282.1).
     """
     col, row = parse_tile(tile)
     for radius in range(1, N + 1):
@@ -198,8 +204,11 @@ def _nearest_land(
                     cell = habitat_grid.cell_data(ncol, nrow)
                 except KeyError:
                     continue
-                if cell[0] is not None:
-                    return cell[0], cell[4]
+                if cell[0] is None:
+                    continue
+                if world is not None and land_style_for(world, cell[4]) is None:
+                    continue
+                return cell[0], cell[4]
     return None, None
 
 
@@ -2077,20 +2086,34 @@ def make_tile(
     sea: dict[str, Any] | None = None
     land_style: str | None = None
     land_eco: int | None = None
+    land_source: str | None = None
     if habitat == "open_ocean":
         # Open sea resolves before any species work: unnamed water
         # stays open_water, and the preview land is the nearest
         # coast's land style, so the Gulf of Finland is boreal
-        # (#177.1, #177.2).
+        # (#177.1, #177.2). A coast whose kind has no style
+        # (desert, Mediterranean, dry forest, mangrove, montane)
+        # falls back to the nearest coast that has one; the
+        # source names it, so we can tell it from a real coast.
+        # With no styled coast at all the islets default to
+        # lush: an open-sea tile blocks only on unnamed water
+        # (#282.1, #282.2).
         sea = _open_sea_name(tile, builder_root or BUILDER_ROOT, world)
         if sea is None:
             return None, {"reason": "open_water", "habitat": habitat}
         land_eco, land_biome = _nearest_land(tile, habitat_grid)
-        if land_eco is None:
-            return None, {"reason": "no_land", "habitat": habitat}
-        land_style = land_style_for(world, land_biome)
-        if land_style is None:
-            return None, {"reason": "no_land", "habitat": habitat}
+        land_style = land_style_for(world, land_biome) if land_eco is not None else None
+        if land_style is not None:
+            land_source = f"lands/index.json:nearest_coast:{land_eco}"
+        else:
+            land_eco, land_biome = _nearest_land(tile, habitat_grid, world)
+            if land_eco is None:
+                land_style = DEFAULT_COAST_STYLE
+                land_source = "lands/index.json:default_coast"
+            else:
+                land_style = land_style_for(world, land_biome)
+                assert land_style is not None
+                land_source = f"lands/index.json:nearest_styled_coast:{land_eco}"
     blend: dict[str, Any] | None = None
     if home != "open_sea":
         # No blend on an open-sea tile: the world's check
@@ -2282,7 +2305,7 @@ def make_tile(
 
         made_tile["name"] = plan_name(habitat, lat, lon, world)
     if habitat == "open_ocean":
-        assert sea is not None and land_style is not None and land_eco is not None
+        assert sea is not None and land_style is not None and land_source is not None
         del made_tile["ecoregion"]
         made_tile["sea"] = sea["sea"]
         # The sea's own names: the world's check requires them
@@ -2292,7 +2315,7 @@ def make_tile(
         made_tile["land_share"] = round(land, 2)
         made_tile["sources"]["habitat"] = "spec04:open_ocean"
         made_tile["sources"]["name"] = sea["source"]
-        made_tile["sources"]["land"] = f"lands/index.json:nearest_coast:{land_eco}"
+        made_tile["sources"]["land"] = land_source
     if blend is not None:
         made_tile["blend"] = blend
     if coast is not None:

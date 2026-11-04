@@ -33,6 +33,8 @@ class Config:
     safety: bool = False
     world_path: str | None = None
     daily_budget_usd: float = 20.0
+    auto_daily_usd: float = 20.0
+    ahead_per_day: int = 200
     job_budget_usd: float = 8.0
     total_budget_usd: float = 80.0
     ledger_path: str = "spend-ledger.json"
@@ -82,6 +84,8 @@ def _from_env(prefix: str = ENV_PREFIX) -> dict[str, str]:
         "SAFETY",
         "WORLD_PATH",
         "DAILY_BUDGET_USD",
+        "AUTO_DAILY_USD",
+        "AHEAD_PER_DAY",
         "JOB_BUDGET_USD",
         "TOTAL_BUDGET_USD",
         "LEDGER_PATH",
@@ -119,9 +123,16 @@ def load(path: str | Path | None = None) -> Config:
             with candidate.open("rb") as handle:
                 values.update(tomllib.load(handle))
     values.update(_from_env())
-    for money in ("daily_budget_usd", "job_budget_usd", "total_budget_usd"):
+    for money in (
+        "daily_budget_usd",
+        "auto_daily_usd",
+        "job_budget_usd",
+        "total_budget_usd",
+    ):
         if money in values:
             values[money] = float(values[money])
+    if "ahead_per_day" in values:
+        values["ahead_per_day"] = int(values["ahead_per_day"])
     if "max_new_species" in values:
         values["max_new_species"] = int(values["max_new_species"])
     if "max_new_plants" in values:

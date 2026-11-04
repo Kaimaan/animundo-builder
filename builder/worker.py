@@ -28,6 +28,9 @@ from .plan import plan_tile
 #: stage and each publish, so only a silent worker loses its lease.
 LEASE_TTL_MINUTES = 30
 
+RING_DOC_PREFIX = "ahead_"
+RING_PLAN_ESTIMATE_USD = 0.05
+
 #: A document update value that deletes the field.
 DELETE = object()
 
@@ -171,6 +174,10 @@ class Worker:
         if self._job_paused(data) and not data.get("operator_action"):
             print(f"build job {job_id}: paused, waiting for an operator")
             return False
+        if data.get("kind") == "request":
+            # The ring drives its own requests (#283.6): planned
+            # or still waiting, they never enter the build queue.
+            return False
         return ("build_job", job_id) not in self.in_flight
 
     @staticmethod
@@ -213,6 +220,14 @@ class Worker:
         self.sync_world()
         request = self.store.get_request(tile)
         if request is None:
+            return
+        ahead = self.store.get_plan(tile)
+        if (
+            ahead is not None
+            and ahead.get("ahead")
+            and ahead.get("world") == self.world_commit
+        ):
+            print(f"request {tile}: reusing the ring's plan on {self.world_commit}")
             return
         try:
             plan = plan_tile(
@@ -1168,6 +1183,7 @@ class Worker:
                     commit,
                     history={"job": job_id, "kind": "place"},
                 )
+                self._plan_ring(tile)
         job = self.store.get_build_job(job_id) or job
         self._place_publish(job_id, job, research, biome, made, ship_world)
         self._place_close_test_build(job_id, items)
@@ -2416,6 +2432,138 @@ class Worker:
         if over_cap:
             extra["plants_over_cap"] = sorted(set(over_cap))
         self._set_status(job_id, "published", extra)
+        self._plan_ring(tile)
+
+    def _plan_ring(self, tile: str) -> None:
+        """Plan the eight neighbours of a published tile, ahead (#283).
+
+        Runs last, after the publish's own spend settled, so a ring
+        plan never takes budget from anything else. Excluded,
+        published and already-planned-for-this-commit neighbours
+        stay put; the rest get a request in `build_jobs`, planned
+        now while the day's count and budget last, else waiting
+        for another day. Queues no further rings: only a published
+        tile starts one.
+        """
+        if self.config.ahead_per_day <= 0:
+            return
+        if self.world is None or self.grid_dir is None:
+            return
+        from .grid import neighbours
+        from .tiles import excluded_tiles
+
+        try:
+            excluded = excluded_tiles(self.builder_root)
+        except ValueError as error:
+            print(f"ring {tile}: {error}", file=sys.stderr)
+            self.alert({"kind": "plan_failed", "tile": tile, "error": str(error)[:200]})
+            return
+        for target in neighbours(tile).values():
+            if target is None or target in excluded:
+                continue
+            try:
+                self._plan_ring_tile(target)
+            except (
+                ValueError,
+                RuntimeError,
+                FileNotFoundError,
+                ConnectionError,
+                KeyError,
+            ) as error:
+                print(
+                    f"ring {tile}: {target}: cannot plan: {error}",
+                    file=sys.stderr,
+                )
+                self.alert(
+                    {
+                        "kind": "plan_failed",
+                        "tile": target,
+                        "error": str(error)[:200],
+                    }
+                )
+
+    def _plan_ring_tile(self, target: str) -> None:
+        """Plan one ring neighbour, or queue its request to wait (#283)."""
+        from .grid import parse_tile
+        from .ledger import today_iso
+
+        if self._tile_published(target):
+            return
+        commit = self.world_commit or "unknown"
+        existing = self.store.get_plan(target)
+        if existing is not None and existing.get("world") == commit:
+            return
+        col, row = parse_tile(target)
+        sea = self._habitat_grid().habitat(col, row) == "open_ocean"
+        planned = False
+        if self._ahead_planned_today() < self.config.ahead_per_day and (
+            sea or self._ring_affordable()
+        ):
+            assert self.world is not None
+            plan = plan_tile(
+                target,
+                None,
+                self._habitat_grid(),
+                self.world,
+                commit,
+                builder_root=self.builder_root,
+                species=self.species,
+                species_source=self._species_source(target),
+                estimates=self._median_estimates(),
+            )
+            plan["ahead"] = True
+            plan["ahead_day"] = today_iso()
+            self.store.set_plan(target, plan)
+            planned = True
+        self.store.set_build_job(
+            f"{RING_DOC_PREFIX}{target}",
+            {
+                "kind": "request",
+                "tile": target,
+                "status": "planned" if planned else "pending",
+                "requested_by": "ring",
+                "ahead": True,
+                "world": commit,
+            },
+        )
+        print(f"ring {target}: {'planned' if planned else 'waiting'}")
+
+    def _tile_published(self, tile: str) -> bool:
+        """The group blob already carries this tile (#283.3)."""
+        import json
+
+        from .grid import group_path
+
+        raw, _ = self.store.read_blob(group_path(tile))
+        if raw is None:
+            return False
+        try:
+            group = json.loads(raw.decode("utf-8"))
+        except ValueError:
+            return False
+        return tile in (group.get("tiles") or {})
+
+    def _ahead_planned_today(self) -> int:
+        """Ahead plans written today, the ring's day count (#283.4)."""
+        from .ledger import today_iso
+
+        today = today_iso()
+        return sum(
+            1
+            for _, plan in self.store.list_plans()
+            if (plan or {}).get("ahead") and (plan or {}).get("ahead_day") == today
+        )
+
+    def _ring_affordable(self) -> bool:
+        """The day's budget still covers one more ahead plan (#283.4)."""
+        from .ledger import FileLedger, LedgerError
+
+        try:
+            spent = FileLedger(self.config.ledger_path).day_spent()
+        except LedgerError as error:
+            print(f"ring: cannot read the day's spend: {error}", file=sys.stderr)
+            return False
+        return spent + RING_PLAN_ESTIMATE_USD <= self.config.auto_daily_usd
 
     def _snapshot_plan(self, job_id: str, job: dict[str, Any], tile: str) -> None:
         """Freeze the plan's approved items into the job folder.

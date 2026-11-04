@@ -3,6 +3,12 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #281 (no silent empty plan), live as v44
+
+- A plan with no items and no improve is now `blocked` with the probe's reason instead of waiting silently (commit `6c540e1`, CI green run 41759032332): `no_animal` carries the probe's `wanted`, so the game and admin health can say why. Plan schema gains `wanted[]`. When the probe is `no_animal`, `_pick_animal` also considers the survey's present animals with `start_from` + `can_make`, whatever their habitat label — native beats introduced when the list says so (no list entries carry those flags yet), then survey order. A skipped probe (a live place) keeps today's shape.
+- Tests: Cairns replays from a reconstructed survey (forest wild_boar/peregrine/honey_bee/monarch + river platypus, in #281's order): with starts → priced `animal_wild_boar` from moose; without → `blocked: no_animal` with `wanted`; native monarch beats introduced wild_boar. The replay reproduces the live bug shape exactly before the fix (`code_only: false, items: [], estimate: 0`, no `blocked`).
+- Deploy, 05:30 UTC: worker v44 on builder `6c540e1`. Single container `ta-01M6JGJV1NW7KHJ1SY2AY0YWER`, script-verified (grids + code hash). The live Cairns tile untouched per the item — its area stays as is until Kai decides. $0.
+
 ## 2026-11-04: inbox #280 (realm resolver) + #284, live as v43
 
 - One `resolve_home()` for planner, maker, worker and resurvey (commit `9d90a44`, CI green run 41751135558): coast flip, listed home, nearest home fitting the world's rule. Retired biomes never picked. Plans carry `blocked_detail` (reason/habitat/ecoregion/name/realm/kind) beside `blocked`. New `request replan-blocked` command (`--dry-run` lists, $0).

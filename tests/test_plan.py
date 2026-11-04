@@ -1729,3 +1729,163 @@ def test_plan_never_plans_a_food_name_as_a_plant(tmp_path: Path) -> None:
         species=_survey(),
     )
     assert "blue_mussel" not in [i["what"] for i in plan["items"]]
+
+
+def _cairns_world(
+    tmp_path: Path,
+    *,
+    starts: bool = True,
+    flags: dict[str, dict[str, bool]] | None = None,
+) -> Path:
+    """A world with wet_tropics and the Cairns survey's animals (#281.3).
+
+    The survey's forest species carry forest labels, like live: only
+    the agouti is rainforest-labelled, so the probe's `wanted` names
+    it (live, `wanted` is the 12 gbif drops, whose keys only a live
+    fetch attaches — recorded answers can't carry them).
+    """
+    world = _world(tmp_path)
+    (world / "homes" / "wet_tropics.json").write_text(
+        json.dumps(
+            {
+                "habitat": "rainforest",
+                "ecoregions": [150],
+                "food": [{"kind": "fruit"}, {"kind": "leaves"}],
+            }
+        )
+    )
+    entries = [
+        {
+            "id": "wild_boar",
+            "gbif_key": 7705930,
+            "habitats": ["forest"],
+            "start_from": "moose",
+            "can_make": True,
+        },
+        {
+            "id": "peregrine",
+            "gbif_key": 2480598,
+            "habitats": ["forest"],
+            "start_from": "kestrel",
+            "can_make": True,
+        },
+        {
+            "id": "honey_bee",
+            "gbif_key": 1334757,
+            "habitats": ["forest"],
+            "start_from": "bee",
+            "can_make": True,
+        },
+        {
+            "id": "monarch",
+            "gbif_key": 1916752,
+            "habitats": ["forest"],
+            "start_from": "peacock_butterfly",
+            "can_make": True,
+        },
+        {"id": "platypus", "gbif_key": 2426990, "habitats": ["wetland"]},
+        {
+            "id": "agouti",
+            "gbif_key": 999001,
+            "habitats": ["rainforest"],
+            "start_from": "vole",
+            "can_make": True,
+        },
+    ]
+    if not starts:
+        for entry in entries:
+            entry.pop("start_from", None)
+            entry.pop("can_make", None)
+    for species_id, extra in (flags or {}).items():
+        next(e for e in entries if e["id"] == species_id).update(extra)
+    listed = json.loads((world / "animal-list.json").read_text())
+    listed["animals"] += entries
+    (world / "animal-list.json").write_text(json.dumps(listed))
+    return world
+
+
+def _cairns_cells() -> dict[str, list[Any]]:
+    base = [150, 1.0, None, 0.0, 1, 1.0, 0.0, 80.0]
+    return {f"{c},{r}": list(base) for r in (293, 294, 295) for c in (580, 581, 582)}
+
+
+def _cairns_survey() -> dict[str, Any]:
+    """The Cairns survey as #281 describes it, continent-neutral.
+
+    `check_place` reads the tile's continent off the grid, so the
+    place names no continent; the species order is #281's own.
+    """
+    return {
+        "place": "Rainforest coast west of the reef",
+        "parts": [
+            {
+                "kind": "forest",
+                "species": ["wild_boar", "peregrine", "honey_bee", "monarch", "agouti"],
+            },
+            {"kind": "river", "species": ["platypus"]},
+        ],
+        "plants": [],
+        "trees": [],
+        "outside_animals": [],
+        "outside_plants": [],
+        "name_en": "Rainforest coast",
+        "name_fi": "Sademetsän rannikko",
+    }
+
+
+def _cairns_plan(tmp_path: Path, monkeypatch: Any, world: Path) -> dict[str, Any]:
+    import builder.plan as plan_mod
+
+    monkeypatch.setattr(plan_mod, "fetch_smoothed", lambda tile, cands: {})
+    return plan_tile(
+        "z10_0581_0294",
+        None,
+        _habitat_grid(tmp_path, _cairns_cells()),
+        world,
+        "abc123",
+        presence=None,
+        unfiled_presence={},
+        species=_cairns_survey(),
+    )
+
+
+def test_cairns_replay_makes_a_survey_animal(tmp_path: Path, monkeypatch: Any) -> None:
+    """#281.2: the survey's own animals can be the item."""
+    plan = _cairns_plan(tmp_path, monkeypatch, _cairns_world(tmp_path))
+    validate("plan", plan)
+    assert plan.get("blocked") is None
+    assert plan["items"] == [
+        {
+            "id": "animal_wild_boar",
+            "kind": "animal",
+            "what": "wild_boar",
+            "from": "moose",
+            "estimate_usd": plan["items"][0]["estimate_usd"],
+            "estimate_from": plan["items"][0]["estimate_from"],
+        }
+    ]
+    assert plan["items"][0]["estimate_usd"] > 0
+
+
+def test_cairns_replay_without_starts_blocks_with_wanted(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#281.1/3: nothing to build means blocked with the probe's why."""
+    plan = _cairns_plan(tmp_path, monkeypatch, _cairns_world(tmp_path, starts=False))
+    validate("plan", plan)
+    assert plan["items"] == []
+    assert plan["improve"] == []
+    assert plan["blocked"] == "no_animal"
+    assert plan["wanted"] == [{"kind": "animal", "what": "agouti", "part": "forest"}]
+
+
+def test_cairns_replay_prefers_a_native_survey_animal(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#281.2: a native survey animal beats an introduced one."""
+    world = _cairns_world(
+        tmp_path,
+        flags={"wild_boar": {"introduced": True}, "monarch": {"native": True}},
+    )
+    plan = _cairns_plan(tmp_path, monkeypatch, world)
+    assert [i["what"] for i in plan["items"]] == ["monarch"]

@@ -271,10 +271,25 @@ def _unfiled(
     ]
 
 
+def _has_improve(unfiled: list[dict[str, Any]], counts: dict[str, float]) -> bool:
+    """Whether `_finish` would list coming animals (#281.1).
+
+    The same rule it builds `improve` with: a recorded unfiled
+    animal the maker can start from. No items picked yet, so no
+    picked ids to skip.
+    """
+    by_id = {e["id"]: e for e in unfiled}
+    return any(
+        species in by_id and by_id[species].get("start_from") for species in counts
+    )
+
+
 def _pick_animal(
     unfiled: list[dict[str, Any]],
     counts: dict[str, float],
     request: dict[str, Any] | None,
+    survey: list[str] | None = None,
+    entries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """The unfiled animal to make: the explorer's own, else most recorded.
 
@@ -283,19 +298,45 @@ def _pick_animal(
     Otherwise the most recorded one; ties break by id. Animals
     without a `start_from` are left out: the one-shot maker cannot
     adapt from a home, so they get no item until D19's `newshape`.
+
+    When the probe found no filed animal at all, the survey's own
+    present animals can be the item instead (#281.2): listed, with
+    a `start_from` and `can_make`, whatever their habitat label.
+    A native one beats an introduced one when the list says so;
+    then the survey's order, then the id.
     """
     buildable = [e for e in unfiled if e.get("start_from")]
     recorded = {e["id"]: counts.get(e["id"], 0.0) for e in buildable}
     recorded = {s: n for s, n in recorded.items() if n > 0}
-    if not recorded:
+    if recorded:
+        played = (request or {}).get("species_played") or {}
+        ranked_played = sorted(played, key=lambda s: (-played[s], s))
+        for species in ranked_played:
+            if species in recorded:
+                return next(e for e in buildable if e["id"] == species)
+        winner = sorted(recorded, key=lambda s: (-recorded[s], s))[0]
+        return next(e for e in buildable if e["id"] == winner)
+    if not survey or not entries:
         return None
-    played = (request or {}).get("species_played") or {}
-    ranked_played = sorted(played, key=lambda s: (-played[s], s))
-    for species in ranked_played:
-        if species in recorded:
-            return next(e for e in buildable if e["id"] == species)
-    winner = sorted(recorded, key=lambda s: (-recorded[s], s))[0]
-    return next(e for e in buildable if e["id"] == winner)
+    by_id = {e["id"]: e for e in entries}
+    order = {species: n for n, species in enumerate(survey)}
+
+    def rank(species_id: str) -> tuple[int, int, str]:
+        entry = by_id[species_id]
+        native = bool(entry.get("native")) and not entry.get("introduced")
+        foreign = bool(entry.get("introduced")) and not entry.get("native")
+        return (0 if native else (2 if foreign else 1), order[species_id], species_id)
+
+    cands = [
+        species_id
+        for species_id in survey
+        if species_id in by_id
+        and by_id[species_id].get("start_from")
+        and by_id[species_id].get("can_make")
+    ]
+    if not cands:
+        return None
+    return by_id[sorted(cands, key=rank)[0]]
 
 
 def _probe_gaps(world: Path, made: dict[str, Any]) -> dict[str, dict[str, list[str]]]:
@@ -709,6 +750,7 @@ def plan_tile(
             species_source,
             tile_facts(tile, habitat_grid, world, home_id, adapt),
         )
+    probe_blocked: dict[str, Any] | None = None
     if home is None and bundle is None:
         home_usd, home_from = quote("home", ITEM_ESTIMATES["home"])
         items.append(
@@ -726,7 +768,7 @@ def plan_tile(
             made = None
         else:
             try:
-                made, _blocked = make_tile(
+                made, probe_blocked = make_tile(
                     tile,
                     habitat_grid,
                     world,
@@ -832,7 +874,20 @@ def plan_tile(
             }
         )
     if not pick_species(present, world, house)[0]:
-        picked = _pick_animal(unfiled, unfiled_counts, request)
+        survey_ids: list[str] | None = None
+        if (
+            probe_blocked is not None
+            and probe_blocked.get("reason") == "no_animal"
+            and answer is not None
+        ):
+            # The survey's order: `present`, or the parts flattened
+            # as `check_answer` flattens them for live answers.
+            survey_ids = list(answer.get("present") or []) or list(
+                dict.fromkeys(
+                    s for p in answer.get("parts") or [] for s in p.get("species") or []
+                )
+            )
+        picked = _pick_animal(unfiled, unfiled_counts, request, survey_ids, entries)
         if picked is not None:
             animal_usd, animal_from = quote("animal", ITEM_ESTIMATES["animal"])
             items.append(
@@ -859,6 +914,33 @@ def plan_tile(
                 "estimate_usd": plant_usd,
                 "estimate_from": plant_from,
             }
+        )
+    if (
+        not items
+        and probe_blocked is not None
+        and probe_blocked.get("reason")
+        and not _has_improve(unfiled, unfiled_counts)
+    ):
+        # Nothing to build and nothing coming: the plan says why
+        # with the probe's reason, never waits silently (#281.1).
+        # A skipped probe (a live place) keeps today's shape.
+        return _finish(
+            tile,
+            False,
+            [],
+            unfiled,
+            unfiled_counts,
+            request,
+            habitat,
+            lat,
+            lon,
+            world_commit,
+            answer,
+            probe_blocked["reason"],
+            world=world,
+            gaps=food_gaps or None,
+            estimates=estimates,
+            wanted=probe_blocked.get("wanted"),
         )
     return _finish(
         tile,
@@ -954,6 +1036,7 @@ def _finish(
     gaps: dict[str, dict[str, list[str]]] | None = None,
     estimates: dict[str, tuple[float, str]] | None = None,
     blocked_detail: dict[str, Any] | None = None,
+    wanted: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items.
 
@@ -1010,6 +1093,8 @@ def _finish(
         plan["blocked"] = blocked
     if blocked_detail is not None:
         plan["blocked_detail"] = blocked_detail
+    if wanted:
+        plan["wanted"] = wanted
     if probe is not None:
         plan["probe"] = probe
         plan["survey_from"] = survey_from

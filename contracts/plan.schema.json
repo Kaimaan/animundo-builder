@@ -135,6 +135,20 @@
         "realm": {"type": ["string", "null"]},
         "kind": {"type": ["integer", "null"]}
       }
+    },
+    "wanted": {
+      "description": "What the survey found that the world doesn't have yet, so the game can say why a no_animal plan waits (#281.1).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "what", "part"],
+        "properties": {
+          "kind": {"type": "string", "minLength": 1},
+          "what": {"type": "string", "minLength": 1},
+          "part": {"type": "string", "minLength": 1}
+        }
+      }
     }
   }
 }

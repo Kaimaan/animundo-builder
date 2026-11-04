@@ -1188,7 +1188,7 @@ def test_plant_item_builds_through_stages(tmp_path: Path, monkeypatch: Any) -> N
     assert brief["names"] == ["cloudberry"]
     region = json.loads((item_dir / "regions" / "zz_work.json").read_text())
     assert region["ground_cover"]["plants"] == [
-        {"model": "cloudberry", "names": ["cloudberry"]}
+        {"model": "cloudberry", "names": ["cloudberry"], "density": 0.5}
     ]
     survey = json.loads((item_dir / "survey.json").read_text())
     assert survey["facts"] == [{"topic": "plant", "text": "cloudberry grows here"}]

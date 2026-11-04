@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #282 (open-sea styled-coast fallback), live as v45
+
+- The open-sea gate no longer blocks `no_land` on an unstyled coast (commit `3879357`, CI green run 41781128527): it takes the nearest coast whose biome has a land style (same expanding rings, date-line wrap), `sources.land = lands/index.json:nearest_styled_coast:<eco>`. With no styled coast at all the islets default to `tropical_moist` (lush reads best for a bare ocean rock), source `...:default_coast`. Open sea now blocks only on unnamed water. The resolver is untouched.
+- Full-grid sea coverage, same grid+world: named open-ocean cells with a styled coast 538,420 → 634,726 of 634,726 (84.82% → 100.00%). 96,306 tiles unblocked, exactly the item's count; no named cell needs the default (every named sea has a styled coast in reach). Western Sahara's sea → savanna from eco 53, Galápagos sea → moist from eco 458, both passing the world's check; Gulf of Finland (`nearest_coast:717`) and reef sea tiles byte-identical.
+- Deploy, 05:57 UTC: worker v45 on builder `3879357`. Single container `ta-01M6JJ4NNCZQP4J89Q31XEAF7R`, script-verified. (The box had restarted since v44; the volume persists.)
+- #282.4 re-plan on the live box: replanned 0, still blocked 0, errors 0 — no `no_land` plans exist in Firestore.
+- Tests: 2 synthetic fallback (nearest styled wins, nearest of two), 2 real-grid (Atlantic/Pacific incl. world-check pass), rewritten #177.1 (default lush), gulf unchanged — 127 tiles green, 214 plan/worker/cli/resurvey green. $0.
+
 ## 2026-11-04: inbox #281 (no silent empty plan), live as v44
 
 - A plan with no items and no improve is now `blocked` with the probe's reason instead of waiting silently (commit `6c540e1`, CI green run 41759032332): `no_animal` carries the probe's `wanted`, so the game and admin health can say why. Plan schema gains `wanted[]`. When the probe is `no_animal`, `_pick_animal` also considers the survey's present animals with `start_from` + `can_make`, whatever their habitat label — native beats introduced when the list says so (no list entries carry those flags yet), then survey order. A skipped probe (a live place) keeps today's shape.

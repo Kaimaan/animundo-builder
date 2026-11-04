@@ -1231,6 +1231,133 @@ def test_place_make_species_remakes_a_stale_checking_item(
     assert calls == ["j1"]
 
 
+def test_place_make_species_runs_past_a_failed_item_in_test_builds(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#297.2: a test build makes every item past a failure."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    job = _place_job(
+        status="building",
+        phase="approved",
+        cap_usd=10.0,
+        research=_build_research(),
+        test_build=True,
+    )
+    store.build_jobs["j1"] = job
+    assert worker._claim("j1")
+    ran: list[str] = []
+
+    def fake_run(self: Worker, job_id: str, job: dict[str, Any], *rest: Any) -> None:
+        item = rest[2]
+        ran.append(item["id"])
+        entry: dict[str, Any] = {"id": item["id"], "cost_usd": 0.1}
+        if item["id"] == "animal_lion":
+            entry.update({"status": "failed", "error": "lion: boom"})
+        else:
+            entry["status"] = "checking"
+        doc = store.build_jobs[job_id]
+        doc["progress"] = [*(doc.get("progress") or []), entry]
+
+    monkeypatch.setattr(Worker, "run_item", fake_run)
+    biome = {
+        "plants": {"trees": [{"id": "pine", "share": 1.0}], "cover": [], "water": []}
+    }
+    items = worker._place_make_species(
+        "j1", store.build_jobs["j1"], job["research"], biome, "z10_0581_0294", 10.0
+    )
+    assert items is not None
+    assert ran == ["animal_lion", "plant_pine"]
+    assert "error" not in store.build_jobs["j1"]
+
+
+def test_place_ship_all_species_runs_past_a_failed_ship_in_test_builds(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#297.2: a test build ships every shippable item past a failure."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    job = _place_job(status="building", test_build=True, progress=[])
+    store.build_jobs["j1"] = job
+    tried: list[str] = []
+
+    def fake_ship(
+        self: Worker, job_id: str, job: dict[str, Any], item: dict[str, Any], *rest: Any
+    ) -> bool:
+        tried.append(item["id"])
+        return item["id"] != "animal_lion"
+
+    monkeypatch.setattr(Worker, "_place_ship_species", fake_ship)
+    items = [
+        {"id": "animal_lion", "kind": "animal", "what": "lion"},
+        {"id": "plant_pine", "kind": "plant", "what": "pine"},
+    ]
+    assert (
+        worker._place_ship_all_species("j1", job, items, worker.world, {}, set())
+        is True
+    )
+    assert tried == ["animal_lion", "plant_pine"]
+    assert "error" not in store.build_jobs["j1"]
+
+
+def test_place_close_test_build_fails_on_failed_items(
+    tmp_path: Path,
+) -> None:
+    """#297.2: the end of a test build fails the job when items failed."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    items = [{"id": "animal_lion"}, {"id": "plant_pine"}]
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        test_build=True,
+        progress=[
+            {"id": "animal_lion", "status": "failed", "error": "lion: boom"},
+            {"id": "plant_pine", "status": "checking"},
+        ],
+    )
+    assert worker._claim("j1")
+    worker._place_close_test_build("j1", items)
+    assert store.build_jobs["j1"]["error"] == "item_failed"
+    assert store.build_jobs["j1"]["status"] == "failed"
+    store.build_jobs["j2"] = _place_job(
+        status="building",
+        test_build=True,
+        progress=[
+            {"id": "animal_lion", "status": "checking"},
+            {"id": "plant_pine", "status": "checking"},
+        ],
+    )
+    assert worker._claim("j2")
+    worker._place_close_test_build("j2", items)
+    assert "error" not in store.build_jobs["j2"]
+    store.build_jobs["j3"] = _place_job(
+        status="building",
+        progress=[{"id": "animal_lion", "status": "failed"}],
+    )
+    assert worker._claim("j3")
+    worker._place_close_test_build("j3", items)
+    assert "error" not in store.build_jobs["j3"]
+
+
+def test_fail_item_records_a_reason(tmp_path: Path) -> None:
+    """#297.2: a failed ship keeps why, for the #276 entry."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    store.build_jobs["j1"] = _place_job(
+        status="building",
+        progress=[{"id": "animal_lion", "status": "checking"}],
+    )
+    assert worker._claim("j1")
+    worker._fail_item(
+        "j1", store.build_jobs["j1"], "animal_lion", "its tiles overlaid nothing"
+    )
+    (entry,) = store.build_jobs["j1"]["progress"]
+    assert entry["status"] == "failed"
+    assert entry["error"] == "its tiles overlaid nothing"
+
+
 def test_place_build_no_short_sets_waiting_then_clears(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

@@ -2341,35 +2341,8 @@ def test_measure_errors_passes_sizes_within_a_fifth(tmp_path: Path) -> None:
     assert errors == []
 
 
-def test_measure_errors_flags_drifted_leg_ratio(tmp_path: Path) -> None:
+def test_measure_errors_flags_absurd_legs(tmp_path: Path) -> None:
     world = _world(tmp_path)
-    (world / "models" / "fox.json").write_text(
-        json.dumps(
-            {
-                "id": "fox",
-                "bones": [
-                    {
-                        "name": "leg_f_l",
-                        "head": [0, 0.3, 0.1],
-                        "tail": [0, 0, 0.1],
-                    }
-                ],
-                "parts": [
-                    {
-                        "name": "body",
-                        "size": [0.17, 0.19, 0.46],
-                        "at": [0, 0.32, 0],
-                    },
-                    {
-                        "name": "arm_l",
-                        "size": [0.06, 0.18, 0.07],
-                        "at": [0.06, 0.24, 0.1],
-                        "bone": "leg_f_l",
-                    },
-                ],
-            }
-        )
-    )
     leggy = _spec(
         parts=[
             {
@@ -2396,7 +2369,7 @@ def test_measure_errors_flags_drifted_leg_ratio(tmp_path: Path) -> None:
     )
     assert len(errors) == 1
     assert errors[0].startswith("legs are 1.3x the body's depth")
-    assert "the fox's are 0.7x" in errors[0]
+    assert "longer than the body is deep" in errors[0]
 
 
 def _barrel(**over: Any) -> dict[str, Any]:
@@ -4512,36 +4485,8 @@ def test_belly_check_fails_the_test1_barrel() -> None:
     assert "belly sits at 0 cm" in errors[0]
 
 
-def test_ratio_yields_deepening_on_a_low_belly(tmp_path: Path) -> None:
-    """#287: with test 1's attempt-1 numbers the ratio keeps shorten only."""
-    world = _world(tmp_path)
-    (world / "models" / "vole.json").write_text(
-        json.dumps(
-            {
-                "id": "vole",
-                "bones": [
-                    {
-                        "name": "leg_f_l",
-                        "head": [0, 0.09, 0.03],
-                        "tail": [0, 0, 0.03],
-                    }
-                ],
-                "parts": [
-                    {
-                        "name": "body",
-                        "size": [0.05, 0.06, 0.30],
-                        "at": [0, 0.09, 0],
-                    },
-                    {
-                        "name": "arm_l",
-                        "size": [0.02, 0.06, 0.02],
-                        "at": [0.02, 0.06, 0.03],
-                        "bone": "leg_f_l",
-                    },
-                ],
-            }
-        )
-    )
+def test_hidden_legs_fail_under_a_tenth_of_top() -> None:
+    """#297.1: test 1's attempt-1 numbers (7.3% belly) hide the legs."""
     found = {"leg_m": 0.3308, "depth_m": 0.7604, "top_m": 0.6535}
     spec = {
         "parts": [
@@ -4552,50 +4497,34 @@ def test_ratio_yields_deepening_on_a_low_belly(tmp_path: Path) -> None:
             }
         ]
     }
-    errors = _shape_errors(found, spec, {"start_from": "vole", "prey": False}, world)
-    assert len(errors) == 1
-    assert "shorten the legs" in errors[0]
-    assert "or deepen the body" not in errors[0]
-    assert "too low to deepen" in errors[0]
+    (error,) = _shape_errors(found, spec)
+    assert "slim the body" in error
 
 
-def test_ratio_keeps_deepening_on_a_high_belly(tmp_path: Path) -> None:
-    """#287: well clear of the ground the ratio guards drift as before."""
-    world = _world(tmp_path)
-    (world / "models" / "vole.json").write_text(
-        json.dumps(
-            {
-                "id": "vole",
-                "bones": [
-                    {
-                        "name": "leg_f_l",
-                        "head": [0, 0.09, 0.03],
-                        "tail": [0, 0, 0.03],
-                    }
-                ],
-                "parts": [
-                    {
-                        "name": "body",
-                        "size": [0.05, 0.06, 0.30],
-                        "at": [0, 0.09, 0],
-                    },
-                    {
-                        "name": "arm_l",
-                        "size": [0.02, 0.06, 0.02],
-                        "at": [0.02, 0.06, 0.03],
-                        "bone": "leg_f_l",
-                    },
-                ],
-            }
-        )
-    )
+def test_absurd_legs_fail_over_body_depth() -> None:
+    """#297.1: legs longer than the body is deep shorten, reference-free."""
     found = {"leg_m": 0.85, "depth_m": 0.65, "top_m": 1.30}
     spec = {
         "parts": [{"name": "body", "at": [0.0, 0.90, 0.0], "size": [0.5, 0.6, 0.65]}]
     }
-    errors = _shape_errors(found, spec, {"start_from": "vole", "prey": False}, world)
-    assert len(errors) == 1
-    assert "shorten the legs or deepen the body" in errors[0]
+    (error,) = _shape_errors(found, spec)
+    assert "longer than the body is deep" in error
+    assert "shorten the legs" in error
+
+
+def test_showing_legs_pass() -> None:
+    """#297.1: test 2's capybara (31.4% belly, 0.5x legs) passes."""
+    found = {"leg_m": 0.3636, "depth_m": 0.7604, "top_m": 0.5922}
+    spec = {
+        "parts": [
+            {
+                "name": "body",
+                "at": [0.0, 0.3517, -0.0238],
+                "size": [0.4598, 0.3315, 0.7604],
+            }
+        ]
+    }
+    assert _shape_errors(found, spec) == []
 
 
 def test_made_needs_a_clean_last_model_try(tmp_path: Path) -> None:

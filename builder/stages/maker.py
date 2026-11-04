@@ -606,7 +606,7 @@ class AnimalMakerStage:
                         found = _measure_spec(spec)
                         misses = _size_misses(found, sourced, spec)
                         file_errors += _size_errors(found, sourced, spec)
-                        file_errors += _shape_errors(found, spec, target, world)
+                        file_errors += _shape_errors(found, spec)
                         if (
                             code_fixed
                             and misses
@@ -2188,17 +2188,14 @@ def _measure_errors(
     """The spec's sizes against the sourced ones, free (#57.4).
 
     Length, shoulder, tail and height within 20% of the research;
-    legs-against-depth within 30% of the reference's ratio (ratios
-    shift between species), unless the legs hide under the belly,
-    which slims the body instead (#269.4). Each miss names exact
-    numbers for the fix round. Missing numbers on either side
-    skip quietly.
+    legs that hide under the belly slim the body instead
+    (#269.4, #297.1), and legs longer than the body is deep
+    shorten. Each miss names exact numbers for the fix round.
+    Missing numbers on either side skip quietly.
     """
     found = _measure_spec(spec)
     sourced = _sourced_sizes(research, target)
-    return _size_errors(found, sourced, spec) + _shape_errors(
-        found, spec, target, world
-    )
+    return _size_errors(found, sourced, spec) + _shape_errors(found, spec)
 
 
 def _reference_spec(world: Path, start_from: str) -> dict[str, Any] | None:
@@ -2786,13 +2783,22 @@ def _size_errors(
     return errors
 
 
+#: Belly share below which the legs count as hidden (#297.1).
+#:
+#: Test 1's attempt-1 capybara hid its legs at 7.3% of its
+#: top, while test 2's good one shows them at 31.4%: a
+#: tenth splits hidden from showing with room both ways.
+#: The 2% ground rule (#269.4) would ship hidden legs.
+BELLY_HIDDEN_SHARE = 0.10
+
+
 def _belly_errors(found: dict[str, float], spec: dict[str, Any]) -> list[str]:
-    """Legs hidden under the belly must show (#269.4).
+    """Legs hidden under the belly must show (#269.4, #297.1).
 
     The belly is the body part's underside; legs reach the
-    ground, so a belly at the ground hides them. Within 2% of
-    the spec's height counts as the ground. Legless specs
-    (snakes) and specs without a body part skip quietly.
+    ground, so a belly under a tenth of the spec's height
+    hides them. Legless specs (snakes) and specs without a
+    body part skip quietly.
     """
     if "leg_m" not in found or "top_m" not in found or not found["top_m"]:
         return []
@@ -2810,7 +2816,7 @@ def _belly_errors(found: dict[str, float], spec: dict[str, Any]) -> list[str]:
     if body is None:
         return []
     belly = float(body["at"][1]) - float(body["size"][1]) / 2
-    if belly > 0.02 * found["top_m"]:
+    if belly > BELLY_HIDDEN_SHARE * found["top_m"]:
         return []
     return [
         f"the belly sits at {max(belly, 0.0) * 100:.0f} cm; the legs hide "
@@ -2819,82 +2825,26 @@ def _belly_errors(found: dict[str, float], spec: dict[str, Any]) -> list[str]:
     ]
 
 
-#: Belly share below which deepening is off the table (#287).
-#:
-#: Matching a drifted ratio deepens the body by the drift (30%
-#: at the bar); on a body whose height runs a third of the
-#: animal that eats a tenth of its top. Below that margin the
-#: ratio keeps the shorten option only, so the fix never digs
-#: a low belly into the ground the way test 1's capybara went.
-BELLY_DEEPEN_MARGIN = 0.10
+def _shape_errors(found: dict[str, float], spec: dict[str, Any]) -> list[str]:
+    """Belly clearance, else legs longer than the body is deep (#297.1).
 
-
-def _belly_low(found: dict[str, float], spec: dict[str, Any]) -> bool:
-    """Whether the belly is too low to deepen the body (#287)."""
-    if "top_m" not in found or not found["top_m"]:
-        return False
-    body = next(
-        (
-            part
-            for part in spec.get("parts", [])
-            if part.get("name") == "body"
-            and isinstance(part.get("at"), list)
-            and isinstance(part.get("size"), list)
-        ),
-        None,
-    )
-    if body is None:
-        return False
-    belly = float(body["at"][1]) - float(body["size"][1]) / 2
-    return belly < BELLY_DEEPEN_MARGIN * found["top_m"]
-
-
-def _shape_errors(
-    found: dict[str, float],
-    spec: dict[str, Any],
-    target: dict[str, Any],
-    world: Path,
-) -> list[str]:
-    """Belly clearance, else legs-against-depth (#269.4).
-
-    When the legs hide, slimming the body is the fix, and the
-    reference's own leg ratio — the disease when the reference
-    is a vole and the target a capybara — must not argue for
-    deepening it back. With the legs showing, the ratio guards
-    drift as before.
+    A capybara really is leggier than a vole, so the check
+    no longer compares against the reference's ratio (that
+    failed test 2's good capybara at 0.5x against the vole's
+    0.3x). It fails only when the legs hide or run absurd:
+    longer than the body is deep means shorten them.
     """
     belly = _belly_errors(found, spec)
     if belly:
         return belly
-    return _ratio_errors(found, target, world, spec)
-
-
-def _ratio_errors(
-    found: dict[str, float],
-    target: dict[str, Any],
-    world: Path,
-    spec: dict[str, Any] | None = None,
-) -> list[str]:
-    """Legs-against-depth drift from the reference's ratio."""
     if "leg_m" not in found or "depth_m" not in found or not found["depth_m"]:
         return []
     ratio = found["leg_m"] / found["depth_m"]
-    reference = _reference_spec(world, target["start_from"])
-    if reference is None:
+    if ratio <= 1.0:
         return []
-    theirs = _measure_spec(reference)
-    if "leg_m" not in theirs or "depth_m" not in theirs or not theirs["depth_m"]:
-        return []
-    want = theirs["leg_m"] / theirs["depth_m"]
-    if abs(ratio - want) / want <= 0.30:
-        return []
-    fix = "shorten the legs or deepen the body"
-    if spec is not None and _belly_low(found, spec):
-        fix = "shorten the legs (the belly is too low to deepen the body)"
     return [
         f"legs are {ratio:.1f}x the body's depth, "
-        f"the {target['start_from']}'s are {want:.1f}x: "
-        f"{fix}"
+        "longer than the body is deep: shorten the legs"
     ]
 
 

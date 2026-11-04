@@ -1074,7 +1074,9 @@ class Worker:
         animals that the same job has yet to make (#266.1).
         Nothing publishes until every species ships, so a
         failed species keeps the tile off Storage too and a
-        half place never goes live.
+        half place never goes live. A test build still runs
+        everything past failures and fails at the end, so one
+        run shows every problem (#297.2).
         """
         import json
 
@@ -1168,6 +1170,7 @@ class Worker:
                 )
         job = self.store.get_build_job(job_id) or job
         self._place_publish(job_id, job, research, biome, made, ship_world)
+        self._place_close_test_build(job_id, items)
 
     def _record_place_survey_spend(
         self, job_id: str, job: dict[str, Any], survey_before: float
@@ -1451,6 +1454,8 @@ class Worker:
                     f"build job {job_id}: {item['id']} failed: {reason}",
                     file=sys.stderr,
                 )
+                if job.get("test_build"):
+                    continue
                 self._fail(job_id, "item_failed")
                 return None
         return items
@@ -1515,8 +1520,11 @@ class Worker:
         species filed, so each overlay seats from the same tiles
         the build is about to publish. The first item that
         can't ship fails the build, and the tiles stay off
-        Storage with it. Each version carries its species'
-        files, so the game reads them from the pack (#275).
+        Storage with it — except in a test build, which ships
+        every shippable item past failures so one run shows
+        them all, and fails at the end instead (#297.2). Each
+        version carries its species' files, so the game reads
+        them from the pack (#275).
         """
         for item in items:
             job = self.store.get_build_job(job_id) or job
@@ -1530,6 +1538,12 @@ class Worker:
             if not self._place_ship_species(
                 job_id, job, item, ship_world, made, tree_ids
             ):
+                if job.get("test_build"):
+                    print(
+                        f"build job {job_id}: test build: {item['id']} "
+                        "not shipped, going on"
+                    )
+                    continue
                 return False
         return True
 
@@ -1574,6 +1588,31 @@ class Worker:
         if entry.get("status") in ("failed", "skipped"):
             return str(entry.get("error") or f"its make {entry.get('status')}")
         return None
+
+    def _place_close_test_build(self, job_id: str, items: list[dict[str, Any]]) -> None:
+        """A test build that ran everything fails on its failures (#297.2).
+
+        Nothing to do for real builds (they stop at the first
+        failure), for jobs already failed, or when every item
+        passed: otherwise the job fails `item_failed`, and the
+        #276 entry lists each item's reason from its progress.
+        """
+        job = self.store.get_build_job(job_id) or {}
+        if not job.get("test_build") or job.get("status") == "failed":
+            return
+        failed = [
+            item["id"]
+            for item in items
+            if self._place_item_failed(job, item["id"]) is not None
+        ]
+        if not failed:
+            return
+        print(
+            f"build job {job_id}: test build: {len(failed)} failed: "
+            + ", ".join(failed),
+            file=sys.stderr,
+        )
+        self._fail(job_id, "item_failed")
 
     def _place_species_files(
         self, job_id: str, item: dict[str, Any]
@@ -1634,7 +1673,9 @@ class Worker:
         species, and a new pack version carries the species
         plus `additions/tiles.json` (#220). An item whose make
         failed, or a species that can't ship, fails the job
-        first (0049-style: a half place never goes live). The
+        first (0049-style: a half place never goes live) —
+        unless the build is a test, which records the failure
+        and goes on (#297.2). The
         remake runs against the given world (the ship checkout
         with the build's new species filed), else this worker's
         own (#266.1). A tree the tiles seat rides the tile with
@@ -1652,7 +1693,8 @@ class Worker:
                 f"build job {job_id}: {item['id']} failed: {reason}",
                 file=sys.stderr,
             )
-            self._fail(job_id, "item_failed")
+            if not job.get("test_build"):
+                self._fail(job_id, "item_failed")
             return False
         research = job.get("research") or {}
         tiles = [t for t in research.get("tiles", []) if isinstance(t, str)]
@@ -1660,7 +1702,10 @@ class Worker:
         ship, failed, general, missing = self._place_ship(job_id, shim, item)
         if general or (ship is not None and not ship):
             self._flag_place(job_id, item, failed, missing, general)
-            self._fail(job_id, "place")
+            refused = "; ".join(general) or "no tile would take it"
+            self._fail_item(job_id, job, item["id"], f"its ship refused: {refused}")
+            if not job.get("test_build"):
+                self._fail(job_id, "place")
             return False
         self._require_lease(job_id)
         passing, made_by_tile, gaps, skipped = self._remake_enrich_tiles(
@@ -1672,8 +1717,9 @@ class Worker:
         self._history_left_out(job_id, shim, ship, failed, missing)
         rides = self._place_tree_rides(item, made or {}, tree_ids or set())
         if not passing and not rides:
-            self._fail_item(job_id, job, item["id"])
-            self._fail(job_id, "nothing_overlaid")
+            self._fail_item(job_id, job, item["id"], "its tiles overlaid nothing")
+            if not job.get("test_build"):
+                self._fail(job_id, "nothing_overlaid")
             return False
         try:
             pack_id = f"{item['kind']}_{what}"
@@ -1700,8 +1746,9 @@ class Worker:
             prefix = packs_mod.publish_pack(self.store, pack_id, version, packed)
         except (ValueError, KeyError, packs_mod.PackExists) as error:
             print(f"build job {job_id}: pack: {error}", file=sys.stderr)
-            self._fail_item(job_id, job, item["id"])
-            self._fail(job_id, "bad_pack")
+            self._fail_item(job_id, job, item["id"], f"its pack broke: {error}")
+            if not job.get("test_build"):
+                self._fail(job_id, "bad_pack")
             return False
         if passing:
             print(f"build job {job_id}: {item['id']} overlaid {len(passing)} tiles")
@@ -3017,12 +3064,27 @@ class Worker:
         print(f"build job {job_id}: overlaid {len(passing)} tiles")
         self._set_status(job_id, "published")
 
-    def _fail_item(self, job_id: str, job: dict[str, Any], item_id: str) -> None:
-        """The item's progress to failed, the rest untouched (#251.3)."""
-        progress = [
-            {**entry, "status": "failed"} if entry.get("id") == item_id else entry
-            for entry in job.get("progress", [])
-        ]
+    def _fail_item(
+        self,
+        job_id: str,
+        job: dict[str, Any],
+        item_id: str,
+        reason: str | None = None,
+    ) -> None:
+        """The item's progress to failed, the rest untouched (#251.3).
+
+        With a reason, the entry keeps why: a test build that
+        runs on lists every failure from its entries (#297.2).
+        """
+        progress = []
+        for entry in job.get("progress", []):
+            if entry.get("id") != item_id:
+                progress.append(entry)
+                continue
+            failed = {**entry, "status": "failed"}
+            if reason is not None:
+                failed["error"] = reason
+            progress.append(failed)
         self._update(job_id, {"progress": progress})
 
     def _overlay_pack_files(

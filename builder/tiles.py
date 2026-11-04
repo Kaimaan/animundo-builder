@@ -2106,7 +2106,7 @@ def _make_place_tile(
         if placed_name.get("fi"):
             made_tile["name"]["fi"] = placed_name["fi"]
     else:
-        made_tile["name"] = plan_name(habitat, lat, lon, world)
+        made_tile["name"] = plan_name(habitat, lat, lon, world, tile=tile)
     if waters:
         made_tile["plants"] = {"water": waters}
     shore = shore_for_tile(tile, habitat_grid.grid_dir)
@@ -2535,7 +2535,7 @@ def make_tile(
         # import stays local: plan.py builds on this module.
         from .plan import plan_name
 
-        made_tile["name"] = plan_name(habitat, lat, lon, world)
+        made_tile["name"] = plan_name(habitat, lat, lon, world, tile=tile)
     if habitat == "open_ocean":
         assert sea is not None and land_style is not None and land_source is not None
         del made_tile["ecoregion"]

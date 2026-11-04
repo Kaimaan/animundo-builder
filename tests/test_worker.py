@@ -2552,7 +2552,9 @@ def test_enrich_failure_names_its_stage_and_the_tile(
     assert "intake: tile z10_0581_0294 has no home in this checkout" in text
     assert "finished every built stage" not in text
     state = json.loads((item_dir / "state.json").read_text(encoding="utf-8"))
-    assert state["params"]["area"] == "z10_0581_0294 (Boreal forest north of Nuuksio)"
+    assert state["params"]["area"] == (
+        "z10_0581_0294 (Boreal forest north of Nuuksio National Park)"
+    )
 
 
 def test_enrich_review_overlays_a_blocked_tile(

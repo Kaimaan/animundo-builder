@@ -51,10 +51,23 @@ from .tiles import (
 )
 
 #: Hand-made places the plan name points from: id, English and
-#: genitive Finnish names, and the region centre.
+#: genitive Finnish names, and the region centre. Full names,
+#: like the place files: the fallback never shortens (#291).
 PLACES: tuple[tuple[str, str, str, float, float], ...] = (
-    ("nuuksio", "Nuuksio", "Nuuksion", 60.3007, 24.5263),
-    ("saimaa", "Saimaa", "Saimaan", 62.115, 28.508),
+    (
+        "nuuksio",
+        "Nuuksio National Park",
+        "Nuuksion kansallispuiston",
+        60.3007,
+        24.5263,
+    ),
+    (
+        "saimaa",
+        "Lake Saimaa – Linnansaari",
+        "Saimaan – Linnansaaren",
+        62.115,
+        28.508,
+    ),
 )
 
 #: Finnish vowels for the genitive rule: a base ending in one
@@ -174,35 +187,60 @@ def plan_name(
     lat: float,
     lon: float,
     world: Path | None = None,
+    tile: str | None = None,
 ) -> dict[str, str]:
     """The area name, always the compass (#135.5, #195.4).
 
-    "Forest north of Nuuksio" / "Metsä Nuuksion
-    pohjoispuolella" by code: one plain style everywhere,
-    English and Finnish saying the same tree. Survey answers
-    name nothing, however fancy their words. With a world,
-    the world's places join the curated names and the nearest
-    wins; a tie keeps the curated name (#169.2).
+    "Forest north of Nuuksio National Park" by code: one
+    plain style everywhere, English and Finnish saying the
+    same tree. Survey answers name nothing, however fancy
+    their words. With a world, the world's place files name
+    every tile beside them (`name.en`/`name.fi_gen` only,
+    never shortened); the curated names are only the fallback
+    for a world without places (#291, was #169.2). A tile of
+    a live place carries the place's own name.
     """
+    if tile is not None and world is not None:
+        own = _place_own_name(tile, world)
+        if own is not None:
+            return own
     words = HABITATS.get(habitat, (habitat.replace("_", " ").title(), habitat))
     scored = []
-    candidates: list[tuple[tuple[str, str, str, float, float], int]] = [
-        (place, 0) for place in PLACES
-    ]
-    if world is not None:
-        candidates += [(place, 1) for place in named_places(world)]
-    for (_pid, en, gen, plat, plon), order in candidates:
+    filed: list[tuple[str, str, str, float, float]] = (
+        named_places(world) if world is not None else []
+    )
+    for _pid, en, gen, plat, plon in filed or PLACES:
         east = (lon - plon) * math.cos(math.radians(lat))
         north = lat - plat
         dist = math.hypot(east, north)
         angle = (math.degrees(math.atan2(east, north)) + 360) % 360
         wind = WINDS[int((angle + 22.5) // 45) % 8]
-        scored.append((dist, order, en, gen, wind))
-    _dist, _order, en, gen, wind = sorted(scored)[0]
+        scored.append((dist, en, gen, wind))
+    _dist, en, gen, wind = sorted(scored)[0]
     return {
         "en": f"{words[0]} {wind[0]} of {en}",
         "fi": f"{words[1]} {gen} {wind[1]}puolella",
     }
+
+
+def _place_own_name(tile: str, world: Path) -> dict[str, str] | None:
+    """A tile of a live place carries the place's own name (#291)."""
+    from .tiles import live_place_for_tile
+
+    try:
+        place = live_place_for_tile(tile, world)
+    except ValueError:
+        return None
+    if place is None:
+        return None
+    name = place.get("name") or {}
+    en = name.get("en") if isinstance(name, dict) else name
+    if not isinstance(en, str) or not en.strip():
+        return None
+    fi = name.get("fi") if isinstance(name, dict) else None
+    if not isinstance(fi, str) or not fi.strip():
+        fi = en.strip()
+    return {"en": en.strip(), "fi": fi.strip()}
 
 
 #: Habitats that are water: a new water home adapts from water.
@@ -1103,7 +1141,7 @@ def _finish(
         "items": items,
         "improve": improve,
         "estimate_usd": round(estimate, 2),
-        "name": plan_name(habitat, lat, lon, world),
+        "name": plan_name(habitat, lat, lon, world, tile=tile),
         "coming": coming,
         "world": world_commit,
         "planned_at": datetime.now(UTC).isoformat(),

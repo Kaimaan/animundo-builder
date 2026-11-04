@@ -161,8 +161,8 @@ def test_plan_is_code_only_when_tile_makes(tmp_path: Path) -> None:
     assert plan["estimate_usd"] == 0
     assert plan["tile"] == "z10_0581_0294"
     assert plan["world"] == "abc123"
-    assert plan["name"]["en"] == "Boreal forest north of Nuuksio"
-    assert plan["name"]["fi"] == "Havumetsä Nuuksion pohjoispuolella"
+    assert plan["name"]["en"] == "Boreal forest north of Nuuksio National Park"
+    assert plan["name"]["fi"] == "Havumetsä Nuuksion kansallispuiston pohjoispuolella"
 
 
 def test_plan_lists_home_from_nearest(tmp_path: Path) -> None:
@@ -1119,13 +1119,14 @@ def test_plan_adapts_a_find_from_the_same_food_kind(tmp_path: Path) -> None:
 
 
 def test_plan_names_direction_from_nearest_place() -> None:
+    """#291: even the curated fallback uses the full names."""
     assert plan_name("sea", 52.077, -5.007) == {
-        "en": "Sea southwest of Nuuksio",
-        "fi": "Meri Nuuksion lounaispuolella",
+        "en": "Sea southwest of Nuuksio National Park",
+        "fi": "Meri Nuuksion kansallispuiston lounaispuolella",
     }
     assert plan_name("tundra", 68.40, 23.60) == {
-        "en": "Tundra north of Saimaa",
-        "fi": "Tundra Saimaan pohjoispuolella",
+        "en": "Tundra north of Lake Saimaa – Linnansaari",
+        "fi": "Tundra Saimaan – Linnansaaren pohjoispuolella",
     }
 
 
@@ -1258,8 +1259,8 @@ def test_named_places_skips_a_place_without_finnish(tmp_path: Path) -> None:
     assert found["b"] == "Ahon"
 
 
-def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
-    """#169.2: where a curated name exists, the place doesn't rename it."""
+def test_plan_prefers_the_filed_name_on_a_tie(tmp_path: Path) -> None:
+    """#291: the place file always wins, even on a tie (was #169.2)."""
     world = _world(tmp_path)
     places = world / "places"
     places.mkdir(exist_ok=True)
@@ -1273,8 +1274,81 @@ def test_plan_keeps_the_curated_name_on_a_tie(tmp_path: Path) -> None:
         )
     )
     assert plan_name("sea", 52.077, -5.007, world) == {
-        "en": "Sea southwest of Nuuksio",
-        "fi": "Meri Nuuksion lounaispuolella",
+        "en": "Sea southwest of Nuuksio National Park",
+        "fi": "Meri Nuuksio National Parkin lounaispuolella",
+    }
+
+
+def test_plan_names_beside_places_from_the_files(tmp_path: Path) -> None:
+    """#291: tiles beside Nuuksio and Saimaa carry the full names."""
+    from builder.grid import center
+
+    world = _named_world(tmp_path)
+    # z10_0580_0293 sits nearer the old short-name point than the
+    # filed centre: the file still wins.
+    lat, lon = center("z10_0580_0293")
+    named = plan_name("boreal_forest", lat, lon, world)
+    assert named["en"].endswith("of Nuuksio National Park")
+    assert named["en"].startswith("Boreal forest ")
+    assert named["fi"].startswith("Havumetsä Nuuksion kansallispuiston ")
+    lat, lon = center("z10_0591_0283")
+    named = plan_name("boreal_forest", lat, lon, world)
+    assert "Lake Saimaa – Linnansaari" in named["en"]
+    assert named["fi"].startswith("Havumetsä Saimaan – Linnansaaren ")
+
+
+def test_plan_names_a_place_tile_by_the_place(tmp_path: Path) -> None:
+    """#291: a tile of a place carries the place's own name."""
+    from fake_world import boreal_3x3, write_grids
+
+    from builder.grid import center
+    from builder.habitats import load_grid
+    from builder.tiles import make_tile
+
+    world = _world(tmp_path)
+    (world / "places").mkdir(exist_ok=True)
+    (world / "places" / "fi_nuuksio.json").write_text(
+        json.dumps(
+            {
+                "id": "fi_nuuksio",
+                "name": {
+                    "en": "Nuuksio National Park",
+                    "fi": "Nuuksion kansallispuisto",
+                    "fi_gen": "Nuuksion kansallispuiston",
+                },
+                "center": {"lat": 60.2398, "lon": 24.6094},
+                "live": True,
+                "tiles": [[581, 294]],
+            }
+        )
+    )
+    lat, lon = center("z10_0581_0294")
+    assert plan_name("boreal_forest", lat, lon, world, tile="z10_0581_0294") == {
+        "en": "Nuuksio National Park",
+        "fi": "Nuuksion kansallispuisto",
+    }
+    grid = load_grid(write_grids(tmp_path / "grid", boreal_3x3()))
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        grid,
+        world,
+        builder_root=tmp_path,
+        species={
+            "place": "Taiga",
+            "parts": [{"kind": "forest", "species": ["fox"]}],
+            "plants": [],
+            "trees": [],
+            "outside_animals": [],
+            "outside_plants": [],
+            "name_en": "Taiga",
+            "name_fi": "Taiga",
+        },
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert made["name"] == {
+        "en": "Nuuksio National Park",
+        "fi": "Nuuksion kansallispuisto",
     }
 
 

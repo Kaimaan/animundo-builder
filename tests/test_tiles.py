@@ -101,6 +101,41 @@ def _habitat_grid(tmp_path: Path, cells: dict[str, list[Any]]) -> HabitatGrid:
     return HabitatGrid.load(path)
 
 
+def _ruled_world() -> Path:
+    """The real checkout with the lands tables and the rule, or a skip."""
+    from builder.schemas import ROOT
+
+    world = ROOT.parent / "animundo-world"
+    if not (world / "lands" / "ecoregions.json").is_file():
+        pytest.skip("needs the world checkout with lands/ecoregions.json")
+    if not (world / "tools" / "check_tile.py").is_file():
+        pytest.skip("needs the world's home_fits")
+    return world
+
+
+def _world_home_fits(world: Path) -> Any:
+    """The world's own `home_fits`, imported from its checkout (tests only)."""
+    import sys
+
+    tools = str(world / "tools")
+    sys.path.insert(0, tools)
+    try:
+        import check_tile
+
+        return check_tile.home_fits
+    finally:
+        sys.path.remove(tools)
+
+
+def _one_cell_grid(
+    tmp_path: Path, eco: int, biome: int, land: float = 1.0, water: float = 0.0
+) -> Any:
+    """A grid whose only cell carries this ecoregion and biome."""
+    return _habitat_grid(
+        tmp_path, {"581,294": [eco, 1.0, None, 0.0, biome, land, water, 100.0]}
+    )
+
+
 def _home(world: Path, home_id: str = "boreal_forest") -> dict[str, Any]:
     return json.loads((world / "homes" / f"{home_id}.json").read_text())
 
@@ -381,7 +416,7 @@ def test_coast_habitat_flips_to_the_sea_side() -> None:
 
 
 def test_default_bundle_keeps_a_listed_ecoregion(tmp_path: Path) -> None:
-    """#198.2: a bundle must list a listed ecoregion; new land as before."""
+    """#280.3: only a same-habitat listing blocks the bundle; new land as before."""
     from builder.tiles import available_biomes, default_bundle
 
     world = _world(tmp_path)
@@ -403,18 +438,20 @@ def test_default_bundle_keeps_a_listed_ecoregion(tmp_path: Path) -> None:
     grid = _habitat_grid(tmp_path, _boreal_3x3(581, 294))
     assert (
         default_bundle(
-            "z10_0581_0294", grid, filed, "rainforest", "tropical_moist", 150
-        )
-        is None
-    )
-    assert (
-        default_bundle(
-            "z10_0581_0294", grid, filed, "rainforest", "tropical_moist", 999
+            "z10_0581_0294", grid, world, filed, "rainforest", "tropical_moist", 150
         )
         == "rainforest"
     )
     assert (
-        default_bundle("z10_0581_0294", grid, filed, "rainforest", "tropical_moist")
+        default_bundle(
+            "z10_0581_0294", grid, world, filed, "rainforest", "tropical_moist", 999
+        )
+        == "rainforest"
+    )
+    assert (
+        default_bundle(
+            "z10_0581_0294", grid, world, filed, "rainforest", "tropical_moist"
+        )
         == "rainforest"
     )
 
@@ -2703,13 +2740,182 @@ def test_default_bundle_takes_the_nearest_matching_biome(tmp_path: Path) -> None
     habitat_grid = _habitat_grid(tmp_path, cells)
     biomes = available_biomes(world)
     assert (
-        default_bundle("z10_0581_0294", habitat_grid, biomes, "boreal_forest", "boreal")
+        default_bundle(
+            "z10_0581_0294", habitat_grid, world, biomes, "boreal_forest", "boreal"
+        )
         == "boreal_forest"
     )
     assert (
-        default_bundle("z10_0581_0294", habitat_grid, biomes, "boreal_forest", "tundra")
+        default_bundle(
+            "z10_0581_0294", habitat_grid, world, biomes, "boreal_forest", "tundra"
+        )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "eco,biome,want",
+    [
+        (718, 6, "boreal_taiga"),
+        (781, 11, "tundra"),
+        (511, 1, "rainforest"),
+        (54, 7, "savanna"),
+        (150, 1, "wet_tropics"),
+        (155, 1, "wet_tropics"),
+        (717, 6, "boreal_taiga"),
+        (496, 1, "rainforest"),
+    ],
+)
+def test_realm_resolver_serves_kind_in_realm(
+    tmp_path: Path, eco: int, biome: int, want: str
+) -> None:
+    """#280.6: each case resolves as the world's home_fits says."""
+    from builder.tiles import available_biomes, home_fits, resolve_home
+
+    world = _ruled_world()
+    world_fits = _world_home_fits(world)
+    grid = _one_cell_grid(tmp_path, eco, biome)
+    biomes = available_biomes(world)
+    habitat = grid.habitat(581, 294)
+    home, final_habitat, blocked = resolve_home(
+        "z10_0581_0294", grid, world, biomes, habitat, eco, biome, 1.0
+    )
+    assert blocked is None
+    assert home == want
+    assert final_habitat == habitat
+    data = biomes[home]
+    assert home_fits(world, eco, habitat, home, data, biomes) is True
+    assert world_fits({"ecoregion": eco, "habitat": habitat}, home, data) is True
+
+
+@pytest.mark.parametrize(
+    "eco,biome,home,want",
+    [
+        (370, 6, "boreal_taiga", False),
+        (150, 1, "rainforest", False),
+        (511, 1, "wet_tropics", False),
+        (718, 6, "boreal_taiga", True),
+        (155, 1, "wet_tropics", True),
+    ],
+)
+def test_realm_rule_matches_home_fits(
+    tmp_path: Path, eco: int, biome: int, home: str, want: bool
+) -> None:
+    """#280.1: the builder's rule agrees with the world's on fits and refusals."""
+    from builder.tiles import available_biomes, home_fits
+
+    world = _ruled_world()
+    world_fits = _world_home_fits(world)
+    biomes = available_biomes(world)
+    data = biomes[home]
+    t = {"ecoregion": eco, "habitat": data["habitat"]}
+    assert home_fits(world, eco, t["habitat"], home, data, biomes) is want
+    assert world_fits(t, home, data) is want
+
+
+def test_realm_resolver_blocks_another_realm(tmp_path: Path) -> None:
+    """#280.6: Canadian Shield names its realm, kind and name."""
+    from builder.tiles import available_biomes, resolve_home
+
+    world = _ruled_world()
+    grid = _one_cell_grid(tmp_path, 370, 6)
+    biomes = available_biomes(world)
+    home, habitat, blocked = resolve_home(
+        "z10_0581_0294", grid, world, biomes, "boreal_forest", 370, 6, 1.0
+    )
+    assert home is None
+    assert blocked is not None
+    assert blocked["reason"] == "no_home"
+    assert blocked["habitat"] == "boreal_forest"
+    assert blocked["ecoregion"] == 370
+    assert blocked["ecoregion_name"] == "Central Canadian Shield forests"
+    assert blocked["realm"] == "Nearctic"
+    assert blocked["kind"] == 6
+
+
+def test_realm_resolver_flips_a_coast_to_its_land_home(tmp_path: Path) -> None:
+    """#284: a Queensland coast cell builds from wet_tropics, not the sea."""
+    from builder.tiles import available_biomes, resolve_home
+
+    world = _ruled_world()
+    grid = _one_cell_grid(tmp_path, 150, 1, land=0.3)
+    biomes = available_biomes(world)
+    assert grid.habitat(581, 294) == "sea"
+    home, habitat, blocked = resolve_home(
+        "z10_0581_0294", grid, world, biomes, "sea", 150, 1, 0.3
+    )
+    assert blocked is None
+    assert (home, habitat) == ("wet_tropics", "rainforest")
+
+
+def test_realm_resolver_keeps_saimaa_and_the_reef(tmp_path: Path) -> None:
+    """#280.6: lake and reef cells resolve as before."""
+    from builder.tiles import available_biomes, resolve_home
+
+    world = _ruled_world()
+    biomes = available_biomes(world)
+    grid = _one_cell_grid(tmp_path, 717, 6, water=0.2)
+    assert grid.habitat(581, 294) == "boreal_lake"
+    home, habitat, blocked = resolve_home(
+        "z10_0581_0294", grid, world, biomes, "boreal_lake", 717, 6, 1.0
+    )
+    assert blocked is None
+    assert (home, habitat) == ("boreal_lakeland", "boreal_lake")
+    grid = _one_cell_grid(tmp_path, 150, 4, land=0.2)
+    assert grid.habitat(581, 294) == "sea"
+    home, habitat, blocked = resolve_home(
+        "z10_0581_0294", grid, world, biomes, "sea", 150, 4, 0.2
+    )
+    assert blocked is None
+    assert (home, habitat) == ("coral_reef", "sea")
+
+
+def test_realm_resolver_skips_retired_biomes(tmp_path: Path) -> None:
+    """#280.2: a retired bundle never wins, by kind or by style."""
+    from builder.tiles import available_biomes, default_bundle
+
+    world = _world(tmp_path)
+    _biomes(world)
+    (world / "biomes" / "boreal_forest.json").write_text(
+        json.dumps(
+            {
+                "habitat": "boreal_forest",
+                "ecoregions": [717],
+                "land": "boreal",
+                "retired": True,
+            }
+        )
+    )
+    (world / "biomes" / "boreal_taiga.json").write_text(
+        json.dumps({"habitat": "boreal_forest", "ecoregions": [717], "land": "boreal"})
+    )
+    grid = _one_cell_grid(tmp_path, 999, 6)
+    biomes = available_biomes(world)
+    assert (
+        default_bundle(
+            "z10_0581_0294", grid, world, biomes, "boreal_forest", "boreal", 999
+        )
+        == "boreal_taiga"
+    )
+
+
+def test_eco_cache_clears_on_demand(tmp_path: Path) -> None:
+    """#280.1: cached lands tables drop when the world moves."""
+    from builder.tiles import clear_eco_cache, ecoregion_info
+
+    world = _world(tmp_path)
+    (world / "lands").mkdir()
+    lands = world / "lands" / "ecoregions.json"
+    lands.write_text(
+        json.dumps({"ecoregions": {"999": {"biome": 6, "realm": "X", "name": "Old"}}})
+    )
+    assert ecoregion_info(world, 999)["name"] == "Old"
+    lands.write_text(
+        json.dumps({"ecoregions": {"999": {"biome": 6, "realm": "X", "name": "New"}}})
+    )
+    assert ecoregion_info(world, 999)["name"] == "Old"
+    clear_eco_cache()
+    assert ecoregion_info(world, 999)["name"] == "New"
 
 
 def test_make_tile_blocks_no_land_without_a_style(tmp_path: Path) -> None:

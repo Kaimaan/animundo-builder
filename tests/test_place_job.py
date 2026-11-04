@@ -66,7 +66,11 @@ class _ResearchRespond:
 def _worker(tmp_path: Path, store: FakeStore) -> Worker:
     world = make_world(tmp_path)
     (world / "biomes").mkdir(parents=True)
-    (world / "biomes" / "boreal_forest.json").write_text(json.dumps({"id": "x"}))
+    # A realistic biome entry: the resolver reads biomes/ as the
+    # layered source of truth, like the planner always did (#280.1).
+    (world / "biomes" / "boreal_forest.json").write_text(
+        json.dumps({"habitat": "boreal_forest", "ecoregions": [717], "style": "boreal"})
+    )
     listed = json.loads((world / "animal-list.json").read_text())
     for entry in listed["animals"]:
         entry.setdefault("name", entry["id"].replace("_", " ").title())

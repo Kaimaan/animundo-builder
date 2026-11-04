@@ -530,6 +530,8 @@ def test_tropical_sea_blocks_instead_of_the_generic_sea(tmp_path: Path) -> None:
     )
     assert plan["blocked"] == "no_home"
     assert plan["items"] == []
+    assert plan["blocked_detail"]["reason"] == "no_home"
+    assert plan["blocked_detail"]["ecoregion"] == 150
     filed = available_biomes(world)
     assert home_for_cell(150, "sea", filed, 1) is None
     assert home_for_cell(717, "sea", filed, 6) == "sea_717"

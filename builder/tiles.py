@@ -249,46 +249,248 @@ def ring_cells(habitat_grid: Any, col: int, row: int) -> Any:
                     continue
 
 
+#: Lands tables by world checkout: ecoregions and styles (#280.1).
+_ECO_TABLES: dict[str, tuple[dict[str, Any], list[dict[str, Any]] | None]] = {}
+
+
+def clear_eco_cache() -> None:
+    """Drop cached lands tables: the world moved under them (#280.1)."""
+    _ECO_TABLES.clear()
+
+
+def _eco_tables(world: Path) -> tuple[dict[str, Any], list[dict[str, Any]] | None]:
+    """`lands/ecoregions.json` and `lands/index.json` styles, cached by checkout."""
+    key = str(world)
+    cached = _ECO_TABLES.get(key)
+    if cached is None:
+        try:
+            eco = json.loads(
+                (world / "lands" / "ecoregions.json").read_text(encoding="utf-8")
+            ).get("ecoregions", {})
+        except (OSError, ValueError):
+            eco = {}
+        try:
+            styles = json.loads(
+                (world / "lands" / "index.json").read_text(encoding="utf-8")
+            ).get("styles", [])
+        except (OSError, ValueError):
+            styles = None
+        if not isinstance(eco, dict):
+            eco = {}
+        if styles is not None and not isinstance(styles, list):
+            styles = None
+        cached = (eco, styles)
+        _ECO_TABLES[key] = cached
+    return cached
+
+
+def ecoregion_info(world: Path, eco: int | None) -> dict[str, Any]:
+    """An ecoregion's RESOLVE biome, realm and name, or nothing (#280.4)."""
+    if eco is None:
+        return {}
+    info, _ = _eco_tables(world)
+    data = info.get(str(eco), {})
+    return dict(data) if isinstance(data, dict) else {}
+
+
+def ecoregion_style(world: Path, eco: int | None) -> str | None:
+    """The land style of an ecoregion's kind, realm-aware (#280.1).
+
+    The first `lands/index.json` entry whose RESOLVE biome
+    matches and whose realms (when named) hold the ecoregion's
+    realm: the world's `ecoregion_style`, matched.
+    """
+    if eco is None:
+        return None
+    info, styles = _eco_tables(world)
+    if styles is None:
+        return None
+    entry = info.get(str(eco), {})
+    if not isinstance(entry, dict):
+        return None
+    for style in styles:
+        if not isinstance(style, dict):
+            continue
+        if style.get("biome") == entry.get("biome") and (
+            not style.get("realms") or entry.get("realm") in style["realms"]
+        ):
+            land = style.get("land")
+            return str(land) if land else None
+    return None
+
+
+def home_fits(
+    world: Path,
+    eco: int | None,
+    habitat: str,
+    home_id: str,
+    home: dict[str, Any],
+    homes: dict[str, dict[str, Any]],
+) -> bool:
+    """Whether a home may build the ecoregion, by the world's rule (#280.1).
+
+    A home that lists it; or, when no home of the habitat lists
+    it, a home of that habitat whose land style is the
+    ecoregion's kind and whose own ecoregions are in the
+    ecoregion's realm. The world's `home_fits` (game proposal
+    013), matched; checkouts without the lands tables read as
+    listed-only.
+    """
+    if eco is None:
+        return False
+    listed = home.get("ecoregions", []) or []
+    if eco in listed:
+        return True
+    if any(
+        eco in (data.get("ecoregions") or []) and data.get("habitat") == habitat
+        for hid, data in homes.items()
+        if hid != home_id
+    ):
+        return False
+    info = ecoregion_info(world, eco)
+    if not info:
+        return False
+    land = home.get("land")
+    if not isinstance(land, str) or land != ecoregion_style(world, eco):
+        return False
+    realm = info.get("realm")
+    return realm is not None and realm in {
+        ecoregion_info(world, e).get("realm") for e in listed
+    }
+
+
 def default_bundle(
     tile: str,
     habitat_grid: HabitatGrid,
+    world: Path,
     biomes: dict[str, dict[str, Any]],
     habitat: str,
     style: str,
     eco: int | None = None,
 ) -> str | None:
-    """The nearest biome of this habitat with this land style (#148.3).
+    """The nearest home of this habitat that fits, by the world's rule (#280.1).
 
-    A cell whose ecoregion no biome lists builds from this default
-    bundle, with its real plants from the survey; the neighbours
-    come first in expanding rings, then the first anywhere. None
-    when no filed biome pairs this habitat with this style. When
-    the ecoregion is listed somewhere, the bundle must list it
-    too: a home that doesn't list the cell's ecoregion fails
-    the world's check (#198.2).
+    A cell whose ecoregion no biome lists builds from this
+    default bundle, with its real plants from the survey; the
+    neighbours come first in expanding rings, then the first
+    anywhere. Each candidate fits by `home_fits`: listed, or
+    the ecoregion's kind in its realm when no home of the
+    habitat lists it. Retired biomes are never picked: the
+    world refuses them on new tiles (#280.2). Checkouts
+    without the lands tables keep the old style match, with
+    the "listed somewhere" guard counting only homes of the
+    tile's own habitat (#280.3): a sea home listing a coast
+    ecoregion never blocks its land.
     """
-    listed = eco is not None and any(
-        eco in (data.get("ecoregions") or []) for data in biomes.values()
-    )
     col, row = parse_tile(tile)
     rings = list(ring_cells(habitat_grid, col, row))
+    tables, _ = _eco_tables(world)
+    ruled = bool(tables)
+    listed = eco is not None and any(
+        eco in (data.get("ecoregions") or []) and data.get("habitat") == habitat
+        for data in biomes.values()
+    )
+
+    def fits(home_id: str, data: dict[str, Any]) -> bool:
+        if data.get("habitat") != habitat or data.get("retired"):
+            return False
+        if ruled:
+            return home_fits(world, eco, habitat, home_id, data, biomes)
+        if data.get("land") != style:
+            return False
+        return not listed or eco in (data.get("ecoregions") or [])
+
     for neighbour_eco, neighbour in rings:
         found = home_for_cell(neighbour_eco, neighbour, biomes)
-        if (
-            found is not None
-            and biomes[found].get("habitat") == habitat
-            and biomes[found].get("land") == style
-            and (not listed or eco in (biomes[found].get("ecoregions") or []))
-        ):
+        if found is not None and fits(found, biomes[found]):
             return found
-    same = sorted(
-        biome_id
-        for biome_id, data in biomes.items()
-        if data.get("habitat") == habitat
-        and data.get("land") == style
-        and (not listed or eco in (data.get("ecoregions") or []))
-    )
+    same = sorted(biome_id for biome_id, data in biomes.items() if fits(biome_id, data))
     return same[0] if same else None
+
+
+def _cell_style(world: Path, eco: int | None, biome: int | None) -> str | None:
+    """The cell's land style: its kind in its realm, else its biome's (#280.1)."""
+    style = ecoregion_style(world, eco)
+    if style is not None:
+        return style
+    tables, _ = _eco_tables(world)
+    if tables:
+        return None
+    return land_style_for(world, biome)
+
+
+def _listed_or_bundle(
+    tile: str,
+    habitat_grid: HabitatGrid,
+    world: Path,
+    biomes: dict[str, dict[str, Any]],
+    habitat: str,
+    eco: int | None,
+    biome: int | None,
+) -> str | None:
+    """A listed home, else the nearest one that fits (#280.1)."""
+    home = home_for_cell(eco, habitat, biomes, biome)
+    if home is not None or eco is None:
+        return home
+    style = _cell_style(world, eco, biome)
+    if style is None:
+        return None
+    return default_bundle(tile, habitat_grid, world, biomes, habitat, style, eco)
+
+
+def resolve_home(
+    tile: str,
+    habitat_grid: HabitatGrid,
+    world: Path,
+    biomes: dict[str, dict[str, Any]],
+    habitat: str,
+    eco: int | None,
+    biome: int | None,
+    land: float,
+) -> tuple[str | None, str, dict[str, Any] | None]:
+    """The tile's home and habitat, or why neither fits (#280.1).
+
+    One resolver for the planner, the maker and the worker: the
+    coast flip, the listed home, then the nearest home of the
+    habitat that fits by the world's rule. Returns (home,
+    habitat, blocked): blocked names what's missing (reason,
+    habitat, ecoregion, ecoregion_name, realm, kind, #280.4),
+    None when a home fits.
+    """
+    habitat = coast_habitat(eco, habitat, land, biomes, biome)
+    if habitat == "sea" and land > 0:
+        land_habitat = habitat_for(eco, biome, 1.0, 0.0)
+        if (
+            _listed_or_bundle(
+                tile, habitat_grid, world, biomes, land_habitat, eco, biome
+            )
+            is not None
+        ):
+            # A coast tile with land builds from its land
+            # habitat's home; the coast mask carries the sea.
+            habitat = land_habitat
+    home = _listed_or_bundle(tile, habitat_grid, world, biomes, habitat, eco, biome)
+    if home is not None:
+        return home, habitat, None
+    if eco is None or not (world / "lands" / "index.json").is_file():
+        reason = "no_home"
+    elif _cell_style(world, eco, biome) is None:
+        reason = "no_land"
+    else:
+        reason = "no_home"
+    info = ecoregion_info(world, eco)
+    return (
+        None,
+        habitat,
+        {
+            "reason": reason,
+            "habitat": habitat,
+            "ecoregion": eco,
+            "ecoregion_name": info.get("name"),
+            "realm": info.get("realm"),
+            "kind": info.get("biome"),
+        },
+    )
 
 
 def excluded_tiles(builder_root: Path | None = None) -> set[str]:
@@ -1709,24 +1911,15 @@ def _resolve_home(
         return {"blocked": {"reason": "excluded", "habitat": habitat}, "place": None}
     homes = available_homes(world)
     biomes = available_biomes(world)
-    habitat = coast_habitat(eco1, habitat, land, biomes, biome)
-    if habitat == "sea" and land > 0:
-        land_habitat = habitat_for(eco1, biome, 1.0, 0.0)
-        if home_for_cell(eco1, land_habitat, biomes, biome) is not None:
-            # A coast tile with land builds from its land habitat's
-            # home (#232.1); the coast mask carries the sea. Without
-            # a land home for the ecoregion it stays sea (#198.2).
-            habitat = land_habitat
-    home = home_for_cell(eco1, habitat, biomes, biome)
+    home, habitat, blocked = resolve_home(
+        tile, habitat_grid, world, biomes, habitat, eco1, biome, land
+    )
     if home is None:
-        if eco1 is None or not (world / "lands" / "index.json").is_file():
-            return {"blocked": {"reason": "no_home", "habitat": habitat}, "place": None}
-        style = land_style_for(world, biome)
-        if style is None:
-            return {"blocked": {"reason": "no_land", "habitat": habitat}, "place": None}
-        home = default_bundle(tile, habitat_grid, biomes, habitat, style, eco1)
-        if home is None:
-            return {"blocked": {"reason": "no_home", "habitat": habitat}, "place": None}
+        assert blocked is not None
+        return {
+            "blocked": {"reason": blocked["reason"], "habitat": habitat},
+            "place": None,
+        }
     house = homes.get(home, biomes[home])
     if habitat == "open_ocean":
         place = live_place_for_tile(tile, world)

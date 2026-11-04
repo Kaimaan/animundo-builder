@@ -295,6 +295,28 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--jobs-dir", default="jobs", help="Job folders (default: jobs)."
     )
+    again = request_sub.add_parser(
+        "replan-blocked", help="Re-plan requests the resolver blocked (#280.5)."
+    )
+    again.add_argument(
+        "--world", default=None, help="Path to an animundo-world checkout."
+    )
+    again.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grid (default: data/habitat-grid).",
+    )
+    again.add_argument("--project", default=None, help="The Firebase project.")
+    again.add_argument(
+        "--storage-bucket",
+        default=None,
+        help="The Storage bucket (default: the project's default bucket).",
+    )
+    again.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List the tiles without planning: no model cost.",
+    )
     take = sub.add_parser("take", help="Take a job's checked items for review.")
     take.add_argument("job", nargs="?", default=None, help="The build job id.")
     take.add_argument(
@@ -1091,6 +1113,75 @@ def cmd_request_build_local(args: argparse.Namespace, world: Path) -> int:
     return 0
 
 
+def cmd_request_replan_blocked(args: argparse.Namespace) -> int:
+    """Re-plan the requests the resolver blocked (#280.5)."""
+    from .plan import plan_tile
+    from .replan import blocked_tiles, replan
+    from .worker import Worker, git_commit
+    from .worker_store import FirebaseStore, StoreError
+
+    try:
+        store = FirebaseStore(args.project, args.storage_bucket)
+    except StoreError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    targets = blocked_tiles(store)
+    if args.dry_run:
+        for tile, _request in targets:
+            plan = store.get_plan(tile) or {}
+            print(f"{tile}: {plan.get('blocked')}")
+        print(f"{len(targets)} blocked requests")
+        return 0
+    if args.world is None:
+        print("error: --world is required to re-plan", file=sys.stderr)
+        return 1
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    worker = Worker(
+        store=store,
+        jobs_dir=Path("jobs"),
+        world=world,
+        config=load_config(),
+        grid_dir=Path(args.habitat_grid),
+    )
+    try:
+        grid = worker._habitat_grid()
+    except (FileNotFoundError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    commit = git_commit(world)
+    estimates = worker._median_estimates()
+
+    def plan_fn(tile: str, request: dict) -> dict:
+        return plan_tile(
+            tile,
+            request,
+            grid,
+            world,
+            commit,
+            builder_root=worker.builder_root,
+            species=worker.species,
+            species_source=worker._species_source(tile),
+            estimates=estimates,
+        )
+
+    result = replan(store, plan_fn, [tile for tile, _request in targets])
+    for tile in result["planned"]:
+        print(f"{tile}: planned")
+    for reason, tiles in sorted(result["blocked"].items()):
+        for tile in tiles:
+            print(f"{tile}: still blocked ({reason})")
+    for tile, error in sorted(result["errors"].items()):
+        print(f"{tile}: error: {error}")
+    still = sum(len(tiles) for tiles in result["blocked"].values())
+    print(
+        f"replanned {len(result['planned'])}"
+        f", still blocked {still}, errors {len(result['errors'])}"
+    )
+    return 0
+
+
 def cmd_place_build(args: argparse.Namespace, world: Path) -> int:
     """One place job locally: replay its own answers, or record them live."""
     from .ledger import CapExceeded
@@ -1268,6 +1359,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_request_plan(args)
     if args.command == "request" and args.request_command == "build":
         return cmd_request_build(args)
+    if args.command == "request" and args.request_command == "replan-blocked":
+        return cmd_request_replan_blocked(args)
     if args.command == "take":
         return cmd_take(args)
     if args.command == "file-plant":

@@ -239,3 +239,27 @@ def test_take_clean_job_reports(tmp_path: Path, monkeypatch, capsys) -> None:
     code = main(["take", "j1", "--out", str(tmp_path), "--world", str(world)])
     assert code == 0
     assert "taken to" in capsys.readouterr().out
+
+
+def test_replan_blocked_dry_run_lists_tiles(monkeypatch, capsys) -> None:
+    """#280.5: --dry-run lists without planning and needs no world."""
+    from fake_store import FakeStore
+
+    store = FakeStore()
+    store.requests = {"t1": {"tile": "t1"}, "t2": {"tile": "t2"}}
+    store.plans = {"t1": {"blocked": "no_home"}, "t2": {"blocked": "no_wild"}}
+    monkeypatch.setattr("builder.worker_store.FirebaseStore", lambda *a, **k: store)
+    assert main(["request", "replan-blocked", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "t1: no_home" in out
+    assert "t2" not in out
+    assert "1 blocked requests" in out
+
+
+def test_replan_blocked_needs_world_to_plan(monkeypatch, capsys) -> None:
+    from fake_store import FakeStore
+
+    store = FakeStore()
+    monkeypatch.setattr("builder.worker_store.FirebaseStore", lambda *a, **k: store)
+    assert main(["request", "replan-blocked"]) == 1
+    assert "--world is required" in capsys.readouterr().err

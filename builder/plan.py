@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from .grid import center, parse_tile
-from .habitats import REEF_TRACT_SHARE, HabitatGrid, habitat_for
+from .habitats import REEF_TRACT_SHARE, HabitatGrid
 from .presence import animals_for_habitat, fetch_smoothed, library_animals
 from .prices import ITEM_ESTIMATES, SURVEY_ESTIMATE_USD
 from .schemas import ROOT as BUILDER_ROOT
@@ -39,14 +39,12 @@ from .species import (
 from .tiles import (
     available_biomes,
     available_homes,
-    coast_habitat,
-    default_bundle,
     excluded_tiles,
     home_for_cell,
-    land_style_for,
     make_tile,
     open_sea_entries,
     pick_species,
+    resolve_home,
     ring_cells,
     tile_facts,
 )
@@ -623,14 +621,9 @@ def plan_tile(
     homes = available_homes(world)
     biomes = available_biomes(world)
     land = habitat_grid.cell_data(col, row)[5]
-    habitat = coast_habitat(eco1, habitat, land, biomes, biome_number)
-    if habitat == "sea" and land > 0:
-        land_habitat = habitat_for(eco1, biome_number, 1.0, 0.0)
-        if home_for_cell(eco1, land_habitat, biomes, biome_number) is not None:
-            # A coast tile with land builds from its land habitat's
-            # home, like the maker (#232.1).
-            habitat = land_habitat
-    home = home_for_cell(eco1, habitat, biomes, biome_number)
+    home, habitat, home_blocked = resolve_home(
+        tile, habitat_grid, world, biomes, habitat, eco1, biome_number, land
+    )
     if (
         habitat == "open_ocean"
         and home in ("open_sea", "coral_reef")
@@ -671,53 +664,35 @@ def plan_tile(
             estimates=estimates,
         )
     bundle: str | None = None
+    adapt = False
     if home is None:
         assert eco1 is not None  # narrowed above; mypy can't see it
         if not (world / "lands" / "index.json").is_file():
+            # Checkouts too old for the lands tables adapt a new
+            # home, as before; the resolver owns the rest (#280.1).
             home_id = nearest_home(tile, habitat_grid, biomes, habitat)
             adapt = True
         else:
-            style = land_style_for(world, biome_number)
-            if style is None:
-                return _finish(
-                    tile,
-                    False,
-                    [],
-                    unfiled,
-                    unfiled_counts,
-                    request,
-                    habitat,
-                    lat,
-                    lon,
-                    world_commit,
-                    None,
-                    "no_land",
-                    world=world,
-                    estimates=estimates,
-                )
-            bundle = default_bundle(tile, habitat_grid, biomes, habitat, style, eco1)
-            if bundle is None:
-                return _finish(
-                    tile,
-                    False,
-                    [],
-                    unfiled,
-                    unfiled_counts,
-                    request,
-                    habitat,
-                    lat,
-                    lon,
-                    world_commit,
-                    None,
-                    "no_home",
-                    world=world,
-                    estimates=estimates,
-                )
-            home_id = bundle
-            adapt = False
+            assert home_blocked is not None
+            return _finish(
+                tile,
+                False,
+                [],
+                unfiled,
+                unfiled_counts,
+                request,
+                habitat,
+                lat,
+                lon,
+                world_commit,
+                None,
+                home_blocked["reason"],
+                world=world,
+                estimates=estimates,
+                blocked_detail=home_blocked,
+            )
     else:
         home_id = home
-        adapt = False
     if habitat == "open_ocean":
         # Open sea needs no survey: the maker reads GBIF
         # densities by code, never the model (#177.8).
@@ -978,13 +953,16 @@ def _finish(
     probe: str | None = None,
     gaps: dict[str, dict[str, list[str]]] | None = None,
     estimates: dict[str, tuple[float, str]] | None = None,
+    blocked_detail: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Improve species, names, estimates: the plan around the items.
 
     A blocked plan carries nothing to build and nothing coming,
-    only the reason for the game to show (#141.2). A plan whose
-    probe needs a survey says so, and its estimate is that
-    survey's cost (#169.3).
+    only the reason for the game to show (#141.2), plus what is
+    missing (reason, habitat, ecoregion, name, realm, kind)
+    beside `no_home` and `no_land` (#280.4). A plan whose probe
+    needs a survey says so, and its estimate is that survey's
+    cost (#169.3).
     """
     quote = _estimator(estimates)
     picked_ids = {i["what"] for i in items if i["kind"] == "animal"}
@@ -1030,6 +1008,8 @@ def _finish(
     }
     if blocked is not None:
         plan["blocked"] = blocked
+    if blocked_detail is not None:
+        plan["blocked_detail"] = blocked_detail
     if probe is not None:
         plan["probe"] = probe
         plan["survey_from"] = survey_from

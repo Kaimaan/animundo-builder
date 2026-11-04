@@ -4023,11 +4023,7 @@ class Worker:
         import json
 
         from .grid import parse_tile
-        from .tiles import (
-            available_homes,
-            coast_habitat,
-            home_for_cell,
-        )
+        from .tiles import available_biomes, available_homes, resolve_home
 
         assert self.world is not None
         for item in plan.get("items", []):
@@ -4040,23 +4036,21 @@ class Worker:
         col, row = parse_tile(tile)
         cells = self._habitat_grid()
         homes = available_homes(self.world)
-        land = cells.cell_data(col, row)[5]
-        habitat = coast_habitat(
-            cells.cell_data(col, row)[0],
+        biomes = available_biomes(self.world)
+        cell = cells.cell_data(col, row)
+        found, _, _ = resolve_home(
+            tile,
+            cells,
+            self.world,
+            biomes,
             cells.habitat(col, row),
-            land,
-            homes,
-            cells.cell_data(col, row)[4],
-        )
-        found = home_for_cell(
-            cells.cell_data(col, row)[0],
-            habitat,
-            homes,
-            cells.cell_data(col, row)[4],
+            cell[0],
+            cell[4],
+            cell[5],
         )
         if found is None:
             raise _NoHome(f"tile {tile} has no home in this checkout")
-        return homes[found]
+        return homes.get(found, biomes[found])
 
     def _failed_home_item(self, plan: dict[str, Any], job_id: str) -> str | None:
         """A failed home item the tile's home was to come from (#135.3).
@@ -4233,6 +4227,9 @@ class Worker:
             return
         print(f"world moved {self.world_commit}..{commit}: re-planning")
         self.world_commit = commit
+        from .tiles import clear_eco_cache
+
+        clear_eco_cache()
         for tile, _doc in self.store.list_requests():
             self.handle_request(tile)
 

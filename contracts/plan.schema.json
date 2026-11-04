@@ -121,6 +121,20 @@
       "description": "Where the probe survey's dollars came from: fixed, or the cost log's rows (#259.4).",
       "type": "string",
       "minLength": 1
+    },
+    "blocked_detail": {
+      "description": "What a no_home/no_land block is missing: reason, habitat, ecoregion, its name, realm and RESOLVE biome (#280.4).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": {"type": "string", "minLength": 1},
+        "habitat": {"type": ["string", "null"]},
+        "ecoregion": {"type": ["integer", "null"]},
+        "ecoregion_name": {"type": ["string", "null"]},
+        "realm": {"type": ["string", "null"]},
+        "kind": {"type": ["integer", "null"]}
+      }
     }
   }
 }

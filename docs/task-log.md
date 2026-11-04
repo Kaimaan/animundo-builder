@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #287 (capybara legs kind + failed-try check-in), live as v46
+
+- #276 entry — which it was: neither. The #269.4 belly check fails this sheet (belly 0 cm, "belly sits at 0 cm"). The model is test 1's attempt-2 try, which failed its checks and should never have checked in: attempt 1 (belly 4.75 cm, legs hidden) passed belly but drew ratio "shorten or deepen"; attempt 2 deepened to 0 cm and raised `_Stopped`; the v40→v41 cutover raced two workers on the shared volume and one's `_made` file-existence skip overwrote the failure, so the retry skipped the remake. 6 of 7 animals show the same failing-final-try-but-checked-in pattern.
+- Fix, commit `fff6a10`, CI green run 41788355951: the ratio keeps "shorten the legs" only when the belly is under 10% of the top (`BELLY_DEEPEN_MARGIN`, room under test 1's barrel), so a repair never digs a low belly into the ground; `_made` now needs the files plus a clean last edits try in mtime order (no surviving errors file → files decide, as for newshape), so a failed try is remade, not skipped. Both apply to the maker; legs that show come from test build 2's remake.
+- Deploy, 07:38 UTC: worker v46 on builder `fff6a10`. Single container `ta-01M6JQXDBWVKAWN64V3SAN1FVR`, script-verified.
+- Tests: barrel fails belly, ratio shorten-only on low belly, ratio keeps deepening on high belly, `_made` needs clean last try; 2 old skip-fakes seeded with clean tries. 159 maker green, full 1333 passed + 12 skipped, ruff clean. $0.
+
 ## 2026-11-04: inbox #282 (open-sea styled-coast fallback), live as v45
 
 - The open-sea gate no longer blocks `no_land` on an unstyled coast (commit `3879357`, CI green run 41781128527): it takes the nearest coast whose biome has a land style (same expanding rings, date-line wrap), `sources.land = lands/index.json:nearest_styled_coast:<eco>`. With no styled coast at all the islets default to `tropical_moist` (lush reads best for a bare ocean rock), source `...:default_coast`. Open sea now blocks only on unnamed water. The resolver is untouched.

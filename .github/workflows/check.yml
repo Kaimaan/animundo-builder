@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --locked --group dev
-      - run: uv run pytest
+      - run: uv run pytest -n auto -q
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - uses: gitleaks/gitleaks-action@v2

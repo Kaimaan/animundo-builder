@@ -26,7 +26,11 @@ dependencies = [
 builder = "builder.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.12"]
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3",
+    "ruff>=0.12",
+]
 
 [build-system]
 requires = ["hatchling"]

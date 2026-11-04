@@ -2599,7 +2599,8 @@ class Worker:
 
         assert self.world is not None
         ctx, item_dir, before = self._item_context(job_id, job, item, budget)
-        start = ctx.tracker.spent_usd - self._prior_stage_costs(item_dir)
+        entry_priors = self._prior_stage_costs(item_dir)
+        start = ctx.tracker.spent_usd - entry_priors
         self._guard_job = job_id
         try:
             self._settle_superseded(job_id, item, ctx)
@@ -2627,6 +2628,7 @@ class Worker:
                 item_dir,
                 ctx,
                 start,
+                entry_priors,
                 before,
                 budget,
                 error,
@@ -2646,6 +2648,7 @@ class Worker:
                 item_dir,
                 ctx,
                 start,
+                entry_priors,
                 before,
                 budget,
                 error,
@@ -2653,7 +2656,7 @@ class Worker:
             )
             raise _BudgetOut(code) from error
         except OffSwitch:
-            spent = round(ctx.tracker.spent_usd - start, 6)
+            spent = round(ctx.tracker.spent_usd - start - entry_priors, 6)
             self._update(
                 job_id, {"cost_usd": before + spent, "spent_usd": before + spent}
             )
@@ -2665,6 +2668,7 @@ class Worker:
                 item_dir,
                 ctx,
                 start,
+                entry_priors,
                 before,
                 budget,
                 error,
@@ -2696,6 +2700,7 @@ class Worker:
                     item_dir,
                     ctx,
                     start,
+                    entry_priors,
                     before,
                     budget,
                     error,
@@ -2704,10 +2709,14 @@ class Worker:
                 )
                 return
             print(f"build job {job_id}: {item['id']} failed: {error}", file=sys.stderr)
-            self._close_item(job_id, item, item_dir, ctx, start, before, budget, error)
+            self._close_item(
+                job_id, item, item_dir, ctx, start, entry_priors, before, budget, error
+            )
             return
         else:
-            self._close_item(job_id, item, item_dir, ctx, start, before, budget, None)
+            self._close_item(
+                job_id, item, item_dir, ctx, start, entry_priors, before, budget, None
+            )
         finally:
             self._guard_job = None
 
@@ -3929,6 +3938,7 @@ class Worker:
         item_dir: Path,
         ctx: Any,
         start: float,
+        entry_priors: float,
         before: float,
         budget: float,
         error: Exception | None,
@@ -3942,7 +3952,12 @@ class Worker:
         A failed item carries its failing stage and message in
         the report and in its progress entry, even when the
         intake broke before any stage ran (#168.3). The
-        pipeline's own record wins when it ran.
+        pipeline's own record wins when it ran. The entry
+        carries the whole item cost (this call plus the entry
+        priors), but the doc total adds only this call's new
+        spend: the priors settled before this call, so `before`
+        already holds them, and adding them again counted
+        test 1's animal research twice (#288.2).
         """
         from . import build as build_mod
         from .report import build_report, failed_checks
@@ -4000,7 +4015,7 @@ class Worker:
         if extra:
             entry.update(extra)
         progress.append(entry)
-        total = round(before + cost, 6)
+        total = round(before + cost - entry_priors, 6)
         self._update(
             job_id, {"progress": progress, "cost_usd": total, "spent_usd": total}
         )

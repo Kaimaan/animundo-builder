@@ -7,7 +7,10 @@ marks show. These marks make the species known; a child
 must see them at game distance. Judge only what the
 render shows, never what the species should have. Our
 models are simple, never realistic: a mark is met when a
-child would see its shape, not its fine detail.
+child would see its shape, not its fine detail. But
+shape words still bind: hollow rings are not solid dots,
+one named spot is not many, and a mark named on a part
+shows only there.
 
 ## Input
 

@@ -86,7 +86,7 @@ NEWSHAPE_ROUNDS = 3
 #: Bump it when the maker's checks or prompts change what a pass
 #: means: a rerun whose oneshot passed under an older version
 #: remakes instead of reusing files the new checks never saw.
-MAKER_VERSION = "2026-11-03"
+MAKER_VERSION = "2026-11-04"
 
 
 def _offered_factors(ref: dict[str, Any]) -> tuple[str, ...]:
@@ -2567,7 +2567,10 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
     `bands`, many thin stripes give `stripes` (#149.1), spots
     give `spots`, a hammer head gives `hammer`, and spines
     give `spines` unless they are fin spines, which the
-    tool's hedgehog coat can't make (#146.3). The rest go
+    tool's hedgehog coat can't make (#146.3). Rings and
+    rosettes are not the tool's solid diamonds, and one
+    named spot is not its whole-coat scatter: both stay
+    unmapped, for the report (#288.3). The rest go
     unmakable, for the report.
     """
     marks: list[str] = []
@@ -2585,7 +2588,11 @@ def _tool_marks(words: list[str]) -> tuple[list[str], list[str]]:
             found.append("bands")
         if re.search(r"\b(stripes?|striped)\b", low):
             found.append("stripes")
-        if re.search(r"\bspots?\b|\bspotted\b", low):
+        ringed = re.search(r"ring\s+spots?|rosettes?", low) is not None
+        single = re.search(r"\bspot\b", low) is not None and (
+            re.search(r"\bspots\b|\bspotted\b", low) is None
+        )
+        if re.search(r"\bspots?\b|\bspotted\b", low) and not ringed and not single:
             found.append("spots")
         if "hammer" in low:
             found.append("hammer")

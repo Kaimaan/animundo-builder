@@ -3134,10 +3134,50 @@ def test_close_item_alerts_on_spending_crossings(tmp_path: Path) -> None:
     tracker = BudgetTracker(budget_usd=10.0)
     tracker.spent_usd = 9.0
     ctx = SimpleNamespace(tracker=tracker)
-    worker._close_item("j1", {"id": "animal_lion"}, item_dir, ctx, 0.0, 4.0, 10.0, None)
+    worker._close_item(
+        "j1", {"id": "animal_lion"}, item_dir, ctx, 0.0, 0.0, 4.0, 10.0, None
+    )
     job = store.build_jobs["j1"]
     assert job["cost_usd"] == 13.0
     assert [a["pct"] for a in store.alerts] == [50, 80, 100]
+
+
+def test_close_item_counts_resumed_priors_once(tmp_path: Path) -> None:
+    """#288.2: priors already in `before` join the entry, not the doc.
+
+    Test 1's animals counted their research twice: the research
+    pass settled it (the doc picked it up via the baseline) and
+    the make pass added the same dollars again as priors.
+    """
+    from types import SimpleNamespace
+
+    from builder.pipeline import BudgetTracker
+
+    store = FakeStore()
+    store.build_jobs["j1"] = {
+        "area": "a",
+        "budget_usd": 10.0,
+        "kind": "build",
+        "status": "building",
+        "items": ["animal_lion"],
+        "progress": [],
+        "cost_usd": 4.0,
+        "spent_usd": 4.0,
+    }
+    worker = _worker(tmp_path, store)
+    assert store.claim_build_job("j1", worker.worker_id) is True
+    item_dir = tmp_path / "jobs" / "j1" / "animal_lion"
+    item_dir.mkdir(parents=True)
+    tracker = BudgetTracker(budget_usd=10.0)
+    tracker.spent_usd = 0.10
+    ctx = SimpleNamespace(tracker=tracker)
+    worker._close_item(
+        "j1", {"id": "animal_lion"}, item_dir, ctx, -0.05, 0.05, 4.0, 10.0, None
+    )
+    job = store.build_jobs["j1"]
+    assert job["progress"][0]["cost_usd"] == 0.15
+    assert job["cost_usd"] == 4.10
+    assert job["spent_usd"] == 4.10
 
 
 def test_close_item_keeps_spent_and_cost_together(tmp_path: Path) -> None:
@@ -3164,7 +3204,9 @@ def test_close_item_keeps_spent_and_cost_together(tmp_path: Path) -> None:
     tracker = BudgetTracker(budget_usd=10.0)
     tracker.spent_usd = 9.0
     ctx = SimpleNamespace(tracker=tracker)
-    worker._close_item("j1", {"id": "animal_lion"}, item_dir, ctx, 0.0, 4.0, 10.0, None)
+    worker._close_item(
+        "j1", {"id": "animal_lion"}, item_dir, ctx, 0.0, 0.0, 4.0, 10.0, None
+    )
     job = store.build_jobs["j1"]
     assert job["cost_usd"] == 13.0
     assert job["spent_usd"] == 13.0

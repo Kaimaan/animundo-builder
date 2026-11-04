@@ -3128,6 +3128,32 @@ def test_tool_marks_skip_fin_spines() -> None:
     assert unmatched == ["long spiny dorsal fin"]
 
 
+def test_tool_marks_skip_a_single_placed_spot() -> None:
+    """#288.3: one named spot is not the tool's whole-coat scatter."""
+    marks, unmatched = _tool_marks(["dark spot behind the gills"])
+    assert marks == []
+    assert unmatched == ["dark spot behind the gills"]
+
+
+def test_tool_marks_skip_ring_spots() -> None:
+    """#288.3: hollow rings are not the tool's solid diamonds."""
+    marks, unmatched = _tool_marks(
+        ["big black ring spots with little dots inside", "dark rosettes"]
+    )
+    assert marks == []
+    assert unmatched == [
+        "big black ring spots with little dots inside",
+        "dark rosettes",
+    ]
+
+
+def test_tool_marks_keep_plain_spotted_coats() -> None:
+    """#288.3: plural unqualified spots still scatter."""
+    marks, unmatched = _tool_marks(["dark spots", "spotted flanks"])
+    assert marks == ["spots"]
+    assert unmatched == []
+
+
 def test_mark_miss_points_at_the_tool_mark() -> None:
     """#146.3: a missing mark's fix keeps what paints it."""
     assert _mark_miss("three white bars across the body") == (
@@ -3608,6 +3634,13 @@ def test_marks_prompt_judges_shapes_on_simple_models() -> None:
     assert "simple, never realistic" in text
     assert "its shape, not its fine detail" in text
     assert "in the TOP view" in text
+
+
+def test_marks_prompt_judges_shape_count_and_place() -> None:
+    """#288.3: rings are hollow, one named spot is one, placed is placed."""
+    text = (PROMPTS_DIR / "model_marks.md").read_text(encoding="utf-8")
+    assert "hollow rings are not solid dots" in text
+    assert "one named spot is not many" in text
 
 
 def test_research_prompt_writes_marks_a_child_sees() -> None:

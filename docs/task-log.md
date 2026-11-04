@@ -3,6 +3,16 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #297 (legs hidden-or-absurd; test builds run to the end), live as v50, test 3 running
+
+- Commit `44ac66a`, CI green run 41830402165. Worker v50 deployed 12:49 UTC (single container `ta-01M6K9PEV8DWYHYVP3KF3TXRSR`, `BUILDER_COMMIT=44ac66a`, world `f0d042d`, verified by exec). Deploy authority: #275 owns Mamirauá end to end, and #297.3 orders test build 3.
+- #297.1, saying which: the item's option 2 (fail only when hidden or absurd), with "hidden" calibrated to belly under 10% of top. Neither literal option works alone: test-1's attempt-1 (7.3% belly, render-hidden legs, ratio 0.435) is indistinguishable by ratio from test-2's good capybara (0.5x), and research emits no body-depth numbers for a species-proportions check — the 2% ground rule would ship hidden legs. Measured: attempt-1 7.3% fails, test-1 barrel 0% fails, test-2 capybara 31.4% passes, absurd legs (>1x depth) fail. No passing animal sits in [2%,10%): macaw 29.4%, iguana/piranha/anaconda skip the check (no body part / legless), tapir is newshape; the jaguar/capybara negative-belly try-specs were failed tries checked in by the #287 `_made` bug, failing under both bars. `_ratio_errors`, `_belly_low` and the deepen margin are gone with the reference comparison.
+- #297.2: test builds make and ship every item past failures and fail `item_failed` at the end (`_place_close_test_build`); ship failures now record their reason in the progress entry for the #276 entry. Real builds still stop at the first failure. Tile/budget/off/pause stops stay fatal for both (a tile isn't an item and downstream needs it; caps and the off switch are job-level). Place file tolerates missing species (`_animal_file` → None, handled).
+- Tests: maker — attempt-1 numbers fail, absurd legs fail, test-2's real try-2 numbers pass, barrel still fails (kept), leggy 1.3 still fails (renamed); worker — make/ship loops continue in test builds, close helper verdicts (fail/untouched/real-untouched), `_fail_item` records reasons. Full suite 1366 passed + 12 skipped, ruff clean. $0.
+- No maker stamp bump: nothing checked in under the 2% bar past the `2026-11-04` stamp (test-2's capybara failed, never checked in), and test 3 starts from an empty folder.
+- Noticed, out of scope: the iguana spec has no part named `body`, so the belly/ratio shape checks are vacuous for it (pre-existing, unchanged by this item).
+- Test build 3 (`place_20261104_mamiraua_test_3`, publish-off, cap $4, doc-only copy) created 12:50 UTC, picked up 12:56:23 UTC on v50 (fresh container needed ~6 min). #276 entry follows when it ends. Expected ~$2.21 for a full 8-item run; running total $3.52 + this run stays under the $9 stop.
+
 ## 2026-11-04: inbox #296 (shape words to the new marks), live as v49, test 2 running
 
 - Commit `f76656e`, CI green run 41822850464. Worker v49 deployed 11:52 UTC (single container `ta-01M6K6FKX9HNJWR62M01T0R68R`, `BUILDER_COMMIT=f76656e`, world `f0d042d` with rosettes in the tool, verified by exec). Deploy authority: #275 owns Mamirauá end to end, and #296's ordered test build 2 needs the mapping live.

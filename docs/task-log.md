@@ -3,6 +3,22 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #302, enrich ledger/world fixes — worker v55 live
+
+- `926fb48` (#302: enrich jobs pull the world on claim). CI green, deployed per standing reef go: worker **v55** on `926fb48`, single container `ta-01M6KS6VQXME92AHBYV6B877CR` (old v54 stopped).
+- #302.2: `build_job` pulls the world right after claiming an enrich job (before intake reads the list), mirroring the code/remake paths; build jobs keep their world. Tests: enrich claim pulls-then-builds, build claim builds without pulling. Full `test_worker` suite green (137), ruff clean.
+- #302.3: verified no change needed — minimum reports `no_food` and the item goes on (`builder/stages/minimum.py`); food never fails an item (0061).
+- #302.1: #298's ledger-fix code is live as a passenger of this deploy (it was committed to main earlier); the Baseten ledger repair itself still awaits Kai's go — say the word and I repair + confirm, then Claude re-adds the two fish jobs. Test-3 ended long ago, so the sequencing concern is gone.
+- Cost: $0.
+
+## 2026-11-04: inbox #301, open-ocean fish presence — worker v55 live
+
+- `dbea099` (#301: open-sea fish present by family records on open ocean). CI green, deployed with #302 above: worker **v55** on `926fb48`.
+- #301.2: on open-ocean cells, an open-sea fish with zero own smoothed count still presents when its GBIF family has wild records within 5 tiles (`presence.family_key` from the species API, cached in-process; `tiles._family_sea_fish`, count 0.05 — faint, below any real trace, so direct records rank first). Land cells never call it; non-fish (whale) skipped before any GBIF call; a GBIF failure skips that fish loudly instead of sinking the tile. The plan probe follows automatically (same `make_tile` branch).
+- Tests: 3 in `test_presence.py` (family key read-once-cached, the four reef tiles seat flying fish beside counted tuna, whale skipped with zero GBIF calls) + 1 land test in `test_survey_kept.py` (dry cell ignores family even when records exist). Suites: presence + kept 25, tiles + enrich + place_job 194 pass; ruff clean.
+- #301.1/.3: blocked same as #302.1 — the fish jobs run when Claude re-adds them after the Baseten repair; the reef ring remakes then pick both fish up. I'll log each job's publish + cost when they land.
+- Cost: $0.
+
 ## 2026-11-04: inbox #293, new-shape pricing — worker v54 live, platypus tile rebuilt
 
 - `1009968` (#293: new-shape animals quote animal_new with its own median). CI green, deployed per standing go: worker **v54** on `1009968`, single container `ta-01M6KQTNTJ6X9RV13XBGMPW5SR` (old v53 stopped).

@@ -3,6 +3,16 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #283, ring ahead — cost first (code follows)
+
+- A ring plan is one survey; the plan itself is $0 (cached species answer + pure code; GBIF presence is a free API, Firestore writes negligible). Measured from today's `survey:<tile>` ledger namespaces (survey spend attributes per tile, species call included):
+- Land tile: **≈$0.022** (17 samples: $0.019–0.027, one $0.041 outlier).
+- Sea tile (reef/coastal): **≈$0.020** (4 samples: $0.017–0.027).
+- Empty open ocean: **$0** (no survey, no species call — the plan returns early).
+- All on Meta by design (surveys use search grounding; unaffected by #298's Baseten outage).
+- A day at 200: all-land ≈ $4.40; a reef-ring mix (100 surveyed + 100 empty) ≈ $2.00; worst ≈ $5.40 — all under the $10 `auto_daily_usd` default. The item's "about $0.05" ($10/day) holds ~2× headroom over measured. `config/border_limits` currently sets neither field, so the ring runs under the defaults (200/day, $10/day shared with auto builds, ring last).
+- Build follows in this entry.
+
 ## 2026-11-04: inbox #300 (Mamirauá parked) — parked
 
 - Parked per the item; nothing started. Running total confirmed $5.64 of $10 (test 3: $2.12). Notes for resume: the item's judge-strictness rule, the 4 real failures, test-build file-based plant checks, and the `no_short` packaging cause (`data/country-names.json` not deployed — found in test-3 analysis) are all recorded.

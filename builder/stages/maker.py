@@ -1596,10 +1596,36 @@ def _seated(region: dict[str, Any], stem: str) -> bool:
 
 
 def _made(job_dir: Path, animal_id: str) -> bool:
-    """Whether a run already made this animal: both files in the job."""
-    return (job_dir / "animals" / f"{animal_id}.json").is_file() and (
-        job_dir / "models" / f"{animal_id}.json"
-    ).is_file()
+    """Whether a run already passed this animal: files plus a clean try (#287).
+
+    The tool writes the model file before the checks pass, so
+    files alone also match a failed make: test 1's capybara
+    checked in with a failing last try. Like _animal_passed,
+    the last edits try's errors must be empty; without any
+    edits tries (a newshape animal) the files decide as before.
+    """
+    if not _animal_passed(job_dir, animal_id):
+        return False
+    if not (job_dir / "models" / f"{animal_id}.json").is_file():
+        return False
+    tries_dir = job_dir / "tries" / animal_id
+    if not tries_dir.is_dir():
+        return True
+    errors_files = [
+        attempt_dir / "errors.json"
+        for phase_dir in sorted(tries_dir.iterdir())
+        if phase_dir.name.startswith("edits") and phase_dir.is_dir()
+        for attempt_dir in sorted(phase_dir.iterdir())
+        if (attempt_dir / "errors.json").is_file()
+    ]
+    if not errors_files:
+        return True
+    errors_files.sort(key=lambda path: path.stat().st_mtime)
+    try:
+        errors = json.loads(errors_files[-1].read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    return errors == []
 
 
 def _match_target(
@@ -2741,6 +2767,36 @@ def _belly_errors(found: dict[str, float], spec: dict[str, Any]) -> list[str]:
     ]
 
 
+#: Belly share below which deepening is off the table (#287).
+#:
+#: Matching a drifted ratio deepens the body by the drift (30%
+#: at the bar); on a body whose height runs a third of the
+#: animal that eats a tenth of its top. Below that margin the
+#: ratio keeps the shorten option only, so the fix never digs
+#: a low belly into the ground the way test 1's capybara went.
+BELLY_DEEPEN_MARGIN = 0.10
+
+
+def _belly_low(found: dict[str, float], spec: dict[str, Any]) -> bool:
+    """Whether the belly is too low to deepen the body (#287)."""
+    if "top_m" not in found or not found["top_m"]:
+        return False
+    body = next(
+        (
+            part
+            for part in spec.get("parts", [])
+            if part.get("name") == "body"
+            and isinstance(part.get("at"), list)
+            and isinstance(part.get("size"), list)
+        ),
+        None,
+    )
+    if body is None:
+        return False
+    belly = float(body["at"][1]) - float(body["size"][1]) / 2
+    return belly < BELLY_DEEPEN_MARGIN * found["top_m"]
+
+
 def _shape_errors(
     found: dict[str, float],
     spec: dict[str, Any],
@@ -2758,11 +2814,14 @@ def _shape_errors(
     belly = _belly_errors(found, spec)
     if belly:
         return belly
-    return _ratio_errors(found, target, world)
+    return _ratio_errors(found, target, world, spec)
 
 
 def _ratio_errors(
-    found: dict[str, float], target: dict[str, Any], world: Path
+    found: dict[str, float],
+    target: dict[str, Any],
+    world: Path,
+    spec: dict[str, Any] | None = None,
 ) -> list[str]:
     """Legs-against-depth drift from the reference's ratio."""
     if "leg_m" not in found or "depth_m" not in found or not found["depth_m"]:
@@ -2777,10 +2836,13 @@ def _ratio_errors(
     want = theirs["leg_m"] / theirs["depth_m"]
     if abs(ratio - want) / want <= 0.30:
         return []
+    fix = "shorten the legs or deepen the body"
+    if spec is not None and _belly_low(found, spec):
+        fix = "shorten the legs (the belly is too low to deepen the body)"
     return [
         f"legs are {ratio:.1f}x the body's depth, "
         f"the {target['start_from']}'s are {want:.1f}x: "
-        "shorten the legs or deepen the body"
+        f"{fix}"
     ]
 
 

@@ -33,6 +33,7 @@ from builder.stages.maker import (
     _foods_text,
     _guide,
     _home_choices_schema,
+    _made,
     _mark_miss,
     _marks_schema,
     _measure_errors,
@@ -50,6 +51,7 @@ from builder.stages.maker import (
     _reference_spec,
     _run_adapt,
     _run_adapt_home,
+    _shape_errors,
     _size_errors,
     _size_misses,
     _sizing_edits,
@@ -1359,6 +1361,15 @@ def test_prey_matches_by_species_key(tmp_path: Path) -> None:
     assert '"species": "capybara"' in client.prompts[0]
 
 
+def _seed_clean_try(tmp_path: Path, species: str) -> None:
+    attempt = tmp_path / "tries" / species / "animal" / "1"
+    attempt.mkdir(parents=True)
+    (attempt / "errors.json").write_text("[]")
+    edits = tmp_path / "tries" / species / "edits" / "1"
+    edits.mkdir(parents=True)
+    (edits / "errors.json").write_text("[]")
+
+
 def test_skips_already_made_prey(tmp_path: Path) -> None:
     world = _world(tmp_path)
     _inputs(tmp_path, minset=_minset_with_prey())
@@ -1366,6 +1377,7 @@ def test_skips_already_made_prey(tmp_path: Path) -> None:
     (tmp_path / "animals" / "capybara.json").write_text("{}")
     (tmp_path / "models").mkdir()
     (tmp_path / "models" / "capybara.json").write_text("{}")
+    _seed_clean_try(tmp_path, "capybara")
     client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
     result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
@@ -1486,6 +1498,7 @@ def test_resume_seats_and_plans_earlier_made_prey(tmp_path: Path) -> None:
     )
     (tmp_path / "models").mkdir()
     (tmp_path / "models" / "capybara.json").write_text("{}")
+    _seed_clean_try(tmp_path, "capybara")
     client = ScriptClient([_animal_answer("lynx"), _edits_answer()])
     result = _stage().run(_ctx(tmp_path, world, client))
     assert result["animal_files"] == ["animals/capybara.json", "animals/lynx.json"]
@@ -4317,3 +4330,127 @@ def test_research_asks_typical_size_and_honest_migration() -> None:
     assert "a typical adult, never a record or maximum" in flat
     assert "south of the equator winter is June-August" in flat
     assert "when they don't, say `active`" in flat
+
+
+def test_belly_check_fails_the_test1_barrel() -> None:
+    """#287: the recorded barrel numbers fail, as the sheet shows."""
+    found = {"leg_m": 0.2445, "depth_m": 0.7604, "top_m": 0.663}
+    spec = {
+        "parts": [
+            {
+                "name": "body",
+                "at": [0.0, 0.2501, -0.0238],
+                "size": [0.9707, 0.6998, 0.7604],
+            }
+        ]
+    }
+    errors = _belly_errors(found, spec)
+    assert len(errors) == 1
+    assert "belly sits at 0 cm" in errors[0]
+
+
+def test_ratio_yields_deepening_on_a_low_belly(tmp_path: Path) -> None:
+    """#287: with test 1's attempt-1 numbers the ratio keeps shorten only."""
+    world = _world(tmp_path)
+    (world / "models" / "vole.json").write_text(
+        json.dumps(
+            {
+                "id": "vole",
+                "bones": [
+                    {
+                        "name": "leg_f_l",
+                        "head": [0, 0.09, 0.03],
+                        "tail": [0, 0, 0.03],
+                    }
+                ],
+                "parts": [
+                    {
+                        "name": "body",
+                        "size": [0.05, 0.06, 0.30],
+                        "at": [0, 0.09, 0],
+                    },
+                    {
+                        "name": "arm_l",
+                        "size": [0.02, 0.06, 0.02],
+                        "at": [0.02, 0.06, 0.03],
+                        "bone": "leg_f_l",
+                    },
+                ],
+            }
+        )
+    )
+    found = {"leg_m": 0.3308, "depth_m": 0.7604, "top_m": 0.6535}
+    spec = {
+        "parts": [
+            {
+                "name": "body",
+                "at": [0.0, 0.3238, -0.0238],
+                "size": [0.7663, 0.5525, 0.7604],
+            }
+        ]
+    }
+    errors = _shape_errors(found, spec, {"start_from": "vole", "prey": False}, world)
+    assert len(errors) == 1
+    assert "shorten the legs" in errors[0]
+    assert "or deepen the body" not in errors[0]
+    assert "too low to deepen" in errors[0]
+
+
+def test_ratio_keeps_deepening_on_a_high_belly(tmp_path: Path) -> None:
+    """#287: well clear of the ground the ratio guards drift as before."""
+    world = _world(tmp_path)
+    (world / "models" / "vole.json").write_text(
+        json.dumps(
+            {
+                "id": "vole",
+                "bones": [
+                    {
+                        "name": "leg_f_l",
+                        "head": [0, 0.09, 0.03],
+                        "tail": [0, 0, 0.03],
+                    }
+                ],
+                "parts": [
+                    {
+                        "name": "body",
+                        "size": [0.05, 0.06, 0.30],
+                        "at": [0, 0.09, 0],
+                    },
+                    {
+                        "name": "arm_l",
+                        "size": [0.02, 0.06, 0.02],
+                        "at": [0.02, 0.06, 0.03],
+                        "bone": "leg_f_l",
+                    },
+                ],
+            }
+        )
+    )
+    found = {"leg_m": 0.85, "depth_m": 0.65, "top_m": 1.30}
+    spec = {
+        "parts": [{"name": "body", "at": [0.0, 0.90, 0.0], "size": [0.5, 0.6, 0.65]}]
+    }
+    errors = _shape_errors(found, spec, {"start_from": "vole", "prey": False}, world)
+    assert len(errors) == 1
+    assert "shorten the legs or deepen the body" in errors[0]
+
+
+def test_made_needs_a_clean_last_model_try(tmp_path: Path) -> None:
+    """#287: files from a failed make don't count as made."""
+    job_dir = tmp_path / "jobs" / "j1" / "animal_x"
+    (job_dir / "animals").mkdir(parents=True)
+    (job_dir / "models").mkdir(parents=True)
+    (job_dir / "animals" / "x.json").write_text("{}")
+    (job_dir / "models" / "x.json").write_text("{}")
+    animal_try = job_dir / "tries" / "x" / "animal" / "1"
+    animal_try.mkdir(parents=True)
+    (animal_try / "errors.json").write_text("[]")
+    edits = job_dir / "tries" / "x" / "edits"
+    first = edits / "1"
+    first.mkdir(parents=True)
+    (first / "errors.json").write_text("[]")
+    assert _made(job_dir, "x") is True
+    second = edits / "2"
+    second.mkdir(parents=True)
+    (second / "errors.json").write_text('["the belly sits at 0 cm"]')
+    assert _made(job_dir, "x") is False

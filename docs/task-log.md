@@ -3,11 +3,21 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #280 (realm resolver) + #284, live as v43
+
+- One `resolve_home()` for planner, maker, worker and resurvey (commit `9d90a44`, CI green run 41751135558): coast flip, listed home, nearest home fitting the world's rule. Retired biomes never picked. Plans carry `blocked_detail` (reason/habitat/ecoregion/name/realm/kind) beside `blocked`. New `request replan-blocked` command (`--dry-run` lists, $0).
+- Coverage, same world+grid before/after: land cells with a home 135,472 → 81,816 of 417,589 (32.4% → 19.6%). The before-share was phantom: retired `boreal_forest` (31,637 picks) and cross-realm style matches the world's check refuses. After: 0 retired picks; Serengeti→savanna, Siberia→boreal_taiga, Óbidos→rainforest, Cairns→wet_tropics. Sample-checked 374 land cells against the world's `home_fits` + habitat + retired: 374 agree. (Inbox's ~26% was area on world `b90d553`; mine are cell shares on the current world.)
+- #284: already covered, no new commit — 155 is Southern New Guinea lowland → `wet_tropics` by kind+realm (pinned), 150 → `wet_tropics` listed, coast flip to land home pinned, 370 → blocked other realm.
+- Deploy, 01:51 UTC: worker v43 on builder `dc1db91` (also carries the #275 draft fix below). Single container `ta-01M6J41QMSEVW5CPDTVKTA1CBR`, code hash `4d90b7839ece` matches, grids complete. (Deploy script's verify exec hit the Modal proxy timeout after cutover; verified by hand.)
+- #280.5 re-plan on the live box: replanned 0, still blocked 0, errors 0 — no `no_home`/`no_land`/`world_check:` plans exist in Firestore (23 requests, all unblocked). The Cairns expectation is superseded: #281 gave it `wet_tropics`, its plan is unblocked, and #281 says to leave it alone.
+- Tests: 16 realm cases incl. all six #280.6 cases in current-world form, `home_fits` cross-checks, `blocked_detail`, replan filter/tally/CLI (22 replan+CLI pass, 54 plan pass). $0 — no model calls; censuses ran on local CPU.
+
 ## 2026-11-04: inbox #275 + #276 (fix-forward live as v42)
 
 - Test build #1 (`place_20261103_mamiraua_test_1`, publish-off, cap $4) reached `failed` 23:43 UTC at the first plant: the ceiba scaffold missed schema-required `density`, and the plant reviewer stopped after 2 empty tries. Fix (`c9cda17`): the scaffold seats `density: 0.5`, the review reader tries 4 times. CI caught one stale scaffold expectation (`a15da77`), then green (run 41747076921).
 - Deploy, 00:40 UTC: worker v42 on builder `a15da77`. Single live container `ta-01M6J00YXN2N06Y61CABAVZV5R`, old container stopped, deploy script confirms code `a15da77`. The real job waits for a clean test run per #275/#276.
 - Retry, 00:55 UTC: test #1 reset to `building`, ceiba entry dropped (failed entries rest), 7 `checking` animals kept for $0 reuse. Spend $2.48 of $4 cap. Later #280+ deploys are safe mid-retry: the volume persists and the resolver is identical for listed-home cells (verified 12/12).
+- Retry #2 died on the ceiba FIX draft: empty content, twice. Diagnosis: the open model reasons first and reasoning counts against the 8k cap, so a big fix prompt (template + examples + full previous draft) stops at `length` with nothing written — genuine empty generations, not API errors (the client raises those). Fix (`dc1db91`, live in v43): a length-cut draft retries once with doubled room (16k), like the maker's #166.1; plain double-empties still stop. Retry #3 waits on #289 (cause from raw responses first).
 - $0 on the fix and deploy.
 
 ## 2026-11-03: inbox #275 + #276 (Mamirauá end to end)

@@ -235,3 +235,24 @@ def test_open_ocean_tile_keeps_an_english_only_sea_name() -> None:
     del tile["ecoregion"]
     del tile["name"]["fi"]
     validate("tile", tile)
+
+
+def test_build_job_takes_a_published_range() -> None:
+    """#277.3: a range job's doc shape validates: spread, dict progress."""
+    job = _valid("build-job")
+    job.update(
+        {
+            "kind": "range",
+            "tile": "z10_0581_0294",
+            "spread": {"kind": "animal", "what": "fox"},
+            "tiles": ["z10_0581_0294", "z10_0582_0294"],
+            "priority": 2,
+            "progress": {"done": 2, "of": 2},
+            "overlay": ["z10_0581_0294"],
+            "skipped": {"z10_0582_0294": "no_records"},
+            "gaps": {"z10_0581_0294": {"diet": ["berries"], "hunts": []}},
+            "seated": {"playable": True, "prey": False, "predators": True},
+            "status": "published",
+        }
+    )
+    validate("build-job", job)

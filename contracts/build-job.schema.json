@@ -19,15 +19,29 @@
   "properties": {
     "format": {"const": 1},
     "tile": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
-    "kind": {"enum": ["code", "build", "enrich", "remake", "place"]},
+    "kind": {"enum": ["code", "build", "enrich", "remake", "place", "range"]},
     "items": {
       "type": "array",
       "items": {"type": "string", "minLength": 1}
     },
     "tiles": {
       "type": "array",
-      "description": "For enrich: every tile that lists the thing in wanted, most played first, any number since overlays (0059). For remake: the tiles the pass changed.",
+      "description": "For enrich: every tile that lists the thing in wanted, most played first, any number since overlays (0059). For remake: the tiles the pass changed. For range: the listed tiles to judge.",
       "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
+    },
+    "spread": {
+      "type": "object",
+      "description": "For spread and range: the one thing reaching tiles.",
+      "additionalProperties": false,
+      "required": ["kind", "what"],
+      "properties": {
+        "kind": {"enum": ["animal", "plant"]},
+        "what": {"type": "string", "minLength": 1}
+      }
+    },
+    "priority": {
+      "type": "number",
+      "description": "For range: lowest first; 0 when missing."
     },
     "world": {
       "type": "string",
@@ -58,12 +72,18 @@
     },
     "overlay": {
       "type": "array",
-      "description": "For enrich and spread, when published: the tiles in the overlay pack.",
+      "description": "For enrich, spread and range, when published: the tiles in the overlay pack.",
       "items": {"type": "string", "pattern": "^z10_[0-9]{4}_[0-9]{4}$"}
+    },
+    "skipped": {
+      "type": "object",
+      "description": "For spread and range, when published: judged tiles that stay out, {tile: short code}.",
+      "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
+      "additionalProperties": {"type": "string", "minLength": 1}
     },
     "gaps": {
       "type": "object",
-      "description": "For enrich and spread, when published: per-tile food gaps {tile: {diet, hunts}}.",
+      "description": "For enrich, spread and range, when published: per-tile food gaps {tile: {diet, hunts}}.",
       "propertyNames": {"pattern": "^z10_[0-9]{4}_[0-9]{4}$"},
       "additionalProperties": {
         "type": "object",
@@ -85,6 +105,17 @@
     "created_by": {"enum": ["policy", "admin", "enrich", "builder"]},
     "status": {
       "enum": ["queued", "building", "checking", "waiting_yes", "published", "failed"]
+    },
+    "seated": {
+      "type": "object",
+      "description": "For range, while judging: the seating union so far.",
+      "additionalProperties": false,
+      "required": ["playable", "prey", "predators"],
+      "properties": {
+        "playable": {"type": "boolean"},
+        "prey": {"type": "boolean"},
+        "predators": {"type": "boolean"}
+      }
     },
     "survey_left_out": {
       "type": "array",
@@ -161,18 +192,32 @@
       "description": "For place past its yes: where the build stands."
     },
     "progress": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "status", "cost_usd"],
-        "properties": {
-          "id": {"type": "string", "minLength": 1},
-          "status": {"enum": ["building", "checking", "failed"]},
-          "report": {"type": "string", "minLength": 1},
-          "cost_usd": {"type": "number", "minimum": 0}
+      "description": "Per-item entries, or {done, of} for a range job.",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "status", "cost_usd"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "status": {"enum": ["building", "checking", "failed"]},
+              "report": {"type": "string", "minLength": 1},
+              "cost_usd": {"type": "number", "minimum": 0}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["done", "of"],
+          "properties": {
+            "done": {"type": "integer", "minimum": 0},
+            "of": {"type": "integer", "minimum": 0}
+          }
         }
-      }
+      ]
     },
     "preview": {
       "type": "object",

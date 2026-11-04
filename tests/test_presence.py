@@ -181,6 +181,29 @@ def _fish_world(tmp_path: Path) -> Path:
     return world
 
 
+def test_fetch_taxon_counts_reads_one_taxon(monkeypatch: Any) -> None:
+    """#277.1: one taxon, counts only, one call per cell."""
+    import builder.presence as presence
+
+    seen: list[dict[str, Any]] = []
+
+    def fake_gbif(
+        params: dict[str, Any], base: str = presence.GBIF_SEARCH
+    ) -> dict[str, Any]:
+        assert base == presence.GBIF_SEARCH
+        seen.append(params)
+        return {"count": 4}
+
+    monkeypatch.setattr(presence, "_gbif", fake_gbif)
+    out = presence.fetch_taxon_counts(5219243, ["z10_0581_0294", "z10_0582_0294"])
+    assert out == {"z10_0581_0294": 4, "z10_0582_0294": 4}
+    assert len(seen) == 2
+    for params in seen:
+        assert params["taxon_key"] == "5219243"
+        assert params["limit"] == 0
+        assert params["geometry"].startswith("POLYGON")
+
+
 def test_family_key_reads_and_caches(monkeypatch: Any) -> None:
     """#301.2: the family key comes from GBIF's species API, once."""
     import builder.presence as presence

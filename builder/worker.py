@@ -31,6 +31,9 @@ LEASE_TTL_MINUTES = 30
 RING_DOC_PREFIX = "ahead_"
 RING_PLAN_ESTIMATE_USD = 0.05
 
+#: Tiles one range dispatch judges before yielding (#277.2).
+RANGE_CHUNK = 100
+
 #: A document update value that deletes the field.
 DELETE = object()
 
@@ -145,6 +148,7 @@ class Worker:
     worker_id: str = field(default_factory=default_worker_id)
     author: str = "Animundo Builder"
     in_flight: set[tuple[str, str]] = field(default_factory=set)
+    _range_cells: dict[tuple[str, str], int] = field(default_factory=dict)
     grid_dir: Path | None = None
     world_commit: str | None = None
     builder_root: Path | None = None
@@ -292,9 +296,13 @@ class Worker:
         if not self._claim(job_id):
             print(f"build job {job_id}: operator action waits for ownership")
             return False
+        entries = job.get("progress", [])
+        if isinstance(entries, dict):
+            # Range jobs track done/of, never pause (#277.2).
+            entries = []
         paused = [
             entry
-            for entry in job.get("progress", [])
+            for entry in entries
             if entry.get("status") == "paused_spend_uncertain"
         ]
         if action == "resume" and (
@@ -311,7 +319,7 @@ class Worker:
                 {**entry, "status": "building"}
                 if entry.get("status") == "paused_spend_uncertain"
                 else entry
-                for entry in job.get("progress", [])
+                for entry in entries
             ]
             patch: dict[str, Any] = {"progress": progress, "operator_action": DELETE}
             if job.get("error") == "paused_spend_uncertain":
@@ -338,7 +346,7 @@ class Worker:
                 {**entry, "status": "failed"}
                 if entry.get("status") == "paused_spend_uncertain"
                 else entry
-                for entry in job.get("progress", [])
+                for entry in entries
             ]
             patch = {"progress": progress, "operator_action": DELETE}
             if uncertain > 0:
@@ -418,7 +426,7 @@ class Worker:
             raise StaleOwner(f"build job {job_id}: owned by another worker")
 
     #: Job kinds the worker runs; anything else stays queued (#199.3).
-    JOB_KINDS = ("code", "build", "enrich", "spread", "place", "remake")
+    JOB_KINDS = ("code", "build", "enrich", "spread", "place", "remake", "range")
 
     def build_job(self, job_id: str, job: dict[str, Any]) -> None:
         """Claim the job and build it: code directly, items each alone."""
@@ -448,6 +456,9 @@ class Worker:
             return
         if job.get("kind") == "remake":
             self.remake_job(job_id, job)
+            return
+        if job.get("kind") == "range":
+            self.range_job(job_id, job)
             return
         tile = self._job_tile(job_id, job)
         if tile is None:
@@ -756,6 +767,275 @@ class Worker:
                 skipped[tile] = why
         gaps = self._overlay_gaps(kind, what, passing, made_by_tile, old_by_tile)
         return passing, made_by_tile, skipped, gaps
+
+    def range_job(self, job_id: str, job: dict[str, Any]) -> None:
+        """One chunk of a range job: the next tiles judged, $0 (#277).
+
+        Judges at most RANGE_CHUNK tiles past `progress.done`,
+        writes progress, overlay, skipped, gaps and seating, and
+        yields: the poll queues the next chunk when nothing else
+        waits, so a 5000-tile job never holds up a player. The
+        last chunk builds the pack and publishes. A lost lease
+        or a crash resumes from `progress.done`; done tiles
+        stand, each cell fetched once per job.
+        """
+        if self._range_busy(job_id):
+            print(f"range job {job_id}: other work is queued, waiting")
+            return
+        if not self._claim(job_id):
+            return
+        job = self.store.get_build_job(job_id) or job
+        assert self.world is not None, "range jobs need the world checkout"
+        assert self.grid_dir is not None, "range jobs need the habitat grid"
+        spec = job.get("spread") or {}
+        if spec.get("kind") != "animal" or not spec.get("what"):
+            self._fail(job_id, "bad_range")
+            return
+        what = str(spec["what"])
+        from .animal_list import find_list, load_list
+
+        entries = load_list(find_list(self.world))["animals"]
+        entry = next((a for a in entries if a.get("id") == what), None)
+        if entry is None or not entry.get("gbif_key"):
+            self._fail(job_id, "no_gbif_key")
+            return
+        import json
+
+        try:
+            animal = json.loads(
+                (self.world / "animals" / f"{what}.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            self._fail(job_id, "no_file")
+            return
+        if not isinstance(animal, dict):
+            self._fail(job_id, "no_file")
+            return
+        tiles = list(job.get("tiles", []))
+        progress = job.get("progress") or {}
+        try:
+            done = min(int(progress.get("done", 0)), len(tiles))
+        except (TypeError, ValueError):
+            done = 0
+        overlay = list(job.get("overlay") or [])
+        skipped = dict(job.get("skipped") or {})
+        gaps = dict(job.get("gaps") or {})
+        seated = dict(
+            job.get("seated") or {"playable": False, "prey": False, "predators": False}
+        )
+        chunk = tiles[done : done + RANGE_CHUNK]
+        passing: list[str] = []
+        olds: dict[str, dict[str, Any] | None] = {}
+        groups: dict[str, dict[str, Any]] = {}
+        files: dict[str, dict[str, Any]] = {}
+        for tile in chunk:
+            code, prey, old = self._range_tile(
+                tile, what, int(entry["gbif_key"]), entry, animal, files, groups, job_id
+            )
+            if code is not None:
+                skipped[tile] = code
+            else:
+                passing.append(tile)
+                olds[tile] = old
+                if prey:
+                    seated["prey"] = True
+        if passing:
+            seated["playable"] = seated["playable"] or bool(animal.get("playable"))
+            seated["predators"] = seated["predators"] or bool(animal.get("hunts"))
+            overlay.extend(passing)
+            gaps.update(self._overlay_gaps("animal", what, passing, {}, olds))
+        done += len(chunk)
+        self._update(
+            job_id,
+            {
+                "progress": {"done": done, "of": len(tiles)},
+                "overlay": overlay,
+                "skipped": skipped,
+                "gaps": gaps,
+                "seated": seated,
+            },
+        )
+        print(f"range job {job_id}: {done} of {len(tiles)} judged")
+        if done < len(tiles):
+            return
+        update: dict[str, Any] = {"cost_usd": 0}
+        if overlay:
+            from . import packs as packs_mod
+
+            pseudo = {
+                "species": {
+                    "playable": [what] if seated["playable"] else [],
+                    "prey": [what] if seated["prey"] else [],
+                    "predators": [what] if seated["predators"] else [],
+                }
+            }
+            blob = packs_mod.build_tiles_overlay(
+                "animal", what, self.world, [pseudo], overlay
+            )
+            version = packs_mod.next_pack_version(self.store, job_id)
+            files_out = packs_mod.assemble_enrich_pack(
+                job_id, version, {"additions/tiles.json": blob}, min_game=2
+            )
+            problems = packs_mod.check_pack(files_out)
+            if problems:
+                raise packs_mod.PackError(
+                    f"pack of {job_id} fails its check: {problems}"
+                )
+            update["pack"] = packs_mod.publish_pack(
+                self.store, job_id, version, files_out
+            )
+        self._update(job_id, update)
+        self._set_status(job_id, "published")
+        self._range_cells = {
+            key: count for key, count in self._range_cells.items() if key[0] != job_id
+        }
+
+    def _range_tile(
+        self,
+        tile: str,
+        what: str,
+        key: int,
+        entry: dict[str, Any],
+        animal: dict[str, Any],
+        files: dict[str, dict[str, Any]],
+        groups: dict[str, dict[str, Any]],
+        job_id: str,
+    ) -> tuple[str | None, bool, dict[str, Any] | None]:
+        """Judge one tile: a skip code, or prey seating when it passes (#277.1).
+
+        Published, homed, habitat-met and wild-recorded, in that
+        order; food never removes. Prey follows a remake: the
+        neither list, or the tile's hunters wanting its tags.
+        """
+        import json
+
+        from .grid import group_path, neighbours, parse_tile
+        from .presence import smooth
+        from .tiles import _candidate_habitats, _resolve_home
+
+        try:
+            col, row = parse_tile(tile)
+        except ValueError:
+            return "not_published", False, None
+        blob = group_path(tile)
+        if blob not in groups:
+            raw, _ = self.store.read_blob(blob)
+            try:
+                groups[blob] = json.loads(raw.decode("utf-8")) if raw else {}
+            except ValueError:
+                groups[blob] = {}
+        old = (groups[blob].get("tiles") or {}).get(tile)
+        if old is None:
+            return "not_published", False, None
+        assert self.world is not None
+        try:
+            resolved = _resolve_home(
+                tile, self._habitat_grid(), self.world, self.builder_root
+            )
+        except KeyError:
+            return "no_home", False, None
+        if resolved.get("blocked") is not None:
+            reason = resolved["blocked"]["reason"]
+            if reason in ("no_home", "no_land"):
+                return "no_home", False, None
+            return "not_published", False, None
+        eco1, _eco2, _share2, biome, land, water, _elev = resolved["cell"]
+        labels = _candidate_habitats(resolved["habitat"], eco1, biome, land, water)
+        if resolved["home"] == "coral_reef":
+            labels.add("reef")
+        if not (set(entry.get("habitats") or []) & labels):
+            return "habitat", False, None
+        hood = [tile] + [n for n in neighbours(tile).values() if n is not None]
+        counts = self._range_counts(job_id, key, hood)
+        if smooth({"x": counts[tile]}, [{"x": counts[c]} for c in hood[1:]])["x"] <= 0:
+            return "no_records", False, None
+        hunters: set[str] = set()
+        species = old.get("species") or {}
+        for name in ("playable", "prey", "predators"):
+            for sid in species.get(name, []):
+                if sid == what:
+                    continue
+                if sid not in files:
+                    try:
+                        files[sid] = json.loads(
+                            (self.world / "animals" / f"{sid}.json").read_text(
+                                encoding="utf-8"
+                            )
+                        )
+                    except (OSError, ValueError):
+                        files[sid] = {}
+                hunters.update(files[sid].get("hunts") or [])
+        tags = set(animal.get("tags") or [])
+        playable = bool(animal.get("playable"))
+        predator = bool(animal.get("hunts"))
+        prey = (not playable and not predator) or bool(tags & hunters)
+        return None, prey, old
+
+    def _range_counts(self, job_id: str, key: int, cells: list[str]) -> dict[str, int]:
+        """One taxon's wild counts, each cell fetched once per job (#277.1)."""
+        from .presence import fetch_taxon_counts
+
+        missing = [c for c in cells if (job_id, c) not in self._range_cells]
+        if missing:
+            for cell, count in fetch_taxon_counts(key, missing).items():
+                self._range_cells[(job_id, cell)] = count
+        return {c: self._range_cells[(job_id, c)] for c in cells}
+
+    def _range_busy(self, job_id: str) -> bool:
+        """Other work waits: players, builds, or an earlier range (#277.2)."""
+        mine = ("build_job", job_id)
+        if any(event != mine for event in self.in_flight):
+            return True
+        me: dict[str, Any] | None = None
+        ranges: list[tuple[str, dict[str, Any]]] = []
+        for other_id, doc in self.store.pending_build_jobs():
+            doc = doc or {}
+            if other_id == job_id:
+                me = doc
+                continue
+            if doc.get("kind") == "range":
+                ranges.append((other_id, doc))
+            elif not self._job_paused(doc):
+                return True
+        mine_key = (self._range_priority((me or {}).get("priority")), job_id)
+        for other_id, doc in ranges:
+            if (self._range_priority(doc.get("priority")), other_id) < mine_key:
+                return True
+        for tile, _ in self.store.list_requests():
+            if self.store.get_plan(tile) is None:
+                return True
+        return False
+
+    @staticmethod
+    def _range_priority(value: Any) -> float:
+        """A range job's priority, lowest first, 0 when missing (#277.2)."""
+        if isinstance(value, bool):
+            return float(value)
+        return float(value) if isinstance(value, (int, float)) else 0.0
+
+    def _range_due(self, queued: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        """The next range job when nothing else waits (#277.2)."""
+        if not self.store.get_enabled() or self.in_flight:
+            return []
+        ranges: list[tuple[str, dict[str, Any]]] = []
+        for job_id, doc in self.store.pending_build_jobs():
+            doc = doc or {}
+            if doc.get("kind") == "range":
+                ranges.append((job_id, doc))
+            elif not self._job_paused(doc):
+                return []
+        for tile, _ in self.store.list_requests():
+            if self.store.get_plan(tile) is None:
+                return []
+        if not ranges:
+            return []
+        ranges.sort(
+            key=lambda pair: (self._range_priority(pair[1].get("priority")), pair[0])
+        )
+        best = ("build_job", ranges[0][0])
+        if best in queued:
+            return []
+        return [best]
 
     def _overlay_gaps(
         self,
@@ -4434,6 +4714,7 @@ class Worker:
         if enabled and not self._was_enabled:
             self._reconcile(queued)
         self._was_enabled = enabled
+        queued.extend(self._range_due(queued))
         return queued
 
     def _reconcile(self, queued: list[tuple[str, str]]) -> None:

@@ -172,6 +172,21 @@ def animals_for_habitat(
     return [a for a in animals if habitat in (a.get("habitats") or [])]
 
 
+def fetch_taxon_counts(key: int, cells: list[str]) -> dict[str, int]:
+    """Wild record counts for one taxon key in these cells (#277.1).
+
+    One call per cell, counts only, no facets; GBIF's retries
+    and pause apply as ever.
+    """
+    out: dict[str, int] = {}
+    for cell in cells:
+        data = _gbif(
+            {**WILD, "taxon_key": str(key), "geometry": cell_wkt(cell), "limit": 0}
+        )
+        out[cell] = int(data.get("count", 0))
+    return out
+
+
 def fetch_neighbourhood(
     tile: str, animals: list[dict[str, Any]]
 ) -> dict[str, dict[str, int]]:

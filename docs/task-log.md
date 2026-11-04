@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #292 + #294 (Apache-2.0; docs match the code)
+
+- Commit `edf50b1` (one commit for both, docs only, no code), CI green run 41814814907. No deploy (docs don't ship to the worker).
+- #292: LICENSE is back to the Apache-2.0 text, byte-identical to `4f0e7c2:LICENSE` and to apache.org's copy (`cmp` clean). README Licence section is one sentence ("open source under the Apache License 2.0"), `pyproject.toml` carries `license = "Apache-2.0"`, no other PolyForm/source-available mentions outside task-log history. The README says nothing about the world's licence. GitHub API license report: `{"spdx": "Apache-2.0", "name": "Apache License 2.0"}`.
+- #294: Muse Image row added after a verified SAM row (`muse-image-1.0`, $0.01 flat in prices, `for_image` + ReferencesStage CLI-only — `pipeline_stages` has no worker caller); "To finish" deleted; session-exports line narrowed to Oct 26–28; AGENTS.md request-builder flow + writes-to-Storage (no `builder submit` exists); worker.md #221 scoped to the border-build verdict path (enrich/places ship themselves per `_needs_review`); README re-read against code (gates, schemas, stages, commands all check out; the 25 km tile line left as long-standing descriptive text). Quick check now reads: without the world `uv run pytest` → **1226 passed, 131 skipped** (~3 min); with the world → **1320 passed, 37 skipped** (~7 min), only Blender/asset tests skip; replay still prints `plan: code_only=True items=[] estimate=$0.42`. Five fresh-clone checks green (pytest ± world, ruff, gitleaks clean, `builder check` 21 passed / 0 failed / 3 skipped). Measured numbers untouched (Nov 3).
+- Two notes for Kai: (1) kept `## Quick check` — the item's `###` reads like a typo (it would nest the section under Meta's models); say the word and I'll demote it. (2) Pre-existing, not mine to fix here: with the pinned world + a local Blender, 2 replay tests fail (`test_replayed_reef_home_job_...`, `test_replayed_place_files_its_missing_on_ship` — newhome makes a 2nd chat call on the old world); CI has no Blender so they skip there. Needs a code item if the pin stays behind the world.
+
 ## 2026-11-04: inbox #288 (test-1 fixes + cost gate), live as v48
 
 - #288.1: covered by #289 (cause + every-JSON-call backstop; v42 had only the review). Frequency from test 1's cost logs: 14 of 71 calls burned the full 8000-token cap (20%), on 2 items — ceiba 9 (drafts + reviews, killed the item twice) and tapir 5 (16k-input newshape calls, survived). All pre-#289 uncapped; test 2 shows the new rate.

@@ -164,3 +164,86 @@ def test_near_wkt_grows_the_cell_and_clamps_at_edges() -> None:
     assert max(grown_lats) > max(cell_lats)
     edge = presence.near_wkt("z10_0000_0000")
     assert "-180.000000" in edge
+
+
+def _fish_world(tmp_path: Path) -> Path:
+    world = tmp_path / "world"
+    (world / "animals").mkdir(parents=True)
+    (world / "animals" / "flying_fish.json").write_text(
+        json.dumps({"archetype": "fish", "open_sea": True})
+    )
+    (world / "animals" / "yellowfin_tuna.json").write_text(
+        json.dumps({"archetype": "fish", "open_sea": True})
+    )
+    (world / "animals" / "humpback_whale.json").write_text(
+        json.dumps({"archetype": "land_mammal", "open_sea": True})
+    )
+    return world
+
+
+def test_family_key_reads_and_caches(monkeypatch: Any) -> None:
+    """#301.2: the family key comes from GBIF's species API, once."""
+    import builder.presence as presence
+
+    calls: list[str] = []
+
+    def fake_gbif(params: dict[str, Any], base: str = "") -> dict[str, Any]:
+        calls.append(base)
+        return {"familyKey": 2968}
+
+    monkeypatch.setattr(presence, "_gbif", fake_gbif)
+    presence._FAMILY_KEYS.clear()
+    assert presence.family_key(2368648) == 2968
+    assert presence.family_key(2368648) == 2968
+    assert len(calls) == 1
+    assert calls[0].endswith("/species/2368648")
+
+
+def test_family_sea_fish_seats_four_reef_tiles(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#301.2: the flying fish presents by family past the reef."""
+    import builder.presence as presence
+    from builder.tiles import _family_sea_fish
+
+    def fake_gbif(params: dict[str, Any], base: str = "") -> dict[str, Any]:
+        if base.endswith("/species/2368648"):
+            return {"familyKey": 2968}
+        return {"count": 5 if params.get("taxon_key") == "2968" else 0}
+
+    monkeypatch.setattr(presence, "_gbif", fake_gbif)
+    presence._FAMILY_KEYS.clear()
+    world = _fish_world(tmp_path)
+    candidates = [
+        {"id": "flying_fish", "gbif_key": 2368648},
+        {"id": "yellowfin_tuna", "gbif_key": 2374013},
+    ]
+    for tile in (
+        "z10_0929_0562",
+        "z10_0930_0562",
+        "z10_0935_0563",
+        "z10_0940_0565",
+    ):
+        out = _family_sea_fish(tile, candidates, world, {"yellowfin_tuna": 0.09})
+        assert out == {"flying_fish": 0.05}, tile
+
+
+def test_family_sea_fish_skips_non_fish(tmp_path: Path, monkeypatch: Any) -> None:
+    """#301.2: a non-fish open-sea animal never presents by family."""
+    import builder.presence as presence
+    from builder.tiles import _family_sea_fish
+
+    calls: list[str] = []
+
+    def fake_gbif(params: dict[str, Any], base: str = "") -> dict[str, Any]:
+        calls.append(base)
+        return {"count": 9}
+
+    monkeypatch.setattr(presence, "_gbif", fake_gbif)
+    presence._FAMILY_KEYS.clear()
+    world = _fish_world(tmp_path)
+    out = _family_sea_fish(
+        "z10_0929_0562", [{"id": "humpback_whale", "gbif_key": 1234}], world, {}
+    )
+    assert out == {}
+    assert calls == []

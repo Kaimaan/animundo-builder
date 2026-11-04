@@ -21,8 +21,16 @@ from .grid import N, bounds, lat_of, lon_of, neighbours, parse_tile
 
 GBIF_SEARCH = "https://api.gbif.org/v1/occurrence/search"
 GBIF_MATCH = "https://api.gbif.org/v1/species/match"
+GBIF_SPECIES = "https://api.gbif.org/v1/species"
 GBIF_TRIES = 3
 GBIF_PAUSE = 1.0
+
+#: Presence for a family-seated fish: faint, below any real
+#: trace, so direct records always rank first (#301.2).
+FAMILY_FISH_COUNT = 0.05
+
+#: Species key to family key, for the open-sea fallback.
+_FAMILY_KEYS: dict[int, int | None] = {}
 
 WILD = {
     "basisOfRecord": ["HUMAN_OBSERVATION", "MACHINE_OBSERVATION"],
@@ -80,6 +88,15 @@ def match_key(name: str) -> int | None:
         return None
     key = data.get("speciesKey", data.get("usageKey"))
     return int(key) if key is not None else None
+
+
+def family_key(gbif_key: int) -> int | None:
+    """The family GBIF key for a species key, cached (#301.2)."""
+    if gbif_key not in _FAMILY_KEYS:
+        data = _gbif({}, f"{GBIF_SPECIES}/{gbif_key}")
+        fam = data.get("familyKey")
+        _FAMILY_KEYS[gbif_key] = int(fam) if fam is not None else None
+    return _FAMILY_KEYS[gbif_key]
 
 
 def near_wkt(tile: str, span: int = 2) -> str:

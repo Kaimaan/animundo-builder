@@ -144,6 +144,49 @@ def open_sea_entries(
     ]
 
 
+def _family_sea_fish(
+    tile: str,
+    candidates: list[dict[str, Any]],
+    world: Path,
+    present: dict[str, float],
+) -> dict[str, float]:
+    """Open-sea fish present by family records alone (#301.2).
+
+    An open-sea fish whose own smoothed count is 0 still
+    presents on an open-ocean cell when its GBIF family has
+    wild records near the tile: open-ocean species records
+    are sparse, family ones aren't. Counted faint, below any
+    real trace. A GBIF failure skips the fish, loudly: a
+    presence hint never sinks a tile.
+    """
+    from .presence import FAMILY_FISH_COUNT, family_key, has_records_near
+
+    out: dict[str, float] = {}
+    for entry in candidates:
+        sid = entry.get("id")
+        key = entry.get("gbif_key")
+        if not sid or not key or present.get(sid, 0) > 0:
+            continue
+        try:
+            data = json.loads((world / "animals" / f"{sid}.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if data.get("archetype") != "fish":
+            continue
+        try:
+            fam = family_key(int(key))
+            hit = fam is not None and has_records_near(fam, tile, 5)
+        except ConnectionError as error:
+            print(
+                f"{tile}: family presence for {sid} skipped: {error}",
+                file=sys.stderr,
+            )
+            continue
+        if hit:
+            out[sid] = FAMILY_FISH_COUNT
+    return out
+
+
 _SEAS_CELLS: dict[Path, dict[str, str]] = {}
 
 
@@ -2269,6 +2312,7 @@ def make_tile(
         # Re-add with the check: animals_for_habitat(animals,
         # "reef") join candidates at reef_mean >= 0.01 (#255.3).
         present = {s: n for s, n in fetch_smoothed(tile, candidates).items() if n > 0}
+        present.update(_family_sea_fish(tile, candidates, world, present))
         species_tag = "gbif:density"
         if reef_mask is not None and reef_mean > 0:
             greens, needs, wants = _reef_sea_plants(world, reef_mean)

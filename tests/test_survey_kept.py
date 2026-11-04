@@ -49,6 +49,18 @@ def _world(tmp_path: Path) -> Path:
             }
         )
     )
+    (world / "animals" / "perch.json").write_text(
+        json.dumps(
+            {
+                "playable": True,
+                "tags": ["fish"],
+                "diet": ["bottom_bugs"],
+                "hunts": [],
+                "archetype": "fish",
+                "open_sea": True,
+            }
+        )
+    )
     (world / "animal-list.json").write_text(
         json.dumps(
             {
@@ -64,6 +76,11 @@ def _world(tmp_path: Path) -> Path:
                         "id": "herring_gull",
                         "gbif_key": 1,
                         "habitats": ["sea", "boreal_lake"],
+                    },
+                    {
+                        "id": "perch",
+                        "gbif_key": 2,
+                        "habitats": ["boreal_lake", "river"],
                     },
                 ],
             }
@@ -234,6 +251,48 @@ def test_dry_town_keeps_no_water_animals(tmp_path: Path) -> None:
         "part": "town",
         "why": "habitat",
     } in made["survey_left_out"]
+
+
+def test_land_cell_ignores_family_presence(tmp_path: Path, monkeypatch: Any) -> None:
+    """#301.2: a land cell never seats a fish by family records."""
+    import builder.presence as presence_mod
+
+    calls: list[int] = []
+
+    def fake_has_records(key: int, tile: str, span: int = 2) -> bool:
+        calls.append(key)
+        return True
+
+    monkeypatch.setattr(presence_mod, "has_records_near", fake_has_records)
+    world = _world(tmp_path)
+    made, blocked = make_tile(
+        "z10_0581_0294",
+        _habitat_grid(tmp_path, _dry_taiga()),
+        world,
+        builder_root=tmp_path,
+        species={
+            "place": "Dry taiga with a town",
+            "parts": [
+                {"kind": "forest", "species": ["fox"]},
+                {"kind": "town", "species": ["fox", "perch"]},
+            ],
+            "plants": [],
+            "trees": [],
+            "outside_animals": [],
+            "outside_plants": [],
+            "name_en": "Dry town",
+            "name_fi": "Kuiva kaupunki",
+        },
+    )
+    assert blocked is None, blocked
+    assert made is not None
+    assert "perch" not in _kept(made)
+    assert {
+        "what": "perch",
+        "part": "town",
+        "why": "habitat",
+    } in made["survey_left_out"]
+    assert calls == []
 
 
 def test_merge_survey_left_out_dedupes() -> None:

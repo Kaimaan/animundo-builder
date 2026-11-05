@@ -3,6 +3,12 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-05: deploy batch (#271, #272+#273+#274, #290) — worker v58 live
+
+- Kai's Nov 5 go, item 1: one deploy carrying the dry run (#271, `6e19a5f`), never-fail-silently (#272, `d3d288b`+`aad457e`) and shores-in-metres (#290, `3296919`). Head `2f5db54`, CI green (run `41939968302`), full suite 1467 passed + 12 skipped before deploy.
+- Worker v58 live on `2f5db54`, single container `ta-01M6MJP2072FSZAAP0QYWY6FZR` (old v57 container stopped); grids complete, live code verified (`dry_run_place_build` present).
+- Not done per the go: re-publishing the 16 shore tiles from #290.4 — waiting on Kai's word. Cost: $0.
+
 ## 2026-11-05: inbox #270, blocked coast tiles — counted, root-caused, proposal (build nothing)
 
 - Count (production `plans`, Nov 5): 4 blocked plans — 3 `no_home` (`z10_0925_0560/0561/0562`, all savanna eco 185) and 1 `place:fi_nuuksio` (`n_414_478`, a place block, not a home gap). Zero blocked coast tiles; zero blocked entries in the 9 published group files. The item's tile `z10_0926_0561` resolves today (`wet_tropics`) — the coast case closed itself.

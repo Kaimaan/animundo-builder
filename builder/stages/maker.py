@@ -458,6 +458,7 @@ class AnimalMakerStage:
                     # The item's own animal is played; prey keep
                     # the model's call (#275.2).
                     files["animal"]["playable"] = True
+                _code_name(files["animal"], target["entry"])
                 _code_abilities(
                     world,
                     files["animal"],
@@ -3074,6 +3075,21 @@ def _code_diet(research: dict[str, Any]) -> list[str]:
         if kind and kind != "prey" and kind not in kinds:
             kinds.append(kind)
     return kinds
+
+
+def _code_name(animal: dict[str, Any], entry: dict[str, Any] | None) -> None:
+    """The list's own name fills a draft that leaves it out (#303.1).
+
+    The map reads English from the file and ship reads the
+    Finnish map name from it; a nameless draft fails there.
+    Only a real list name fills it: without one the file
+    stays nameless and ship still stops loud.
+    """
+    if animal.get("name"):
+        return
+    name = (entry or {}).get("name")
+    if isinstance(name, str) and name.strip():
+        animal["name"] = name
 
 
 def _code_whale(animal: dict[str, Any]) -> None:

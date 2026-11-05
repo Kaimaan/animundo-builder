@@ -25,6 +25,7 @@ from builder.stages.maker import (
     _choices_files,
     _closest_home,
     _code_choices,
+    _code_name,
     _code_whale,
     _description,
     _edits_files,
@@ -507,6 +508,19 @@ def test_code_choices_keeps_a_deep_base_deep(tmp_path: Path) -> None:
     choices = {"depth": "shallow"}
     _code_choices(choices, "sea", brief, research, shallow_base)
     assert choices["depth"] == "shallow"
+
+
+def test_code_name_fills_a_nameless_draft_from_the_list() -> None:
+    """#303.1: a draft without `name` takes the list entry's own."""
+    animal: dict[str, Any] = {"id": "flying_fish"}
+    _code_name(animal, {"id": "flying_fish", "name": "Flying fish"})
+    assert animal["name"] == "Flying fish"
+    keep: dict[str, Any] = {"id": "x", "name": "Draft's own"}
+    _code_name(keep, {"id": "x", "name": "List name"})
+    assert keep["name"] == "Draft's own"
+    bare: dict[str, Any] = {"id": "x"}
+    _code_name(bare, {"id": "x"})
+    assert "name" not in bare
 
 
 def test_code_whale_sets_the_diving_fields() -> None:

@@ -3,6 +3,13 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-04: inbox #291, full place names — worker v57 live
+
+- `60a71de` (#291: full place names from the files, own tiles carry the place). CI green on run `41899116663`. Deployed myself per the standing go: worker v57 live on `60a71de`, container `ta-01M6MG4AB8AMJ9CFW1PCH1G7KR` (single; live code hash verified `fc0451d222b6`, grids complete — the script's first check raced the volume attach and I verified by hand).
+- The short names came from the curated `PLACES` beating the place files (nearer centre or tie). The namer now uses `places/<id>.json` `name.en`/`name.fi_gen` only whenever the world names places; curated survives solely as a full-name fallback for placeless worlds. A tile listed in a live place's `tiles` carries the place's own name (`name.en` + `name.fi`), in the tile and the plan alike. Open-ocean tiles keep the sea's own names (the world's check requires them).
+- Tests: beside-Nuuksio/Saimaa tiles name from the files even where the old short point was nearer; a place tile names itself in plan and tile; the old curated-wins-tie test now asserts the file wins. Two short-name expectations (plan fallback, enrich area label) updated to full. Full suite green (1461 passed, 12 skipped in CI; one worker-label expectation fixed along the way).
+- New tiles and remakes now file full names; the four renamed area docs stay renamed. Cost: $0.
+
 ## 2026-11-04: inbox #290, shores in metres — ready to deploy
 
 - `3296919` (#290: nearest shore in metres, not degrees). CI green on run `41895550120`. Ready to deploy; Kai decides the deploy, and per #290.4 nothing is re-published yet.

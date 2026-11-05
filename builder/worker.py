@@ -1315,7 +1315,12 @@ class Worker:
         return {c: self._range_cells[(job_id, c)] for c in cells}
 
     def _range_busy(self, job_id: str) -> bool:
-        """Other work waits: players, builds, or an earlier range (#277.2)."""
+        """Other work waits: players, builds, or an earlier range (#277.2).
+
+        Only queued work blocks: ring-ahead placeholders never
+        enter the queue (#283.6), and running or human-gated
+        jobs aren't queued either (#305.2).
+        """
         mine = ("build_job", job_id)
         if any(event != mine for event in self.in_flight):
             return True
@@ -1328,6 +1333,10 @@ class Worker:
                 continue
             if doc.get("kind") == "range":
                 ranges.append((other_id, doc))
+            elif doc.get("kind") == "request":
+                continue
+            elif (doc.get("status") or "queued") != "queued":
+                continue
             elif not self._job_paused(doc):
                 return True
         mine_key = (self._range_priority((me or {}).get("priority")), job_id)
@@ -1347,14 +1356,25 @@ class Worker:
         return float(value) if isinstance(value, (int, float)) else 0.0
 
     def _range_due(self, queued: list[tuple[str, str]]) -> list[tuple[str, str]]:
-        """The next range job when nothing else waits (#277.2)."""
-        if not self.store.get_enabled() or self.in_flight:
+        """The next range job when nothing else waits (#277.2).
+
+        Queue state only, never in-flight: the poll runs while
+        a dispatch holds the loop, and running work must not
+        starve the range; the run re-checks busyness before it
+        claims, so a player who arrived meanwhile still goes
+        first (#305.2).
+        """
+        if not self.store.get_enabled():
             return []
         ranges: list[tuple[str, dict[str, Any]]] = []
         for job_id, doc in self.store.pending_build_jobs():
             doc = doc or {}
             if doc.get("kind") == "range":
                 ranges.append((job_id, doc))
+            elif doc.get("kind") == "request":
+                continue
+            elif (doc.get("status") or "queued") != "queued":
+                continue
             elif not self._job_paused(doc):
                 return []
         for tile, _ in self.store.list_requests():

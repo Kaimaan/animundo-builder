@@ -467,6 +467,37 @@ def test_range_busy_build_job_claims_nothing(tmp_path: Path) -> None:
     assert "lease_until" not in job
 
 
+def test_range_ignores_placeholders_and_gated_jobs(tmp_path: Path) -> None:
+    """#305.2: placeholders and human-gated jobs don't block a range."""
+    store = FakeStore()
+    store.build_jobs["range_20261104_fox"] = _range_job("range_20261104_fox")
+    store.build_jobs["ahead_z10_0581_0294"] = {
+        "kind": "request",
+        "status": "planned",
+        "tile": T1,
+        "ahead": True,
+    }
+    store.build_jobs["b1"] = {
+        "kind": "build",
+        "status": "checking",
+        "tile": T1,
+        "tiles": [T1],
+        "items": [],
+    }
+    worker = _worker(tmp_path, store)
+    assert worker._range_busy("range_20261104_fox") is False
+    assert worker._range_due([]) == [("build_job", "range_20261104_fox")]
+
+
+def test_range_due_while_dispatch_holds_the_loop(tmp_path: Path) -> None:
+    """#305.2: running work doesn't stop the poll queueing a range."""
+    store = FakeStore()
+    store.build_jobs["range_20261104_fox"] = _range_job("range_20261104_fox")
+    worker = _worker(tmp_path, store)
+    worker.in_flight.add(("request", T1))
+    assert worker._range_due([]) == [("build_job", "range_20261104_fox")]
+
+
 def test_range_expired_building_counts_as_due(tmp_path: Path) -> None:
     """#305.2: an expired building range job is due and comes back."""
     store = FakeStore()

@@ -1132,6 +1132,14 @@ class Worker:
         seated = dict(
             job.get("seated") or {"playable": False, "prey": False, "predators": False}
         )
+        # Playable and hunter ride the animal, never the chunk: a
+        # resume whose last tiles all skip still seats them (#305.3).
+        seated["playable"] = seated.get("playable", False) or bool(
+            animal.get("playable")
+        )
+        seated["predators"] = seated.get("predators", False) or bool(
+            animal.get("hunts")
+        )
         chunk = tiles[done : done + RANGE_CHUNK]
         passing: list[str] = []
         olds: dict[str, dict[str, Any] | None] = {}
@@ -1173,8 +1181,6 @@ class Worker:
             self._fail(job_id, f"range_failed: {error}")
             return
         if passing:
-            seated["playable"] = seated["playable"] or bool(animal.get("playable"))
-            seated["predators"] = seated["predators"] or bool(animal.get("hunts"))
             overlay.extend(passing)
             gaps.update(self._overlay_gaps("animal", what, passing, {}, olds))
         done += len(chunk)

@@ -534,6 +534,36 @@ def test_range_place_tile_judges_from_placed_biome(
     assert old is None
 
 
+def test_range_resume_seats_without_new_passing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#305.3: a resume whose last tiles skip still seats the animal."""
+    store = FakeStore()
+    _seed_tiles(store)
+    store.build_jobs["range_20261104_fox"] = _range_job(
+        "range_20261104_fox",
+        tiles=[T1, T2],
+        status="building",
+        progress={"done": 1, "of": 2},
+        overlay=[T1],
+        skipped={},
+        gaps={},
+        seated={"playable": False, "prey": False, "predators": False},
+    )
+    worker = _worker(tmp_path, store)
+    _stub_gbif(monkeypatch, {}, FOX_KEY)
+    worker.range_job("range_20261104_fox", store.build_jobs["range_20261104_fox"])
+    job = store.build_jobs["range_20261104_fox"]
+    assert job["status"] == "published"
+    assert job["overlay"] == [T1]
+    overlay = json.loads(
+        store.blobs[job["pack"] + "additions/tiles.json"].decode("utf-8")
+    )
+    assert overlay["playable"] == ["fox"]
+    assert overlay["predators"] == ["fox"]
+    assert overlay["tiles"] == [T1]
+
+
 def test_range_expired_building_counts_as_due(tmp_path: Path) -> None:
     """#305.2: an expired building range job is due and comes back."""
     store = FakeStore()

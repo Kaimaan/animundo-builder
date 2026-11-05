@@ -741,6 +741,12 @@ class Worker:
         if job.get("kind") not in self.JOB_KINDS:
             print(f"build job {job_id}: unknown kind; staying queued")
             return
+        if job.get("kind") == "range" and self._range_busy(job_id):
+            # A waiting range holds no lease: claiming one only
+            # to wait writes the doc, re-triggers the watch, and
+            # spins claim-wait-claim until traffic clears (#305.2).
+            print(f"range job {job_id}: other work is queued, waiting")
+            return
         if not self._claim(job_id):
             return
         job = self.store.get_build_job(job_id) or job

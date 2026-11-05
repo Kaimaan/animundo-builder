@@ -447,6 +447,26 @@ def test_range_chunk_throw_fails_with_reason_and_partial(
     assert job["overlay"] == []
 
 
+def test_range_busy_build_job_claims_nothing(tmp_path: Path) -> None:
+    """#305.2: a waiting range holds no lease, so the watch doesn't spin."""
+    store = FakeStore()
+    _seed_tiles(store)
+    store.build_jobs["range_20261104_fox"] = _range_job("range_20261104_fox")
+    store.build_jobs["b1"] = {
+        "kind": "build",
+        "status": "queued",
+        "tile": T1,
+        "tiles": [T1],
+        "items": [],
+    }
+    worker = _worker(tmp_path, store)
+    worker.build_job("range_20261104_fox", store.build_jobs["range_20261104_fox"])
+    job = store.build_jobs["range_20261104_fox"]
+    assert job["status"] == "queued"
+    assert "worker_id" not in job
+    assert "lease_until" not in job
+
+
 def test_range_expired_building_counts_as_due(tmp_path: Path) -> None:
     """#305.2: an expired building range job is due and comes back."""
     store = FakeStore()

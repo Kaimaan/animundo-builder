@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-05: inbox #305, range jobs stuck — fixed, worker v59 live, jobs running
+
+- Root cause (two layers). Under v56 the 37-tile GBIF chunk outlasted the 30-min lease (no heartbeat before #272), so the final write died `StaleOwner` and the handler just printed "another worker owns it" — stuck `building`, nothing written, no sweep to reap it. Under v58 the sweep did reap both jobs, but they spun claim-wait-claim without ever running: `build_job` claimed before the busy check (each claim wrote the doc, re-triggering the watch), and the busy rules blocked on 17 `#283.6` ring-ahead placeholders plus 2 stale `checking` jobs from Nov 1–2 — none of it real queued work. GBIF itself has a 30 s timeout, so no hang there.
+- Fix, 3 commits: `20312ca` (a throwing chunk fails `range_failed: <error>` with partial progress/overlay/skipped, never silent), `8927431` (a waiting range holds no lease — busy check before claim, ending the spin), `2d6694b` (busy/due follow #277.2 literally: only queued work blocks; placeholders, running and human-gated jobs don't; the poll queues while a dispatch holds the loop since the run re-checks before claiming). #305.2's resume path is #272.3's sweep (live, proven: both jobs came back with attempts 1).
+- Worker v59 live on `64359fe` (also carries the #306 README), single container `ta-01M6MN192JA6KAV0W3TR7DR1SR`, grids complete, `range_failed` verified in the live code. CI green on run `41946883836`.
+- Tests (5 new in `tests/test_range.py`): chunk throw → `range_failed` + partials; busy build holds no lease; placeholders + checking jobs don't block; due while a dispatch runs; expired-building range is due and requeues. Range 19 + robust 35 green; ruff clean.
+- Both jobs (`range_20261104_platypus`, `range_20261104_saimaa_seal`) were dispatching-but-waiting at deploy time; the new rules unblock them and they run next quiet turn. Seated/skipped report follows when they publish. Cost: $0.
+
 ## 2026-11-05: inbox #306, README shows the maker's render look (README only, no deploy)
 
 - One line per the item's two insertions (steps table `Animal` row + "A new animal" bullet); nothing else touched. Cost: $0.

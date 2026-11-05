@@ -3,6 +3,14 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-05: inbox #270, blocked coast tiles — counted, root-caused, proposal (build nothing)
+
+- Count (production `plans`, Nov 5): 4 blocked plans — 3 `no_home` (`z10_0925_0560/0561/0562`, all savanna eco 185) and 1 `place:fi_nuuksio` (`n_414_478`, a place block, not a home gap). Zero blocked coast tiles; zero blocked entries in the 9 published group files. The item's tile `z10_0926_0561` resolves today (`wet_tropics`) — the coast case closed itself.
+- Why (#270.2): the trio blocks `no_home` + habitat savanna + ecoregion 185 (`Einasleigh upland savanna`, Australasia, kind 7) — named, per #280.4. Root cause: no savanna home fits 185 under the world's kind-in-realm rule (`home_fits`), and no neighbour ring offers a fitting savanna home, so the #280 bundle logic refuses rather than misbuild. Same family as the item's coast diagnosis (unlisted ecoregion + bundle guard), one habitat over. The 150 coast gap specifically closed when the world shipped `wet_tropics` (rainforest, lists 150) — the exact listing the item found missing.
+- #270.3: nothing built or loosened — reads and resolve runs only. No overlap with #272/#277 (both shipped, separate paths).
+- #270.4, proposal (short): a `home` job kind. Trigger: `no_home` count per (habitat, ecoregion) crossing 3, or reviewer command. The job surveys the ecoregion's flora/foods (Meta, ~1 survey), drafts `homes/<id>.json` + `biomes/<id>.json`, runs the world's checks, and files on human yes (world write needs Kai's go as usual). Price ≈ one survey + one small make (~$0.50). First candidate: savanna 185 (unblocks the trio above); the lake habitat (605 cells, #272.8) wants the same treatment next.
+- Recommend: close the coast case as fixed by the world; keep this reply as the home-job spec. Cost: $0.
+
 ## 2026-11-05: inbox #271, a $0 dry run before the yes — ready to deploy
 
 - `6e19a5f` (#271: a $0 stage-C dry run before the yes). CI green on run `41938682183`. Ready to deploy; no deploy per the item (worker still v57).

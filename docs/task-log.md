@@ -3,6 +3,16 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-05: inbox #271, a $0 dry run before the yes — ready to deploy
+
+- `6e19a5f` (#271: a $0 stage-C dry run before the yes). CI green on run `41938682183`. Ready to deploy; no deploy per the item (worker still v57).
+- `dry_run_place_build` walks stage C's real gates in order — research (biome filed+thick, short dict, country, tiles, centre), species (`missing_species` + start check, unmakable as notes), tiles (every tile resolves a home), ship (progress verdicts through the real gate; retry-futile reasons block, model verdicts note), publish (country name resolvable) — and reports every step plus the first blocker. $0 by construction: no client, no ledger, no writes.
+- CLI: `builder place dry-run <job>` fetches the Firestore doc, prints the steps and the first blocker, exits 1 on a blocker. Worker writes `dry_run: {ok, blocker, at}` next to the price at `waiting_yes` and on every re-price.
+- Ran on the live Mamirauá doc (read-only — no copy doc written: the pure function needs no copy, and a fake pending doc could tempt the live worker): clean, 2 notes — sloth wanted-but-unmakable (no start, tiles seat the rest), jaguar failed on model verdicts (a retry re-runs it). A retry would run.
+- Tests (6): clean pass with all five steps; missing short/country → `no_short`; a homeless tile → `tile_blocked` naming tile+reason (the #266 lesson: found before spending); `checking` passes while `overlaid nothing` blocks and judge verdicts note (the #269 gate, shared code); unresolvable country → `no_short`; research writes `dry_run`. Full suite 1467 passed, 12 skipped; ruff clean.
+- Two follow-ups outside this item: `place-show` needs one game-side line to display `dry_run` (game repo, not mine); the worker-side publish step will flag `no_short` for every place until the image ships `data/country-names.json` (test 3's cause — fix lands with #300's deploy, which Mamirauá needs anyway).
+- Cost: $0.
+
 ## 2026-11-04: inbox #291, full place names — worker v57 live
 
 - `60a71de` (#291: full place names from the files, own tiles carry the place). CI green on run `41899116663`. Deployed myself per the standing go: worker v57 live on `60a71de`, container `ta-01M6MG4AB8AMJ9CFW1PCH1G7KR` (single; live code hash verified `fc0451d222b6`, grids complete — the script's first check raced the volume attach and I verified by hand).

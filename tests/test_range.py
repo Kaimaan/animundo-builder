@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -417,3 +418,50 @@ def test_range_without_spec_fails(tmp_path: Path, monkeypatch: Any) -> None:
     job = store.build_jobs["range_20261104_fox"]
     assert job["status"] == "failed"
     assert job["error"] == "bad_range"
+
+
+def test_range_chunk_throw_fails_with_reason_and_partial(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#305.1: a chunk that throws fails range_failed, keeping partials."""
+    import builder.presence as presence_mod
+
+    store = FakeStore()
+    _seed_tiles(store)
+    store.build_jobs["range_20261104_fox"] = _range_job(
+        "range_20261104_fox", tiles=[T8, T2]
+    )
+    worker = _worker(tmp_path, store)
+
+    def boom(params: dict[str, Any], base: str = "") -> dict[str, Any]:
+        raise ConnectionError("GBIF stayed down: boom")
+
+    monkeypatch.setattr(presence_mod, "_gbif", boom)
+    worker.range_job("range_20261104_fox", store.build_jobs["range_20261104_fox"])
+    job = store.build_jobs["range_20261104_fox"]
+    assert job["status"] == "failed"
+    assert job["error"].startswith("range_failed: ")
+    assert "boom" in job["error"]
+    assert job["progress"] == {"done": 1, "of": 2}
+    assert job["skipped"] == {T8: "no_home"}
+    assert job["overlay"] == []
+
+
+def test_range_expired_building_counts_as_due(tmp_path: Path) -> None:
+    """#305.2: an expired building range job is due and comes back."""
+    store = FakeStore()
+    past = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    store.build_jobs["range_20261104_fox"] = _range_job(
+        "range_20261104_fox",
+        status="building",
+        worker_id="dead-host:1",
+        lease_until=past,
+        attempts=0,
+    )
+    worker = _worker(tmp_path, store)
+    assert worker._range_due([]) == [("build_job", "range_20261104_fox")]
+    queued = worker.poll()
+    assert ("build_job", "range_20261104_fox") in queued
+    job = store.build_jobs["range_20261104_fox"]
+    assert job["status"] == "queued"
+    assert job["attempts"] == 1

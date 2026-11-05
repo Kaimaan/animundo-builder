@@ -1078,7 +1078,9 @@ class Worker:
         waits, so a 5000-tile job never holds up a player. The
         last chunk builds the pack and publishes. A lost lease
         or a crash resumes from `progress.done`; done tiles
-        stand, each cell fetched once per job.
+        stand, each cell fetched once per job. A chunk that
+        throws fails `range_failed` with the reason and its
+        partial progress, never silently (#305.1).
         """
         if self._range_busy(job_id):
             print(f"range job {job_id}: other work is queued, waiting")
@@ -1129,17 +1131,41 @@ class Worker:
         olds: dict[str, dict[str, Any] | None] = {}
         groups: dict[str, dict[str, Any]] = {}
         files: dict[str, dict[str, Any]] = {}
-        for tile in chunk:
-            code, prey, old = self._range_tile(
-                tile, what, int(entry["gbif_key"]), entry, animal, files, groups, job_id
+        judged = 0
+        try:
+            for tile in chunk:
+                code, prey, old = self._range_tile(
+                    tile,
+                    what,
+                    int(entry["gbif_key"]),
+                    entry,
+                    animal,
+                    files,
+                    groups,
+                    job_id,
+                )
+                judged += 1
+                if code is not None:
+                    skipped[tile] = code
+                else:
+                    passing.append(tile)
+                    olds[tile] = old
+                    if prey:
+                        seated["prey"] = True
+        except Exception as error:  # noqa: BLE001 - a chunk throw fails loud
+            overlay.extend(passing)
+            self._update(
+                job_id,
+                {
+                    "progress": {"done": done + judged, "of": len(tiles)},
+                    "overlay": overlay,
+                    "skipped": skipped,
+                    "gaps": gaps,
+                    "seated": seated,
+                },
             )
-            if code is not None:
-                skipped[tile] = code
-            else:
-                passing.append(tile)
-                olds[tile] = old
-                if prey:
-                    seated["prey"] = True
+            self._fail(job_id, f"range_failed: {error}")
+            return
         if passing:
             seated["playable"] = seated["playable"] or bool(animal.get("playable"))
             seated["predators"] = seated["predators"] or bool(animal.get("hunts"))

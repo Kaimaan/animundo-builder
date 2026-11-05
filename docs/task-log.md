@@ -3,6 +3,10 @@
 What ran for each task, and where the evidence is. Newest first.
 Job folders live under `jobs/` (local only, never committed).
 
+## 2026-11-05: inbox #306, README shows the maker's render look (README only, no deploy)
+
+- One line per the item's two insertions (steps table `Animal` row + "A new animal" bullet); nothing else touched. Cost: $0.
+
 ## 2026-11-05: deploy batch (#271, #272+#273+#274, #290) — worker v58 live
 
 - Kai's Nov 5 go, item 1: one deploy carrying the dry run (#271, `6e19a5f`), never-fail-silently (#272, `d3d288b`+`aad457e`) and shores-in-metres (#290, `3296919`). Head `2f5db54`, CI green (run `41939968302`), full suite 1467 passed + 12 skipped before deploy.

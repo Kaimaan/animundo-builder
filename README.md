@@ -106,7 +106,7 @@ An approved border build makes the **minimum set** the tile needs: its home, one
 | Plan | Works out what's missing and what it will cost | none (code) |
 | Research | One strict call per new item: its main food, the things around it, its size and year, each with a source | Muse Spark with web search |
 | Home | A new home: the AI fills a short choices form; code makes the home | Muse Spark Open or Muse Spark |
-| Animal | A new animal: a short list of edits to the closest reference model; code does the geometry, Blender builds it | Muse Spark Open or Muse Spark |
+| Animal | A new animal: a short list of edits to the closest reference model; code does the geometry, Blender builds it; Muse Spark Open then looks at each try's render, and a key mark from the research that doesn't show fails the try, so the next round fixes it ([`builder/stages/maker.py`](builder/stages/maker.py) `_marks_errors`) | Muse Spark Open or Muse Spark |
 | Plant | A new findable plant, drafted from the home's named plants | Muse Spark Open or Muse Spark |
 | Words | English and Finnish for every new text | Muse Spark Open or Muse Spark |
 | Pack | Border build's items: laid out for a person, who reviews in the game's admin console; shipped items publish with the tile. Enrich items and places: the checks replace review — pass everything and the content pack goes live (0049) | none (code) |
@@ -127,7 +127,7 @@ The hosted worker runs all of this on Modal ([`deploy/modal_worker.py`](deploy/m
 
 Early in the week the model wrote whole 3D model specs and terrain numbers. A lynx came out as a deer, then with floating legs; a rainforest came out as a lake. So the AI no longer writes positions, sizes or terrain numbers:
 
-- **A new animal** is the closest reference model, scaled in code to the animal's real size, plus a short list of edits from the AI (colours, head, ears, legs, tail, marks). animundo-world's `tools/adapt_model.py` applies them, then Blender builds the model.
+- **A new animal** is the closest reference model, scaled in code to the animal's real size, plus a short list of edits from the AI (colours, head, ears, legs, tail, marks). animundo-world's `tools/adapt_model.py` applies them, then Blender builds the model. Muse Spark Open looks at each render and names the marks the research asked for that are missing; the maker revises until they show.
 - **A new home** is a choices form from the AI (land type, levels, colours, which trees and plants); every number comes from animundo-world's `tools/adapt_home.py`, so the land always stands above the water.
 
 Each AI answer is decoded against a strict JSON schema ([`builder/strict.py`](builder/strict.py)), so it is either a valid form or a failed call, never free text.

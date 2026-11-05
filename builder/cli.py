@@ -419,6 +419,22 @@ def build_parser() -> argparse.ArgumentParser:
     file_pack.add_argument(
         "--world", required=True, help="Path to an animundo-world checkout."
     )
+    dry_run = place_sub.add_parser(
+        "dry-run", help="A $0 stage-C dry run over a place job, writing nothing."
+    )
+    dry_run.add_argument("job", help="The place build_jobs id.")
+    dry_run.add_argument(
+        "--world", required=True, help="Path to an animundo-world checkout."
+    )
+    dry_run.add_argument(
+        "--habitat-grid",
+        default="data/habitat-grid",
+        help="Baked habitat grid (default: data/habitat-grid).",
+    )
+    dry_run.add_argument("--project", required=True, help="The Firebase project.")
+    dry_run.add_argument(
+        "--storage-bucket", required=True, help="The Storage bucket for tiles."
+    )
     sub.add_parser("eval", help="Run the eval suite over the test places.")
     return parser
 
@@ -697,6 +713,44 @@ def cmd_place_file_pack(args: argparse.Namespace) -> int:
     for place_id in sorted(filed):
         for entry in filed[place_id]:
             print(f"filed {place_id} {entry}")
+    return 0
+
+
+def cmd_place_dry_run(args: argparse.Namespace) -> int:
+    """A $0 stage-C dry run over a place job, writing nothing (#271)."""
+    from .habitats import BAKED_GRID_FILE, load_grid
+    from .worker import dry_run_place_build
+    from .worker_store import FirebaseStore, StoreError
+
+    world = _world_or_error(args.world)
+    if world is None:
+        return 1
+    path = Path(args.habitat_grid) / BAKED_GRID_FILE
+    if not path.is_file():
+        print(f"error: no baked grid: {path}", file=sys.stderr)
+        return 1
+    try:
+        store = FirebaseStore(args.project, args.storage_bucket)
+    except StoreError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    job = store.get_build_job(args.job)
+    if job is None:
+        print(f"error: no job {args.job}", file=sys.stderr)
+        return 1
+    if job.get("kind") != "place":
+        print(f"error: {args.job} is not a place job", file=sys.stderr)
+        return 1
+    report = dry_run_place_build(job, world, load_grid(Path(args.habitat_grid)))
+    for entry in report["steps"]:
+        mark = "ok" if entry["ok"] else "BLOCKED"
+        print(f"{entry['step']:>8} [{mark}]: {entry['detail']}")
+    for note in report["notes"]:
+        print(f"    note: {note}")
+    if report["blocker"] is not None:
+        print(f"first blocker: {report['blocker']}")
+        return 1
+    print("clean: stage C would run")
     return 0
 
 
@@ -1356,6 +1410,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_place_file(args)
     if args.command == "place" and args.place_command == "file-pack":
         return cmd_place_file_pack(args)
+    if args.command == "place" and args.place_command == "dry-run":
+        return cmd_place_dry_run(args)
     if args.command == "request" and args.request_command == "plan":
         return cmd_request_plan(args)
     if args.command == "request" and args.request_command == "build":

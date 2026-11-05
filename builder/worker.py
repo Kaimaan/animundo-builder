@@ -106,6 +106,175 @@ def lease_expired(lease_until: Any) -> bool:
     return not isinstance(lease_until, str) or lease_until <= now_iso()
 
 
+#: Progress failures a retry cannot fix: the dry run flags them (#271).
+DRY_RETRY_FUTILE = (
+    "tile_blocked",
+    "no_home",
+    "no_short",
+    "bad_pack",
+    "no_biome",
+    "no wild tile",
+    "overlaid nothing",
+)
+
+
+def _dry_futile(verdict: str) -> bool:
+    """A failure verdict a retry would hit again (#271)."""
+    if verdict in ("failed", "skipped"):
+        return True
+    lowered = verdict.lower()
+    return any(code in lowered for code in DRY_RETRY_FUTILE)
+
+
+def dry_run_place_build(
+    job: dict[str, Any],
+    world: Path,
+    habitat_grid: Any,
+    builder_root: Path | None = None,
+) -> dict[str, Any]:
+    """Stage C's real order over the job doc: $0, writing nothing (#271).
+
+    The same gates the build would hit — research, species,
+    tiles, ship verdicts, publish prerequisites — with model
+    calls stubbed out (nothing is made, only judged). Returns
+    each step with its detail, the first blocker, and notes:
+    `{"ok", "blocker", "steps", "notes", "at"}`. Never spends,
+    never publishes, never touches the job.
+    """
+    from . import place as place_mod
+    from .grid import parse_tile
+    from .tiles import available_biomes, resolve_home
+
+    steps: list[dict[str, Any]] = []
+    notes: list[str] = []
+    blocker: str | None = None
+
+    def step(name: str, ok: bool, detail: str) -> dict[str, Any] | None:
+        nonlocal blocker
+        steps.append({"step": name, "ok": ok, "detail": detail})
+        if not ok and blocker is None:
+            blocker = f"{name}: {detail}"
+            return {
+                "ok": False,
+                "blocker": blocker,
+                "steps": steps,
+                "notes": notes,
+                "at": now_iso(),
+            }
+        return None
+
+    research = job.get("research")
+    if not isinstance(research, dict):
+        return step("research", False, "no research on the job") or {}
+    biome_id = research.get("biome")
+    biomes = available_biomes(world)
+    biome = biomes.get(biome_id) if isinstance(biome_id, str) else None
+    if not isinstance(biome, dict):
+        return step("research", False, f"no_biome: {biome_id!r} is not filed") or {}
+    thin = place_mod.biome_thinness(biome)
+    if thin is not None:
+        return step("research", False, f"thin_biome: {thin}") or {}
+    short = research.get("short")
+    if not isinstance(short, dict):
+        return step("research", False, "no_short: research has no short names") or {}
+    country = research.get("country")
+    if not isinstance(country, str) or not country.strip():
+        return step("research", False, "no_short: research has no country") or {}
+    tiles = [t for t in research.get("tiles", []) or [] if isinstance(t, str)]
+    if not tiles:
+        return step("research", False, "no_tiles: research names no tiles") or {}
+    centre = research.get("centre") or {}
+    if not isinstance(centre.get("lat"), (int, float)) or not isinstance(
+        centre.get("lon"), (int, float)
+    ):
+        return step("research", False, "no_centre: research has no centre") or {}
+    done = step(
+        "research", True, f"{biome_id}, {len(tiles)} tiles, country {country.strip()}"
+    )
+    assert done is None
+
+    try:
+        missing = place_mod.missing_species(
+            research.get("animals", []) or [],
+            research.get("plants", []) or [],
+            world,
+            str(biome_id),
+            research.get("plant_swaps"),
+        )
+    except Exception as error:  # noqa: BLE001 - a bad list stops the build
+        return step("species", False, f"species list unreadable: {error}") or {}
+    try:
+        from .animal_list import find_list, load_list
+
+        listed = {
+            entry["id"]: entry
+            for entry in load_list(find_list(world))["animals"]
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+        }
+    except (OSError, ValueError) as error:
+        return step("species", False, f"animal list unreadable: {error}") or {}
+    unmakable = [
+        entry["what"]
+        for entry in missing
+        if entry.get("kind") == "animal"
+        and not (listed.get(entry.get("what", "")) or {}).get("start_from")
+    ]
+    if unmakable:
+        notes.append(
+            "wanted but unmakable (no start): "
+            + ", ".join(sorted(unmakable))
+            + "; the tiles seat the rest"
+        )
+    done = step("species", True, f"{len(missing)} missing, {len(unmakable)} unmakable")
+    assert done is None
+
+    for tile in tiles:
+        try:
+            col, row = parse_tile(tile)
+            cell = habitat_grid.cell_data(col, row)
+            eco1, biome_n, land = cell[0], cell[4], cell[5]
+            habitat = habitat_grid.habitat(col, row)
+            home, _hab, blocked = resolve_home(
+                tile, habitat_grid, world, biomes, habitat, eco1, biome_n, land
+            )
+        except (ValueError, KeyError) as error:
+            return step("tiles", False, f"{tile}: unreadable: {error}") or {}
+        if home is None:
+            reason = blocked.get("reason") if isinstance(blocked, dict) else "no_home"
+            return step("tiles", False, f"{tile}: {reason or 'no_home'}") or {}
+    done = step("tiles", True, f"{len(tiles)} tiles resolve a home")
+    assert done is None
+
+    for entry in job.get("progress", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        item_id = entry.get("id", "?")
+        verdict = Worker._place_item_failed(job, item_id)
+        if verdict is None:
+            continue
+        if _dry_futile(verdict):
+            return step("ship", False, f"{item_id}: {verdict}") or {}
+        notes.append(f"{item_id}: failed ({verdict}); a retry re-runs it")
+    done = step("ship", True, "every verdict judges clean")
+    assert done is None
+
+    name = place_mod.country_name(country.strip(), builder_root)
+    if name is None:
+        return (
+            step("publish", False, f"no_short: country {country.strip()!r} has no name")
+            or {}
+        )
+    done = step("publish", True, f"country {name}")
+    assert done is None
+    return {
+        "ok": True,
+        "blocker": None,
+        "steps": steps,
+        "notes": notes,
+        "at": now_iso(),
+    }
+
+
 def _plan_error_due(plan: dict[str, Any] | None) -> bool:
     """A plan error whose backoff has passed, ready to retry (#272.4)."""
     if not isinstance(plan, dict):
@@ -1372,7 +1541,24 @@ class Worker:
             spot, centre["lat"], centre["lon"], self._habitat_grid()
         )
         research["centre"] = {"lat": lat, "lon": lon}
-        self._update(job_id, {**update, "status": "waiting_yes"})
+        dry = dry_run_place_build(
+            {**job, "research": research},
+            self.world,
+            self._habitat_grid(),
+            self.builder_root,
+        )
+        self._update(
+            job_id,
+            {
+                **update,
+                "dry_run": {
+                    "ok": dry["ok"],
+                    "blocker": dry["blocker"],
+                    "at": dry["at"],
+                },
+                "status": "waiting_yes",
+            },
+        )
         print(
             f"build job {job_id}: surveyed {len(survey['tiles'])} tiles, "
             f"waiting for yes"
@@ -1417,6 +1603,17 @@ class Worker:
         )
         research["price_parts"] = parts
         update: dict[str, Any] = {"research": research, "price": parts["total"]}
+        dry = dry_run_place_build(
+            {**job, "research": research},
+            self.world,
+            self._habitat_grid(),
+            self.builder_root,
+        )
+        update["dry_run"] = {
+            "ok": dry["ok"],
+            "blocker": dry["blocker"],
+            "at": dry["at"],
+        }
         yes = job.get("place_yes")
         cap = yes.get("cap") if isinstance(yes, dict) else None
         if (

@@ -1026,6 +1026,128 @@ def _stub_run_item(
     _stub_make_lion(self, job_id, item)
 
 
+def _dry_world(tmp_path: Path) -> tuple[Worker, dict[str, Any]]:
+    """A worker on a fake boreal world, and a buildable place job."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    (tmp_path / "br" / "data").mkdir(parents=True)
+    (tmp_path / "br" / "data" / "country-names.json").write_text(
+        json.dumps({"names": {"FI": "Finland"}})
+    )
+    job = _place_job(status="building", research=_build_research())
+    return worker, job
+
+
+def _dry_report(worker: Worker, job: dict[str, Any], tmp_path: Path) -> dict[str, Any]:
+    from builder.worker import dry_run_place_build
+
+    assert worker.world is not None
+    grid = worker._habitat_grid()
+    return dry_run_place_build(job, worker.world, grid, tmp_path / "br")
+
+
+def test_dry_run_clean_passes(tmp_path: Path) -> None:
+    """#271: a buildable job dry-runs clean, step by step."""
+    worker, job = _dry_world(tmp_path)
+    report = _dry_report(worker, job, tmp_path)
+    assert report["ok"] is True
+    assert report["blocker"] is None
+    assert [step["step"] for step in report["steps"]] == [
+        "research",
+        "species",
+        "tiles",
+        "ship",
+        "publish",
+    ]
+    assert all(step["ok"] for step in report["steps"])
+
+
+def test_dry_run_catches_missing_short_and_country(tmp_path: Path) -> None:
+    """#271: research without short/country blocks, naming no_short."""
+    worker, job = _dry_world(tmp_path)
+    del job["research"]["short"]
+    report = _dry_report(worker, job, tmp_path)
+    assert report["ok"] is False
+    assert "no_short" in (report["blocker"] or "")
+    job["research"]["short"] = {"en": "x", "fi": "x", "fi_gen": "x"}
+    del job["research"]["country"]
+    report = _dry_report(worker, job, tmp_path)
+    assert report["ok"] is False
+    assert "no_short" in (report["blocker"] or "")
+
+
+def test_dry_run_catches_a_tile_that_cannot_build(tmp_path: Path) -> None:
+    """#271: a tile with no home blocks before a dollar is spent (#266)."""
+    from fake_world import boreal_3x3, write_grids
+
+    worker, job = _dry_world(tmp_path)
+    assert worker.world is not None
+    cells = boreal_3x3()
+    cells["599,299"] = [717, 1.0, None, 0.0, 6, 1.0, 0.9, 80.0]
+    grid_dir = write_grids(tmp_path / "grids2", cells)
+    from builder.habitats import load_grid
+    from builder.worker import dry_run_place_build
+
+    job["research"]["tiles"] = ["z10_0599_0299"]
+    report = dry_run_place_build(
+        job, worker.world, load_grid(grid_dir), tmp_path / "br"
+    )
+    assert report["ok"] is False
+    assert "z10_0599_0299" in (report["blocker"] or "")
+    assert "no_home" in (report["blocker"] or "")
+
+
+def test_dry_run_judges_progress_like_the_gate(tmp_path: Path) -> None:
+    """#271: a passed retry passes; structural failures block (#269)."""
+    worker, job = _dry_world(tmp_path)
+    job["progress"] = [{"id": "animal_lion", "status": "checking"}]
+    report = _dry_report(worker, job, tmp_path)
+    assert report["ok"] is True, report["blocker"]
+    job["progress"] = [
+        {"id": "plant_x", "status": "failed", "error": "its tiles overlaid nothing"}
+    ]
+    report = _dry_report(worker, job, tmp_path)
+    assert report["ok"] is False
+    assert "plant_x" in (report["blocker"] or "")
+    job["progress"] = [
+        {"id": "animal_x", "status": "failed", "error": "judge: muzzle missing"}
+    ]
+    report = _dry_report(worker, job, tmp_path)
+    assert report["ok"] is True, report["blocker"]
+
+
+def test_dry_run_catches_an_unresolvable_country(tmp_path: Path) -> None:
+    """#271: a country the publish can't name blocks the dry run."""
+    worker, job = _dry_world(tmp_path)
+    job["research"]["country"] = "XX"
+    report = _dry_report(worker, job, tmp_path)
+    assert report["ok"] is False
+    assert "no_short" in (report["blocker"] or "")
+
+
+def test_place_research_writes_dry_run(tmp_path: Path) -> None:
+    """#271: waiting_yes carries dry_run next to the price."""
+    store = FakeStore()
+    worker = _worker(tmp_path, store)
+    assert worker.world is not None
+    _rich_biome(worker.world)
+    survey = _survey(
+        short={"en": "Nuuksio", "fi": "Nuuksio", "fi_gen": "Nuuksion"},
+        country="fi",
+    )
+    worker.chat = _ScriptRespond([json.dumps(survey)])
+    store.build_jobs["j1"] = _place_job()
+    worker.handle_build_job("j1")
+    job = store.build_jobs["j1"]
+    assert job["status"] == "waiting_yes"
+    dry = job.get("dry_run") or {}
+    assert set(dry) == {"ok", "blocker", "at"}
+    assert dry["ok"] is True
+    assert dry["blocker"] is None
+
+
 def test_place_check_failure_publishes_nothing(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

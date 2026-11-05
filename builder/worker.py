@@ -1272,9 +1272,20 @@ class Worker:
             if reason in ("no_home", "no_land"):
                 return "no_home", False, None
             return "not_published", False, None
-        eco1, _eco2, _share2, biome, land, water, _elev = resolved["cell"]
-        labels = _candidate_habitats(resolved["habitat"], eco1, biome, land, water)
-        if resolved["home"] == "coral_reef":
+        if resolved.get("place") is not None:
+            # A live place lays this open-sea tile: the placed
+            # biome is its home, the grid still its cell (#305.3).
+            _place, placed = resolved["place"]
+            home = placed
+            habitat = (resolved["biomes"].get(placed) or {}).get("habitat") or "sea"
+            grid = self._habitat_grid()
+            eco1, _, _, _, biome, land, water, _ = grid.cell_data(col, row)
+        else:
+            eco1, _eco2, _share2, biome, land, water, _elev = resolved["cell"]
+            habitat = resolved["habitat"]
+            home = resolved["home"]
+        labels = _candidate_habitats(habitat, eco1, biome, land, water)
+        if home == "coral_reef":
             labels.add("reef")
         if not (set(entry.get("habitats") or []) & labels):
             return "habitat", False, None

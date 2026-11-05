@@ -498,6 +498,42 @@ def test_range_due_while_dispatch_holds_the_loop(tmp_path: Path) -> None:
     assert worker._range_due([]) == [("build_job", "range_20261104_fox")]
 
 
+def test_range_place_tile_judges_from_placed_biome(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """#305.3: a live-place open-sea tile judges, never KeyErrors."""
+    import builder.presence as presence_mod
+    import builder.tiles as tiles_mod
+
+    store = FakeStore()
+    _seed_tiles(store)
+    worker = _worker(tmp_path, store)
+    layered = {
+        "blocked": None,
+        "place": ({"id": "au_great_barrier_reef"}, "coral_reef"),
+        "homes": {},
+        "biomes": {"coral_reef": {"habitat": "sea"}},
+    }
+    monkeypatch.setattr(tiles_mod, "_resolve_home", lambda *a, **k: layered)
+
+    def boom(params: dict[str, Any], base: str = "") -> dict[str, Any]:
+        raise AssertionError("no GBIF past a habitat skip")
+
+    monkeypatch.setattr(presence_mod, "_gbif", boom)
+    code, _prey, old = worker._range_tile(
+        T1,
+        "mole",
+        999,
+        {"id": "mole", "habitats": ["tundra"]},
+        {"tags": [], "playable": False, "hunts": []},
+        {},
+        {},
+        "range_x",
+    )
+    assert code == "habitat"
+    assert old is None
+
+
 def test_range_expired_building_counts_as_due(tmp_path: Path) -> None:
     """#305.2: an expired building range job is due and comes back."""
     store = FakeStore()
